@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { withAuth } from 'next-auth/middleware';
 
 const secret = process.env.NEXTAUTH_SECRET;
@@ -5,12 +6,27 @@ if (process.env.NODE_ENV === 'production' && !secret) {
   throw new Error('NEXTAUTH_SECRET 환경변수가 설정되지 않았습니다.');
 }
 
-export default withAuth({
-  pages: {
-    signIn: '/login',
+export default withAuth(
+  function middleware(req) {
+    const role = (req.nextauth.token as any)?.role;
+    if (req.nextUrl.pathname.startsWith('/api/admin') && role !== '관리자') {
+      return NextResponse.json(
+        { success: false, error: '관리자 권한이 필요합니다.' },
+        { status: 403 }
+      );
+    }
+    return NextResponse.next();
   },
-  ...(secret ? { secret } : {}),
-});
+  {
+    pages: {
+      signIn: '/login',
+    },
+    ...(secret ? { secret } : {}),
+    callbacks: {
+      authorized: ({ token }) => !!token,
+    },
+  }
+);
 
 export const config = {
   matcher: [

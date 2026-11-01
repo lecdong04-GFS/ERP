@@ -82,7 +82,8 @@ const CACHE_TTL_MS = 15_000;
 let statsCache: { at: number; data: DashboardStats } | null = null;
 
 export async function GET(req: NextRequest) {
-  if (statsCache && Date.now() - statsCache.at < CACHE_TTL_MS) {
+  const fresh = req.nextUrl.searchParams.get('fresh') === '1';
+  if (!fresh && statsCache && Date.now() - statsCache.at < CACHE_TTL_MS) {
     return NextResponse.json({ success: true, data: statsCache.data });
   }
   try {

@@ -40,7 +40,7 @@ export const Dashboard: React.FC = () => {
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
     try {
-      const res = await fetch('/api/dashboard/stats', { cache: 'no-store' });
+      const res = await fetch(`/api/dashboard/stats${silent ? '?fresh=1' : ''}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && json.data) {
         setStats((prev) => ({ ...prev, ...json.data }));
