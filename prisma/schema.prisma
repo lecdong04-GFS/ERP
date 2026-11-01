@@ -1270,3 +1270,26 @@ model Notice {
   @@index([category])
   @@index([deletedAt])
 }
+
+/// 업무연락 (부서간 커뮤니케이션)
+model WorkContact {
+  id            Int       @id @default(autoincrement())
+  title         String
+  content       String
+  contactType   String    @default("요청") // 요청, 보고, 문의, 전달
+  receiverName  String    @default("") // 받는 부서/사람
+  status        String    @default("접수") // 접수, 진행중, 완료
+  response      String    @default("") // 처리내용
+  respondedAt   DateTime? @map("respondedAt")
+  senderId      Int?
+  senderLoginId String    @default("")
+  senderName    String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([status])
+  @@index([contactType])
+  @@index([deletedAt])
+  @@index([senderId])
+}
