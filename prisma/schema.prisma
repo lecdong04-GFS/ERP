@@ -723,6 +723,7 @@ model Inventory {
   expiryDate    String   @default("")  // 유통기한
   warehouse     String   @default("")  // 보관창고
   currentQty    Float    @default(0)   // 현재고 수량
+  dailyUsage    Float    @default(0)   // 일 사용량(박스)
   unit          String   @default("")
   unitPrice     Float    @default(0)   // 단가
   stockAmount   Float    @default(0)   // 재고금액
