@@ -31,23 +31,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'items가 비어 있습니다.' }, { status: 400 });
     }
 
-    // 서버측 중복 차단 (같은 날짜/센터 기존 수주)
-    const allowDuplicate = body.allowDuplicate === true;
+    // 중복 차단 + 교체 모드
+    const replaceByDate = body.replaceByDate === true;
     const existingOrder = await prisma.salesOrder.findFirst({
       where: { orderDate, centerCode, status: { not: '취소' }, uploadMethod: { contains: '발주현황' } },
       orderBy: { id: 'desc' },
-      select: { orderNo: true },
+      select: { orderNo: true, totalAmount: true, _count: { select: { details: true } } },
     });
-    if (existingOrder && !allowDuplicate) {
+    if (existingOrder && !replaceByDate) {
       return NextResponse.json(
         {
           success: false,
           code: 'DUPLICATE_ORDER',
-          error: `${orderDate} 수주가 이미 등록되어 있습니다. (${existingOrder.orderNo})`,
+          error: `${orderDate} 수주가 이미 등록되어 있습니다. (${existingOrder.orderNo}, ${existingOrder._count.details}개 품목)`,
           existingOrderNo: existingOrder.orderNo,
+          existingItemCount: existingOrder._count.details,
         },
         { status: 409 }
       );
+    }
+    if (existingOrder && replaceByDate) {
+      await prisma.salesOrder.deleteMany({
+        where: { orderDate, centerCode, uploadMethod: { contains: '발주현황' } },
+      });
     }
 
     let matched = 0;
