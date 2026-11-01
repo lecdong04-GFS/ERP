@@ -7,7 +7,7 @@ import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { usePipeline } from '@/context/PipelineContext';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
-import { Loader2, Search } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, Trash2 } from 'lucide-react';
 
 interface OrderUploadRow {
   id: number;
@@ -91,6 +91,7 @@ export const OrderUploadGsrView: React.FC = () => {
   const [dateMode, setDateMode] = useState<DateMode>('day');
   const [filterDate, setFilterDate] = useState(kstToday);
   const [keyword, setKeyword] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
 
   const dateRange = useMemo(() => computeRange(dateMode, filterDate), [dateMode, filterDate]);
 
@@ -162,33 +163,30 @@ export const OrderUploadGsrView: React.FC = () => {
         return;
       }
       const orderDate = kstToday();
-      let allowDuplicate = false;
-      try {
-        const dupRes = await fetch(`/api/sales/order?orderDate=${orderDate}`);
-        const dupJson = await dupRes.json();
-        const dupList = (dupJson.success && Array.isArray(dupJson.data) ? dupJson.data : []).filter(
-          (o: any) => (o.uploadMethod || '').includes('발주현황')
-        );
-        if (dupList.length > 0) {
-          const info = dupList.map((o: any) => `${o.orderNo}`).join(', ');
-          if (!window.confirm(`이미 등록된 발주현황이 ${dupList.length}건 있어요 (${info}).\n그래도 새로 등록할까요? (중복 집계 주의)`)) return;
-          allowDuplicate = true;
-        }
-      } catch { /* 조회 실패 시 진행 */ }
-      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${orderDate} 일자로 등록할까요?`)) return;
-      const res = await fetch('/api/sales/intake', {
+      const intakeBody = {
+        orderDate,
+        items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
+      };
+
+      let res = await fetch('/api/sales/intake', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderDate, allowDuplicate,
-          items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
-        }),
+        body: JSON.stringify(intakeBody),
       });
-      const json = await res.json();
+      let json = await res.json();
+
+      // 중복 감지 → 교체 등록 확인
+      if (json.code === 'DUPLICATE_ORDER') {
+        if (!window.confirm(`${json.error}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) return;
+        res = await fetch('/api/sales/intake', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...intakeBody, replaceByDate: true }),
+        });
+        json = await res.json();
+      }
+
       if (json.success) {
         alert(`수주 등록 완료 (${json.data.orderNo})\n매칭 ${json.data.matched}건 · 신규 ${json.data.createdProducts}건 · 제외 ${json.data.skipped}건`);
         void loadOrders();
-      } else if (json.code === 'DUPLICATE_ORDER') {
-        alert('이미 등록된 수주가 있습니다.\n' + (json.error || ''));
       } else {
         alert('수주 등록 실패: ' + (json.error || '알 수 없는 오류'));
       }
@@ -204,6 +202,28 @@ export const OrderUploadGsrView: React.FC = () => {
     setDateMode('day');
     setFilterDate(kstToday());
     setKeyword('');
+    void loadOrders();
+  };
+
+  const handleDeleteByDate = async () => {
+    if (filteredData.length === 0) return;
+    const totalAmt = filteredData.reduce((s, r) => s + (r.orderAmt || 0), 0);
+    const totalQty = filteredData.reduce((s, r) => s + (r.orderQty || 0), 0);
+    if (!window.confirm(`${filterDate} 수주 ${filteredData.length}건 (품목 ${totalQty.toLocaleString()}개, 합계 ₩${totalAmt.toLocaleString()})을\n완전 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      const res = await fetch(`/api/sales/order?date=${filterDate}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        setToast(`${filterDate} 수주 ${json.deleted}건이 삭제되었습니다.`);
+        window.setTimeout(() => setToast(null), 2500);
+        void loadOrders();
+      } else {
+        alert(json.error || '삭제에 실패했습니다.');
+      }
+    } catch (err) {
+      console.error('Failed to delete orders by date:', err);
+      alert('삭제에 실패했습니다.');
+    }
   };
 
   const shiftDay = (delta: number) => {
@@ -236,6 +256,12 @@ export const OrderUploadGsrView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
+      {toast && (
+        <div className="fixed top-14 right-6 z-[300] flex items-center gap-2 rounded-md border border-[#a7f3d0] bg-[#ecfdf5] px-3 py-2 text-[11.5px] font-semibold text-[#047857] shadow-lg">
+          <CheckCircle2 className="w-4 h-4" />{toast}
+        </div>
+      )}
+
       <SalesActionBar
         title="주문등록GSR(upload)"
         buttons={[
@@ -243,6 +269,7 @@ export const OrderUploadGsrView: React.FC = () => {
           { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data: filteredData }) },
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
+          { key: 'deleteDate', label: '일자 삭제', icon: 'delete', variant: 'secondary', onClick: () => void handleDeleteByDate() },
         ]}
         helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다."
       />
