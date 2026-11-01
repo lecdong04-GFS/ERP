@@ -198,13 +198,6 @@ export const OrderUploadGsrView: React.FC = () => {
     }
   };
 
-  const handleReset = () => {
-    setDateMode('day');
-    setFilterDate(kstToday());
-    setKeyword('');
-    void loadOrders();
-  };
-
   const handleDeleteByDate = async () => {
     if (filteredData.length === 0) return;
     const totalAmt = filteredData.reduce((s, r) => s + (r.orderAmt || 0), 0);
@@ -265,7 +258,6 @@ export const OrderUploadGsrView: React.FC = () => {
       <SalesActionBar
         title="주문등록GSR(upload)"
         buttons={[
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: handleReset },
           { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data: filteredData }) },
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
