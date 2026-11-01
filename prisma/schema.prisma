@@ -1238,3 +1238,14 @@ model GfsSnapshot {
 
   @@index([warehouse])
 }
+
+/// 대시보드 읽기 모델 (집계 JSON 스냅샷)
+model DashboardSnapshot {
+  key              String    @id
+  payload          Json      @default("{}")
+  asOf             String    @default("1970-01-01") @map("as_of")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  refreshStartedAt DateTime? @map("refresh_started_at") @db.Timestamptz(3)
+
+  @@map("DashboardSnapshot")
+}
