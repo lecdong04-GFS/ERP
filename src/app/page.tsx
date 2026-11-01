@@ -96,7 +96,7 @@ function ErpApp() {
             {TICKER_MESSAGES[tickerIndex].text}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           <button
             onClick={openExcelOrderModal}
             className="h-6.5 flex items-center gap-1.5 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded text-[11.5px] font-bold cursor-pointer transition-colors shadow-2xs"
