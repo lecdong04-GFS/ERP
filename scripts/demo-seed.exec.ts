@@ -35,13 +35,24 @@ function fmt(n: number): string {
 }
 
 async function cleanDemo() {
-  const delivery = await prisma.delivery.deleteMany({ where: { deliveryNo: { startsWith: 'DEMO-' } } });
-  const sales = await prisma.salesOrder.deleteMany({ where: { orderNo: { startsWith: 'DEMO-' } } });
-  const work = await prisma.workOrder.deleteMany({ where: { workOrderNo: { startsWith: 'DEMO-' } } });
-  const purchase = await prisma.purchaseOrder.deleteMany({ where: { orderNo: { startsWith: 'DEMO-' } } });
+  const delivery = await prisma.delivery.deleteMany({
+    where: { OR: [{ createdBy: 'DEMO' }, { deliveryNo: { startsWith: 'DEMO-' } }] },
+  });
+  const sales = await prisma.salesOrder.deleteMany({
+    where: { OR: [{ createdBy: 'DEMO' }, { orderNo: { startsWith: 'DEMO-' } }] },
+  });
+  const work = await prisma.workOrder.deleteMany({
+    where: { OR: [{ createdBy: 'DEMO' }, { workOrderNo: { startsWith: 'DEMO-' } }] },
+  });
+  const purchase = await prisma.purchaseOrder.deleteMany({
+    where: { OR: [{ createdBy: 'DEMO' }, { orderNo: { startsWith: 'DEMO-' } }] },
+  });
   const safety = await prisma.safetyStock.deleteMany({ where: { remark: { startsWith: TAG } } });
   const req = await prisma.materialRequirement.deleteMany({ where: { remark: { startsWith: TAG } } });
   const prices = await prisma.productPrice.deleteMany({ where: { remark: { contains: TAG } } });
+  const expiry = await prisma.expiryDiscardMgmt.deleteMany({
+    where: { remark: { startsWith: TAG } },
+  });
   const inv = await prisma.inventory.updateMany({
     where: { remark: { startsWith: TAG } },
     data: { expiryDate: '', remark: '엑셀적재' },
@@ -69,6 +80,7 @@ async function cleanDemo() {
       purchaseOrder: purchase.count,
       safetyStock: safety.count,
       materialRequirement: req.count,
+      expiryDiscard: expiry.count,
       productPrice: prices.count,
       inventoryRestored: inv.count,
     })
@@ -146,19 +158,6 @@ async function seedDemo() {
     return;
   }
 
-  // 데모 추정단가 보충
-  if (missingPrice.length) {
-    await prisma.productPrice.createMany({
-      data: missingPrice.map((s) => ({
-        productId: s.product.id,
-        deliveryPrice: medianPrice,
-        purchasePrice: 0,
-        effectiveDate: today,
-        remark: `${TAG}추정단가(중앙값 ₩${fmt(medianPrice)})`,
-      })),
-    });
-  }
-
   // ── 30일 매출 ──────────────────────────────────────
   let todayOrderId: number | null = null;
   let todayDetails: { productId: number; qty: number; price: number }[] = [];
@@ -201,7 +200,7 @@ async function seedDemo() {
 
     const order = await prisma.salesOrder.create({
       data: {
-        orderNo: `DEMO-SO-${ymd(date)}`,
+        orderNo: `SO-${ymd(date)}-001`,
         orderDate: date,
         centerCode: 'GSR-001',
         shift: '전체',
@@ -211,7 +210,7 @@ async function seedDemo() {
         totalAmount,
         totalQty,
         createdBy: 'DEMO',
-        remark: `${TAG} 시연 데이터`,
+        remark: '',
         details: {
           create: details.map((x) => ({
             productId: x.productId,
@@ -220,7 +219,7 @@ async function seedDemo() {
             totalQty: x.qty,
             unitPrice: x.price,
             amount: x.qty * x.price,
-            remark: TAG,
+            remark: '',
           })),
         },
       },
@@ -231,7 +230,7 @@ async function seedDemo() {
       const progress = d <= 1 ? jitter(`wo|${item.productId}|${date}`, 0.88, 1) : 1;
       const prodQty = Math.round(item.qty * progress);
       workOrderRows.push({
-        workOrderNo: `DEMO-WO-${ymd(date)}-${String(woSeq).padStart(3, '0')}`,
+        workOrderNo: `WO-${ymd(date)}-${String(woSeq).padStart(4, '0')}`,
         workDate: date,
         shift: woSeq % 2 === 0 ? '2편' : '1편',
         gyeId: gyes[(woSeq - 1) % Math.max(1, gyes.length)]?.id || gyes[0]?.id || 'GFS001',
@@ -242,7 +241,7 @@ async function seedDemo() {
         workSeq: woSeq,
         status: d <= 1 ? (progress >= 0.995 ? '완료' : '진행중') : '완료',
         createdBy: 'DEMO',
-        remark: TAG,
+        remark: '',
       });
     }
 
@@ -276,7 +275,7 @@ async function seedDemo() {
         seq += 1;
         const qty = shift === '1편' ? Math.round(item.qty * 0.56) : item.qty - Math.round(item.qty * 0.56);
         deliveryData.push({
-          deliveryNo: `DEMO-DV-${ymd(date)}-${String(seq).padStart(3, '0')}`,
+          deliveryNo: `DV-${ymd(date)}-${String(seq).padStart(3, '0')}`,
           deliveryDate: date,
           status: '완료',
           totalQty: qty,
@@ -290,7 +289,7 @@ async function seedDemo() {
     deliveryData[deliveryData.length - 1].status = '대기';
   }
   await prisma.delivery.createMany({
-    data: deliveryData.map((d) => ({ ...d, centerCode: 'GSR-001', createdBy: 'DEMO', remark: TAG })),
+    data: deliveryData.map((d) => ({ ...d, centerCode: 'GSR-001', createdBy: 'DEMO', remark: '' })),
   });
   const done = deliveryData.filter((d) => d.status === '완료').length;
   console.log(`납품 ${deliveryData.length}건 생성 (완료 ${done}) · 달성률 ${((done / deliveryData.length) * 100).toFixed(1)}%`);
@@ -332,7 +331,7 @@ async function seedDemo() {
       const totalAmount = details.reduce((s, x) => s + x.amount, 0);
       await prisma.purchaseOrder.create({
         data: {
-          orderNo: `DEMO-PO-${ymd(date)}`,
+          orderNo: `PO-${ymd(date)}-001`,
           orderDate: date,
           partnerId: poMaterials[0].partnerId || fallbackPartnerId || 'V001',
           partnerName: '',
@@ -341,7 +340,7 @@ async function seedDemo() {
           status: d === 0 ? '발주' : '입고완료',
           totalAmount,
           createdBy: 'DEMO',
-          remark: TAG,
+          remark: '',
           details: { create: details },
         },
       });
@@ -429,7 +428,7 @@ async function seedDemo() {
     const qty = Math.max(100, Math.round(item.total * 0.5));
     await prisma.salesOrder.create({
       data: {
-        orderNo: `DEMO-SO-UNDEL-${i + 1}`,
+        orderNo: `SO-${ymd(addDays(today, -3))}-${String(901 + i)}`,
         orderDate: addDays(today, -3),
         centerCode: 'GSR-001',
         shift: i % 2 === 0 ? '1편' : '2편',
@@ -439,7 +438,7 @@ async function seedDemo() {
         totalAmount: qty * item.price,
         totalQty: qty,
         createdBy: 'DEMO',
-        remark: `${TAG} 미출 시연`,
+        remark: '',
         details: {
           create: [
             {
@@ -449,7 +448,7 @@ async function seedDemo() {
               totalQty: qty,
               unitPrice: item.price,
               amount: qty * item.price,
-              remark: TAG,
+              remark: '',
             },
           ],
         },
@@ -463,7 +462,14 @@ async function seedDemo() {
     where: { currentQty: { gt: 0 }, category: '원재료' },
     orderBy: { stockAmount: 'desc' },
     take: 40,
-    select: { id: true, productName: true, warehouse: true },
+    select: {
+      id: true,
+      productCode: true,
+      productName: true,
+      warehouse: true,
+      currentQty: true,
+      unit: true,
+    },
   });
   const picked: typeof expiryRows = [];
   const prefer = ['냉장1', '냉장2', '냉동'];
@@ -484,7 +490,25 @@ async function seedDemo() {
       data: { expiryDate: addDays(today, days), remark: `${TAG}FEFO(D${days >= 0 ? '+' : ''}${days})` },
     });
   }
-  console.log(`유통기한 임박 ${picked.length}건 설정`);
+  if (picked.length > 0) {
+    await prisma.expiryDiscardMgmt.createMany({
+      data: picked.map((row, i) => ({
+        checkDate: today,
+        productCode: row.productCode,
+        productName: row.productName,
+        lotNo: '',
+        expiryDate: addDays(today, i - 2),
+        daysRemaining: i - 2,
+        warehouse: row.warehouse,
+        currentQty: Number(row.currentQty) || 0,
+        unit: row.unit || '봉',
+        action: '유통기한 임박',
+        status: '점검',
+        remark: `${TAG}FEFO`,
+      })),
+    });
+  }
+  console.log(`유통기한 임박 ${picked.length}건 설정 (폐기관리 화면 반영)`);
 
   await prisma.systemLog.create({
     data: {

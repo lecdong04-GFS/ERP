@@ -52,27 +52,55 @@ export const SafetyStockMgmtView: React.FC = () => {
   const [rows, setRows] = useState(SAMPLE_SAFETY_DATA);
 
   useEffect(() => {
-    fetch('/api/master/product?category=원재료')
+    fetch('/api/inventory/safety-stock')
       .then((res) => res.json())
-      .then((res) => {
-        if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-          const mapped: SafetyStockRow[] = res.data.map((p: any, idx: number) => ({
-            id: p.id || idx + 1,
-            supplier: p.partnerName || '[네트웍스]대림',
-            category: p.category || '원재료',
-            itemName: p.name,
-            spec: p.spec || '20kg',
-            unit: p.unit || 'kg',
-            safetyStock: p.safetyStockQty || 50,
-            recommendStock: Math.round((p.safetyStockQty || 50) * 1.2),
-            diffQty: (p.safetyStockQty || 50) - Math.round((p.safetyStockQty || 50) * 1.2),
-            stockDays: 3.0,
-            inputQty: (p.safetyStockQty || 50) * 4,
-            inputChange: 5,
-            ratio: 105.0,
-          }));
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const mapped: SafetyStockRow[] = json.data.map((s: any, idx: number) => {
+            const current = Number(s.currentQty) || 0;
+            const safety = Number(s.safetyQty) || 0;
+            const usage = Number(s.avgDailyUsage) || 0;
+            return {
+              id: s.id || idx + 1,
+              supplier: s.product?.partner?.name || '',
+              category: s.category || '원재료',
+              itemName: s.productName || s.product?.name || '',
+              spec: s.product?.spec || '',
+              unit: s.unit || '봉',
+              safetyStock: safety,
+              recommendStock: Math.round(safety + (Number(s.shortageQty) || 0)),
+              diffQty: current - safety,
+              stockDays: usage > 0 ? Math.round((current / usage) * 10) / 10 : 0,
+              inputQty: current,
+              inputChange: Number(s.shortageQty) || 0,
+              ratio: safety > 0 ? Math.round((current / safety) * 1000) / 10 : 0,
+            };
+          });
           setRows(mapped);
+          return;
         }
+        return fetch('/api/master/product?category=원재료')
+          .then((res) => res.json())
+          .then((res) => {
+            if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+              const mapped: SafetyStockRow[] = res.data.map((p: any, idx: number) => ({
+                id: p.id || idx + 1,
+                supplier: p.partnerName || '',
+                category: p.category || '원재료',
+                itemName: p.name,
+                spec: p.spec || '',
+                unit: p.unit || 'kg',
+                safetyStock: p.safetyStockQty || 50,
+                recommendStock: Math.round((p.safetyStockQty || 50) * 1.2),
+                diffQty: (p.safetyStockQty || 50) - Math.round((p.safetyStockQty || 50) * 1.2),
+                stockDays: 3.0,
+                inputQty: (p.safetyStockQty || 50) * 4,
+                inputChange: 5,
+                ratio: 105.0,
+              }));
+              setRows(mapped);
+            }
+          });
       })
       .catch((err) => console.error('Failed to load safety stocks from DB:', err));
   }, []);

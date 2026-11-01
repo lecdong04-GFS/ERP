@@ -156,6 +156,7 @@ async function main() {
       category: string;
       warehouse: string;
       partnerId: string | null;
+      partnerName: string;
       boxQty: number;
       unit: string;
       remark: string;
@@ -182,6 +183,7 @@ async function main() {
         category: row.category,
         warehouse: row.warehouse,
         partnerId: partnerByNorm.get(normName(row.partnerName))?.id || null,
+        partnerName: row.partnerName,
         boxQty: row.boxQty > 0 ? Math.round(row.boxQty) : 1,
         unit: '봉',
         remark: '엑셀적재(재고조사표)',
@@ -208,6 +210,7 @@ async function main() {
         category: '완성품',
         warehouse: '',
         partnerId: null,
+        partnerName: '',
         boxQty: 1,
         unit: 'ea',
         remark: '엑셀적재(발주현황)',
@@ -236,7 +239,7 @@ async function main() {
               name: p.name,
               category: p.category,
               warehouse: p.warehouse,
-              partnerId: p.partnerId,
+              partnerId: partnerByNorm.get(normName(p.partnerName))?.id || p.partnerId,
               boxQty: p.boxQty,
               unit: p.unit,
               remark: p.remark,

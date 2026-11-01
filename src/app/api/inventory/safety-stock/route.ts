@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 export async function GET(req: NextRequest) {
   try {
     const list = await prisma.safetyStock.findMany({
-      include: { product: true },
+      include: { product: { include: { partner: true } } },
       orderBy: { id: 'desc' },
     });
     return NextResponse.json({ success: true, data: list });
