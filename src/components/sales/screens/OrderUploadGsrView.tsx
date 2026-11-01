@@ -7,36 +7,27 @@ import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { usePipeline } from '@/context/PipelineContext';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
+import { Loader2, Search } from 'lucide-react';
 
 interface OrderUploadRow {
   id: number;
-  gubun: string;      // 구분
-  partNo: string;     // 품번
-  partName: string;   // 품명
-  spec: string;       // 규격
-  unit: string;       // 단위
-  orderQty: number;   // 주문수량
-  delivDate: string;  // 납품일자
-  unitPrice: number;  // 납품단가
-  orderAmt: number;   // 주문금액
-  delivTo: string;    // 납품처
-  shipTo: string;     // 배송처
-  poNo: string;       // P/O no.
-  shift: string;      // 편수
-  remark: string;     // 비고
-  status: string;     // 상태
+  gubun: string;
+  partNo: string;
+  partName: string;
+  spec: string;
+  unit: string;
+  orderQty: number;
+  delivDate: string;
+  unitPrice: number;
+  orderAmt: number;
+  delivTo: string;
+  shipTo: string;
+  poNo: string;
+  shift: string;
+  remark: string;
+  status: string;
+  orderCreatedAt: string;
 }
-
-const INITIAL_ROWS: OrderUploadRow[] = [
-  { id: 1, gubun: '정상', partNo: '27000388865', partName: '넷플)더담은K떡볶이김밥', spec: '240g', unit: 'ea', orderQty: 180, delivDate: '2026-10-30', unitPrice: 2545, orderAmt: 458100, delivTo: 'GS리테일(주)', shipTo: 'GSR 김해일배', poNo: 'PO-20261029-01', shift: '1편', remark: '오전납품', status: '확정' },
-  { id: 2, gubun: '정상', partNo: '27000388781', partName: '더블치즈소시지김밥1편', spec: '230g', unit: 'ea', orderQty: 220, delivDate: '2026-10-30', unitPrice: 2160, orderAmt: 475200, delivTo: 'GS리테일(주)', shipTo: 'GSR 김해일배', poNo: 'PO-20261029-02', shift: '1편', remark: '오전납품', status: '확정' },
-  { id: 3, gubun: '정상', partNo: '27000388782', partName: '불고기치즈김밥2편', spec: '235g', unit: 'ea', orderQty: 150, delivDate: '2026-10-30', unitPrice: 2127, orderAmt: 319050, delivTo: 'GS리테일(주)', shipTo: 'GSR 김해2일배', poNo: 'PO-20261029-03', shift: '2편', remark: '야간납품', status: '확정' },
-  { id: 4, gubun: '정상', partNo: '27000388804', partName: '직화)한돈제육쌈김밥', spec: '240g', unit: 'ea', orderQty: 130, delivDate: '2026-10-30', unitPrice: 2186, orderAmt: 284180, delivTo: 'GS리테일(주)', shipTo: 'GSR 양산조리센터', poNo: 'PO-20261029-04', shift: '2편', remark: '야간납품', status: '확정' },
-  { id: 5, gubun: '정상', partNo: '27000388820', partName: '더큰)오징어제육깻잎주먹밥', spec: '160g', unit: 'ea', orderQty: 350, delivDate: '2026-10-30', unitPrice: 1064, orderAmt: 372400, delivTo: 'GS리테일(주)', shipTo: 'GSR 부산물류센터', poNo: 'PO-20261029-05', shift: '1편', remark: '오전납품', status: '확정' },
-  { id: 6, gubun: '정상', partNo: '27000388710', partName: '착한1900핫도그(양배추)', spec: '130g', unit: 'ea', orderQty: 90, delivDate: '2026-10-30', unitPrice: 1286, orderAmt: 115740, delivTo: 'GS리테일(주)', shipTo: 'GSR 신광주 저온', poNo: 'PO-20261029-06', shift: '1편', remark: '오전납품', status: '확정' },
-  { id: 7, gubun: '정상', partNo: '27000388733', partName: '혜자)돌아온제육도시락', spec: '460g', unit: 'ea', orderQty: 240, delivDate: '2026-10-30', unitPrice: 3915, orderAmt: 939600, delivTo: 'GS리테일(주)', shipTo: 'GSR 김해일배', poNo: 'PO-20261029-07', shift: '1편', remark: '오전납품', status: '확정' },
-  { id: 8, gubun: '정상', partNo: '27000388859', partName: '혜자)통등심돈까스도시락', spec: '480g', unit: 'ea', orderQty: 160, delivDate: '2026-10-30', unitPrice: 4900, orderAmt: 784000, delivTo: 'GS리테일(주)', shipTo: 'GSR 해인 CVS', poNo: 'PO-20261029-08', shift: '1편', remark: '오전납품', status: '확정' },
-];
 
 const COLUMNS: GridColumnDef[] = [
   { key: 'gubun', label: '구분', width: '60px', align: 'center' },
@@ -56,53 +47,101 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'status', label: '상태', width: '60px', align: 'center' },
 ];
 
+type DateMode = 'day' | 'week' | 'month' | '30days';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function computeRange(mode: DateMode, filterDate: string): { startDate: string; endDate: string } {
+  if (mode === 'day') return { startDate: filterDate, endDate: filterDate };
+  const d = new Date(filterDate + 'T00:00:00');
+  if (mode === 'week') {
+    const dow = d.getDay();
+    const mon = new Date(d); mon.setDate(d.getDate() - dow + 1);
+    const sun = new Date(d); sun.setDate(d.getDate() - dow + 7);
+    return {
+      startDate: mon.toISOString().slice(0, 10),
+      endDate: sun.toISOString().slice(0, 10),
+    };
+  }
+  if (mode === 'month') {
+    const y = Number(filterDate.slice(0, 4));
+    const m = Number(filterDate.slice(5, 7));
+    const last = new Date(y, m, 0).getDate();
+    return {
+      startDate: `${filterDate.slice(0, 7)}-01`,
+      endDate: `${filterDate.slice(0, 7)}-${pad(last)}`,
+    };
+  }
+  const start = new Date(Date.now() + 9 * 3600 * 1000 - 29 * 86400000);
+  return { startDate: start.toISOString().slice(0, 10), endDate: filterDate };
+}
+
+function pad(n: number): string { return String(n).padStart(2, '0'); }
+
 export const OrderUploadGsrView: React.FC = () => {
-  const [data, setData] = useState<OrderUploadRow[]>(INITIAL_ROWS);
+  const [data, setData] = useState<OrderUploadRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { openExcelOrderModal } = usePipeline();
   const fileRef = useRef<HTMLInputElement>(null);
   const [isIntaking, setIsIntaking] = useState(false);
 
-  const loadOrders = useCallback(() => {
-    fetch('/api/sales/order')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const loaded: OrderUploadRow[] = [];
-          json.data.forEach((o: any) => {
-            (o.details || []).forEach((dt: any, dtIdx: number) => {
-              loaded.push({
-                id: dt.id || dtIdx + 1,
-                gubun: '정규',
-                partNo: dt.product?.productCode || '27000388865',
-                partName: dt.product?.name || '제품',
-                spec: dt.product?.spec || '230g',
-                unit: dt.product?.unit || 'ea',
-                orderQty: dt.totalQty ?? 0,
-                delivDate: o.orderDate,
-                unitPrice: dt.unitPrice ?? 0,
-                orderAmt: dt.amount ?? 0,
-                delivTo: o.centerCode || 'GS리테일',
-                shipTo: o.centerCode || '김해물류',
-                poNo: o.orderNo,
-                shift: o.shift || '1편',
-                remark: o.remark || '정상 접수',
-                status: o.status || '완료',
-              });
+  const [dateMode, setDateMode] = useState<DateMode>('day');
+  const [filterDate, setFilterDate] = useState(kstToday);
+  const [keyword, setKeyword] = useState('');
+
+  const dateRange = useMemo(() => computeRange(dateMode, filterDate), [dateMode, filterDate]);
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const params = new URLSearchParams({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      });
+      const res = await fetch(`/api/sales/order?${params}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const loaded: OrderUploadRow[] = [];
+        json.data.forEach((o: any) => {
+          (o.details || []).forEach((dt: any) => {
+            loaded.push({
+              id: dt.id || 0,
+              gubun: '정규',
+              partNo: dt.product?.productCode || '',
+              partName: dt.product?.name || '',
+              spec: dt.product?.spec || '',
+              unit: dt.product?.unit || 'ea',
+              orderQty: dt.totalQty ?? 0,
+              delivDate: o.orderDate,
+              unitPrice: dt.unitPrice ?? 0,
+              orderAmt: dt.amount ?? 0,
+              delivTo: o.centerCode || '',
+              shipTo: o.centerCode || '',
+              poNo: o.orderNo,
+              shift: o.shift || '',
+              remark: o.remark || '',
+              status: o.status || '',
+              orderCreatedAt: o.createdAt || '',
             });
           });
-          if (loaded.length > 0) {
-            setData(loaded);
-          }
-        }
-      })
-      .catch((err) => console.error('Failed to load uploaded orders', err));
-  }, []);
+        });
+        setData(loaded);
+      } else {
+        setError(json.error || '수주 데이터를 불러오지 못했습니다.');
+        setData([]);
+      }
+    } catch (err) {
+      console.error('Failed to load orders:', err);
+      setError('수주 데이터를 불러오지 못했습니다.');
+      setData([]);
+    } finally { setLoading(false); }
+  }, [dateRange]);
 
-  useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+  useEffect(() => { void loadOrders(); }, [loadOrders]);
 
-  // 발주현황(카톡보내기) 엑셀 → 수주 일괄등록
   const handleIntakeFile = async (file: File) => {
     setIsIntaking(true);
     try {
@@ -116,17 +155,13 @@ export const OrderUploadGsrView: React.FC = () => {
         if (!ws) continue;
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
         const r = parseOrderStatusRows(rows);
-        if (r && r.length > 0) {
-          parsed = r;
-          usedSheet = n;
-          break;
-        }
+        if (r && r.length > 0) { parsed = r; usedSheet = n; break; }
       }
       if (!parsed || parsed.length === 0) {
         alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      const orderDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const orderDate = kstToday();
       let allowDuplicate = false;
       try {
         const dupRes = await fetch(`/api/sales/order?orderDate=${orderDate}`);
@@ -136,30 +171,22 @@ export const OrderUploadGsrView: React.FC = () => {
         );
         if (dupList.length > 0) {
           const info = dupList.map((o: any) => `${o.orderNo}`).join(', ');
-          if (!window.confirm(`이미 등록된 발주현황이 ${dupList.length}건 있어요 (${info}).\n그래도 새로 등록할까요? (중복 집계 주의)`)) {
-            return;
-          }
+          if (!window.confirm(`이미 등록된 발주현황이 ${dupList.length}건 있어요 (${info}).\n그래도 새로 등록할까요? (중복 집계 주의)`)) return;
           allowDuplicate = true;
         }
-      } catch {
-        /* 조회 실패 시 그냥 진행 */
-      }
-      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${orderDate} 일자로 등록할까요?`)) {
-        return;
-      }
+      } catch { /* 조회 실패 시 진행 */ }
+      if (!window.confirm(`[${usedSheet}] 수주 ${parsed.length}건을 ${orderDate} 일자로 등록할까요?`)) return;
       const res = await fetch('/api/sales/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orderDate,
-          allowDuplicate,
+          orderDate, allowDuplicate,
           items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
         }),
       });
       const json = await res.json();
       if (json.success) {
         alert(`수주 등록 완료 (${json.data.orderNo})\n매칭 ${json.data.matched}건 · 신규 ${json.data.createdProducts}건 · 제외 ${json.data.skipped}건`);
-        loadOrders();
+        void loadOrders();
       } else if (json.code === 'DUPLICATE_ORDER') {
         alert('이미 등록된 수주가 있습니다.\n' + (json.error || ''));
       } else {
@@ -174,42 +201,41 @@ export const OrderUploadGsrView: React.FC = () => {
   };
 
   const handleReset = () => {
-    setData(INITIAL_ROWS);
+    setDateMode('day');
+    setFilterDate(kstToday());
     setKeyword('');
-    setShowAll(false);
-    setFilterDate(new Date().toISOString().slice(0, 10));
   };
 
-  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [showAll, setShowAll] = useState(false);
-  const [keyword, setKeyword] = useState('');
-
   const shiftDay = (delta: number) => {
+    setDateMode('day');
     const d = new Date(filterDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
     setFilterDate(d.toISOString().slice(0, 10));
   };
 
   const filteredData = useMemo(() => {
-    return data.filter((r) => {
-      if (!showAll && r.delivDate !== filterDate) return false;
-      if (keyword.trim()) {
-        const kw = keyword.trim().toLowerCase();
-        if (
-          !String(r.partName || '').toLowerCase().includes(kw) &&
-          !String(r.partNo || '').toLowerCase().includes(kw) &&
-          !String(r.poNo || '').toLowerCase().includes(kw)
-        ) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [data, filterDate, showAll, keyword]);
+    if (!keyword.trim()) return data;
+    const kw = keyword.trim().toLowerCase();
+    return data.filter((r) =>
+      String(r.partName || '').toLowerCase().includes(kw) ||
+      String(r.partNo || '').toLowerCase().includes(kw) ||
+      String(r.poNo || '').toLowerCase().includes(kw)
+    );
+  }, [data, keyword]);
+
+  const totalQty = useMemo(() => filteredData.reduce((s, r) => s + (r.orderQty || 0), 0), [filteredData]);
+  const totalAmt = useMemo(() => filteredData.reduce((s, r) => s + (r.orderAmt || 0), 0), [filteredData]);
+  const lastUpload = useMemo(() => {
+    if (data.length === 0) return '';
+    return data.reduce((latest, r) => (r.orderCreatedAt > latest ? r.orderCreatedAt : latest), '');
+  }, [data]);
+
+  const MODE_LABELS: Record<DateMode, string> = {
+    day: '일별', week: '이번 주', month: '이번 달', '30days': '최근 30일',
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
-      {/* 1. 상단 액션 바 (화면 캡처 091210.png: 초기화, 엑셀업로드, ?) */}
       <SalesActionBar
         title="주문등록GSR(upload)"
         buttons={[
@@ -218,83 +244,114 @@ export const OrderUploadGsrView: React.FC = () => {
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
         ]}
-        helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다 (LIVE 버팀일 계산의 수주 근거)."
+        helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다."
       />
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleIntakeFile(f);
-        }}
-      />
+      <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleIntakeFile(f); }} />
 
-      {/* 2. 서브 헤더 바 (화면 캡처 091210.png: 최종업로드일시) */}
+      {/* 서브 헤더 */}
       <div className="h-[25px] bg-[#f8fafc] border-b border-gray-300 px-3 flex items-center justify-between text-[11px] text-gray-700 font-sans shadow-2xs shrink-0">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-600">최종업로드일시:</span>
-          <span className="font-mono text-blue-900 font-bold">2026-10-29 14:15</span>
+          {lastUpload ? (
+            <span className="font-mono text-blue-900 font-bold">
+              {new Date(lastUpload).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
         </div>
-        <div className="text-gray-500 text-[10px]">
-          GS리테일 B2B 자동수신 채널 연동 중
-        </div>
+        <div className="text-gray-500 text-[10px]">GS리테일 B2B 자동수신 채널 연동 중</div>
       </div>
 
-      {/* 3. 조회 조건 바 (일자별 수주 조회) */}
-      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-3 py-1 flex flex-wrap items-center gap-3 text-[12px] shrink-0">
-        <div className="flex items-center gap-1">
-          <span className="font-semibold text-gray-700">기준일자:</span>
-          <button
-            type="button"
-            onClick={() => shiftDay(-1)}
-            className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-l-xs text-[11px] font-bold hover:bg-gray-100"
-          >
-            &lt;
-          </button>
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            disabled={showAll}
-            className="bg-white border-y border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none disabled:bg-gray-100 disabled:text-gray-400"
-          />
-          <button
-            type="button"
-            onClick={() => shiftDay(1)}
-            className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-r-xs text-[11px] font-bold hover:bg-gray-100"
-          >
-            &gt;
-          </button>
+      {/* 조회 조건 바 */}
+      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-3 py-1 flex flex-wrap items-center gap-2 text-[12px] shrink-0">
+        {/* 기간 칩 */}
+        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#e2e8f0] border border-gray-300">
+          {(Object.keys(MODE_LABELS) as DateMode[]).map((m) => (
+            <button key={m} type="button" onClick={() => { setDateMode(m); }}
+              className={`px-2 py-[3px] text-[11px] font-bold rounded-[5px] transition-all cursor-pointer ${
+                dateMode === m ? 'bg-white text-[var(--ink-900)] shadow-sm' : 'text-[var(--ink-600)] hover:text-[var(--ink-900)]'
+              }`}>
+              {MODE_LABELS[m]}
+            </button>
+          ))}
         </div>
-        <label className="flex items-center gap-1 cursor-pointer font-medium text-gray-700">
-          <input
-            type="checkbox"
-            checked={showAll}
-            onChange={(e) => setShowAll(e.target.checked)}
-            className="accent-blue-600"
-          />
-          전체 보기
-        </label>
+
+        {/* 날짜 피커 (일별 모드만) */}
+        {dateMode === 'day' && (
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => shiftDay(-1)}
+              className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-l-xs text-[11px] font-bold hover:bg-gray-100">&lt;</button>
+            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-white border-y border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none" />
+            <button type="button" onClick={() => shiftDay(1)}
+              className="px-1.5 py-0.5 bg-white border border-gray-400 rounded-r-xs text-[11px] font-bold hover:bg-gray-100">&gt;</button>
+          </div>
+        )}
+
+        {/* 날짜 범위 표시 (day 외 모드) */}
+        {dateMode !== 'day' && (
+          <span className="num text-[11.5px] font-semibold text-[var(--ink-700)] bg-white px-2 py-0.5 rounded border border-gray-300">
+            {dateRange.startDate} ~ {dateRange.endDate}
+          </span>
+        )}
+
+        {/* 검색 */}
         <div className="flex items-center gap-1">
-          <span className="font-semibold text-gray-700">검색어:</span>
-          <input
-            type="text"
-            placeholder="품명 / 품번 / 발주번호"
-            value={keyword}
+          <Search className="w-3.5 h-3.5 text-[var(--ink-400)]" />
+          <input type="text" placeholder="품명 / 품번 / 발주번호" value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded-xs w-44 outline-none focus:border-blue-500"
-          />
+            className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded-xs w-44 outline-none focus:border-blue-500" />
         </div>
+
         <span className="ml-auto text-[11px] text-gray-600 font-semibold bg-white px-2 py-0.5 rounded border border-gray-300">
           <span className="text-blue-700 font-bold">{filteredData.length}</span>건
         </span>
       </div>
 
-      {/* 4. 그리드 영역 (#c5c9f7 연보라 헤더, #fdfde0 하단 합계줄) */}
+      {/* 에러 */}
+      {error && (
+        <div className="mx-1 mt-1 flex items-center gap-2 rounded-md border border-[#fecdd3] bg-[#fff1f2] px-3 py-2 text-[11.5px] text-[#9f1239]">
+          <Loader2 className="w-4 h-4" />{error}
+        </div>
+      )}
+
+      {/* 그리드 */}
       <div className="flex-1 p-1 min-h-0 overflow-hidden flex flex-col">
-        <SalesDataGrid columns={COLUMNS} data={filteredData} />
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center bg-white">
+            <div className="flex items-center gap-2 text-[var(--ink-400)] text-[12px]">
+              <Loader2 className="w-4 h-4 animate-spin" />불러오는 중...
+            </div>
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center bg-white">
+            <div className="text-center">
+              <div className="text-[var(--ink-400)] text-[12px]">
+                {dateMode === 'day'
+                  ? `${filterDate}에 등록된 수주가 없습니다.`
+                  : `${dateRange.startDate} ~ ${dateRange.endDate} 기간에 수주가 없습니다.`}
+              </div>
+              <div className="mt-1 text-[10.5px] text-[var(--ink-400)]">
+                상단 [발주현황 업로드] 또는 [엑셀업로드]로 수주를 등록하세요.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <SalesDataGrid columns={COLUMNS} data={filteredData} />
+            </div>
+            {/* 요약 푸터 */}
+            <div className="h-[26px] bg-[#fdfde0] border-t border-gray-400 px-3 flex items-center gap-6 text-[12px] font-bold shrink-0">
+              <span className="text-gray-700">합계</span>
+              <span className="text-gray-400">전체 잠계</span>
+              <span className="num text-blue-900">{totalQty.toLocaleString()}</span>
+              <span className="num text-blue-900 ml-auto">₩{totalAmt.toLocaleString()}</span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -7,11 +7,19 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const orderDate = searchParams.get('orderDate');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
     const shift = searchParams.get('shift');
     const status = searchParams.get('status');
 
     const where: any = {};
-    if (orderDate) where.orderDate = orderDate;
+    if (orderDate) {
+      where.orderDate = orderDate;
+    } else if (startDate || endDate) {
+      where.orderDate = {};
+      if (startDate) where.orderDate.gte = startDate;
+      if (endDate) where.orderDate.lte = endDate;
+    }
     if (shift) where.shift = shift;
     if (status) where.status = status;
 
