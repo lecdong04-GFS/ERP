@@ -3,198 +3,140 @@ export interface ChartPoint {
   value: number;
 }
 
-// 01 ~ 30일 (or 31일) 데이터
-export const SALES_DAILY: ChartPoint[] = [
-  { label: '01', value: 114 },
-  { label: '02', value: 109 },
-  { label: '03', value: 92 },
-  { label: '04', value: 102 },
-  { label: '05', value: 113 },
-  { label: '06', value: 92 },
-  { label: '07', value: 102 },
-  { label: '08', value: 107 },
-  { label: '09', value: 92 },
-  { label: '10', value: 95 },
-  { label: '11', value: 90 },
-  { label: '12', value: 111 },
-  { label: '13', value: 105 },
-  { label: '14', value: 99 },
-  { label: '15', value: 113 },
-  { label: '16', value: 104 },
-  { label: '17', value: 93 },
-  { label: '18', value: 95 },
-  { label: '19', value: 111 },
-  { label: '20', value: 95 },
-  { label: '21', value: 104 },
-  { label: '22', value: 97 },
-  { label: '23', value: 110 },
-  { label: '24', value: 90 },
-  { label: '25', value: 91 },
-  { label: '26', value: 105 },
-  { label: '27', value: 107 },
-  { label: '28', value: 116 },
-  { label: '29', value: 108 },
-  { label: '30', value: 113 },
-];
+export interface ChartSeries {
+  monthly: ChartPoint[];
+  yearly: ChartPoint[];
+}
 
-export const PURCHASE_DAILY: ChartPoint[] = [
-  { label: '01', value: 22 },
-  { label: '02', value: 96 },
-  { label: '03', value: 66 },
-  { label: '04', value: 76 },
-  { label: '05', value: 47 },
-  { label: '06', value: 84 },
-  { label: '07', value: 60 },
-  { label: '08', value: 105 },
-  { label: '09', value: 52 },
-  { label: '10', value: 71 },
-  { label: '11', value: 52 },
-  { label: '12', value: 92 },
-  { label: '13', value: 60 },
-  { label: '14', value: 56 },
-  { label: '15', value: 100 },
-  { label: '16', value: 41 },
-  { label: '17', value: 86 },
-  { label: '18', value: 66 },
-  { label: '19', value: 59 },
-  { label: '20', value: 93 },
-  { label: '21', value: 58 },
-  { label: '22', value: 89 },
-  { label: '23', value: 54 },
-  { label: '24', value: 87 },
-  { label: '25', value: 49 },
-  { label: '26', value: 89 },
-  { label: '27', value: 87 },
-  { label: '28', value: 54 },
-  { label: '29', value: 49 },
-  { label: '30', value: 78 },
-];
+export type ChartKey = 'sales' | 'purchase' | 'production' | 'undelivered';
 
-// 생산현황은 기본적으로 데이터 0 (빈 축만 표시)
-export const PRODUCTION_DAILY_EMPTY: ChartPoint[] = [
-  { label: '01', value: 0 },
-  { label: '02', value: 0 },
-  { label: '03', value: 0 },
-  { label: '04', value: 0 },
-  { label: '05', value: 0 },
-  { label: '06', value: 0 },
-  { label: '07', value: 0 },
-  { label: '08', value: 0 },
-  { label: '09', value: 0 },
-  { label: '10', value: 0 },
-  { label: '11', value: 0 },
-  { label: '12', value: 0 },
-  { label: '13', value: 0 },
-  { label: '14', value: 0 },
-  { label: '15', value: 0 },
-  { label: '16', value: 0 },
-  { label: '17', value: 0 },
-  { label: '18', value: 0 },
-  { label: '19', value: 0 },
-  { label: '20', value: 0 },
-  { label: '21', value: 0 },
-  { label: '22', value: 0 },
-  { label: '23', value: 0 },
-  { label: '24', value: 0 },
-  { label: '25', value: 0 },
-  { label: '26', value: 0 },
-  { label: '27', value: 0 },
-  { label: '28', value: 0 },
-  { label: '29', value: 0 },
-  { label: '30', value: 0 },
-];
+export interface PipelineStats {
+  orderQty: number;
+  prodDone: number;
+  prodTarget: number;
+  prodPct: number;
+  undeliveredCount: number;
+  cutoffAt: string | null;
+}
 
-export const UNDELIVERED_DAILY: ChartPoint[] = [
-  { label: '01', value: 136 },
-  { label: '02', value: 204 },
-  { label: '03', value: 154 },
-  { label: '04', value: 92 },
-  { label: '05', value: 179 },
-  { label: '06', value: 159 },
-  { label: '07', value: 190 },
-  { label: '08', value: 142 },
-  { label: '09', value: 198 },
-  { label: '10', value: 161 },
-  { label: '11', value: 95 },
-  { label: '12', value: 159 },
-  { label: '13', value: 142 },
-  { label: '14', value: 194 },
-  { label: '15', value: 166 },
-  { label: '16', value: 159 },
-  { label: '17', value: 198 },
-  { label: '18', value: 95 },
-  { label: '19', value: 153 },
-  { label: '20', value: 196 },
-  { label: '21', value: 148 },
-  { label: '22', value: 169 },
-  { label: '23', value: 147 },
-  { label: '24', value: 189 },
-  { label: '25', value: 91 },
-  { label: '26', value: 195 },
-  { label: '27', value: 162 },
-  { label: '28', value: 203 },
-  { label: '29', value: 162 },
-  { label: '30', value: 12 },
-];
+export type ActionKind = 'act' | 'warn' | 'info';
 
-// 연간 (1월 ~ 12월) 데이터
-export const SALES_YEARLY: ChartPoint[] = [
-  { label: '01월', value: 3120 },
-  { label: '02월', value: 2980 },
-  { label: '03월', value: 3340 },
-  { label: '04월', value: 3210 },
-  { label: '05월', value: 3450 },
-  { label: '06월', value: 3300 },
-  { label: '07월', value: 3520 },
-  { label: '08월', value: 3410 },
-  { label: '09월', value: 3380 },
-  { label: '10월', value: 3590 },
-  { label: '11월', value: 3290 },
-  { label: '12월', value: 3480 },
-];
+export interface ActionItem {
+  id: string;
+  kind: ActionKind;
+  label: string;
+  count: number;
+  unit: string;
+  menuId: string;
+}
 
-export const PURCHASE_YEARLY: ChartPoint[] = [
-  { label: '01월', value: 2150 },
-  { label: '02월', value: 1980 },
-  { label: '03월', value: 2240 },
-  { label: '04월', value: 2180 },
-  { label: '05월', value: 2310 },
-  { label: '06월', value: 2190 },
-  { label: '07월', value: 2400 },
-  { label: '08월', value: 2320 },
-  { label: '09월', value: 2280 },
-  { label: '10월', value: 2410 },
-  { label: '11월', value: 2200 },
-  { label: '12월', value: 2350 },
-];
+export interface FefoRow {
+  code: string;
+  name: string;
+  warehouse: string;
+  qty: number;
+  unit: string;
+  daysLeft: number;
+}
 
-export const PRODUCTION_YEARLY: ChartPoint[] = [
-  { label: '01월', value: 2890 },
-  { label: '02월', value: 2750 },
-  { label: '03월', value: 3100 },
-  { label: '04월', value: 2980 },
-  { label: '05월', value: 3190 },
-  { label: '06월', value: 3050 },
-  { label: '07월', value: 3240 },
-  { label: '08월', value: 3150 },
-  { label: '09월', value: 3120 },
-  { label: '10월', value: 3300 },
-  { label: '11월', value: 3040 },
-  { label: '12월', value: 3220 },
-];
+export interface StockDayRow {
+  code: string;
+  name: string;
+  warehouse: string;
+  stockDays: number;
+}
 
-export const UNDELIVERED_YEARLY: ChartPoint[] = [
-  { label: '01월', value: 480 },
-  { label: '02월', value: 390 },
-  { label: '03월', value: 520 },
-  { label: '04월', value: 460 },
-  { label: '05월', value: 510 },
-  { label: '06월', value: 430 },
-  { label: '07월', value: 540 },
-  { label: '08월', value: 490 },
-  { label: '09월', value: 470 },
-  { label: '10월', value: 530 },
-  { label: '11월', value: 450 },
-  { label: '12월', value: 480 },
-];
+export interface LineRow {
+  gyeId: string;
+  name: string;
+  status: '가동' | '대기' | '이상';
+}
 
+export interface KpiSummary {
+  totalProducts: number;
+  totalPartners: number;
+  totalInventoryItems: number;
+  salesTotalMonth: number;
+  shortageCount: number;
+  todaySalesAmount: number;
+  yesterdaySalesAmount: number;
+  todayOrderQty: number;
+  deliveryRate: number;
+  deliveryDoneCount: number;
+  deliveryTotalCount: number;
+  productionRate: number;
+  expiryUrgentCount: number;
+  safetyShortageCount: number;
+}
+
+export interface DashboardStats {
+  sales: ChartSeries;
+  purchase: ChartSeries;
+  production: ChartSeries;
+  undelivered: ChartSeries;
+  notifications: string[];
+  hasData: Record<ChartKey, boolean>;
+  kpiSummary: KpiSummary;
+  pipeline: PipelineStats;
+  actionQueue: ActionItem[];
+  fefoTop: FefoRow[];
+  stockDaysTop: StockDayRow[];
+  lineMap: LineRow[];
+  spark: { sales: number[]; purchase: number[]; production: number[] };
+  fetchedAt: string;
+}
+
+/** 1~31일 빈 축 */
+export function emptyMonth(): ChartPoint[] {
+  return Array.from({ length: 31 }, (_, i) => ({
+    label: String(i + 1).padStart(2, '0'),
+    value: 0,
+  }));
+}
+
+/** 01월~12월 빈 축 */
+export function emptyYear(): ChartPoint[] {
+  return Array.from({ length: 12 }, (_, i) => ({
+    label: `${String(i + 1).padStart(2, '0')}월`,
+    value: 0,
+  }));
+}
+
+export const EMPTY_STATS: DashboardStats = {
+  sales: { monthly: emptyMonth(), yearly: emptyYear() },
+  purchase: { monthly: emptyMonth(), yearly: emptyYear() },
+  production: { monthly: emptyMonth(), yearly: emptyYear() },
+  undelivered: { monthly: emptyMonth(), yearly: emptyYear() },
+  notifications: [],
+  hasData: { sales: false, purchase: false, production: false, undelivered: false },
+  kpiSummary: {
+    totalProducts: 0,
+    totalPartners: 0,
+    totalInventoryItems: 0,
+    salesTotalMonth: 0,
+    shortageCount: 0,
+    todaySalesAmount: 0,
+    yesterdaySalesAmount: 0,
+    todayOrderQty: 0,
+    deliveryRate: 0,
+    deliveryDoneCount: 0,
+    deliveryTotalCount: 0,
+    productionRate: 0,
+    expiryUrgentCount: 0,
+    safetyShortageCount: 0,
+  },
+  pipeline: {
+    orderQty: 0,
+    prodDone: 0,
+    prodTarget: 0,
+    prodPct: 0,
+    undeliveredCount: 0,
+    cutoffAt: null,
+  },
+  actionQueue: [],
+  fefoTop: [],
+  stockDaysTop: [],
+  lineMap: [],
+  spark: { sales: [0, 0, 0, 0, 0, 0, 0], purchase: [0, 0, 0, 0, 0, 0, 0], production: [0, 0, 0, 0, 0, 0, 0] },
+  fetchedAt: '',
+};
