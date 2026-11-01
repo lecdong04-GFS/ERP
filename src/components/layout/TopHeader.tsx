@@ -47,7 +47,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
   const userDept = (session?.user as any)?.department;
 
   return (
-    <header className="h-[46px] bg-[#1a2332] text-gray-200 px-4 flex items-center justify-between border-b border-slate-700/80 select-none shadow-sm">
+    <header className="h-[46px] bg-[#1a2332] text-gray-200 px-2 sm:px-4 flex items-center justify-between gap-2 border-b border-slate-700/80 select-none shadow-sm">
       {/* Title & Logo */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5 font-black tracking-tight text-white text-[15px]">
@@ -73,7 +73,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         {/* GS Retail Excel Import Button */}
         <button
           onClick={openExcelOrderModal}
-          className="flex items-center gap-1.5 h-7.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
+          className="hidden lg:flex items-center gap-1.5 h-7.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
           title="GS리테일 점포 발주 엑셀 업로드 및 자동 파싱"
         >
           <FileSpreadsheet className="w-4 h-4" />
@@ -83,7 +83,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         {/* Pipeline Trigger Button */}
         <button
           onClick={openPipelineModal}
-          className="flex items-center gap-1.5 h-7.5 px-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-extrabold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
+          className="hidden lg:flex items-center gap-1.5 h-7.5 px-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-extrabold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
           title="생산-원가 자동 연산 파이프라인 엔진 가동"
         >
           <Zap className="w-4 h-4 fill-black stroke-black" />
@@ -93,7 +93,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         {/* Standard Document Print Button */}
         <button
           onClick={() => openPrintModal()}
-          className="flex items-center gap-1.5 h-7.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
+          className="hidden lg:flex items-center gap-1.5 h-7.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-[12px] shadow-sm transition-all active:scale-95 cursor-pointer"
           title="HACCP 및 공정 작업지시서, 수불부 표준 규격 인쇄"
         >
           <Printer className="w-4 h-4" />
@@ -117,7 +117,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
 
         {/* User Info & Logout */}
         <div className="flex items-center gap-2 pl-2 border-l border-gray-600">
-          <div className="flex items-center gap-1.5 text-amber-300 font-medium text-[12px]">
+          <div className="hidden sm:flex items-center gap-1.5 text-amber-300 font-medium text-[12px]">
             <User className="w-4 h-4" />
             <span>
               {userName}님{userDept ? ` (${userDept})` : ''} <span className="text-[11px] bg-amber-400/20 text-amber-200 px-1.5 py-0.5 rounded border border-amber-400/30 font-bold">{userRole}</span>

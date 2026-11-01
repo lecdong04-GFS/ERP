@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/master/product?category=완성품&search=김밥
 export async function GET(req: NextRequest) {
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
           productId: product.id,
           deliveryPrice: deliveryPrice ? Number(deliveryPrice) : 0,
           purchasePrice: purchasePrice ? Number(purchasePrice) : 0,
-          effectiveDate: new Date().toISOString().slice(0, 10),
+          effectiveDate: kstToday(),
         },
       });
     }
@@ -169,4 +170,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

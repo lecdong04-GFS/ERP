@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday, makeDocNo } from '@/lib/kst';
 
 // GET /api/purchase/order-req-confirm?date=2026-10-30
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    const date = searchParams.get('date') || kstToday();
 
     // 1. 자재 마스터 및 현재고, 소요량 집계
     const materials = await prisma.product.findMany({
@@ -165,14 +166,14 @@ export async function POST(req: NextRequest) {
         if (!partner) {
           partner = await tx.partner.create({
             data: {
-              id: `V-AUTO-${Date.now().toString().slice(-4)}-${partnerIdx}`,
+              id: `V-AUTO-${Date.now()}-${partnerIdx}`,
               name: groupItems[0]?.supplier || groupItems[0]?.partnerName || '협력사',
               partnerType: 'P',
             },
           });
         }
 
-        const poNo = `PO-${orderDate.replace(/-/g, '')}-${partner.id}-${Date.now().toString().slice(-4)}`;
+        const poNo = `${makeDocNo('PO', orderDate)}-${partner.id}`;
         let poTotalAmount = 0;
         const detailRecords = [];
 

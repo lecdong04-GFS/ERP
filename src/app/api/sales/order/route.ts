@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { makeDocNo } from '@/lib/kst';
 
 // GET /api/sales/order?orderDate=2026-10-30&shift=1편
 export async function GET(req: NextRequest) {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const orderNo = `SO-${orderDate.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
+    const orderNo = makeDocNo('SO', orderDate);
 
     let totalAmount = 0;
     let totalQty = 0;
@@ -117,4 +118,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

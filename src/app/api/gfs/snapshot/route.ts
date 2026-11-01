@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/gfs/snapshot — 품목별 GFS 버팀일 스냅샷 전체
 export async function GET() {
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
     const me = session.user as any;
     const body = await req.json();
-    const asOf: string = body.asOf || new Date().toISOString().slice(0, 10);
+    const asOf: string = body.asOf || kstToday();
     const source: string = body.source === 'erp' ? 'erp' : 'gfs';
     const items = (body.items || []) as {
       productCode?: string;

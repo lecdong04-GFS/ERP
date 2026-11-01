@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
         productCode: data.productCode || '',
         productName: data.productName || '',
         category: data.category || '완성품',
-        discontinuedDate: data.discontinuedDate || new Date().toISOString().slice(0, 10),
+        discontinuedDate: data.discontinuedDate || kstToday(),
         reason: data.reason || '',
         remainStock: Number(data.remainStock) || 0,
         disposalPlan: data.disposalPlan || '',

@@ -1,10 +1,15 @@
 import { withAuth } from 'next-auth/middleware';
 
+const secret = process.env.NEXTAUTH_SECRET;
+if (process.env.NODE_ENV === 'production' && !secret) {
+  throw new Error('NEXTAUTH_SECRET 환경변수가 설정되지 않았습니다.');
+}
+
 export default withAuth({
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || 'gfs-erp-prodcore-2026-secret-key-do-not-expose',
+  ...(secret ? { secret } : {}),
 });
 
 export const config = {

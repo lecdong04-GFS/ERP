@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.productionResult.create({
       data: {
-        resultDate: data.resultDate || new Date().toISOString().slice(0, 10),
+        resultDate: data.resultDate || kstToday(),
         workOrderId: data.workOrderId ? Number(data.workOrderId) : null,
         shift: data.shift || '1편',
         gyeId: data.gyeId || '',

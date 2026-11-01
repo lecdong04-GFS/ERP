@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { normName } from '@/lib/gfs/canonical';
+import { kstToday, makeDocNo } from '@/lib/kst';
 
 interface IntakeItem {
   menuName: string;
@@ -22,11 +23,30 @@ export async function POST(req: NextRequest) {
     }
     const me = session.user as any;
     const body = await req.json();
-    const orderDate: string = body.orderDate || new Date().toISOString().slice(0, 10);
+    const orderDate: string = body.orderDate || kstToday();
     const centerCode: string = body.centerCode || 'GSR-001';
     const items = (body.items || []) as IntakeItem[];
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: 'items가 비어 있습니다.' }, { status: 400 });
+    }
+
+    // 서버측 중복 차단 (같은 날짜/센터 기존 수주)
+    const allowDuplicate = body.allowDuplicate === true;
+    const existingOrder = await prisma.salesOrder.findFirst({
+      where: { orderDate, centerCode, status: { not: '취소' } },
+      orderBy: { id: 'desc' },
+      select: { orderNo: true },
+    });
+    if (existingOrder && !allowDuplicate) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'DUPLICATE_ORDER',
+          error: `${orderDate} 수주가 이미 등록되어 있습니다. (${existingOrder.orderNo})`,
+          existingOrderNo: existingOrder.orderNo,
+        },
+        { status: 409 }
+      );
     }
 
     let matched = 0;
@@ -91,7 +111,7 @@ export async function POST(req: NextRequest) {
       if (!priceMap.has(p.productId)) priceMap.set(p.productId, Number(p.deliveryPrice) || 0);
     }
 
-    const orderNo = `SO-${orderDate.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
+    const orderNo = makeDocNo('SO', orderDate);
     let totalQty = 0;
     let totalAmount = 0;
     const details = detailInputs.map((d) => {

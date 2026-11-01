@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/purchase/order?orderDate=2026-10-30&status=미입고
 export async function GET(req: NextRequest) {
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
         data: {
           status: '발주취소',
           cancelReason: cancelReason || '사용자 요청에 의한 발주 취소',
-          cancelDate: new Date().toISOString().slice(0, 10),
+          cancelDate: kstToday(),
         },
       });
       return NextResponse.json({ success: true, message: '발주가 성공적으로 취소되었습니다.', data: updated });
@@ -75,4 +76,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

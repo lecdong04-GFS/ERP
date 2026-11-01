@@ -121,7 +121,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
 
-  secret: process.env.NEXTAUTH_SECRET || 'gfs-erp-prodcore-2026-secret-key-do-not-expose',
+  secret: process.env.NEXTAUTH_SECRET,
 };
 
 /** 역할(role) 기반 접근 권한 체크 */

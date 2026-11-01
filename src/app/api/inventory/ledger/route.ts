@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.materialLedger.create({
       data: {
-        ledgerDate: data.ledgerDate || new Date().toISOString().slice(0, 10),
+        ledgerDate: data.ledgerDate || kstToday(),
         productId: Number(data.productId) || 1,
         productCode: data.productCode || '',
         productName: data.productName || '',

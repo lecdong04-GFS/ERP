@@ -126,7 +126,8 @@ export const OrderUploadGsrView: React.FC = () => {
         alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      const orderDate = new Date().toISOString().slice(0, 10);
+      const orderDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      let allowDuplicate = false;
       try {
         const dupRes = await fetch(`/api/sales/order?orderDate=${orderDate}`);
         const dupJson = await dupRes.json();
@@ -138,6 +139,7 @@ export const OrderUploadGsrView: React.FC = () => {
           if (!window.confirm(`이미 등록된 발주현황이 ${dupList.length}건 있어요 (${info}).\n그래도 새로 등록할까요? (중복 집계 주의)`)) {
             return;
           }
+          allowDuplicate = true;
         }
       } catch {
         /* 조회 실패 시 그냥 진행 */
@@ -150,6 +152,7 @@ export const OrderUploadGsrView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderDate,
+          allowDuplicate,
           items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
         }),
       });
@@ -157,6 +160,8 @@ export const OrderUploadGsrView: React.FC = () => {
       if (json.success) {
         alert(`수주 등록 완료 (${json.data.orderNo})\n매칭 ${json.data.matched}건 · 신규 ${json.data.createdProducts}건 · 제외 ${json.data.skipped}건`);
         loadOrders();
+      } else if (json.code === 'DUPLICATE_ORDER') {
+        alert('이미 등록된 수주가 있습니다.\n' + (json.error || ''));
       } else {
         alert('수주 등록 실패: ' + (json.error || '알 수 없는 오류'));
       }

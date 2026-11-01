@@ -107,7 +107,7 @@ export default function LoginPage() {
                 type="text"
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
-                placeholder="admin"
+                placeholder="아이디 입력"
                 autoComplete="username"
                 autoFocus
                 className="w-full h-9 px-3 text-[12px] bg-white border border-gray-400 rounded shadow-inner focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 placeholder:text-gray-400"

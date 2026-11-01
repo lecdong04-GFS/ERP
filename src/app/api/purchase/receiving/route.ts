@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { makeDocNo } from '@/lib/kst';
 
 // GET /api/purchase/receiving?receivingDate=2026-10-30&status=입고
 export async function GET(req: NextRequest) {
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const receivingNo = `RC-${receivingDate.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
+    const receivingNo = makeDocNo('RC', receivingDate);
 
     // Prisma $transaction으로 입고 + 재고 + 수불부 원자적 동시 처리 (ACID 보장)
     const result = await prisma.$transaction(async (tx) => {
@@ -181,4 +182,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

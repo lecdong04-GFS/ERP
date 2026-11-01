@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { findRepoFiles, loadBomBundle, buildPreview, executeImport } from '@/lib/gfs/bomImport';
+import { kstToday } from '@/lib/kst';
 
 // POST /api/master/bom-import — 발주서 정본 내장 BOM 일괄적재
 // body: { dryRun?: boolean }
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const me = session.user as any;
     const body = await req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false; // 기본 미리보기
-    const today = new Date().toISOString().slice(0, 10);
+    const today = kstToday();
 
     const { orderFile, auditFile } = findRepoFiles();
     const bundle = await loadBomBundle(orderFile, auditFile, today);

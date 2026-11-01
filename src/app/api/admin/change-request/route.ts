@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,12 +32,12 @@ export async function POST(req: NextRequest) {
     }
 
     const count = await prisma.changeRequest.count();
-    const requestNo = `CR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(count + 1).padStart(3, '0')}`;
+    const requestNo = `CR-${kstToday().replace(/-/g, '')}-${String(count + 1).padStart(3, '0')}`;
 
     const created = await prisma.changeRequest.create({
       data: {
         requestNo,
-        requestDate: data.requestDate || new Date().toISOString().slice(0, 10),
+        requestDate: data.requestDate || kstToday(),
         requester: data.requester || '관리자',
         menuId: data.menuId || '',
         title: data.title || '기능 개선 요청',

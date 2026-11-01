@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       for (const r of rows) {
         const item = await prisma.materialExtraIssue.create({
           data: {
-            issueDate: r.issueDate || new Date().toISOString().slice(0, 10),
+            issueDate: r.issueDate || kstToday(),
             gyeId: r.gyeId || '',
             gyeName: r.gyeName || '',
             productCode: r.productCode || '',
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.materialExtraIssue.create({
       data: {
-        issueDate: data.issueDate || new Date().toISOString().slice(0, 10),
+        issueDate: data.issueDate || kstToday(),
         gyeId: data.gyeId || '',
         gyeName: data.gyeName || '',
         productCode: data.productCode || '',

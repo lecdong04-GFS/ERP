@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.foodWaste.create({
       data: {
-        wasteDate: data.wasteDate || new Date().toISOString().slice(0, 10),
+        wasteDate: data.wasteDate || kstToday(),
         gyeId: data.gyeId || '',
         gyeName: data.gyeName || '',
         wasteType: data.wasteType || '잔반',

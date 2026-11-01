@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { buildAuditMap, normName } from '@/lib/gfs/canonical';
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
+import { kstToday } from '@/lib/kst';
 
 interface InItem {
   name: string;
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: 'items가 비어 있습니다.' }, { status: 400 });
     }
-    const today = (orderDate || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+    const today = (orderDate || kstToday()).replace(/-/g, '');
 
     // 정본 로드 (서버 커밋 파일)
     const candidates = [
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest) {
               productId: product.id,
               purchasePrice: bagPrice,
               deliveryPrice: 0,
-              effectiveDate: new Date().toISOString().slice(0, 10),
+              effectiveDate: kstToday(),
               remark: 'GFS 자동생성 단가(봉단가)',
             },
           });

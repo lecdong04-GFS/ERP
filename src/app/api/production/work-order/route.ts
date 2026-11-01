@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { makeDocNo } from '@/lib/kst';
 
 // GET /api/production/work-order?workDate=2026-10-30&shift=1편&gyeId=GFS005
 export async function GET(req: NextRequest) {
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 });
     }
 
-    const workOrderNo = `WO-${workDate.replace(/-/g, '')}-${gyeId}-${Date.now().toString().slice(-4)}`;
+    const workOrderNo = `${makeDocNo('WO', workDate)}-${gyeId}`;
 
     const wo = await prisma.workOrder.create({
       data: {
@@ -97,4 +98,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

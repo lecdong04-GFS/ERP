@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
     const created = await prisma.productionSeq.create({
       data: {
-        seqDate: data.seqDate || new Date().toISOString().slice(0, 10),
+        seqDate: data.seqDate || kstToday(),
         shift: data.shift || '1편',
         gyeId: data.gyeId || '',
         gyeName: data.gyeName || '',

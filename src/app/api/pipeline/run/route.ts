@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProductionCostPipelineDBEngine } from '@/services/pipeline/ProductionCostPipelineDB';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // POST /api/pipeline/run (DB 실데이터 기반 원클릭 파이프라인 엔진 실행 & DB 영구 저장)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { orderDate = new Date().toISOString().slice(0, 10), shift = '1편' } = body;
+    const { orderDate = kstToday(), shift = '1편' } = body;
 
     // 1. DB 기반 파이프라인 연산 실행
     const result = await ProductionCostPipelineDBEngine.executePipeline(prisma, {

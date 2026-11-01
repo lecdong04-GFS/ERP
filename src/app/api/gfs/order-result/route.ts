@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 interface OrderResultItem {
   productCode: string;
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const today = orderDate || new Date().toISOString().slice(0, 10);
+    const today = orderDate || kstToday();
 
     // 그룹핑: partnerId별 1건씩 발주서 생성 (미지정 시 첫 번째 유효 거래처 사용)
     const groups = new Map<string, OrderResultItem[]>();

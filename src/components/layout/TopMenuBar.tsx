@@ -62,7 +62,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
       )}
 
       {/* Categories & System Menus */}
-      <div className="flex items-center space-x-1 overflow-visible">
+      <div className="hidden md:flex items-center space-x-1 overflow-visible">
         {/* 1~9: 업무관리 ~ 도움말 */}
         {MENU_CATEGORIES.filter((c) => c.id !== 'admin').map((category) => {
           const isOpen = openDropdownId === category.id;
@@ -79,7 +79,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
                   e.stopPropagation();
                   setOpenDropdownId(isOpen ? null : category.id);
                 }}
-                className={`px-3 py-1.5 text-[13px] font-semibold transition-colors cursor-pointer rounded-xs ${
+                className={`whitespace-nowrap shrink-0 px-3 py-1.5 text-[13px] font-semibold transition-colors cursor-pointer rounded-xs ${
                   isOpen
                     ? 'bg-[#2563eb] text-white shadow-xs'
                     : 'text-gray-800 hover:bg-[#e2e8f0]'

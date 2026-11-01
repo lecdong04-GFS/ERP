@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/inventory/stocktake?warehouse=냉장창고1&category=원재료
 export async function GET(req: NextRequest) {
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { stocktakeDate = new Date().toISOString().slice(0, 10), rows = [], createdBy = 'admin' } = body;
+    const { stocktakeDate = kstToday(), rows = [], createdBy = 'admin' } = body;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(

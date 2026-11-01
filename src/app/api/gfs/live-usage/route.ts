@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/gfs/live-usage?date=YYYY-MM-DD
 // ERP 자체 계산: 금일 완제품 수주량 x BOM = 자재별 live 일사용량 (GFS H열과 동일식)
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
         orderBy: { orderDate: 'desc' },
         select: { orderDate: true },
       });
-      date = latest?.orderDate || new Date().toISOString().slice(0, 10);
+      date = latest?.orderDate || kstToday();
     }
 
     // 1) 당일 완제품 수주량 합산 (productId 기준)

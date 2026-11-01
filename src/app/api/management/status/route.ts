@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
   try {
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
       const created = await prisma.salesPurchaseStatus.create({
         data: {
-          statusDate: data.statusDate || new Date().toISOString().slice(0, 10),
+          statusDate: data.statusDate || kstToday(),
           statusMonth: data.statusMonth || new Date().toISOString().slice(0, 7),
           salesAmount: sales,
           purchaseAmount: purchase,
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (type === 'provisional') {
       const created = await prisma.provisionalSalesStatus.create({
         data: {
-          statusDate: data.statusDate || new Date().toISOString().slice(0, 10),
+          statusDate: data.statusDate || kstToday(),
           provisionalSales: Number(data.provisionalSales) || 0,
           undeliveredAmount: Number(data.undeliveredAmount) || 0,
           confirmedAmount: Number(data.confirmedAmount) || 0,
