@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:backup": "tsx scripts/db-backup.exec.ts",
+    "excel:import": "tsx scripts/excel-import.exec.ts",
+    "demo:seed": "tsx scripts/demo-seed.exec.ts",
+    "demo:clean": "tsx scripts/demo-seed.exec.ts --clean"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

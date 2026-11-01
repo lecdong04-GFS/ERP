@@ -44,7 +44,7 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
   title,
   monthlyData,
   yearlyData,
-  yDomain = [0, 120],
+  yDomain,
   defaultMode = 'monthly',
   showZeroLabels = false,
   hasData = true,
@@ -122,7 +122,7 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
                   : 'text-[var(--ink-600)] hover:text-[var(--ink-900)]'
               }`}
             >
-              {m === 'monthly' ? '당월' : '년'}
+              {m === 'monthly' ? '30일' : '년'}
             </button>
           ))}
         </div>
@@ -148,11 +148,7 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
                 axisLine={{ stroke: '#dbe3ee' }}
               />
               <YAxis
-                domain={
-                  mode === 'yearly'
-                    ? [0, (dataMax: number) => Math.ceil((dataMax || 1000) * 1.15)]
-                    : yDomain
-                }
+                domain={yDomain ?? [0, (dataMax: number) => Math.ceil((dataMax || 10) * 1.15)]}
                 tick={{ fontSize: 9.5, fill: '#94a3b8' }}
                 tickLine={false}
                 axisLine={false}
@@ -174,7 +170,7 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
                     return (
                       <div className="rounded-md border border-[var(--line)] bg-white px-2.5 py-1.5 shadow-lg">
                         <div className="text-[10px] font-semibold text-[var(--ink-400)]">
-                          {mode === 'monthly' ? `${data.label}일` : data.label}
+                          {data.label}
                         </div>
                         <div className="num text-[13px] font-bold" style={{ color: accent }}>
                           {data.value?.toLocaleString() ?? 0}

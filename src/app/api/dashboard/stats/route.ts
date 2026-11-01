@@ -41,27 +41,18 @@ function nextCutoff(): string | null {
   return CUTOFF_TIMES[0];
 }
 
-function daysInMonth(month: string): number {
-  const [y, m] = month.split('-').map(Number);
-  return new Date(y, m, 0).getDate();
-}
-
-/** 일자별 합계 → 백만원 차트 (해당 월 일수만큼 축 생성) */
-function buildMonthly(
-  rows: { date: string; amount: number }[],
-  month: string
-): ChartPoint[] {
-  const days = daysInMonth(month);
+/** 최근 30일 일별 차트 (MM/DD 라벨) */
+function buildRolling30(rows: { date: string; amount: number }[], endDate: string): ChartPoint[] {
   const map: Record<string, number> = {};
   rows.forEach((r) => {
-    if (r.date.startsWith(month)) {
-      const d = r.date.slice(8, 10);
-      map[d] = (map[d] || 0) + (r.amount || 0);
-    }
+    map[r.date] = (map[r.date] || 0) + (r.amount || 0);
   });
-  return Array.from({ length: days }, (_, i) => {
-    const label = String(i + 1).padStart(2, '0');
-    return { label, value: Math.round((map[label] || 0) / 1000000) };
+  return Array.from({ length: 30 }, (_, i) => {
+    const d = kstDate(i - 29);
+    return {
+      label: `${d.slice(5, 7)}/${d.slice(8, 10)}`,
+      value: Math.round((map[d] || 0) / 1000000),
+    };
   });
 }
 
@@ -92,6 +83,7 @@ export async function GET(req: NextRequest) {
     const today = kstDate(0);
     const yesterday = kstDate(-1);
     const weekAgo = kstDate(-6);
+    const monthAgo = kstDate(-29);
     const thisMonth = today.slice(0, 7);
     const thisYear = today.slice(0, 4);
 
@@ -122,15 +114,15 @@ export async function GET(req: NextRequest) {
       stockDaysRows,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
-        where: { orderDate: { startsWith: thisMonth }, status: { not: '취소' } },
+        where: { orderDate: { gte: monthAgo, lte: today }, status: { not: '취소' } },
         select: { orderDate: true, totalAmount: true, totalQty: true },
       }),
       prisma.purchaseOrder.findMany({
-        where: { orderDate: { startsWith: thisMonth } },
+        where: { orderDate: { gte: monthAgo, lte: today } },
         select: { orderDate: true, totalAmount: true },
       }),
       prisma.workOrder.findMany({
-        where: { workDate: { startsWith: thisMonth } },
+        where: { workDate: { gte: monthAgo, lte: today } },
         select: { workDate: true, prodQty: true, orderQty: true },
       }),
       prisma.salesOrder.findMany({
@@ -210,7 +202,7 @@ export async function GET(req: NextRequest) {
         },
       }),
       prisma.gfsSnapshot.findMany({
-        where: { stockDays: { not: null } },
+        where: { stockDays: { gt: 0 } },
         select: { productCode: true, productName: true, warehouse: true, stockDays: true },
         orderBy: { stockDays: 'asc' },
         take: 5,
@@ -226,24 +218,24 @@ export async function GET(req: NextRequest) {
     }));
 
     const sales: ChartSeries = {
-      monthly: buildMonthly(salesRows, thisMonth),
+      monthly: buildRolling30(salesRows, today),
       yearly: buildYearly(yearSales.map((o) => ({ date: o.orderDate, amount: o.totalAmount })), thisYear),
     };
     const purchase: ChartSeries = {
-      monthly: buildMonthly(purchaseRows, thisMonth),
+      monthly: buildRolling30(purchaseRows, today),
       yearly: buildYearly(yearPurchase.map((o) => ({ date: o.orderDate, amount: o.totalAmount })), thisYear),
     };
     const production: ChartSeries = {
-      monthly: buildMonthly(prodRows, thisMonth),
+      monthly: buildRolling30(prodRows, today),
       yearly: buildYearly(
         yearWork.map((w) => ({ date: w.workDate, amount: (w.prodQty || w.orderQty || 0) * 2000 })),
         thisYear
       ),
     };
     const undelivered: ChartSeries = {
-      monthly: buildMonthly(
+      monthly: buildRolling30(
         undeliveredOrders.map((o) => ({ date: o.orderDate, amount: o.totalAmount })),
-        thisMonth
+        today
       ),
       yearly: buildYearly(
         undeliveredOrders.map((o) => ({ date: o.orderDate, amount: o.totalAmount })),

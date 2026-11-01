@@ -188,7 +188,6 @@ export const Dashboard: React.FC = () => {
           title="매출현황 (단위: 백만)"
           monthlyData={stats.sales.monthly}
           yearlyData={stats.sales.yearly}
-          yDomain={[0, 120]}
           defaultMode="monthly"
           hasData={stats.hasData.sales}
           accent="#2b7de9"
@@ -197,7 +196,6 @@ export const Dashboard: React.FC = () => {
           title="매입현황 (단위: 백만)"
           monthlyData={stats.purchase.monthly}
           yearlyData={stats.purchase.yearly}
-          yDomain={[0, 120]}
           defaultMode="monthly"
           hasData={stats.hasData.purchase}
           accent="#0ea5e9"
@@ -206,7 +204,6 @@ export const Dashboard: React.FC = () => {
           title="생산현황 (단위: 백만)"
           monthlyData={stats.production.monthly}
           yearlyData={stats.production.yearly}
-          yDomain={[0, 120]}
           defaultMode="monthly"
           hasData={stats.hasData.production}
           accent="#10b981"
@@ -216,7 +213,6 @@ export const Dashboard: React.FC = () => {
           title="미납품금액 (단위: 백만)"
           monthlyData={stats.undelivered.monthly}
           yearlyData={stats.undelivered.yearly}
-          yDomain={[0, 250]}
           defaultMode="monthly"
           hasData={stats.hasData.undelivered}
           accent="#f59e0b"
