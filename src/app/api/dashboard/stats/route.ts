@@ -78,7 +78,13 @@ function buildSpark(rows: { date: string; amount: number }[], today: string): nu
   });
 }
 
+const CACHE_TTL_MS = 15_000;
+let statsCache: { at: number; data: DashboardStats } | null = null;
+
 export async function GET(req: NextRequest) {
+  if (statsCache && Date.now() - statsCache.at < CACHE_TTL_MS) {
+    return NextResponse.json({ success: true, data: statsCache.data });
+  }
   try {
     const today = kstDate(0);
     const yesterday = kstDate(-1);
@@ -97,9 +103,6 @@ export async function GET(req: NextRequest) {
       shortageCount,
       safetyShortageCount,
       expiryCandidates,
-      productsCount,
-      partnersCount,
-      inventoryCount,
       warehouseRows,
       stockDaysRows,
     ] = await Promise.all([
@@ -144,9 +147,6 @@ export async function GET(req: NextRequest) {
         },
         take: 300,
       }),
-      prisma.product.count({ where: { isUsed: true, category: '완성품' } }),
-      prisma.partner.count({ where: { isUsed: true } }),
-      prisma.inventory.count(),
       prisma.inventory.findMany({
         select: { warehouse: true, currentQty: true, unitPrice: true, stockAmount: true },
       }),
@@ -357,9 +357,9 @@ export async function GET(req: NextRequest) {
         undelivered: undeliveredOrders.length > 0,
       },
       kpiSummary: {
-        totalProducts: productsCount,
-        totalPartners: partnersCount,
-        totalInventoryItems: inventoryCount,
+        totalProducts: 0,
+        totalPartners: 0,
+        totalInventoryItems: 0,
         salesTotalMonth: Math.round(
           salesRows.reduce((s, o) => s + (o.amount || 0), 0) / 10000
         ),
@@ -391,6 +391,7 @@ export async function GET(req: NextRequest) {
       fetchedAt: new Date().toISOString(),
     };
 
+    statsCache = { at: Date.now(), data };
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('Dashboard stats error:', error);
