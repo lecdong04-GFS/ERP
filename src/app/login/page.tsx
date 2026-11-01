@@ -157,21 +157,9 @@ export default function LoginPage() {
                 </>
               )}
             </button>
-
-            {/* 데모 계정 안내 */}
-            <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
-              <p className="text-[10px] font-bold text-blue-800 mb-1.5">데모 계정 안내</p>
-              <div className="space-y-1 text-[10px] text-blue-700">
-                <div className="flex justify-between">
-                  <span className="font-medium">관리자:</span>
-                  <span className="font-mono">admin / password123!</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">생산팀:</span>
-                  <span className="font-mono">gfs_prod / password123!</span>
-                </div>
-              </div>
-            </div>
+            <p className="mt-4 text-center text-[10px] text-gray-400">
+              계정 문의는 정보전산팀에 연락하세요.
+            </p>
           </form>
 
           {/* 하단 정보 */}
