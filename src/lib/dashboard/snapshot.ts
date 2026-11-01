@@ -1,6 +1,7 @@
 import { DashboardStats } from '@/components/dashboard/dashboardData';
 import { kstToday } from '@/lib/kst';
 import { pgQuery } from '@/lib/db/pg';
+import { readSharedDashboard, writeSharedDashboard } from '@/lib/cache/shared';
 import { nextCutoff } from './cutoff';
 
 const KEY = 'dashboard';
@@ -68,6 +69,7 @@ export async function refreshSnapshot(): Promise<DashboardStats | null> {
     const { computeDashboardStats } = await import('./compute');
     const data = await computeDashboardStats();
     await writeSnapshot(data);
+    await writeSharedDashboard({ data, updatedAt: data.fetchedAt, asOf: kstToday() });
     mem = { at: Date.now(), data };
     return data;
   } finally {
@@ -93,7 +95,7 @@ export function scheduleRefresh(): void {
 
 export interface DashboardResult {
   data: DashboardStats;
-  source: 'memory' | 'snapshot' | 'live';
+  source: 'memory' | 'redis' | 'snapshot' | 'live';
   stale: boolean;
 }
 
@@ -107,6 +109,27 @@ export async function getDashboardStats(options: { force?: boolean } = {}): Prom
 
   if (!force) {
     try {
+      const shared = await readSharedDashboard();
+      if (shared?.data && (shared.data as any)?.kpiSummary) {
+        const data: DashboardStats = {
+          ...(shared.data as DashboardStats),
+          fetchedAt: shared.updatedAt,
+          pipeline: {
+            ...(shared.data as DashboardStats).pipeline,
+            cutoffAt: nextCutoff(),
+          },
+        };
+        mem = { at: Date.now(), data };
+        const stale =
+          shared.asOf !== today ||
+          Date.now() - new Date(shared.updatedAt).getTime() > STALE_MS;
+        return { data, source: 'redis', stale };
+      }
+    } catch (error: any) {
+      console.error('[dashboard] shared cache read failed:', error?.message || error);
+    }
+
+    try {
       const snapshot = await readSnapshot();
       if (snapshot) {
         const data: DashboardStats = {
@@ -114,10 +137,17 @@ export async function getDashboardStats(options: { force?: boolean } = {}): Prom
           fetchedAt: new Date(snapshot.updated_at).toISOString(),
           pipeline: { ...snapshot.payload.pipeline, cutoffAt: nextCutoff() },
         };
-        mem = { at: Date.now(), data };
         const stale =
           snapshot.as_of !== today ||
           Date.now() - new Date(snapshot.updated_at).getTime() > STALE_MS;
+        if (!stale) {
+          await writeSharedDashboard({
+            data: snapshot.payload,
+            updatedAt: new Date(snapshot.updated_at).toISOString(),
+            asOf: snapshot.as_of,
+          });
+        }
+        mem = { at: Date.now(), data };
         return { data, source: 'snapshot', stale };
       }
     } catch (error: any) {
@@ -131,6 +161,7 @@ export async function getDashboardStats(options: { force?: boolean } = {}): Prom
   await writeSnapshot(data).catch((error) => {
     console.error('[dashboard] snapshot write failed:', error?.message || error);
   });
+  await writeSharedDashboard({ data, updatedAt: data.fetchedAt, asOf: today });
   mem = { at: Date.now(), data };
   return { data, source: 'live', stale: false };
 }

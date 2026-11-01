@@ -11,7 +11,8 @@ dist/
 
 # Env (secret 포함이므로 커밋 제외)
 .env
-.env*.local
+.env*
+!.env.example.local
 
 # Prisma DB (로컬 sqlite - 필요시 별도 백업)
 prisma/*.db
@@ -38,3 +39,4 @@ Thumbs.db
 ~$*.xlsx
 .vercel
 .env*
+!.env.example
