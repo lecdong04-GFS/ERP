@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 // GET /api/inventory/stocktake?warehouse=냉장창고1&category=원재료
 export async function GET(req: NextRequest) {
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest) {
       return count;
     });
 
+    await touchDashboardSnapshot();
     return NextResponse.json({
       success: true,
       message: `${updated}개 품목의 일일 재고실사가 성공적으로 반영되었습니다.`,

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { normName } from '@/lib/gfs/canonical';
 import { kstToday, makeDocNo } from '@/lib/kst';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 interface IntakeItem {
   menuName: string;
@@ -160,6 +161,7 @@ export async function POST(req: NextRequest) {
       })
       .catch(() => {});
 
+    await touchDashboardSnapshot();
     return NextResponse.json({
       success: true,
       data: { orderNo, itemCount: detailInputs.length, matched, createdProducts, skipped },

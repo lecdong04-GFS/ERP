@@ -12,7 +12,8 @@
     "db:backup": "tsx scripts/db-backup.exec.ts",
     "excel:import": "tsx scripts/excel-import.exec.ts",
     "demo:seed": "tsx scripts/demo-seed.exec.ts",
-    "demo:clean": "tsx scripts/demo-seed.exec.ts --clean"
+    "demo:clean": "tsx scripts/demo-seed.exec.ts --clean",
+    "db:migrate:sql": "tsx scripts/db-migrate.exec.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -28,6 +29,7 @@
     "lucide-react": "^0.460.0",
     "next": "^15.1.0",
     "next-auth": "^4.24.15",
+    "pg": "^8.23.1",
     "prisma": "6.19.3",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",

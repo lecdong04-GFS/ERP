@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 // GET /api/inventory/stock?category=원재료&warehouse=상온보관고
 export async function GET(req: NextRequest) {
@@ -223,6 +224,7 @@ export async function POST(req: NextRequest) {
       })
       .catch(() => {});
 
+    await touchDashboardSnapshot();
     return NextResponse.json({ success: true, count: created.length, data: created });
   } catch (error: any) {
     console.error('Inventory stock create failed:', error);

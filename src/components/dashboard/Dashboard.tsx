@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Factory, PackageCheck, ShieldAlert, TrendingUp } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
@@ -11,7 +11,7 @@ import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
 import { ProductionProgress } from './ProductionProgress';
 import { WarehouseStock } from './WarehouseStock';
-import { DashboardStats, EMPTY_STATS } from './dashboardData';
+import { useDashboardStats } from './useDashboardStats';
 
 // Recharts는 클라이언트 환경(브라우저)에서만 로드하도록 ssr: false 설정
 const ErpChartPanel = dynamic(
@@ -32,37 +32,8 @@ const ErpChartPanel = dynamic(
 const wont = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 
 export const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { stats, loading, refreshing, error, refresh } = useDashboardStats();
   const { openTab } = useTabs();
-
-  const load = useCallback(async (silent = false) => {
-    if (silent) setRefreshing(true);
-    try {
-      const res = await fetch(`/api/dashboard/stats${silent ? '?fresh=1' : ''}`, { cache: 'no-store' });
-      const json = await res.json();
-      if (json.success && json.data) {
-        setStats((prev) => ({ ...prev, ...json.data }));
-        setError(json.error || null);
-      } else {
-        setError(json.error || '대시보드 데이터를 불러오지 못했습니다.');
-      }
-    } catch (err) {
-      console.error('Failed to load dashboard stats:', err);
-      setError('대시보드 데이터를 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const timer = setInterval(() => load(true), 60_000);
-    return () => clearInterval(timer);
-  }, [load]);
 
   const navigate = useCallback(
     (menuId: string) => {
@@ -105,7 +76,7 @@ export const Dashboard: React.FC = () => {
       <PipelineHero
         pipeline={stats.pipeline}
         fetchedAt={stats.fetchedAt}
-        onRefresh={() => load(true)}
+        onRefresh={() => { void refresh(); }}
         refreshing={refreshing}
       />
 

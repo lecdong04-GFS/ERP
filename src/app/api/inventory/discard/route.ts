@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
         });
         createdList.push(item);
       }
+      await touchDashboardSnapshot();
       return NextResponse.json({ success: true, count: createdList.length, data: createdList });
     }
 
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
         remark: data.remark || '',
       },
     });
+    await touchDashboardSnapshot();
     return NextResponse.json({ success: true, data: created });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

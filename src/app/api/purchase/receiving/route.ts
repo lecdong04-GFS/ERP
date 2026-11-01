@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 // GET /api/purchase/receiving?receivingDate=2026-10-30&status=입고
 export async function GET(req: NextRequest) {
@@ -170,6 +171,7 @@ export async function POST(req: NextRequest) {
       return createdReceiving;
     });
 
+    await touchDashboardSnapshot();
     return NextResponse.json({
       success: true,
       message: '입고가 정상 등록되었으며 현재고와 자재수불부에 반영되었습니다 (트랜잭션 완료).',
