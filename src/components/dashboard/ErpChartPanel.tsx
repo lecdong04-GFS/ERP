@@ -184,7 +184,7 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
                   return null;
                 }}
               />
-              <Bar dataKey="value" maxBarSize={mode === 'monthly' ? 13 : 26} radius={[3, 3, 0, 0]}>
+              <Bar dataKey="value" maxBarSize={mode === 'monthly' ? 13 : 26} radius={[3, 3, 0, 0]} isAnimationActive={false}>
                 {currentData.map((_, i) => (
                   <Cell key={i} fill={`url(#${gradientId})`} />
                 ))}
