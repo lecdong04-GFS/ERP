@@ -1316,3 +1316,26 @@ model Schedule {
   @@index([category])
   @@index([deletedAt])
 }
+
+/// 업무실행등록 (일일 업무 일지)
+model WorkExecution {
+  id            Int       @id @default(autoincrement())
+  execDate      String    // YYYY-MM-DD
+  execType      String    @default("정기업무") // 정기업무, 임시업무, 개선업무, 고장처리, 교육
+  title         String
+  content       String    @default("")
+  hours         Float     @default(0)
+  status        String    @default("완료") // 완료, 진행중, 보류
+  department    String    @default("")
+  authorId      Int?
+  authorLoginId String    @default("")
+  authorName    String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([execDate])
+  @@index([execType])
+  @@index([deletedAt])
+  @@index([authorId])
+}
