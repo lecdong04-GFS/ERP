@@ -80,17 +80,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '등록할 수주가 없습니다. (수량 0 또는 품명 누락)' }, { status: 400 });
     }
 
+    // 납품단가: 제품별 최신 적용일 기준 ProductPrice.deliveryPrice
+    const priceRows = await prisma.productPrice.findMany({
+      where: { productId: { in: detailInputs.map((d) => d.productId) } },
+      select: { productId: true, deliveryPrice: true, effectiveDate: true },
+      orderBy: [{ productId: 'asc' }, { effectiveDate: 'desc' }],
+    });
+    const priceMap = new Map<number, number>();
+    for (const p of priceRows) {
+      if (!priceMap.has(p.productId)) priceMap.set(p.productId, Number(p.deliveryPrice) || 0);
+    }
+
     const orderNo = `SO-${orderDate.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`;
     let totalQty = 0;
+    let totalAmount = 0;
     const details = detailInputs.map((d) => {
       totalQty += d.total;
+      const unitPrice = priceMap.get(d.productId) ?? 0;
+      const amount = Math.round(d.total * unitPrice);
+      totalAmount += amount;
       return {
         productId: d.productId,
         orderQty1: d.qty1,
         orderQty2: d.qty2,
         totalQty: d.total,
-        unitPrice: 0,
-        amount: 0,
+        unitPrice,
+        amount,
       };
     });
 
@@ -103,7 +118,7 @@ export async function POST(req: NextRequest) {
         orderType: '정규',
         uploadMethod: '엑셀(발주현황)',
         status: '접수',
-        totalAmount: 0,
+        totalAmount,
         totalQty,
         createdBy: `${me.name || me.loginId || '담당자'}(${(me as any).loginId || ''})`,
         details: { create: details },
