@@ -8,7 +8,7 @@ export const TabBar: React.FC = () => {
   const { tabs, activeTabId, setActiveTabId, closeTab, closeAllTabs } = useTabs();
 
   return (
-    <div className="h-[36px] bg-[#cbd5e1] border-b border-gray-400 flex items-end justify-between px-2 text-xs select-none shadow-xs">
+    <div className="h-[34px] bg-[#eef2f7] border-b border-[var(--line)] flex items-end justify-between px-2 text-xs select-none">
       {/* Scrollable Tab List */}
       <div className="flex items-end space-x-1.5 overflow-x-auto flex-1 min-w-0 pr-2">
         {tabs.map((tab) => {
@@ -19,10 +19,10 @@ export const TabBar: React.FC = () => {
             <div
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`group relative flex items-center gap-2 px-3.5 py-1.5 text-[12.5px] cursor-pointer border-t border-l border-r border-gray-400 transition-colors whitespace-nowrap min-w-[110px] max-w-[220px] rounded-t-xs ${
+              className={`group relative flex items-center gap-2 px-3 py-1.5 text-[12px] cursor-pointer transition-colors whitespace-nowrap min-w-[104px] max-w-[220px] rounded-t-md ${
                 isActive
-                  ? 'bg-white text-gray-900 font-bold border-t-[3px] border-t-[#2563eb] shadow-sm z-10 -mb-px pb-2'
-                  : 'bg-[#e2e8f0] text-gray-700 hover:bg-[#f1f5f9] font-medium'
+                  ? 'bg-white text-[var(--ink-900)] font-bold border-t-[2px] border-t-[#2b7de9] shadow-sm z-10 -mb-px pb-2'
+                  : 'bg-transparent text-[var(--ink-600)] hover:bg-white/70 font-medium'
               }`}
             >
               {isDashboard ? (
@@ -54,15 +54,15 @@ export const TabBar: React.FC = () => {
       </div>
 
       {/* Right End: [창 모두 닫기] Button */}
-      <div className="flex items-center gap-1 shrink-0 pb-1.5 pl-2 border-l border-gray-400 bg-[#cbd5e1]">
+      <div className="flex items-center gap-1 shrink-0 pb-1.5 pl-2 border-l border-[var(--line)]">
         <button
           type="button"
           onClick={closeAllTabs}
           disabled={tabs.length <= 1}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] border rounded-xs font-semibold transition-colors shadow-2xs cursor-pointer ${
             tabs.length <= 1
-              ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed opacity-60'
-              : 'bg-white text-gray-800 border-gray-400 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-400'
+              ? 'bg-[#f1f5f9] text-[var(--ink-400)] border-[var(--line)] cursor-not-allowed opacity-60'
+              : 'bg-white text-[var(--ink-700)] border-[var(--line)] hover:bg-[#fff1f2] hover:text-[#be123c] hover:border-[#fecdd3]'
           }`}
           title="대시보드를 제외한 모든 탭 닫기"
         >

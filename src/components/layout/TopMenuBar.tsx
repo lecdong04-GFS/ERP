@@ -42,7 +42,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
   return (
     <div
       ref={barRef}
-      className="h-[36px] bg-[#f8fafc] border-b border-gray-300 flex items-center px-2 text-xs select-none relative z-50 overflow-visible shadow-xs"
+      className="h-[36px] bg-white border-b border-[var(--line)] flex items-center px-2 text-xs select-none relative z-50 overflow-visible"
     >
       {/* Sidebar Toggle Button */}
       {onToggleSidebar && (
@@ -51,8 +51,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
           onClick={onToggleSidebar}
           className={`flex items-center gap-1.5 px-2.5 py-1 mr-1.5 text-[12px] border rounded-xs transition-colors cursor-pointer ${
             isSidebarOpen
-              ? 'bg-blue-50 text-blue-800 border-blue-400 font-bold'
-              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 font-medium'
+              ? 'bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe] font-semibold'
+              : 'bg-white text-[var(--ink-700)] border-[var(--line)] hover:bg-[#f8fafc] font-medium'
           }`}
           title="사이드바 메뉴 트리 열기/닫기"
         >
@@ -82,7 +82,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
                 className={`whitespace-nowrap shrink-0 px-3 py-1.5 text-[13px] font-semibold transition-colors cursor-pointer rounded-xs ${
                   isOpen
                     ? 'bg-[#2563eb] text-white shadow-xs'
-                    : 'text-gray-800 hover:bg-[#e2e8f0]'
+                    : 'text-[var(--ink-700)] hover:bg-[#f1f5f9]'
                 }`}
               >
                 {category.title}
@@ -141,8 +141,8 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
                 }}
                 className={`px-3 py-1.5 text-[13px] font-bold transition-colors cursor-pointer rounded-xs ${
                   isOpen
-                    ? 'bg-rose-600 text-white shadow-xs'
-                    : 'text-rose-700 hover:bg-rose-50 border border-rose-300'
+                    ? 'bg-[#e11d48] text-white'
+                    : 'text-[#be123c] hover:bg-[#fff1f2] border border-[#fecdd3]'
                 }`}
               >
                 {adminCat.title}

@@ -300,23 +300,23 @@ export const RawMatStocktakeView: React.FC = () => {
       <div className="flex-1 p-1 min-h-0 overflow-hidden flex flex-col bg-white">
         <div className="flex-1 min-h-0 overflow-auto border border-gray-300 shadow-2xs">
           <EditableTableWrapper><table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
-            <thead className="sticky top-0 z-20 bg-[#c5c9f7] text-gray-900 font-bold border-b border-[#a0a4d0] shadow-xs">
+            <thead className="sticky top-0 z-20 bg-[#eef2f7] text-gray-900 font-bold border-b border-[#dbe3ee] shadow-xs">
               <tr className="h-[32px] text-center leading-tight whitespace-nowrap">
-                <th className="border border-[#a0a4d0] px-1.5 py-1 w-[40px] bg-[#bcc0f0] text-[11px]">No</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 w-[75px] min-w-[75px]">창고구분</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 w-[55px] min-w-[55px]">구분</th>
-                <th className="border border-[#a0a4d0] px-2.5 py-1 min-w-[160px] text-left">거래처</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[90px]">품번(ID)</th>
-                <th className="border border-[#a0a4d0] px-3 py-1 min-w-[320px] text-left">제품명</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[65px]">입고일</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[85px]">유통기한</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[75px] bg-[#b5bbf5]">박스(BOX)</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[75px] bg-[#b5bbf5]">낱개(봉)</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[85px] bg-[#abb2f2]">현재고(봉)</th>
-                <th className="border border-[#a0a4d0] px-2 py-1 min-w-[65px]">입수량</th>
-                <th className="border border-[#a0a4d0] px-2.5 py-1 min-w-[85px] text-right">봉단가</th>
-                <th className="border border-[#a0a4d0] px-3 py-1 min-w-[105px] text-right bg-[#bcc0f0]">금액</th>
-                <th className="border border-[#a0a4d0] px-2.5 py-1 min-w-[150px] text-left">비고</th>
+                <th className="border border-[#dbe3ee] px-1.5 py-1 w-[40px] bg-[#e8edf4] text-[11px]">No</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 w-[75px] min-w-[75px]">창고구분</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 w-[55px] min-w-[55px]">구분</th>
+                <th className="border border-[#dbe3ee] px-2.5 py-1 min-w-[160px] text-left">거래처</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[90px]">품번(ID)</th>
+                <th className="border border-[#dbe3ee] px-3 py-1 min-w-[320px] text-left">제품명</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[65px]">입고일</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[85px]">유통기한</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[75px] bg-[#b5bbf5]">박스(BOX)</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[75px] bg-[#b5bbf5]">낱개(봉)</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[85px] bg-[#abb2f2]">현재고(봉)</th>
+                <th className="border border-[#dbe3ee] px-2 py-1 min-w-[65px]">입수량</th>
+                <th className="border border-[#dbe3ee] px-2.5 py-1 min-w-[85px] text-right">봉단가</th>
+                <th className="border border-[#dbe3ee] px-3 py-1 min-w-[105px] text-right bg-[#e8edf4]">금액</th>
+                <th className="border border-[#dbe3ee] px-2.5 py-1 min-w-[150px] text-left">비고</th>
               </tr>
             </thead>
             <tbody>

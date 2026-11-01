@@ -374,7 +374,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
 
               {/* Data Table Preview */}
               <div className="border border-gray-200 rounded overflow-hidden">
-                <div className="bg-[#c5c9f7] text-[#1e293b] font-bold px-3 py-1.5 flex items-center justify-between text-xs border-b border-gray-300">
+                <div className="bg-[#eef2f7] text-[#1e293b] font-bold px-3 py-1.5 flex items-center justify-between text-xs border-b border-gray-300">
                   <span>집계 발주 내역 미리보기 (대표 품목별)</span>
                   <span className="text-[11px] font-normal text-gray-700">
                     단위: EA, 원

@@ -239,7 +239,7 @@ async function seedDemo() {
         prodQty,
         defectQty: 0,
         workSeq: woSeq,
-        status: d <= 1 ? (progress >= 0.995 ? '완료' : '진행중') : '완료',
+        status: d <= 1 ? (progress >= 0.97 ? '완료' : '진행중') : '완료',
         createdBy: 'DEMO',
         remark: '',
       });

@@ -228,15 +228,15 @@ export const TagPrintView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 <tr>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">선택</th>
-                  <th className="py-1 px-3 border-r border-[#a0a4d0] text-left">거래처명</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-20">주문방법</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-16">편수</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-24">주문금액계</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-24">납품수량계</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-28">납품금액계</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">선택</th>
+                  <th className="py-1 px-3 border-r border-[#dbe3ee] text-left">거래처명</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">주문방법</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-16">편수</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-24">주문금액계</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-24">납품수량계</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-28">납품금액계</th>
                   <th className="whitespace-nowrap py-1 px-2 w-20">축약명</th>
                 </tr>
               </thead>
@@ -301,16 +301,16 @@ export const TagPrintView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 <tr>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">선택</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-18">품종</th>
-                  <th className="py-1 px-3 border-r border-[#a0a4d0] text-left">품명</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20">납품수량</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-18">제외수량</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20 bg-[#bcc0f0]">출력수량</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-center w-22">박스내입수량</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20 font-bold">박스수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">선택</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-18">품종</th>
+                  <th className="py-1 px-3 border-r border-[#dbe3ee] text-left">품명</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20">납품수량</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-18">제외수량</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20 bg-[#e8edf4]">출력수량</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-center w-22">박스내입수량</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20 font-bold">박스수량</th>
                   <th className="whitespace-nowrap py-1 px-2 text-right w-20 font-bold">낱개수량</th>
                 </tr>
               </thead>
@@ -343,7 +343,7 @@ export const TagPrintView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#a0a4d0] sticky bottom-0">
+              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
                 <tr>
                   <td colSpan={3} className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-2 text-right text-blue-900 border-r border-gray-300">{detailTotals.delivQty.toLocaleString()}</td>

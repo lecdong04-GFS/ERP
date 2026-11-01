@@ -106,6 +106,7 @@ export async function GET(req: NextRequest) {
       expiryCandidates,
       warehouseRows,
       stockDaysRows,
+      gyeRows,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
         where: { orderDate: { startsWith: thisYear }, status: { not: '취소' } },
@@ -117,7 +118,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.workOrder.findMany({
         where: { workDate: { startsWith: thisYear } },
-        select: { workDate: true, prodQty: true, orderQty: true, status: true },
+        select: { workDate: true, gyeId: true, prodQty: true, orderQty: true, defectQty: true, status: true },
       }),
       prisma.salesOrder.findMany({
         where: { status: '미출' },
@@ -156,6 +157,11 @@ export async function GET(req: NextRequest) {
         select: { productCode: true, productName: true, warehouse: true, stockDays: true },
         orderBy: { stockDays: 'asc' },
         take: 5,
+      }),
+      prisma.gyeMaster.findMany({
+        where: { isUsed: true },
+        select: { id: true, name: true },
+        orderBy: { sortOrder: 'asc' },
       }),
     ]);
 
@@ -258,6 +264,52 @@ export async function GET(req: NextRequest) {
     const prodTarget = todayWorkOrders.reduce((s, w) => s + (w.orderQty || 0), 0);
     const prodDone = todayWorkOrders.reduce((s, w) => s + (w.prodQty || 0), 0);
     const prodPct = prodTarget > 0 ? Math.min(100, Math.round((prodDone / prodTarget) * 100)) : 0;
+
+    const gyeNameMap = new Map(gyeRows.map((g) => [g.id, g.name]));
+    const lineMap = new Map<
+      string,
+      { orderQty: number; prodQty: number; defectQty: number; statuses: Set<string> }
+    >();
+    todayWorkOrders.forEach((w) => {
+      const cur = lineMap.get(w.gyeId) || {
+        orderQty: 0,
+        prodQty: 0,
+        defectQty: 0,
+        statuses: new Set<string>(),
+      };
+      cur.orderQty += w.orderQty || 0;
+      cur.prodQty += w.prodQty || 0;
+      cur.defectQty += w.defectQty || 0;
+      cur.statuses.add(w.status || '대기');
+      lineMap.set(w.gyeId, cur);
+    });
+    const productionLines = [...lineMap.entries()]
+      .map(([gyeId, v]) => {
+        const pct = v.orderQty > 0 ? Math.min(100, Math.round((v.prodQty / v.orderQty) * 100)) : 100;
+        const status: '완료' | '진행중' | '대기' =
+          v.statuses.size === 1
+            ? (([...v.statuses][0] as '완료' | '진행중' | '대기') || '대기')
+            : v.prodQty >= v.orderQty
+              ? '완료'
+              : v.prodQty > 0
+                ? '진행중'
+                : '대기';
+        return {
+          gyeId,
+          name: gyeNameMap.get(gyeId) || gyeId,
+          orderQty: v.orderQty,
+          prodQty: v.prodQty,
+          pct,
+          status,
+        };
+      })
+      .sort((a, b) => b.orderQty - a.orderQty);
+
+    const doneLines = productionLines.filter((l) => l.status === '완료').length;
+    const activeLines = productionLines.filter((l) => l.status === '진행중').length;
+    const waitingLines = productionLines.filter((l) => l.status === '대기').length;
+    const totalDefect = todayWorkOrders.reduce((s2, w) => s2 + (w.defectQty || 0), 0);
+    const defectRate = prodDone > 0 ? Math.round((totalDefect / prodDone) * 1000) / 10 : 0;
 
     const todayOrderQty = todayOrders.reduce((s, o) => s + (o.totalQty || 0), 0);
     const todaySalesAmount = todayOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
@@ -382,6 +434,13 @@ export async function GET(req: NextRequest) {
         prodPct,
         undeliveredCount: undeliveredOrders.length,
         cutoffAt: nextCutoff(),
+      },
+      productionWork: {
+        doneLines,
+        activeLines,
+        waitingLines,
+        defectRate,
+        lines: productionLines.slice(0, 8),
       },
       actionQueue,
       fefoTop,

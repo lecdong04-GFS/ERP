@@ -223,21 +223,21 @@ export const UndeliveredStatusView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 {/* 1st Tier */}
-                <tr className="border-b border-[#a0a4d0]">
-                  <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">선택</th>
-                  <th rowSpan={2} className="py-1 px-3 border-r border-[#a0a4d0] text-left">거래처명</th>
-                  <th colSpan={3} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] bg-[#bcc0f0]">미출수량</th>
+                <tr className="border-b border-[#dbe3ee]">
+                  <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">선택</th>
+                  <th rowSpan={2} className="py-1 px-3 border-r border-[#dbe3ee] text-left">거래처명</th>
+                  <th colSpan={3} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">미출수량</th>
                   <th colSpan={3} className="whitespace-nowrap py-1 px-1 bg-[#b5baf0]">미출금액</th>
                 </tr>
                 {/* 2nd Tier */}
-                <tr className="border-b border-[#a0a4d0] text-[11.5px]">
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">1편</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">2편</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-24 bg-[#b2b7ec]">합계</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-24">1편</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-24">2편</th>
+                <tr className="border-b border-[#dbe3ee] text-[11.5px]">
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">1편</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">2편</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24 bg-[#b2b7ec]">합계</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">1편</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">2편</th>
                   <th className="whitespace-nowrap py-0.5 px-1 bg-[#b2b7ec] w-28">합계</th>
                 </tr>
               </thead>
@@ -272,7 +272,7 @@ export const UndeliveredStatusView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#a0a4d0] sticky bottom-0">
+              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
                 <tr>
                   <td colSpan={2} className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-1 text-right text-amber-900 border-r border-gray-300">{sumTotals.s1Q.toLocaleString()}</td>
@@ -296,20 +296,20 @@ export const UndeliveredStatusView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 <tr>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">선택</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-20">거래일</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">구분</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">품종</th>
-                  <th className="py-1 px-3 border-r border-[#a0a4d0] text-left">품명</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">규격</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">단위</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-12">편수</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-18">단가</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20 bg-[#bcc0f0]">미출수량</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-24">미출금액</th>
-                  <th className="py-1 px-3 border-r border-[#a0a4d0] text-left w-36">미납사유</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">선택</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">거래일</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">구분</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품종</th>
+                  <th className="py-1 px-3 border-r border-[#dbe3ee] text-left">품명</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">규격</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">단위</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-12">편수</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-18">단가</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20 bg-[#e8edf4]">미출수량</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-24">미출금액</th>
+                  <th className="py-1 px-3 border-r border-[#dbe3ee] text-left w-36">미납사유</th>
                   <th className="whitespace-nowrap py-1 px-2 text-left">비고</th>
                 </tr>
               </thead>
@@ -346,7 +346,7 @@ export const UndeliveredStatusView: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#a0a4d0] sticky bottom-0">
+              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
                 <tr>
                   <td colSpan={9} className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-2 text-right text-red-600 font-black border-r border-gray-300">{detailTotals.qty.toLocaleString()}</td>

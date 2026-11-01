@@ -202,30 +202,30 @@ export const OrderSummaryGsrView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 {/* 1st Tier Header */}
-                <tr className="border-b border-[#a0a4d0]">
-                  <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-20">품목</th>
-                  <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">품목수</th>
-                  <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] bg-[#bcc0f0]">합계</th>
-                  <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] bg-[#b5baf0]">1편</th>
-                  <th colSpan={6} className="whitespace-nowrap py-1 px-1 bg-[#bcc0f0]">2편</th>
+                <tr className="border-b border-[#dbe3ee]">
+                  <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">품목</th>
+                  <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품목수</th>
+                  <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
+                  <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#b5baf0]">1편</th>
+                  <th colSpan={6} className="whitespace-nowrap py-1 px-1 bg-[#e8edf4]">2편</th>
                 </tr>
                 {/* 2nd Tier Header */}
-                <tr className="border-b border-[#a0a4d0] text-[11.5px]">
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16">수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16">업로드수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-18">업로드금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-14">추가수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16">추가금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16 bg-[#b2b7ec]">소계수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-18 bg-[#b2b7ec]">소계금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16">업로드수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-18">업로드금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-14">추가수량</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16">추가금액</th>
-                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-16 bg-[#b2b7ec]">소계수량</th>
+                <tr className="border-b border-[#dbe3ee] text-[11.5px]">
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">업로드수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">업로드금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18 bg-[#b2b7ec]">소계금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">업로드수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">업로드금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
+                  <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
                   <th className="whitespace-nowrap py-0.5 px-1 bg-[#b2b7ec] w-18">소계금액</th>
                 </tr>
               </thead>
@@ -252,7 +252,7 @@ export const OrderSummaryGsrView: React.FC = () => {
                 ))}
               </tbody>
               {/* 연노란색 하단 합계줄 #fdfde0 */}
-              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#a0a4d0] sticky bottom-0">
+              <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
                 <tr>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-1 text-center border-r border-gray-300">{prodTotals.itemCount}</td>
@@ -286,20 +286,20 @@ export const OrderSummaryGsrView: React.FC = () => {
 
             <div className="flex-1 overflow-auto">
               <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-                <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
-                  <tr className="border-b border-[#a0a4d0]">
-                    <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-28">센터명</th>
-                    <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">품목수</th>
-                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] bg-[#bcc0f0]">합계</th>
-                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] bg-[#b5baf0]">1편 소계</th>
-                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 bg-[#bcc0f0]">2편 소계</th>
+                <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
+                  <tr className="border-b border-[#dbe3ee]">
+                    <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-28">센터명</th>
+                    <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품목수</th>
+                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
+                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#b5baf0]">1편 소계</th>
+                    <th colSpan={2} className="whitespace-nowrap py-1 px-1 bg-[#e8edf4]">2편 소계</th>
                   </tr>
-                  <tr className="border-b border-[#a0a4d0] text-[11.5px]">
-                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">수량</th>
-                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-24">금액</th>
-                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">수량</th>
-                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-24">금액</th>
-                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#a0a4d0] w-20">수량</th>
+                  <tr className="border-b border-[#dbe3ee] text-[11.5px]">
+                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
+                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">금액</th>
+                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
+                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">금액</th>
+                    <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
                     <th className="whitespace-nowrap py-0.5 px-1 w-24">금액</th>
                   </tr>
                 </thead>
@@ -336,10 +336,10 @@ export const OrderSummaryGsrView: React.FC = () => {
 
             <div className="flex-1 overflow-auto">
               <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-                <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+                <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                   <tr>
-                    <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-24">품번</th>
-                    <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0]">품명</th>
+                    <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-24">품번</th>
+                    <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee]">품명</th>
                     <th className="whitespace-nowrap py-1 px-2 text-right w-16">수량</th>
                   </tr>
                 </thead>

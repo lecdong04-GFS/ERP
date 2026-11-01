@@ -265,9 +265,9 @@ export const PurchaseDataGrid: React.FC<PurchaseDataGridProps> = ({
       <div className="flex-1 overflow-auto">
         <table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
           {/* Table Header: 연보라/청보라 배경 #c5c9f7 */}
-          <thead className="sticky top-0 z-20 bg-[#c5c9f7] text-gray-900 shadow-xs border-b border-[#a0a4d0]">
+          <thead className="sticky top-0 z-20 bg-[#eef2f7] text-gray-900 shadow-xs border-b border-[#dbe3ee]">
             <tr className="h-[32px]">
-              <th className="w-10 px-1.5 py-1.5 border-r border-[#a0a4d0] text-center font-bold text-gray-800 bg-[#bcc0f0] sticky left-0 z-30 text-[11px]">
+              <th className="w-10 px-1.5 py-1.5 border-r border-[#dbe3ee] text-center font-bold text-gray-800 bg-[#e8edf4] sticky left-0 z-30 text-[11px]">
                 No
               </th>
               {columns.map((col) => {
@@ -281,8 +281,8 @@ export const PurchaseDataGrid: React.FC<PurchaseDataGridProps> = ({
                       left: col.sticky ? col.leftOffset : undefined,
                     }}
                     onClick={() => handleSort(col.key)}
-                    className={`relative px-2.5 py-1.5 border-r border-[#a0a4d0] font-bold text-gray-800 whitespace-nowrap cursor-pointer hover:bg-[#b5b9ea] transition-colors select-none text-[12.5px] ${
-                      col.sticky ? 'sticky z-30 bg-[#bcc0f0]' : ''
+                    className={`relative px-2.5 py-1.5 border-r border-[#dbe3ee] font-bold text-gray-800 whitespace-nowrap cursor-pointer hover:bg-[#b5b9ea] transition-colors select-none text-[12.5px] ${
+                      col.sticky ? 'sticky z-30 bg-[#e8edf4]' : ''
                     } ${
                       col.align === 'right'
                         ? 'text-right'

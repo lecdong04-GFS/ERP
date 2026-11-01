@@ -52,6 +52,23 @@ export interface WarehouseStockRow {
   amount: number;
 }
 
+export interface ProductionLineRow {
+  gyeId: string;
+  name: string;
+  orderQty: number;
+  prodQty: number;
+  pct: number;
+  status: '완료' | '진행중' | '대기';
+}
+
+export interface ProductionWorkStats {
+  doneLines: number;
+  activeLines: number;
+  waitingLines: number;
+  defectRate: number;
+  lines: ProductionLineRow[];
+}
+
 export interface KpiSummary {
   totalProducts: number;
   totalPartners: number;
@@ -78,6 +95,7 @@ export interface DashboardStats {
   hasData: Record<ChartKey, boolean>;
   kpiSummary: KpiSummary;
   pipeline: PipelineStats;
+  productionWork: ProductionWorkStats;
   actionQueue: ActionItem[];
   fefoTop: FefoRow[];
   stockDaysTop: StockDayRow[];
@@ -133,6 +151,13 @@ export const EMPTY_STATS: DashboardStats = {
     prodPct: 0,
     undeliveredCount: 0,
     cutoffAt: null,
+  },
+  productionWork: {
+    doneLines: 0,
+    activeLines: 0,
+    waitingLines: 0,
+    defectRate: 0,
+    lines: [],
   },
   actionQueue: [],
   fefoTop: [],

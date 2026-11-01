@@ -174,16 +174,16 @@ export const SalesDataGrid: React.FC<SalesDataGridProps> = ({
       <div className="flex-1 overflow-auto">
         <table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
           {/* Table Header: 연보라/청보라 배경 #c5c9f7 */}
-          <thead className="sticky top-0 z-20 bg-[#c5c9f7] text-gray-900 shadow-xs border-b border-[#a0a4d0]">
+          <thead className="sticky top-0 z-20 bg-[#eef2f7] text-gray-900 shadow-xs border-b border-[#dbe3ee]">
             {/* If 2-Tier Group Headers */}
             {hasGroupHeaders && (
-              <tr className="border-b border-[#a0a4d0] text-center font-bold text-[12px]">
-                <th className="w-10 px-1.5 py-1.5 border-r border-[#a0a4d0] bg-[#b8bceb]">No</th>
+              <tr className="border-b border-[#dbe3ee] text-center font-bold text-[12px]">
+                <th className="w-10 px-1.5 py-1.5 border-r border-[#dbe3ee] bg-[#e8edf4]">No</th>
                 {Object.entries(headerGroups!).map(([groupTitle, span]) => (
                   <th
                     key={groupTitle}
                     colSpan={span}
-                    className="px-2.5 py-1.5 border-r border-[#a0a4d0] bg-[#bcc0f0] tracking-tight"
+                    className="px-2.5 py-1.5 border-r border-[#dbe3ee] bg-[#e8edf4] tracking-tight"
                   >
                     {groupTitle}
                   </th>
@@ -194,7 +194,7 @@ export const SalesDataGrid: React.FC<SalesDataGridProps> = ({
             {/* Standard Columns Header */}
             <tr>
               {!hasGroupHeaders && (
-                <th className="w-10 px-1.5 py-2 border-r border-[#a0a4d0] text-center font-bold text-gray-800 bg-[#bcc0f0]">
+                <th className="w-10 px-1.5 py-2 border-r border-[#dbe3ee] text-center font-bold text-gray-800 bg-[#e8edf4]">
                   No
                 </th>
               )}
@@ -208,7 +208,7 @@ export const SalesDataGrid: React.FC<SalesDataGridProps> = ({
                       minWidth: columnWidths[col.key] ? `${columnWidths[col.key]}px` : col.minWidth,
                     }}
                     onClick={() => handleSort(col.key)}
-                    className={`relative px-2.5 py-2 border-r border-[#a0a4d0] font-bold text-gray-900 whitespace-nowrap cursor-pointer hover:bg-[#b5b9ea] transition-colors select-none ${
+                    className={`relative px-2.5 py-2 border-r border-[#dbe3ee] font-bold text-gray-900 whitespace-nowrap cursor-pointer hover:bg-[#b5b9ea] transition-colors select-none ${
                       col.align === 'right'
                         ? 'text-right'
                         : col.align === 'center'

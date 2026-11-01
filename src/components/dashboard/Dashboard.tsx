@@ -9,6 +9,7 @@ import { PipelineHero } from './PipelineHero';
 import { ActionQueue } from './ActionQueue';
 import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
+import { ProductionProgress } from './ProductionProgress';
 import { WarehouseStock } from './WarehouseStock';
 import { DashboardStats, EMPTY_STATS } from './dashboardData';
 
@@ -142,12 +143,12 @@ export const Dashboard: React.FC = () => {
           icon={PackageCheck}
         />
         <KpiCard
-          label="생산 가동률"
+          label="생산 진척률"
           value={k.productionRate}
           format={(n) => `${Math.round(n)} %`}
           sub={
             stats.pipeline.prodTarget > 0
-              ? `${stats.pipeline.prodDone.toLocaleString()} / ${stats.pipeline.prodTarget.toLocaleString()} ea`
+              ? `${stats.pipeline.prodDone.toLocaleString()} / ${stats.pipeline.prodTarget.toLocaleString()} ea · 완료 ${stats.productionWork.doneLines}·진행 ${stats.productionWork.activeLines}`
               : '금일 작업지시 없음'
           }
           tone="info"
@@ -169,6 +170,8 @@ export const Dashboard: React.FC = () => {
           subTone={k.safetyShortageCount > 0 ? 'warn' : 'ok'}
         />
       </div>
+
+      <ProductionProgress work={stats.productionWork} onNavigate={navigate} />
 
       {/* FEFO / 재고유지일 / 창고별 재고금액 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 shrink-0">

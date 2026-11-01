@@ -255,20 +255,20 @@ export const DeliveryRegistrationView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 <tr>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-20">주문날짜</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-20">주문번호</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-12">차수</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-20">주문방법</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-20">등록타입</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0]">거래처명</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">편수</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-18">상태</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">주문수량</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">미납수량</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-24">주문금액</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-24">기납품금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-20">주문날짜</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-20">주문번호</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-12">차수</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">주문방법</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">등록타입</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee]">거래처명</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">편수</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-18">상태</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">주문수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">미납수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-24">주문금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-24">기납품금액</th>
                   <th className="whitespace-nowrap py-1 px-1 text-right w-24">미납품금액</th>
                 </tr>
               </thead>
@@ -317,24 +317,24 @@ export const DeliveryRegistrationView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-              <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+              <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                 <tr>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-16">수기종결</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-18">상태</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">구분</th>
-                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0]">품명</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-14">규격</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">단위</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-16">주문수량</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-16">미납품수량</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-18 bg-[#b8bded]">납품수량</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-18">납품단가</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">주문금액</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">기납품금액</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">미납품금액</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] text-right w-20">납품금액</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-20">납기일</th>
-                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-24">LOT no.</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-16">수기종결</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-18">상태</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">구분</th>
+                  <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee]">품명</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">규격</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">단위</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-16">주문수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-16">미납품수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-18 bg-[#b8bded]">납품수량</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-18">납품단가</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">주문금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">기납품금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">미납품금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] text-right w-20">납품금액</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-20">납기일</th>
+                  <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-24">LOT no.</th>
                   <th className="whitespace-nowrap py-1 px-2 w-24">비고</th>
                 </tr>
               </thead>

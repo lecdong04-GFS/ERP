@@ -99,24 +99,24 @@ function ErpApp() {
         <div className="hidden md:flex items-center gap-2">
           <button
             onClick={openExcelOrderModal}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded text-[11.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>[📂 GS리테일 엑셀 수주]</span>
+            <span>엑셀 수주 업로드</span>
           </button>
           <button
             onClick={openPipelineModal}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 rounded text-[11.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
           >
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
-            <span>[⚡ 자동 파이프라인 엔진]</span>
+            <span>자동 파이프라인</span>
           </button>
           <button
             onClick={() => openPrintModal()}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-900 rounded text-[11.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
           >
             <Printer className="w-3.5 h-3.5 text-blue-600" />
-            <span>[🖨️ 표준 양식 인쇄센터]</span>
+            <span>표준 양식 인쇄</span>
           </button>
         </div>
       </div>

@@ -241,18 +241,18 @@ export const ShippingOrderStatusView: React.FC = () => {
       <div className="flex-1 p-1 min-h-0 overflow-hidden flex flex-col bg-white border border-gray-400 shadow-2xs">
         <div className="flex-1 overflow-auto">
           <EditableTableWrapper><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
-            <thead className="bg-[#c5c9f7] text-gray-900 sticky top-0 border-b border-[#a0a4d0] z-10 text-center font-bold whitespace-nowrap">
+            <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
               <tr>
-                <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-10">No</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-28 text-left">거래처명</th>
-                <th className="whitespace-nowrap py-1 px-1 border-r border-[#a0a4d0] w-24">품번</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] w-16">품종</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-left">품명</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20">납품수량</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-18">제외수량</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-right w-20 bg-[#bcc0f0]">실출력수량</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-center w-22">박스내입수량</th>
-                <th className="whitespace-nowrap py-1 px-2 border-r border-[#a0a4d0] text-center w-28 bg-[#bcc0f0]">수량정보</th>
+                <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-10">No</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-28 text-left">거래처명</th>
+                <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-24">품번</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-16">품종</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-left">품명</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20">납품수량</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-18">제외수량</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-right w-20 bg-[#e8edf4]">실출력수량</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-center w-22">박스내입수량</th>
+                <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] text-center w-28 bg-[#e8edf4]">수량정보</th>
                 <th className="whitespace-nowrap py-1 px-2 text-right w-20 font-extrabold text-blue-950">BOX수량</th>
               </tr>
             </thead>
@@ -281,7 +281,7 @@ export const ShippingOrderStatusView: React.FC = () => {
               ))}
             </tbody>
             {/* 합계줄 (#fdfde0 연노랑) */}
-            <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#a0a4d0] sticky bottom-0">
+            <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
               <tr>
                 <td colSpan={5} className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 whitespace-nowrap py-1 px-2 text-right text-blue-900 border-r border-gray-300">32,067</td>
