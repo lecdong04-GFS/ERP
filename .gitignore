@@ -36,3 +36,5 @@ Thumbs.db
 # Excel backups / temp
 *_backup*.xlsx
 ~$*.xlsx
+.vercel
+.env*

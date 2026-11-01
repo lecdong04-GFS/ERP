@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
-import { JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { ToastProvider } from '@/context/ToastContext';
 import { ConfirmProvider } from '@/context/ConfirmContext';
 
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['500', '700'],
+const mono = localFont({
+  src: './fonts/JetBrainsMono-latin.woff2',
+  weight: '500 700',
+  style: 'normal',
   variable: '--font-mono',
   display: 'swap',
 });
