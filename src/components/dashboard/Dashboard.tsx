@@ -9,7 +9,7 @@ import { PipelineHero } from './PipelineHero';
 import { ActionQueue } from './ActionQueue';
 import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
-import { LineMap } from './LineMap';
+import { WarehouseStock } from './WarehouseStock';
 import { DashboardStats, EMPTY_STATS } from './dashboardData';
 
 // Recharts는 클라이언트 환경(브라우저)에서만 로드하도록 ssr: false 설정
@@ -170,12 +170,16 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* FEFO / 재고유지일 / 계 미니맵 */}
+      {/* FEFO / 재고유지일 / 창고별 재고금액 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 shrink-0">
         <div className="xl:col-span-2">
           <WatchList fefo={stats.fefoTop} stockDays={stats.stockDaysTop} onNavigate={navigate} />
         </div>
-        <LineMap lines={stats.lineMap} onNavigate={navigate} />
+        <WarehouseStock
+          rows={stats.warehouseStock}
+          total={stats.warehouseStockTotal}
+          onNavigate={navigate}
+        />
       </div>
 
       {/* 차트 2×2 */}

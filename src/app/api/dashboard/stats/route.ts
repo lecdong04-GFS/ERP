@@ -6,8 +6,8 @@ import {
   ChartSeries,
   DashboardStats,
   FefoRow,
-  LineRow,
   StockDayRow,
+  WarehouseStockRow,
   emptyMonth,
   emptyYear,
 } from '@/components/dashboard/dashboardData';
@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
       productsCount,
       partnersCount,
       inventoryCount,
-      gyeList,
+      warehouseRows,
       stockDaysRows,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
@@ -201,10 +201,13 @@ export async function GET(req: NextRequest) {
       prisma.product.count({ where: { isUsed: true, category: '완성품' } }),
       prisma.partner.count({ where: { isUsed: true } }),
       prisma.inventory.count(),
-      prisma.gyeMaster.findMany({
-        where: { isUsed: true },
-        select: { id: true, name: true },
-        orderBy: { sortOrder: 'asc' },
+      prisma.inventory.findMany({
+        select: {
+          warehouse: true,
+          currentQty: true,
+          unitPrice: true,
+          stockAmount: true,
+        },
       }),
       prisma.gfsSnapshot.findMany({
         where: { stockDays: { not: null } },
@@ -304,17 +307,21 @@ export async function GET(req: NextRequest) {
     const deliveryRate =
       deliveryTotalCount > 0 ? Math.round((deliveryDoneCount / deliveryTotalCount) * 1000) / 10 : 0;
 
-    // ── 6. 라인 미니맵 ─────────────────────────────────────
-    const lineMap: LineRow[] = gyeList.map((g) => {
-      const wos = todayWorkOrders.filter((w) => w.gyeId === g.id);
-      const abnormal = wos.some(
-        (w) =>
-          !['대기', '진행중', '완료'].includes(w.status) ||
-          (w.orderQty > 0 && (w.defectQty || 0) / w.orderQty > 0.05)
-      );
-      const status: LineRow['status'] = abnormal ? '이상' : wos.length > 0 ? '가동' : '대기';
-      return { gyeId: g.id, name: g.name, status };
-    });
+    // ── 6. 창고별 재고금액 ─────────────────────────────────
+    const whMap = new Map<string, { items: number; amount: number }>();
+    for (const r of warehouseRows) {
+      const key = r.warehouse || '창고미지정';
+      const amount =
+        Number(r.stockAmount) || (Number(r.currentQty) || 0) * (Number(r.unitPrice) || 0);
+      const cur = whMap.get(key) || { items: 0, amount: 0 };
+      cur.items += 1;
+      cur.amount += amount;
+      whMap.set(key, cur);
+    }
+    const warehouseStock: WarehouseStockRow[] = [...whMap.entries()]
+      .map(([warehouse, v]) => ({ warehouse, items: v.items, amount: Math.round(v.amount) }))
+      .sort((a, b) => b.amount - a.amount);
+    const warehouseStockTotal = warehouseStock.reduce((s, w) => s + w.amount, 0);
 
     // ── 7. 액션 큐 ─────────────────────────────────────────
     const actionQueue: ActionItem[] = [];
@@ -418,7 +425,8 @@ export async function GET(req: NextRequest) {
       actionQueue,
       fefoTop,
       stockDaysTop,
-      lineMap,
+      warehouseStock,
+      warehouseStockTotal,
       spark,
       fetchedAt: new Date().toISOString(),
     };

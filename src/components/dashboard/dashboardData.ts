@@ -46,10 +46,10 @@ export interface StockDayRow {
   stockDays: number;
 }
 
-export interface LineRow {
-  gyeId: string;
-  name: string;
-  status: '가동' | '대기' | '이상';
+export interface WarehouseStockRow {
+  warehouse: string;
+  items: number;
+  amount: number;
 }
 
 export interface KpiSummary {
@@ -81,7 +81,8 @@ export interface DashboardStats {
   actionQueue: ActionItem[];
   fefoTop: FefoRow[];
   stockDaysTop: StockDayRow[];
-  lineMap: LineRow[];
+  warehouseStock: WarehouseStockRow[];
+  warehouseStockTotal: number;
   spark: { sales: number[]; purchase: number[]; production: number[] };
   fetchedAt: string;
 }
@@ -136,7 +137,8 @@ export const EMPTY_STATS: DashboardStats = {
   actionQueue: [],
   fefoTop: [],
   stockDaysTop: [],
-  lineMap: [],
+  warehouseStock: [],
+  warehouseStockTotal: 0,
   spark: { sales: [0, 0, 0, 0, 0, 0, 0], purchase: [0, 0, 0, 0, 0, 0, 0], production: [0, 0, 0, 0, 0, 0, 0] },
   fetchedAt: '',
 };
