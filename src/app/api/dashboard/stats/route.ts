@@ -84,25 +84,15 @@ export async function GET(req: NextRequest) {
     const yesterday = kstDate(-1);
     const weekAgo = kstDate(-6);
     const monthAgo = kstDate(-29);
-    const thisMonth = today.slice(0, 7);
     const thisYear = today.slice(0, 4);
 
-    // ── 1. 병렬 조회 ────────────────────────────────────────
+    // ── 1. 병렬 조회 (연도 1회 조회 후 30일/7일 파생) ───────
     const [
-      monthSales,
-      monthPurchase,
-      monthWork,
+      yearSalesRows,
+      yearPurchaseRows,
+      yearWorkRows,
       undeliveredOrders,
-      yearSales,
-      yearPurchase,
-      yearWork,
-      todayOrders,
-      yesterdayOrders,
-      weekSales,
-      weekPurchase,
-      weekWork,
       todayDeliveries,
-      todayWorkOrders,
       pendingChanges,
       shortageCount,
       safetyShortageCount,
@@ -114,24 +104,8 @@ export async function GET(req: NextRequest) {
       stockDaysRows,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
-        where: { orderDate: { gte: monthAgo, lte: today }, status: { not: '취소' } },
-        select: { orderDate: true, totalAmount: true, totalQty: true },
-      }),
-      prisma.purchaseOrder.findMany({
-        where: { orderDate: { gte: monthAgo, lte: today } },
-        select: { orderDate: true, totalAmount: true },
-      }),
-      prisma.workOrder.findMany({
-        where: { workDate: { gte: monthAgo, lte: today } },
-        select: { workDate: true, prodQty: true, orderQty: true },
-      }),
-      prisma.salesOrder.findMany({
-        where: { status: '미출' },
-        select: { orderDate: true, totalAmount: true },
-      }),
-      prisma.salesOrder.findMany({
         where: { orderDate: { startsWith: thisYear }, status: { not: '취소' } },
-        select: { orderDate: true, totalAmount: true },
+        select: { orderDate: true, totalAmount: true, totalQty: true },
       }),
       prisma.purchaseOrder.findMany({
         where: { orderDate: { startsWith: thisYear } },
@@ -139,35 +113,15 @@ export async function GET(req: NextRequest) {
       }),
       prisma.workOrder.findMany({
         where: { workDate: { startsWith: thisYear } },
-        select: { workDate: true, prodQty: true, orderQty: true },
+        select: { workDate: true, prodQty: true, orderQty: true, status: true },
       }),
       prisma.salesOrder.findMany({
-        where: { orderDate: today, status: { not: '취소' } },
-        select: { totalAmount: true, totalQty: true },
-      }),
-      prisma.salesOrder.findMany({
-        where: { orderDate: yesterday, status: { not: '취소' } },
-        select: { totalAmount: true, totalQty: true },
-      }),
-      prisma.salesOrder.findMany({
-        where: { orderDate: { gte: weekAgo, lte: today }, status: { not: '취소' } },
+        where: { status: '미출' },
         select: { orderDate: true, totalAmount: true },
-      }),
-      prisma.purchaseOrder.findMany({
-        where: { orderDate: { gte: weekAgo, lte: today } },
-        select: { orderDate: true, totalAmount: true },
-      }),
-      prisma.workOrder.findMany({
-        where: { workDate: { gte: weekAgo, lte: today } },
-        select: { workDate: true, prodQty: true, orderQty: true },
       }),
       prisma.delivery.findMany({
         where: { deliveryDate: today, status: { not: '취소' } },
         select: { status: true },
-      }),
-      prisma.workOrder.findMany({
-        where: { workDate: today },
-        select: { gyeId: true, status: true, orderQty: true, prodQty: true, defectQty: true },
       }),
       prisma.changeRequest.count({ where: { status: { in: ['접수', '접수대기'] } } }),
       prisma.materialRequirement.count({
@@ -194,12 +148,7 @@ export async function GET(req: NextRequest) {
       prisma.partner.count({ where: { isUsed: true } }),
       prisma.inventory.count(),
       prisma.inventory.findMany({
-        select: {
-          warehouse: true,
-          currentQty: true,
-          unitPrice: true,
-          stockAmount: true,
-        },
+        select: { warehouse: true, currentQty: true, unitPrice: true, stockAmount: true },
       }),
       prisma.gfsSnapshot.findMany({
         where: { stockDays: { gt: 0 } },
@@ -209,26 +158,45 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // ── 2. 차트 시리즈 ──────────────────────────────────────
-    const salesRows = monthSales.map((o) => ({ date: o.orderDate, amount: o.totalAmount }));
-    const purchaseRows = monthPurchase.map((o) => ({ date: o.orderDate, amount: o.totalAmount }));
-    const prodRows = monthWork.map((w) => ({
-      date: w.workDate,
-      amount: (w.prodQty || w.orderQty || 0) * 2000,
-    }));
+    const inMonth = (date: string) => date >= monthAgo && date <= today;
+    const todayOrders = yearSalesRows.filter((o) => o.orderDate === today);
+    const yesterdayOrders = yearSalesRows.filter((o) => o.orderDate === yesterday);
+    const weekSales = yearSalesRows.filter((o) => o.orderDate >= weekAgo && o.orderDate <= today);
+    const weekPurchase = yearPurchaseRows.filter((o) => o.orderDate >= weekAgo && o.orderDate <= today);
+    const weekWork = yearWorkRows.filter((w) => w.workDate >= weekAgo && w.workDate <= today);
+    const todayWorkOrders = yearWorkRows.filter((w) => w.workDate === today);
 
+    const salesRows = yearSalesRows
+      .filter((o) => inMonth(o.orderDate))
+      .map((o) => ({ date: o.orderDate, amount: o.totalAmount }));
+    const purchaseRows = yearPurchaseRows
+      .filter((o) => inMonth(o.orderDate))
+      .map((o) => ({ date: o.orderDate, amount: o.totalAmount }));
+    const prodAmount = (w: { prodQty: number; orderQty: number }) =>
+      (w.prodQty || w.orderQty || 0) * 2000;
+    const prodRows = yearWorkRows
+      .filter((w) => inMonth(w.workDate))
+      .map((w) => ({ date: w.workDate, amount: prodAmount(w) }));
+
+    // ── 2. 차트 시리즈 ──────────────────────────────────────
     const sales: ChartSeries = {
       monthly: buildRolling30(salesRows, today),
-      yearly: buildYearly(yearSales.map((o) => ({ date: o.orderDate, amount: o.totalAmount })), thisYear),
+      yearly: buildYearly(
+        yearSalesRows.map((o) => ({ date: o.orderDate, amount: o.totalAmount })),
+        thisYear
+      ),
     };
     const purchase: ChartSeries = {
       monthly: buildRolling30(purchaseRows, today),
-      yearly: buildYearly(yearPurchase.map((o) => ({ date: o.orderDate, amount: o.totalAmount })), thisYear),
+      yearly: buildYearly(
+        yearPurchaseRows.map((o) => ({ date: o.orderDate, amount: o.totalAmount })),
+        thisYear
+      ),
     };
     const production: ChartSeries = {
       monthly: buildRolling30(prodRows, today),
       yearly: buildYearly(
-        yearWork.map((w) => ({ date: w.workDate, amount: (w.prodQty || w.orderQty || 0) * 2000 })),
+        yearWorkRows.map((w) => ({ date: w.workDate, amount: prodAmount(w) })),
         thisYear
       ),
     };
@@ -253,7 +221,7 @@ export async function GET(req: NextRequest) {
         today
       ),
       production: buildSpark(
-        weekWork.map((w) => ({ date: w.workDate, amount: (w.prodQty || w.orderQty || 0) * 2000 })),
+        weekWork.map((w) => ({ date: w.workDate, amount: prodAmount(w) })),
         today
       ),
     };
@@ -383,9 +351,9 @@ export async function GET(req: NextRequest) {
       undelivered,
       notifications,
       hasData: {
-        sales: monthSales.length > 0,
-        purchase: monthPurchase.length > 0,
-        production: monthWork.length > 0,
+        sales: salesRows.length > 0,
+        purchase: purchaseRows.length > 0,
+        production: prodRows.length > 0,
         undelivered: undeliveredOrders.length > 0,
       },
       kpiSummary: {
@@ -393,7 +361,7 @@ export async function GET(req: NextRequest) {
         totalPartners: partnersCount,
         totalInventoryItems: inventoryCount,
         salesTotalMonth: Math.round(
-          monthSales.reduce((s, o) => s + (o.totalAmount || 0), 0) / 10000
+          salesRows.reduce((s, o) => s + (o.amount || 0), 0) / 10000
         ),
         shortageCount,
         todaySalesAmount,
