@@ -18,6 +18,7 @@ import { CostScreenRouter } from '@/components/cost/CostScreenRouter';
 import { CostProvider } from '@/components/cost/context/CostContext';
 import { ManagementScreenRouter } from '@/components/management/ManagementScreenRouter';
 import { AdminScreenRouter } from '@/components/admin/AdminScreenRouter';
+import { WorkScreenRouter } from '@/components/work/WorkScreenRouter';
 import { AdminProvider } from '@/components/admin/context/AdminContext';
 import { PipelineProvider, usePipeline } from '@/context/PipelineContext';
 import { PipelineModal } from '@/components/pipeline/PipelineModal';
@@ -153,6 +154,8 @@ function ErpApp() {
               <ManagementScreenRouter key={activeTab.id} tab={activeTab} />
             ) : activeTab.categoryId === 'admin' ? (
               <AdminScreenRouter key={activeTab.id} tab={activeTab} />
+            ) : activeTab.categoryId === 'work' ? (
+              <WorkScreenRouter key={activeTab.id} tab={activeTab} />
             ) : (
               <ErpWorkspace key={activeTab.id} tab={activeTab} />
             )}
