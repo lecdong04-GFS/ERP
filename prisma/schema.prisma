@@ -1293,3 +1293,26 @@ model WorkContact {
   @@index([deletedAt])
   @@index([senderId])
 }
+
+/// 일정관리
+model Schedule {
+  id            Int       @id @default(autoincrement())
+  title         String
+  content       String    @default("")
+  scheduleDate  String    // YYYY-MM-DD
+  startTime     String    @default("") // HH:mm
+  endTime       String    @default("")
+  category      String    @default("기타") // 생산, 회의, 휴무, 검사, 납품, 교육, 기타
+  allDay        Boolean   @default(true)
+  department    String    @default("")
+  authorId      Int?
+  authorLoginId String    @default("")
+  authorName    String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([scheduleDate])
+  @@index([category])
+  @@index([deletedAt])
+}
