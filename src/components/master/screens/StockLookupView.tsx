@@ -678,7 +678,7 @@ export const StockLookupView: React.FC = () => {
             const box = Math.floor(current / pack);
             const piece = Math.round((current % pack) * 10) / 10;
             const uprice = o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price;
-            const dailyU = o ? Number(o.dailyUsage) || 0 : 0;
+            const dailyU = inv.dailyUsage ? Number(inv.dailyUsage) : (o ? Number(o.dailyUsage) || 0 : 0);
             const nDays = o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null;
             if (o) merged += 1;
             loaded.push({
