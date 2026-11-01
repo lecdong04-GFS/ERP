@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     // 서버측 중복 차단 (같은 날짜/센터 기존 수주)
     const allowDuplicate = body.allowDuplicate === true;
     const existingOrder = await prisma.salesOrder.findFirst({
-      where: { orderDate, centerCode, status: { not: '취소' } },
+      where: { orderDate, centerCode, status: { not: '취소' }, uploadMethod: { contains: '발주현황' } },
       orderBy: { id: 'desc' },
       select: { orderNo: true },
     });
