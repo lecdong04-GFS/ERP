@@ -359,19 +359,28 @@ async function seedDemo() {
   const invByProduct = new Map<number, number>();
   inventoryRows.forEach((r) => invByProduct.set(r.productId, (invByProduct.get(r.productId) || 0) + Number(r.currentQty)));
 
-  const safetyCandidates = snapshots
-    .map((s) => {
-      const product = productByNorm.get(normName(s.productName));
-      return product ? { product, stockDays: Number(s.stockDays) || 0 } : null;
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null)
+  const safetySnapshots = await prisma.gfsSnapshot.findMany({
+    where: { stockDays: { gt: 0 } },
+    select: { productName: true, stockDays: true },
+  });
+  const stockDaysByName = new Map(
+    safetySnapshots.map((s) => [normName(s.productName), Number(s.stockDays) || 0])
+  );
+  const safetyCandidates = products
+    .filter((p) => (p.category === '원재료' || p.category === '부자재') && (invByProduct.get(p.id) || 0) > 0)
+    .map((product) => ({
+      product,
+      currentQty: invByProduct.get(product.id) || 0,
+      stockDays: stockDaysByName.get(normName(product.name)) || 999,
+    }))
+    .sort((a, b) => a.stockDays - b.stockDays)
     .slice(0, 8);
 
   if (safetyCandidates.length > 0) {
     await prisma.safetyStock.createMany({
-      data: safetyCandidates.map((c) => {
-        const currentQty = invByProduct.get(c.product.id) || 0;
-        const safetyQty = Math.round(currentQty * 1.6 + 20);
+      data: safetyCandidates.map((c, idx) => {
+        const currentQty = c.currentQty;
+        const safetyQty = Math.round(currentQty * 1.35 + 10 + (idx % 4) * 8);
         const shortageQty = Math.max(1, Math.round(safetyQty - currentQty));
         return {
           productId: c.product.id,
@@ -382,8 +391,11 @@ async function seedDemo() {
           safetyQty,
           currentQty,
           shortageQty,
-          avgDailyUsage: c.stockDays > 0 ? Math.round((currentQty / c.stockDays) * 10) / 10 : 0,
-          leadTime: 2,
+          avgDailyUsage:
+            c.stockDays > 0 && c.stockDays < 900
+              ? Math.round((currentQty / c.stockDays) * 10) / 10
+              : Math.round(currentQty * 0.15 * 10) / 10,
+          leadTime: 2 + (idx % 3),
           remark: `${TAG}안전재고 미달`,
         };
       }),

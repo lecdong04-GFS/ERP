@@ -6,6 +6,14 @@ import { SalesFilterBar } from '../common/SalesFilterBar';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+const CENTER_NAMES: Record<string, string> = {
+  'GSR-001': 'GSR 김해일배',
+  'GSR-002': 'GSR 김해2일배',
+  'GSR-003': 'GSR 양산조리센터',
+  'GSR-004': 'GSR 부산물류센터',
+  'GSR-005': 'GSR 신광주 저온',
+};
+
 interface UndelivSummaryRow {
   id: number;
   checked: boolean;
@@ -109,7 +117,7 @@ export const UndeliveredStatusView: React.FC = () => {
             loadedSummaries.push({
               id,
               checked: false,
-              clientName: o.centerCode || '',
+              clientName: CENTER_NAMES[o.centerCode] || o.centerCode || '',
               shift1Qty: q1,
               shift2Qty: q2,
               totalQty: q1 + q2,
