@@ -61,8 +61,9 @@ const INITIAL_DETAILS: Record<number, UndelivDetailRow[]> = {
 };
 
 export const UndeliveredStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const kstToday = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState(kstToday);
+  const [endDate, setEndDate] = useState(kstToday);
   const [summaries, setSummaries] = useState<UndelivSummaryRow[]>(INITIAL_SUMMARIES);
   const [selectedSummaryId, setSelectedSummaryId] = useState<number>(1);
   const [details, setDetails] = useState<Record<number, UndelivDetailRow[]>>(INITIAL_DETAILS);
@@ -72,14 +73,56 @@ export const UndeliveredStatusView: React.FC = () => {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && json.data && json.data.length > 0) {
-          const loadedSummaries: UndelivSummaryRow[] = json.data.map((o: any, idx: number) => ({
-            id: o.id || idx + 1,
-            clientName: o.centerCode || 'GSR 김해일배',
-            unDelivCount: o.details?.length || 1,
-            unDelivQty: o.totalQty || 10,
-            unDelivAmt: o.totalAmount || 20000,
-          }));
+          const loadedSummaries: UndelivSummaryRow[] = [];
+          const loadedDetails: Record<number, UndelivDetailRow[]> = {};
+
+          json.data.forEach((o: any, idx: number) => {
+            const id = o.id || idx + 1;
+            const dets: UndelivDetailRow[] = (o.details || []).map((d: any, di: number) => ({
+              id: d.id || id * 1000 + di,
+              checked: false,
+              tradeDate: o.orderDate,
+              gubun: '완성품',
+              kind: d.product?.kind || '',
+              partName: d.product?.name || '',
+              spec: d.product?.spec || '',
+              unit: d.product?.unit || 'ea',
+              shift: o.shift || '1편',
+              unitPrice: Number(d.unitPrice) || 0,
+              unDelivQty: Number(d.totalQty) || 0,
+              unDelivAmt: Number(d.amount) || 0,
+              unDelivReason: '미출',
+              remark: o.remark || '',
+            }));
+
+            const q1 = (o.details || []).reduce((s: number, d: any) => s + (Number(d.orderQty1) || 0), 0);
+            const q2 = (o.details || []).reduce((s: number, d: any) => s + (Number(d.orderQty2) || 0), 0);
+            const a1 = (o.details || []).reduce(
+              (s: number, d: any) => s + (Number(d.orderQty1) || 0) * (Number(d.unitPrice) || 0),
+              0
+            );
+            const a2 = (o.details || []).reduce(
+              (s: number, d: any) => s + (Number(d.orderQty2) || 0) * (Number(d.unitPrice) || 0),
+              0
+            );
+
+            loadedSummaries.push({
+              id,
+              checked: false,
+              clientName: o.centerCode || '',
+              shift1Qty: q1,
+              shift2Qty: q2,
+              totalQty: q1 + q2,
+              shift1Amt: a1,
+              shift2Amt: a2,
+              totalAmt: a1 + a2,
+            });
+            loadedDetails[id] = dets;
+          });
+
           setSummaries(loadedSummaries);
+          setDetails(loadedDetails);
+          if (loadedSummaries.length > 0) setSelectedSummaryId(loadedSummaries[0].id);
         }
       })
       .catch((err) => console.error('Failed to load undelivered orders', err));
