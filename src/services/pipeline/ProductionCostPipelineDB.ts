@@ -41,6 +41,8 @@ interface PipelineResult {
   costResults: CostAnalysisResultItem[];
   summary: PipelineExecutionSummary;
   materialRequirements: MaterialRequirementRow[];
+  /** 해당 일자 수주가 없어 연산할 내용이 없으면 true (샘플 폴백 없음) */
+  isEmpty: boolean;
 }
 
 interface MaterialRequirementRow {
@@ -128,10 +130,39 @@ export class ProductionCostPipelineDBEngine {
       }
       orders = Object.values(itemMap);
       addLog('STEP 1: 수주 조회', `DB에서 ${salesOrders.length}건 수주, ${orders.length}개 품목 집계 완료`, 'success');
-    } else {
-      // DB에 수주 없으면 레거시 샘플 데이터 사용 (폴백)
+    } else if (params.useLegacyFallback === true) {
+      // 명시적 요청 시에만 내장 샘플 데이터 사용 (폴백)
       orders = [...SAMPLE_STORE_ORDERS];
-      addLog('STEP 1: 수주 조회', `DB 수주 없음 → 내장 샘플 데이터 ${orders.length}건 사용 (폴백)`, 'warn');
+      addLog('STEP 1: 수주 조회', `DB 수주 없음 → 내장 샘플 데이터 ${orders.length}건 사용 (명시적 폴백)`, 'warn');
+    } else {
+      // 수주 없음 → 빈 결과 반환 (샘플 저장 방지)
+      addLog('STEP 1: 수주 조회', `${orderDate} 수주가 DB에 없습니다. 주문등록GSR에서 먼저 수주를 등록하세요.`, 'error');
+      const now = new Date();
+      const emptySummary: PipelineExecutionSummary = {
+        executionDate: orderDate,
+        executionTime: now.toTimeString().slice(0, 8),
+        totalOrdersCount: 0,
+        totalOrdersQty: 0,
+        dispatchedWorkOrdersCount: 0,
+        depletedMaterialsCount: 0,
+        totalSalesAmount: 0,
+        totalDirectMaterialCost: 0,
+        totalLogisticsCost: 0,
+        totalIndirectCost: 0,
+        totalCostAmount: 0,
+        netProfitAmount: 0,
+        overallProfitRate: 0,
+        abnormalItemsCount: 0,
+        logs,
+      };
+      return {
+        workOrders: [],
+        materialDepletions: [],
+        costResults: [],
+        summary: emptySummary,
+        materialRequirements: [],
+        isEmpty: true,
+      };
     }
 
     const totalOrderQty = orders.reduce((sum, o) => sum + o.totalOrderQty, 0);
@@ -550,7 +581,7 @@ export class ProductionCostPipelineDBEngine {
 
     const now = new Date();
     const summary: PipelineExecutionSummary = {
-      executionDate: now.toISOString().slice(0, 10),
+      executionDate: orderDate,
       executionTime: now.toTimeString().slice(0, 8),
       totalOrdersCount: orders.length,
       totalOrdersQty: totalOrderQty,
@@ -573,6 +604,7 @@ export class ProductionCostPipelineDBEngine {
       costResults,
       summary,
       materialRequirements,
+      isEmpty: false,
     };
   }
 }

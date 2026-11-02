@@ -9,7 +9,6 @@ import { PipelineHero } from './PipelineHero';
 import { ActionQueue } from './ActionQueue';
 import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
-import { ProductionProgress } from './ProductionProgress';
 import { WarehouseStock } from './WarehouseStock';
 import { useDashboardStats } from './useDashboardStats';
 
@@ -141,8 +140,6 @@ export const Dashboard: React.FC = () => {
           subTone={k.safetyShortageCount > 0 ? 'warn' : 'ok'}
         />
       </div>
-
-      <ProductionProgress work={stats.productionWork} onNavigate={navigate} />
 
       {/* FEFO / 재고유지일 / 창고별 재고금액 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 shrink-0">
