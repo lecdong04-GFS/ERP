@@ -33,18 +33,14 @@ function writeCache(data: DashboardStats): void {
 }
 
 export function useDashboardStats() {
-  // 첫 렌더 전에 localStorage 캐시를 읽어 스켈레톤 깜빡임 제거
-  const boot = useRef<CacheEntry | null | undefined>(undefined);
-  if (boot.current === undefined) {
-    boot.current = typeof window !== 'undefined' ? readCache() : null;
-  }
-  const initial = boot.current;
-
-  const [stats, setStats] = useState<DashboardStats>(initial?.data ?? EMPTY_STATS);
-  const [loading, setLoading] = useState(!initial);
+  // 서버/클라이언트 첫 렌더를 일치시키기 위해 초기값은 항상 빈 상태.
+  // localStorage 캐시는 마운트 후(useEffect, 클라이언트 전용)에만 읽는다.
+  // 렌더 중에 캐시를 읽으면 서버(스켈레톤)와 클라이언트(캐시 데이터)가 달라져 hydration mismatch가 난다.
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cachedAt, setCachedAt] = useState<string | null>(initial?.data.fetchedAt ?? null);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const load = useCallback(async (force: boolean) => {
@@ -75,6 +71,13 @@ export function useDashboardStats() {
   }, []);
 
   useEffect(() => {
+    // 마운트 후 캐시 적용 (깜빡임 최소화) + 서버에서 최신 조회
+    const cached = readCache();
+    if (cached?.data) {
+      setStats(cached.data);
+      setCachedAt(cached.data.fetchedAt ?? null);
+      setLoading(false);
+    }
     void load(false);
     const timer = setInterval(() => void load(false), 60_000);
     return () => clearInterval(timer);

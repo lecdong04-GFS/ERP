@@ -40,11 +40,28 @@ function num(n: any): number {
   return Number(n) || 0;
 }
 
+function fmt(n: number): string {
+  return n ? n.toLocaleString('ko-KR') : '-';
+}
+
+function shiftDays(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function diffDays(a: string, b: string): number {
+  return Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+}
+
 export const OrderSummaryGsrView: React.FC = () => {
   const [startDate, setStartDate] = useState(kstToday);
   const [endDate, setEndDate] = useState(kstToday);
   const [appliedRange, setAppliedRange] = useState({ start: kstToday(), end: kstToday() });
   const [orders, setOrders] = useState<any[]>([]);
+  const [prevKindQty, setPrevKindQty] = useState<Record<string, number>>({});
+  const [aggAt, setAggAt] = useState('');
+  const [drillKind, setDrillKind] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCenter, setSelectedCenter] = useState<string>('');
@@ -62,9 +79,34 @@ export const OrderSummaryGsrView: React.FC = () => {
           if (prev && list.some((o: any) => (o.centerCode || '') === prev)) return prev;
           return list.length > 0 ? (list[0].centerCode || '') : '';
         });
+        const now = new Date(Date.now() + 9 * 3600 * 1000);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        setAggAt(`${pad(now.getUTCMonth() + 1)}/${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`);
       } else {
         setError(json.error || '수주 데이터를 불러오지 못했습니다.');
         setOrders([]);
+      }
+      // 직전 동일 기간 품목별 합계 (전일비 계산용)
+      try {
+        const len = diffDays(s, e) + 1;
+        const ps = shiftDays(s, -len);
+        const pe = shiftDays(s, -1);
+        const pParams = new URLSearchParams({ startDate: ps, endDate: pe });
+        const pRes = await fetch(`/api/sales/order?${pParams}`, { cache: 'no-store' }).then((r) => r.json());
+        const prevMap: Record<string, number> = {};
+        if (pRes.success && Array.isArray(pRes.data)) {
+          pRes.data
+            .filter((o: any) => o.status !== '취소')
+            .forEach((o: any) => {
+              (o.details || []).forEach((dt: any) => {
+                const kind = (dt.product?.kind || '').trim() || '기타';
+                prevMap[kind] = (prevMap[kind] || 0) + num(dt.totalQty);
+              });
+            });
+        }
+        setPrevKindQty(prevMap);
+      } catch {
+        setPrevKindQty({});
       }
     } catch (err) {
       console.error('Failed to load order summaries', err);
@@ -176,6 +218,25 @@ export const OrderSummaryGsrView: React.FC = () => {
     return [...map.values()].sort((a, b) => b.qty - a.qty);
   }, [orders, selectedCenter]);
 
+  // ── 드릴다운: 선택 품목의 구성 수주 목록 ──
+  const drillRows = useMemo(() => {
+    if (!drillKind) return [];
+    const rows: { orderNo: string; orderDate: string; centerCode: string; qty: number; amt: number }[] = [];
+    orders.forEach((o: any) => {
+      let q = 0;
+      let a = 0;
+      (o.details || []).forEach((dt: any) => {
+        const kind = (dt.product?.kind || '').trim() || '기타';
+        if (kind === drillKind) {
+          q += num(dt.totalQty);
+          a += num(dt.amount);
+        }
+      });
+      if (q > 0) rows.push({ orderNo: o.orderNo, orderDate: o.orderDate, centerCode: o.centerCode || '-', qty: q, amt: a });
+    });
+    return rows.sort((a, b) => (a.orderDate === b.orderDate ? 0 : (a.orderDate < b.orderDate ? -1 : 1)));
+  }, [orders, drillKind]);
+
   const kindTotals = useMemo(() => kindSummary.reduce(
     (acc, r) => ({
       itemCount: acc.itemCount + r.itemCount, totalQty: acc.totalQty + r.totalQty, totalAmt: acc.totalAmt + r.totalAmt,
@@ -190,6 +251,17 @@ export const OrderSummaryGsrView: React.FC = () => {
   const rangeLabel = appliedRange.start === appliedRange.end
     ? appliedRange.start
     : `${appliedRange.start} ~ ${appliedRange.end}`;
+
+  const orderCount = orders.length;
+
+  function dayOverDay(kind: string, qty: number): { text: string; up: boolean | null; title: string } {
+    const prev = prevKindQty[kind] || 0;
+    if (prev <= 0) return { text: '신규', up: null, title: '직전 기간 수주 없음' };
+    if (qty === prev) return { text: '±0%', up: null, title: `직전 ${prev.toLocaleString('ko-KR')} ea → 동일` };
+    const pct = ((qty - prev) / prev) * 100;
+    const sign = pct > 0 ? '▲' : '▼';
+    return { text: `${sign}${Math.abs(pct).toFixed(1)}%`, up: pct > 0, title: `직전 ${prev.toLocaleString('ko-KR')} ea → ${qty.toLocaleString('ko-KR')} ea` };
+  }
 
   const cellCls = 'whitespace-nowrap py-1 px-1 text-right border-r border-gray-200';
 
@@ -247,9 +319,12 @@ export const OrderSummaryGsrView: React.FC = () => {
           <>
             {/* 상단: 품목별 요약 그리드 */}
             <div className="h-[48%] flex flex-col bg-white border border-gray-400 shadow-2xs overflow-hidden">
-              <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300 flex items-center justify-between">
-                <span>요약 (품목별 1편/2편 집계 · 정기/추가 구분)</span>
-                <span className="text-[11.5px] text-gray-500">단위: EA, 원</span>
+              <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300 flex items-center justify-between gap-2">
+                <span className="shrink-0">요약 (품목별 1편/2편 집계 · 정기/추가 구분)</span>
+                <span className="text-[10.5px] font-normal text-gray-500 truncate">
+                  정기=발주현황 업로드분 · 추가=추가주문등록분 · 기준 {rangeLabel} · 수주 {orderCount}건{aggAt ? ` · ${aggAt} 집계` : ''}
+                </span>
+                <span className="text-[11.5px] text-gray-500 shrink-0">단위: EA, 원</span>
               </div>
 
               <div className="flex-1 overflow-auto">
@@ -260,19 +335,20 @@ export const OrderSummaryGsrView: React.FC = () => {
                       <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품목수</th>
                       <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
                       <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#b5baf0]">1편</th>
-                      <th colSpan={6} className="whitespace-nowrap py-1 px-1 bg-[#e8edf4]">2편</th>
+                      <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">2편</th>
+                      <th rowSpan={2} className="whitespace-nowrap py-1 px-1 w-16" title="직전 동일 기간 대비">전일비</th>
                     </tr>
                     <tr className="border-b border-[#dbe3ee] text-[11.5px]">
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">수량</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">업로드수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">업로드금액</th>
+                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">정기수량</th>
+                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">정기금액</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18 bg-[#b2b7ec]">소계금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">업로드수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">업로드금액</th>
+                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">정기수량</th>
+                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">정기금액</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
                       <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
@@ -280,45 +356,62 @@ export const OrderSummaryGsrView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 font-mono">
-                    {kindSummary.map((row) => (
-                      <tr key={row.kind} className="hover:bg-blue-50/50">
+                    {kindSummary.map((row) => {
+                      const dod = dayOverDay(row.kind, row.totalQty);
+                      return (
+                      <tr
+                        key={row.kind}
+                        onClick={() => setDrillKind(row.kind)}
+                        className="hover:bg-blue-50/50 cursor-pointer"
+                        title="클릭하면 구성 수주 목록 표시"
+                      >
                         <td className="whitespace-nowrap py-1 px-2 font-sans font-bold text-center border-r border-gray-200">{row.kind}</td>
                         <td className="whitespace-nowrap py-1 px-1 text-center border-r border-gray-200">{row.itemCount}</td>
-                        <td className={`${cellCls} font-bold text-blue-900`}>{row.totalQty.toLocaleString()}</td>
-                        <td className={`${cellCls} font-bold text-gray-900`}>{row.totalAmt.toLocaleString()}</td>
-                        <td className={cellCls}>{row.reg1Qty.toLocaleString()}</td>
-                        <td className={cellCls}>{row.reg1Amt.toLocaleString()}</td>
-                        <td className={`${cellCls} text-amber-700`}>{row.ext1Qty.toLocaleString()}</td>
-                        <td className={`${cellCls} text-amber-700`}>{row.ext1Amt.toLocaleString()}</td>
-                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{(row.reg1Qty + row.ext1Qty).toLocaleString()}</td>
-                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{(row.reg1Amt + row.ext1Amt).toLocaleString()}</td>
-                        <td className={cellCls}>{row.reg2Qty.toLocaleString()}</td>
-                        <td className={cellCls}>{row.reg2Amt.toLocaleString()}</td>
-                        <td className={`${cellCls} text-amber-700`}>{row.ext2Qty.toLocaleString()}</td>
-                        <td className={`${cellCls} text-amber-700`}>{row.ext2Amt.toLocaleString()}</td>
-                        <td className={`${cellCls} font-bold text-indigo-800 bg-indigo-50/30`}>{(row.reg2Qty + row.ext2Qty).toLocaleString()}</td>
-                        <td className="whitespace-nowrap py-1 px-1 text-right font-bold text-indigo-800 bg-indigo-50/30">{(row.reg2Amt + row.ext2Amt).toLocaleString()}</td>
+                        <td className={`${cellCls} font-bold text-blue-900`}>{fmt(row.totalQty)}</td>
+                        <td className={`${cellCls} font-bold text-gray-900`}>{fmt(row.totalAmt)}</td>
+                        <td className={cellCls}>{fmt(row.reg1Qty)}</td>
+                        <td className={cellCls}>{fmt(row.reg1Amt)}</td>
+                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext1Qty)}</td>
+                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext1Amt)}</td>
+                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{fmt(row.reg1Qty + row.ext1Qty)}</td>
+                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{fmt(row.reg1Amt + row.ext1Amt)}</td>
+                        <td className={cellCls}>{fmt(row.reg2Qty)}</td>
+                        <td className={cellCls}>{fmt(row.reg2Amt)}</td>
+                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext2Qty)}</td>
+                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext2Amt)}</td>
+                        <td className={`${cellCls} font-bold text-indigo-800 bg-indigo-50/30`}>{fmt(row.reg2Qty + row.ext2Qty)}</td>
+                        <td className="whitespace-nowrap py-1 px-1 text-right font-bold text-indigo-800 bg-indigo-50/30 border-r border-gray-200">{fmt(row.reg2Amt + row.ext2Amt)}</td>
+                        <td
+                          className={`whitespace-nowrap py-1 px-1 text-center text-[11px] font-bold ${
+                            dod.up === true ? 'text-rose-600' : dod.up === false ? 'text-blue-600' : 'text-gray-400'
+                          }`}
+                          title={dod.title}
+                        >
+                          {dod.text}
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
                     <tr>
                       <td className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
                       <td className="whitespace-nowrap py-1 px-1 text-center border-r border-gray-300">{kindTotals.itemCount}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-blue-900 border-r border-gray-300">{kindTotals.totalQty.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{kindTotals.totalAmt.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{kindTotals.reg1Qty.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{kindTotals.reg1Amt.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{kindTotals.ext1Qty.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{kindTotals.ext1Amt.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{(kindTotals.reg1Qty + kindTotals.ext1Qty).toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{(kindTotals.reg1Amt + kindTotals.ext1Amt).toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{kindTotals.reg2Qty.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{kindTotals.reg2Amt.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{kindTotals.ext2Qty.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{kindTotals.ext2Amt.toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900 border-r border-gray-300">{(kindTotals.reg2Qty + kindTotals.ext2Qty).toLocaleString()}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900">{(kindTotals.reg2Amt + kindTotals.ext2Amt).toLocaleString()}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-blue-900 border-r border-gray-300">{fmt(kindTotals.totalQty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.totalAmt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg1Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg1Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext1Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext1Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{fmt(kindTotals.reg1Qty + kindTotals.ext1Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{fmt(kindTotals.reg1Amt + kindTotals.ext1Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg2Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg2Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext2Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext2Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900 border-r border-gray-300">{fmt(kindTotals.reg2Qty + kindTotals.ext2Qty)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900 border-r border-gray-300">{fmt(kindTotals.reg2Amt + kindTotals.ext2Amt)}</td>
+                      <td className="whitespace-nowrap py-1 px-1 text-center text-gray-400">-</td>
                     </tr>
                   </tfoot>
                 </table></EditableTableWrapper>
@@ -411,6 +504,60 @@ export const OrderSummaryGsrView: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* 드릴다운: 품목 구성 수주 목록 */}
+      {drillKind !== null && (
+        <div className="fixed inset-0 z-[300] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-[560px] max-w-full max-h-[80vh] flex flex-col">
+            <div className="px-4 py-2.5 border-b border-gray-300 flex items-center justify-between">
+              <span className="font-bold text-[13px]">
+                [{drillKind}] 구성 수주 ({drillRows.length}건)
+              </span>
+              <button
+                type="button" onClick={() => setDrillKind(null)}
+                className="px-2 py-0.5 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-[12px] border-collapse">
+                <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] text-center font-bold whitespace-nowrap">
+                  <tr>
+                    <th className="py-1 px-2 border-r border-[#dbe3ee]">주문번호</th>
+                    <th className="py-1 px-1 border-r border-[#dbe3ee]">일자</th>
+                    <th className="py-1 px-2 border-r border-[#dbe3ee] text-left">거래처</th>
+                    <th className="py-1 px-1 border-r border-[#dbe3ee] text-right">수량</th>
+                    <th className="py-1 px-1 text-right">금액</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 font-mono">
+                  {drillRows.map((r, i) => (
+                    <tr key={`${r.orderNo}-${i}`} className="hover:bg-blue-50/50">
+                      <td className="py-1 px-2 border-r border-gray-200">{r.orderNo}</td>
+                      <td className="py-1 px-1 text-center border-r border-gray-200">{r.orderDate}</td>
+                      <td className="py-1 px-2 font-sans text-left border-r border-gray-200">{r.centerCode}</td>
+                      <td className="py-1 px-1 text-right font-bold text-blue-900 border-r border-gray-200">{r.qty.toLocaleString('ko-KR')}</td>
+                      <td className="py-1 px-1 text-right">{r.amt.toLocaleString('ko-KR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-[#fdfde0] font-mono font-bold border-t-2 border-[#dbe3ee] sticky bottom-0">
+                  <tr>
+                    <td colSpan={3} className="py-1 px-2 text-center border-r border-gray-300">합계</td>
+                    <td className="py-1 px-1 text-right text-blue-900 border-r border-gray-300">
+                      {drillRows.reduce((s, r) => s + r.qty, 0).toLocaleString('ko-KR')}
+                    </td>
+                    <td className="py-1 px-1 text-right">
+                      {drillRows.reduce((s, r) => s + r.amt, 0).toLocaleString('ko-KR')}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
