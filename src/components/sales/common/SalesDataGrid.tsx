@@ -11,6 +11,7 @@ export interface GridColumnDef {
   align?: 'left' | 'center' | 'right';
   format?: 'text' | 'number' | 'currency' | 'date' | 'checkbox';
   editable?: boolean;
+  hideSummary?: boolean; // 합계행에서 제외 (단가 등 합산이 무의미한 컬럼)
   groupHeader?: string; // For 2-tier header
 }
 
@@ -87,7 +88,7 @@ export const SalesDataGrid: React.FC<SalesDataGridProps> = ({
   const computedSummary: Record<string, number> = {};
   if (showSummary && !summaryData) {
     columns.forEach((col) => {
-      if (col.format === 'number' || col.format === 'currency') {
+      if ((col.format === 'number' || col.format === 'currency') && !col.hideSummary) {
         const sum = gridData.reduce((acc, row) => {
           const val = Number(row[col.key]);
           return isNaN(val) ? acc : acc + val;
@@ -320,9 +321,11 @@ export const SalesDataGrid: React.FC<SalesDataGridProps> = ({
                   합계
                 </td>
                 {columns.map((col, idx) => {
-                  const sumVal = summaryData
-                    ? summaryData[col.key]
-                    : computedSummary[col.key];
+                  const sumVal = col.hideSummary
+                    ? undefined
+                    : summaryData
+                      ? summaryData[col.key]
+                      : computedSummary[col.key];
 
                   return (
                     <td

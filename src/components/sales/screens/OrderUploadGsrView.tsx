@@ -7,6 +7,7 @@ import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { usePipeline } from '@/context/PipelineContext';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
+import { parseBonbaljuRows, BonbaljuParseResult } from '@/lib/gfs/bonbaljuIntake';
 import { CheckCircle2, Loader2, Search, Trash2 } from 'lucide-react';
 
 interface OrderUploadRow {
@@ -37,10 +38,10 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'unit', label: '단위', width: '45px', align: 'center' },
   { key: 'orderQty', label: '주문수량', width: '80px', align: 'right', format: 'number' },
   { key: 'delivDate', label: '납품일자', width: '90px', align: 'center', format: 'date' },
-  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency' },
+  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency', hideSummary: true },
   { key: 'orderAmt', label: '주문금액', width: '100px', align: 'right', format: 'currency' },
-  { key: 'delivTo', label: '납품처', width: '110px', align: 'left' },
-  { key: 'shipTo', label: '배송처', width: '120px', align: 'left' },
+  { key: 'delivTo', label: '납품처', width: '110px', align: 'center' },
+  { key: 'shipTo', label: '배송처', width: '120px', align: 'center' },
   { key: 'poNo', label: 'P/O no.', width: '130px', align: 'center' },
   { key: 'shift', label: '편수', width: '55px', align: 'center' },
   { key: 'remark', label: '비고', width: '110px', align: 'left' },
@@ -53,6 +54,18 @@ interface IntakePayloadItem {
   qty1?: number;
   qty2?: number;
   total?: number;
+  productCode?: string;
+  unitPrice?: number;
+}
+
+interface ParsedIntakeFile {
+  items: IntakePayloadItem[];
+  source: '발주현황' | '본발주';
+  kind: '정규' | '추가' | '슈퍼';
+  orderDate?: string;
+  docKeys?: string[];
+  totalQty?: number;
+  totalAmount?: number;
 }
 
 interface IntakeResult {
@@ -65,15 +78,31 @@ interface IntakeResult {
   error?: string;
   duplicate?: boolean;
   duplicateInfo?: string;
+  alreadyRegistered?: boolean;
+  appended?: boolean;
 }
 
-type DateMode = 'day' | 'week' | 'month' | '30days';
+type DateMode = 'day' | 'week' | 'month' | '30days' | 'custom';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-function computeRange(mode: DateMode, filterDate: string): { startDate: string; endDate: string } {
+const MAX_CUSTOM_DAYS = 93;
+
+function clampCustomRange(start: string, end: string): { startDate: string; endDate: string } {
+  let s = start <= end ? start : end;
+  let e = start <= end ? end : start;
+  const diff = Math.round((new Date(e + 'T00:00:00').getTime() - new Date(s + 'T00:00:00').getTime()) / 86400000);
+  if (diff > MAX_CUSTOM_DAYS - 1) {
+    const d = new Date(s + 'T00:00:00');
+    d.setDate(d.getDate() + MAX_CUSTOM_DAYS - 1);
+    e = toLocalISODate(d);
+  }
+  return { startDate: s, endDate: e };
+}
+
+function computeRange(mode: DateMode, filterDate: string, custom?: { start: string; end: string }): { startDate: string; endDate: string } {
   if (mode === 'day') return { startDate: filterDate, endDate: filterDate };
   const d = new Date(filterDate + 'T00:00:00');
   if (mode === 'week') {
@@ -81,8 +110,8 @@ function computeRange(mode: DateMode, filterDate: string): { startDate: string; 
     const mon = new Date(d); mon.setDate(d.getDate() - dow + 1);
     const sun = new Date(d); sun.setDate(d.getDate() - dow + 7);
     return {
-      startDate: mon.toISOString().slice(0, 10),
-      endDate: sun.toISOString().slice(0, 10),
+      startDate: toLocalISODate(mon),
+      endDate: toLocalISODate(sun),
     };
   }
   if (mode === 'month') {
@@ -94,11 +123,19 @@ function computeRange(mode: DateMode, filterDate: string): { startDate: string; 
       endDate: `${filterDate.slice(0, 7)}-${pad(last)}`,
     };
   }
+  if (mode === 'custom' && custom) {
+    return clampCustomRange(custom.start, custom.end);
+  }
   const start = new Date(Date.now() + 9 * 3600 * 1000 - 29 * 86400000);
   return { startDate: start.toISOString().slice(0, 10), endDate: filterDate };
 }
 
 function pad(n: number): string { return String(n).padStart(2, '0'); }
+
+/** 로컬 자정 기준 Date → YYYY-MM-DD (toISOString UTC 변환 오차 방지) */
+function toLocalISODate(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export const OrderUploadGsrView: React.FC = () => {
   const [data, setData] = useState<OrderUploadRow[]>([]);
@@ -110,23 +147,49 @@ export const OrderUploadGsrView: React.FC = () => {
 
   const [dateMode, setDateMode] = useState<DateMode>('day');
   const [filterDate, setFilterDate] = useState(kstToday);
+  const [customStart, setCustomStart] = useState(kstToday);
+  const [customEnd, setCustomEnd] = useState(kstToday);
   const [keyword, setKeyword] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
   // 수주 등록용 일자 (기본 오늘, 백필 시 과거일자 지정)
   const [intakeDate, setIntakeDate] = useState(kstToday);
 
+  // 진입 시 DB 최신 수주일자로 자동 이동 (A안) — 실패 시 오늘 유지
+  const latestApplied = useRef(false);
+  useEffect(() => {
+    if (latestApplied.current) return;
+    latestApplied.current = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/sales/order?latest=1', { cache: 'no-store' });
+        const json = await res.json();
+        const latestDate: string | null = json?.data?.orderDate ?? null;
+        if (latestDate && /^\d{4}-\d{2}-\d{2}$/.test(latestDate)) {
+          setFilterDate(latestDate);
+          setIntakeDate(latestDate);
+          setCustomEnd(latestDate);
+        }
+      } catch {
+        // 폴백: 오늘 유지
+      }
+    })();
+  }, []);
+
   // 일괄 업로드 (멀티파일 + 파일별 날짜)
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchRows, setBatchRows] = useState<{ key: number; file: File; date: string }[]>([]);
   const [batchStart, setBatchStart] = useState(kstToday);
-  const [batchReplace, setBatchReplace] = useState(false);
+  const [batchReplace, setBatchReplace] = useState(true);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchReport, setBatchReport] = useState<Record<number, string>>({});
   const batchKey = useRef(0);
   const batchFileRef = useRef<HTMLInputElement>(null);
 
-  const dateRange = useMemo(() => computeRange(dateMode, filterDate), [dateMode, filterDate]);
+  const dateRange = useMemo(
+    () => computeRange(dateMode, filterDate, { start: customStart, end: customEnd }),
+    [dateMode, filterDate, customStart, customEnd]
+  );
 
   const loadOrders = useCallback(async () => {
     setLoading(true); setError(null);
@@ -143,7 +206,7 @@ export const OrderUploadGsrView: React.FC = () => {
           (o.details || []).forEach((dt: any) => {
             loaded.push({
               id: dt.id || 0,
-              gubun: '정규',
+              gubun: o.orderType || '정규',
               partNo: dt.product?.productCode || '',
               partName: dt.product?.name || '',
               spec: dt.product?.spec || '',
@@ -176,8 +239,8 @@ export const OrderUploadGsrView: React.FC = () => {
 
   useEffect(() => { void loadOrders(); }, [loadOrders]);
 
-  // 발주현황 엑셀 파싱 (시트 자동탐색)
-  const parseIntakeFile = async (file: File): Promise<IntakePayloadItem[] | null> => {
+  // 수주 엑셀 파싱 (본발주 우선 → 발주현황, 시트 자동탐색)
+  const parseIntakeFile = async (file: File): Promise<ParsedIntakeFile | null> => {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
     const names = pickOrderSheetName(wb.SheetNames);
@@ -185,21 +248,53 @@ export const OrderUploadGsrView: React.FC = () => {
       const ws = wb.Sheets[n];
       if (!ws) continue;
       const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      // 1) 본발주(B2B EDI) 우선 — 종류 자동판별 (정규/추가/슈퍼)
+      const bon: BonbaljuParseResult | null = parseBonbaljuRows(rows);
+      if (bon && bon.items.length > 0) {
+        return {
+          source: '본발주',
+          kind: bon.kind,
+          orderDate: bon.orderDate,
+          docKeys: bon.docKeys,
+          totalQty: bon.totalQty,
+          totalAmount: bon.totalAmount,
+          items: bon.items.map((p) => ({
+            menuName: p.menuName, productCode: p.productCode, category: p.category,
+            qty1: p.qty1, qty2: p.qty2, total: p.total, unitPrice: p.unitPrice,
+          })),
+        };
+      }
+      // 2) 발주현황(카톡)
       const r = parseOrderStatusRows(rows);
-      if (r && r.length > 0) return r;
+      if (r && r.length > 0) {
+        return {
+          source: '발주현황',
+          kind: '정규',
+          docKeys: [],
+          items: r.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
+        };
+      }
     }
     return null;
   };
 
   const postIntake = async (
     orderDate: string,
-    items: IntakePayloadItem[],
+    parsed: ParsedIntakeFile,
     replaceByDate: boolean
   ): Promise<IntakeResult> => {
     const res = await fetch('/api/sales/intake', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderDate, items, replaceByDate }),
+      body: JSON.stringify({
+        orderDate,
+        items: parsed.items,
+        replaceByDate,
+        orderType: parsed.kind,
+        docKeys: parsed.docKeys ?? [],
+        uploadMethod: parsed.source === '본발주' ? '엑셀(본발주)' : '엑셀(발주현황)',
+        source: parsed.source,
+      }),
     });
     const json = await res.json();
     if (json.success) {
@@ -210,6 +305,8 @@ export const OrderUploadGsrView: React.FC = () => {
         matched: json.data.matched,
         createdProducts: json.data.createdProducts,
         skipped: json.data.skipped,
+        alreadyRegistered: json.data.alreadyRegistered === true,
+        appended: json.data.appended === true,
       };
     }
     if (json.code === 'DUPLICATE_ORDER') {
@@ -223,20 +320,30 @@ export const OrderUploadGsrView: React.FC = () => {
     try {
       const parsed = await parseIntakeFile(file);
       if (!parsed) {
-        alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
+        alert('수주 시트를 찾지 못했습니다. (본발주: 상품코드/낱개수량/발주단가 또는 발주현황: 분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      const items = parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total }));
-      let result = await postIntake(intakeDate, items, false);
+      // 본발주는 파일 내부 발주일자(수주받은 날짜)를 우선 사용
+      const targetDate = parsed.source === '본발주' && parsed.orderDate ? parsed.orderDate : intakeDate;
+      if (parsed.source === '본발주' && parsed.orderDate && parsed.orderDate !== intakeDate) {
+        setIntakeDate(parsed.orderDate);
+      }
+      const kindLabel = parsed.source === '본발주' ? `본발주[${parsed.kind}]` : '발주현황';
+      // 같은 파일이면 서버가 스킵, 추가/슈퍼는 누적, 정규 중복만 확인
+      let result = await postIntake(targetDate, parsed, false);
 
-      // 중복 감지 → 교체 등록 확인
+      if (result.ok && result.alreadyRegistered) {
+        setToast(`${targetDate} [${parsed.kind}] 이미 등록된 파일입니다. (변경 없음)`);
+        window.setTimeout(() => setToast(null), 2500);
+        return;
+      }
       if (result.duplicate) {
         if (!window.confirm(`${result.duplicateInfo}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) return;
-        result = await postIntake(intakeDate, items, true);
+        result = await postIntake(targetDate, parsed, true);
       }
 
       if (result.ok) {
-        alert(`수주 등록 완료 (${intakeDate} / ${result.orderNo})\n매칭 ${result.matched}건 · 신규 ${result.createdProducts}건 · 제외 ${result.skipped}건`);
+        alert(`수주 등록 완료 [${kindLabel}] (${targetDate} / ${result.orderNo})\n매칭 ${result.matched}건 · 신규 ${result.createdProducts}건 · 제외 ${result.skipped}건${result.appended ? ' · 누적추가' : ''}`);
         void loadOrders();
       } else {
         alert('수주 등록 실패: ' + (result.error || '알 수 없는 오류'));
@@ -249,12 +356,41 @@ export const OrderUploadGsrView: React.FC = () => {
     }
   };
 
-  // ── 일괄 업로드 ──
-  const handleBatchFiles = (files: FileList | null) => {
+  // ── 일괄 업로드 (본발주: 파일 내부 발주일자 자동추출, 발주현황: 수동일자) ──
+  const handleBatchFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const rows = Array.from(files).map((file) => ({ key: batchKey.current++, file, date: '' }));
+    const list = Array.from(files);
+    const rows = list.map((file) => ({ key: batchKey.current++, file, date: '' }));
     setBatchRows((prev) => [...prev, ...rows]);
     setBatchReport({});
+    // 본발주는 즉시 일자 자동추출
+    try {
+      const extracted = await Promise.all(
+        list.map(async (file) => {
+          try {
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            for (const n of wb.SheetNames) {
+              const ws = wb.Sheets[n];
+              if (!ws) continue;
+              const rws: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+              const bon = parseBonbaljuRows(rws);
+              if (bon) return bon.orderDate;
+            }
+          } catch { /* ignore */ }
+          return '';
+        })
+      );
+      setBatchRows((prev) => {
+        const next = [...prev];
+        let di = 0;
+        for (let i = next.length - list.length; i < next.length; i++) {
+          if (i >= 0 && extracted[di]) next[i] = { ...next[i], date: extracted[di++] || next[i].date };
+          else di++;
+        }
+        return next;
+      });
+    } catch { /* ignore */ }
     if (batchFileRef.current) batchFileRef.current.value = '';
   };
 
@@ -265,7 +401,7 @@ export const OrderUploadGsrView: React.FC = () => {
       prev.map((r, i) => {
         const dd = new Date(d);
         dd.setDate(d.getDate() + i);
-        return { ...r, date: dd.toISOString().slice(0, 10) };
+        return { ...r, date: toLocalISODate(dd) };
       })
     );
   };
@@ -285,16 +421,20 @@ export const OrderUploadGsrView: React.FC = () => {
       try {
         const parsed = await parseIntakeFile(row.file);
         if (!parsed) {
-          report[row.key] = '실패: 발주현황 시트를 찾지 못함';
+          report[row.key] = '실패: 수주 시트를 찾지 못함 (본발주/발주현황 헤더 확인)';
           setBatchReport({ ...report });
           continue;
         }
-        const items = parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total }));
-        let result = await postIntake(row.date, items, batchReplace);
-        if (result.duplicate && !batchReplace) {
+        // 본발주는 파일 내부 발주일자 우선. 종류별 분리저장이라 덮어쓰기 강제 불필요
+        // (같은 파일=스킵, 추가/슈퍼=누적, 정규 중복만 교체확인)
+        const targetDate = parsed.source === '본발주' && parsed.orderDate ? parsed.orderDate : row.date;
+        let result = await postIntake(targetDate, parsed, batchReplace);
+        if (result.ok && result.alreadyRegistered) {
+          report[row.key] = '스킵: 이미 등록된 파일 (변경 없음)';
+        } else if (result.duplicate && !batchReplace) {
           report[row.key] = '중복: 이미 등록됨 (교체 미지정)';
         } else if (result.ok) {
-          report[row.key] = `완료: ${result.itemCount}건 (매칭 ${result.matched}·신규 ${result.createdProducts}·제외 ${result.skipped})`;
+          report[row.key] = `완료[${parsed.kind}]: ${result.itemCount}건 (매칭 ${result.matched}·신규 ${result.createdProducts}·제외 ${result.skipped}${result.appended ? '·누적' : ''})`;
         } else {
           report[row.key] = `실패: ${result.error}`;
         }
@@ -332,7 +472,7 @@ export const OrderUploadGsrView: React.FC = () => {
     setDateMode('day');
     const d = new Date(filterDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
-    setFilterDate(d.toISOString().slice(0, 10));
+    setFilterDate(toLocalISODate(d));
   };
 
   const filteredData = useMemo(() => {
@@ -345,15 +485,13 @@ export const OrderUploadGsrView: React.FC = () => {
     );
   }, [data, keyword]);
 
-  const totalQty = useMemo(() => filteredData.reduce((s, r) => s + (r.orderQty || 0), 0), [filteredData]);
-  const totalAmt = useMemo(() => filteredData.reduce((s, r) => s + (r.orderAmt || 0), 0), [filteredData]);
   const lastUpload = useMemo(() => {
     if (data.length === 0) return '';
     return data.reduce((latest, r) => (r.orderCreatedAt > latest ? r.orderCreatedAt : latest), '');
   }, [data]);
 
   const MODE_LABELS: Record<DateMode, string> = {
-    day: '일별', week: '이번 주', month: '이번 달', '30days': '최근 30일',
+    day: '일별', week: '이번 주', month: '이번 달', '30days': '최근 30일', custom: '직접지정',
   };
 
   return (
@@ -373,7 +511,7 @@ export const OrderUploadGsrView: React.FC = () => {
           { key: 'batch', label: '일괄 업로드', icon: 'excel', variant: 'secondary', onClick: () => setBatchOpen(true) },
           { key: 'deleteDate', label: '일자 삭제', icon: 'delete', variant: 'secondary', onClick: () => void handleDeleteByDate() },
         ]}
-        helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다."
+        helpContent="GS리테일 B2B EDI 본발주 엑셀을 업로드하여 수주로 일괄 등록합니다. 파일 종류를 자동판별해 정규/추가/슈퍼로 분리 저장하며 같은 날짜 3건이 누적됩니다. 같은 파일은 스킵됩니다. [일괄 업로드]로 여러 파일을 한 번에 등록하세요."
       />
       <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleIntakeFile(f); }} />
@@ -419,11 +557,25 @@ export const OrderUploadGsrView: React.FC = () => {
           </div>
         )}
 
-        {/* 날짜 범위 표시 (day 외 모드) */}
-        {dateMode !== 'day' && (
+        {/* 날짜 범위 표시 (day·custom 외 모드) */}
+        {dateMode !== 'day' && dateMode !== 'custom' && (
           <span className="num text-[11.5px] font-semibold text-[var(--ink-700)] bg-white px-2 py-0.5 rounded border border-gray-300">
             {dateRange.startDate} ~ {dateRange.endDate}
           </span>
+        )}
+
+        {/* 직접지정 (시작~종료, 최대 93일) */}
+        {dateMode === 'custom' && (
+          <div className="flex items-center gap-1">
+            <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)}
+              className="bg-white border border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none focus:border-blue-500" />
+            <span className="text-gray-500 font-bold">~</span>
+            <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)}
+              className="bg-white border border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none focus:border-blue-500" />
+            <span className="num text-[11.5px] font-semibold text-[var(--ink-700)] bg-white px-2 py-0.5 rounded border border-gray-300">
+              {dateRange.startDate} ~ {dateRange.endDate}
+            </span>
+          </div>
         )}
 
         {/* 검색 */}
@@ -475,18 +627,9 @@ export const OrderUploadGsrView: React.FC = () => {
             </div>
           </div>
         ) : (
-          <>
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <SalesDataGrid columns={COLUMNS} data={filteredData} />
-            </div>
-            {/* 요약 푸터 */}
-            <div className="h-[26px] bg-[#fdfde0] border-t border-gray-400 px-3 flex items-center gap-6 text-[12px] font-bold shrink-0">
-              <span className="text-gray-700">합계</span>
-              <span className="text-gray-400">전체 잠계</span>
-              <span className="num text-blue-900">{totalQty.toLocaleString()}</span>
-              <span className="num text-blue-900 ml-auto">₩{totalAmt.toLocaleString()}</span>
-            </div>
-          </>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <SalesDataGrid columns={COLUMNS} data={filteredData} />
+          </div>
         )}
       </div>
 

@@ -165,20 +165,45 @@ function findFile(candidates: string[]): string | null {
   return null;
 }
 
+/** 루트에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 제외) */
+function findLatestByPattern(pattern: RegExp): string | null {
+  const root = process.cwd();
+  try {
+    const hits = fs
+      .readdirSync(root)
+      .filter((f) => !f.startsWith('~$') && pattern.test(f))
+      .map((f) => {
+        const p = path.join(root, f);
+        return { p, m: fs.statSync(p).mtimeMs };
+      })
+      .sort((a, b) => b.m - a.m);
+    if (hits.length > 0) return hits[0].p;
+  } catch {
+    /* 읽기 실패 시 null */
+  }
+  return null;
+}
+
 export function getAuditFilePath(): string | null {
-  return findFile([
-    '일일 재고조사표 새 양식(10월 29일) (2).xlsx',
-    '/Users/bunker/GFS/일일 재고조사표 새 양식(10월 29일) (2).xlsx',
-  ]);
+  return (
+    findLatestByPattern(/^일일 재고조사표 새 양식.*\.xlsx$/) ||
+    findFile([
+      '일일 재고조사표 새 양식(10월 29일) (2).xlsx',
+      '/Users/bunker/GFS/일일 재고조사표 새 양식(10월 29일) (2).xlsx',
+    ])
+  );
 }
 
 export function getOrderSheetFilePath(): string | null {
-  return findFile([
-    '★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
-    'GFS.xlsx',
-    '/Users/bunker/GFS/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
-    '/Users/bunker/GFS/GFS.xlsx',
-  ]);
+  return (
+    findLatestByPattern(/^★★발주서양식통합★★.*\.xlsx$/) ||
+    findFile([
+      '★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
+      'GFS.xlsx',
+      '/Users/bunker/GFS/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
+      '/Users/bunker/GFS/GFS.xlsx',
+    ])
+  );
 }
 
 /** 재고조사표 5시트 → 정본 맵 (norm → AuditEntry) */

@@ -1,0 +1,31 @@
+CREATE TABLE IF NOT EXISTS "InventorySnapshot" (
+  "id" SERIAL PRIMARY KEY,
+  "snapshotDate" TEXT NOT NULL,
+  "productId" INTEGER REFERENCES "Product"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  "productCode" TEXT NOT NULL DEFAULT '',
+  "productName" TEXT NOT NULL DEFAULT '',
+  "category" TEXT NOT NULL DEFAULT '',
+  "warehouse" TEXT NOT NULL DEFAULT '',
+  "lotNo" TEXT NOT NULL DEFAULT '',
+  "expiryDate" TEXT NOT NULL DEFAULT '',
+  "currentQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "dailyUsage" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "packUnit" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "boxQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "pieceQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "unit" TEXT NOT NULL DEFAULT '',
+  "unitPrice" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "stockAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "safetyStock" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  "inboundDate" TEXT NOT NULL DEFAULT '',
+  "vendor" TEXT NOT NULL DEFAULT '',
+  "itemCode" TEXT NOT NULL DEFAULT '',
+  "itemType" TEXT NOT NULL DEFAULT '',
+  "spec" TEXT NOT NULL DEFAULT '',
+  "remark" TEXT NOT NULL DEFAULT '',
+  "createdBy" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "InventorySnapshot_snapshotDate_productCode_warehouse_key" ON "InventorySnapshot"("snapshotDate", "productCode", "warehouse");
+CREATE INDEX IF NOT EXISTS "InventorySnapshot_snapshotDate_idx" ON "InventorySnapshot"("snapshotDate");

@@ -38,5 +38,7 @@ Thumbs.db
 *_backup*.xlsx
 ~$*.xlsx
 .vercel
+# 원본 업로드 데이터 (대용량, 커밋 제외)
+제작관련 데이터/
 .env*
 !.env.example

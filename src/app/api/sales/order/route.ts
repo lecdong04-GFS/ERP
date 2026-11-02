@@ -5,9 +5,20 @@ import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 
 // GET /api/sales/order?orderDate=2026-10-30&shift=1편
+// GET /api/sales/order?latest=1 → { orderDate: 최신 수주일자, orderCount }
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    if (searchParams.get('latest') === '1') {
+      const latest = await prisma.salesOrder.findFirst({
+        orderBy: { orderDate: 'desc' },
+        select: { orderDate: true },
+      });
+      const orderCount = latest
+        ? await prisma.salesOrder.count({ where: { orderDate: latest.orderDate } })
+        : 0;
+      return NextResponse.json({ success: true, data: { orderDate: latest?.orderDate ?? null, orderCount } });
+    }
     const orderDate = searchParams.get('orderDate');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');

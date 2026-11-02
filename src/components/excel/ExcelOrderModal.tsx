@@ -21,6 +21,8 @@ import {
   parseGsRetailText,
   ParsedExcelResult,
 } from '@/services/excel/gsRetailExcelService';
+import { parseBonbaljuRows } from '@/lib/gfs/bonbaljuIntake';
+import * as XLSX from 'xlsx';
 import { usePipeline } from '@/context/PipelineContext';
 
 interface ExcelOrderModalProps {
@@ -37,6 +39,10 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<ParsedExcelResult | null>(null);
+  const [parsedSource, setParsedSource] = useState<'GS표준' | '본발주'>('GS표준');
+  const [parsedOrderDate, setParsedOrderDate] = useState<string | null>(null);
+  const [parsedKind, setParsedKind] = useState<'정규' | '추가' | '슈퍼'>('정규');
+  const [parsedDocKeys, setParsedDocKeys] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isOpen) return null;
@@ -47,6 +53,55 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
     try {
       const buffer = await file.arrayBuffer();
       const result = parseGsRetailExcelBuffer(buffer);
+      const hasQty = result.totalQty > 0 && result.orders.length > 0;
+      if (hasQty) {
+        setParsedSource('GS표준');
+        setParsedOrderDate(null);
+        setParsedKind('정규');
+        setParsedDocKeys([]);
+        setParsedData(result);
+        return;
+      }
+      // 본발주(B2B EDI ordview) 폴백: 상품코드/낱개수량/발주단가 + 발주일자(수주받은 날짜)
+      const wb = XLSX.read(buffer, { type: 'array' });
+      for (const sn of wb.SheetNames) {
+        const ws = wb.Sheets[sn];
+        if (!ws) continue;
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        const bon = parseBonbaljuRows(rows);
+        if (bon && bon.items.length > 0) {
+          setParsedSource('본발주');
+          setParsedOrderDate(bon.orderDate);
+          setParsedKind(bon.kind);
+          setParsedDocKeys(bon.docKeys);
+          setParsedData({
+            orders: bon.items.map((it, idx) => ({
+              orderId: `BONBALJU-${bon.orderDate.replace(/-/g, '')}-${String(idx + 1).padStart(3, '0')}`,
+              storeCode: 'GSR-001',
+              storeName: 'GS리테일 본발주 통합',
+              orderItemCode: it.productCode,
+              orderItemName: it.menuName,
+              orderQty1: it.qty1,
+              orderQty2: it.qty2,
+              totalOrderQty: it.total,
+              deliveryPrice: it.unitPrice,
+            })),
+            totalLines: bon.items.length,
+            totalQty: bon.totalQty,
+            shift1Qty: bon.items.reduce((s, it) => s + it.qty1, 0),
+            shift2Qty: bon.items.reduce((s, it) => s + it.qty2, 0),
+            validItemCount: bon.items.length,
+            unrecognizedBarcodes: [],
+            rawRowCount: bon.rowCount,
+          });
+          return;
+        }
+      }
+      // 둘 다 아니면 GS표준 결과(0건) 그대로 표시
+      setParsedSource('GS표준');
+      setParsedOrderDate(null);
+      setParsedKind('정규');
+      setParsedDocKeys([]);
       setParsedData(result);
     } catch (err) {
       alert('엑셀 파일을 읽는 중 오류가 발생했습니다. 양식을 확인해 주세요.');
@@ -88,30 +143,71 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
       return;
     }
 
-    onClose();
-
-    // 1. 주문 데이터 DB 저장
+    // 1. 주문 데이터 DB 저장 (결과 확인 후 모달 닫기)
+    // 본발주: 종류별 분리저장 (정규/추가/슈퍼 누적, 같은 파일은 스킵)
     try {
-      await fetch('/api/sales/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderDate: new Date().toISOString().slice(0, 10),
-          centerCode: 'GSR-001',
-          shift: '1편',
-          orderType: '정규',
-          uploadMethod: '엑셀업로드',
-          items: parsedData.orders.map((o) => ({
-            productCode: o.orderItemCode,
-            orderQty1: o.orderQty1,
-            orderQty2: o.orderQty2,
-            unitPrice: o.deliveryPrice,
-          })),
-        }),
-      });
+      if (parsedSource === '본발주' && parsedOrderDate) {
+        const postBon = async (replace: boolean) => {
+          const res = await fetch('/api/sales/intake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderDate: parsedOrderDate,
+              centerCode: 'GSR-001',
+              orderType: parsedKind,
+              docKeys: parsedDocKeys,
+              uploadMethod: '엑셀(본발주)',
+              source: '본발주',
+              replaceByDate: replace,
+              items: parsedData.orders.map((o) => ({
+                menuName: o.orderItemName,
+                productCode: o.orderItemCode,
+                qty1: o.orderQty1,
+                qty2: o.orderQty2,
+                total: o.totalOrderQty,
+                unitPrice: o.deliveryPrice,
+              })),
+            }),
+          });
+          return res.json();
+        };
+        let json = await postBon(false);
+        if (json?.success && json.data?.alreadyRegistered) {
+          onClose();
+          alert(`${parsedOrderDate} [${parsedKind}] 이미 등록된 파일입니다. (변경 없음)`);
+          return;
+        }
+        if (!json?.success && json?.code === 'DUPLICATE_ORDER') {
+          if (!window.confirm(`${json.error}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) return;
+          json = await postBon(true);
+        }
+        if (!json?.success) {
+          alert('수주 등록 실패: ' + (json?.error || '알 수 없는 오류'));
+          return;
+        }
+      } else {
+        await fetch('/api/sales/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderDate: new Date().toISOString().slice(0, 10),
+            centerCode: 'GSR-001',
+            shift: '1편',
+            orderType: '정규',
+            uploadMethod: '엑셀업로드',
+            items: parsedData.orders.map((o) => ({
+              productCode: o.orderItemCode,
+              orderQty1: o.orderQty1,
+              orderQty2: o.orderQty2,
+              unitPrice: o.deliveryPrice,
+            })),
+          }),
+        });
+      }
     } catch (err) {
       console.error('Failed to save uploaded sales order to DB:', err);
     }
+    onClose();
 
     // 2. 파이프라인 엔진 가동 (BOM 전개, 46개 계 배분, FEFO 차감, 원가계산)
     await executePipeline(parsedData.orders);
@@ -121,6 +217,10 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
   const handleReset = () => {
     setFileName(null);
     setParsedData(null);
+    setParsedOrderDate(null);
+    setParsedSource('GS표준');
+    setParsedKind('정규');
+    setParsedDocKeys([]);
     setPasteText('');
   };
 
@@ -296,6 +396,11 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                   <span className="font-bold text-gray-800 text-[13px]">
                     발주 분석 결과 요약
                   </span>
+                  {parsedSource === '본발주' && parsedOrderDate && (
+                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded border border-blue-300">
+                      본발주[{parsedKind}] · 발주일자 {parsedOrderDate} (같은 파일은 스킵·추가/슈퍼는 누적)
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={handleReset}

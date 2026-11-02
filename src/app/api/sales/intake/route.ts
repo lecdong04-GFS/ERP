@@ -12,10 +12,23 @@ interface IntakeItem {
   qty1?: number;
   qty2?: number;
   total?: number;
+  productCode?: string;
+  unitPrice?: number;
 }
 
-// POST /api/sales/intake — 발주현황(카톡보내기) 수주 일괄등록
-// body: { orderDate?: string(기본 오늘), centerCode?, items: [{menuName, category, qty1, qty2, total?}] }
+// POST /api/sales/intake — 발주현황/본발주 수주 일괄등록
+// body: { orderDate?, centerCode?, orderType? (정규/추가/슈퍼), uploadMethod?, replaceByDate?, docKeys?: string[], items: [...] }
+// - 같은 날짜라도 orderType(정규/추가/슈퍼)별로 따로 저장 → 하루 3종(본발주/1편주문/슈퍼) 누적
+// - 같은 파일 재업로드(docKeys 일치)는 등록 없이 스킵
+function docHashOf(keys: unknown): string | null {
+  if (!Array.isArray(keys)) return null;
+  const uniq = [...new Set(keys.map((k) => String(k ?? '').trim()).filter(Boolean))].sort();
+  if (uniq.length === 0) return null;
+  let h = 5381;
+  const s = uniq.join('|');
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${(h >>> 0).toString(16)}:${uniq.length}`;
+}
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -31,46 +44,81 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'items가 비어 있습니다.' }, { status: 400 });
     }
 
-    // 중복 차단 + 교체 모드
+    // 종류별 분리 저장 (하루 3종 누적용) + 같은 파일 재업로드 스킵
     const replaceByDate = body.replaceByDate === true;
-    const existingOrder = await prisma.salesOrder.findFirst({
-      where: { orderDate, centerCode, status: { not: '취소' }, uploadMethod: { contains: '발주현황' } },
+    const orderType: string = ['정규', '추가', '슈퍼'].includes(String(body.orderType))
+      ? String(body.orderType)
+      : '정규';
+    const uploadMethod: string = String(
+      body.uploadMethod || (body.source === '본발주' ? '엑셀(본발주)' : '엑셀(발주현황)')
+    );
+    const dupKeyword = uploadMethod.includes('본발주') ? '본발주' : '발주현황';
+    const docHash = docHashOf(body.docKeys);
+    const docMarker = docHash ? `DOC:${docHash}` : null;
+    const scope = { orderDate, centerCode, orderType, status: { not: '취소' }, uploadMethod: { contains: dupKeyword } };
+    const existingOrders = await prisma.salesOrder.findMany({
+      where: scope as any,
       orderBy: { id: 'desc' },
-      select: { orderNo: true, totalAmount: true, _count: { select: { details: true } } },
+      select: { orderNo: true, totalAmount: true, remark: true, _count: { select: { details: true } } },
     });
-    if (existingOrder && !replaceByDate) {
+    // 같은 파일이면 등록 없이 스킵 (상자 중복 쌓기 방지)
+    if (docMarker && existingOrders.some((o) => (o.remark || '').includes(docMarker))) {
+      const dup = existingOrders.find((o) => (o.remark || '').includes(docMarker));
+      return NextResponse.json({
+        success: true,
+        data: {
+          orderNo: dup?.orderNo ?? null,
+          itemCount: 0,
+          matched: 0,
+          createdProducts: 0,
+          skipped: items.length,
+          alreadyRegistered: true,
+          message: `${orderDate} [${orderType}] 이미 등록된 파일입니다. (변경 없음)`,
+        },
+      });
+    }
+    const existingOrder = existingOrders[0];
+    const appended = !replaceByDate && existingOrders.length > 0 && orderType !== '정규';
+    if (existingOrder && !replaceByDate && !appended) {
       return NextResponse.json(
         {
           success: false,
           code: 'DUPLICATE_ORDER',
-          error: `${orderDate} 수주가 이미 등록되어 있습니다. (${existingOrder.orderNo}, ${existingOrder._count.details}개 품목)`,
+          error: `${orderDate} [${orderType}] 수주가 이미 등록되어 있습니다. (${existingOrder.orderNo}, ${existingOrder._count.details}개 품목)`,
           existingOrderNo: existingOrder.orderNo,
           existingItemCount: existingOrder._count.details,
         },
         { status: 409 }
       );
     }
-    if (existingOrder && replaceByDate) {
-      await prisma.salesOrder.deleteMany({
-        where: { orderDate, centerCode, uploadMethod: { contains: '발주현황' } },
-      });
+    if (existingOrders.length > 0 && replaceByDate) {
+      await prisma.salesOrder.deleteMany({ where: scope as any });
     }
 
     let matched = 0;
     let createdProducts = 0;
     let skipped = 0;
-    const detailInputs: { productId: number; qty1: number; qty2: number; total: number }[] = [];
+    const detailInputs: { productId: number; qty1: number; qty2: number; total: number; unitPrice?: number }[] = [];
 
     for (const it of items) {
       const name = String(it.menuName || '').trim();
       const qty1 = Math.round(Number(it.qty1) || 0);
       const qty2 = Math.round(Number(it.qty2) || 0);
       const total = it.total != null && Number(it.total) > 0 ? Math.round(Number(it.total)) : qty1 + qty2;
+      const givenCode = String(it.productCode || '').trim();
+      const givenPrice = Number(it.unitPrice) > 0 ? Math.round(Number(it.unitPrice)) : 0;
       if (!name || total <= 0) {
         skipped += 1;
         continue;
       }
-      let product = await prisma.product.findFirst({ where: { name } });
+      // 코드 우선 매칭 (본발주) → 품명 정확 매칭 → 정규화 매칭
+      let product = null as Awaited<ReturnType<typeof prisma.product.findFirst>>;
+      if (givenCode) {
+        product = await prisma.product.findUnique({ where: { productCode: givenCode } });
+      }
+      if (!product) {
+        product = await prisma.product.findFirst({ where: { name } });
+      }
       if (!product) {
         const norm = normName(name);
         const cand = await prisma.product.findMany({ where: { category: '완성품' }, select: { id: true, productCode: true, name: true } });
@@ -78,29 +126,39 @@ export async function POST(req: NextRequest) {
         if (hit) product = await prisma.product.findUnique({ where: { id: hit.id } });
       }
       if (!product) {
-        const count = await prisma.product.count();
-        let productCode = `FG-${orderDate.replace(/-/g, '').slice(2)}-${String(count + 1).padStart(4, '0')}`;
-        let n = 1;
-        while (await prisma.product.findUnique({ where: { productCode } })) {
-          productCode = `${productCode}-${n++}`;
+        let productCode = givenCode;
+        if (!productCode) {
+          const count = await prisma.product.count();
+          productCode = `FG-${orderDate.replace(/-/g, '').slice(2)}-${String(count + 1).padStart(4, '0')}`;
+          let n = 1;
+          while (await prisma.product.findUnique({ where: { productCode } })) {
+            productCode = `${productCode}-${n++}`;
+          }
+        } else if (await prisma.product.findUnique({ where: { productCode } })) {
+          // 동일 코드가 이미 있으면(경쟁 생성) 재조회
+          product = await prisma.product.findUnique({ where: { productCode } });
         }
-        product = await prisma.product.create({
-          data: {
-            productCode,
-            name,
-            spec: '',
-            unit: 'ea',
-            category: '완성품',
-            kind: '',
-            boxQty: 1,
-            remark: '수주 intake 자동생성',
-          },
-        });
-        createdProducts += 1;
+        if (!product) {
+          product = await prisma.product.create({
+            data: {
+              productCode,
+              name,
+              spec: '',
+              unit: 'ea',
+              category: '완성품',
+              kind: '',
+              boxQty: 1,
+              remark: dupKeyword === '본발주' ? '본발주 intake 자동생성' : '수주 intake 자동생성',
+            },
+          });
+          createdProducts += 1;
+        } else {
+          matched += 1;
+        }
       } else {
         matched += 1;
       }
-      detailInputs.push({ productId: product.id, qty1, qty2, total });
+      detailInputs.push({ productId: product.id, qty1, qty2, total, unitPrice: givenPrice || undefined });
     }
 
     if (detailInputs.length === 0) {
@@ -123,7 +181,8 @@ export async function POST(req: NextRequest) {
     let totalAmount = 0;
     const details = detailInputs.map((d) => {
       totalQty += d.total;
-      const unitPrice = priceMap.get(d.productId) ?? 0;
+      // 본발주 단가(발주단가)는 상세에만 저장, 마스터 미갱신. 없으면 마스터 최신가 fallback
+      const unitPrice = d.unitPrice && d.unitPrice > 0 ? d.unitPrice : (priceMap.get(d.productId) ?? 0);
       const amount = Math.round(d.total * unitPrice);
       totalAmount += amount;
       return {
@@ -142,11 +201,12 @@ export async function POST(req: NextRequest) {
         orderDate,
         centerCode,
         shift: '전체',
-        orderType: '정규',
-        uploadMethod: '엑셀(발주현황)',
+        orderType,
+        uploadMethod,
         status: '접수',
         totalAmount,
         totalQty,
+        remark: docMarker ?? '',
         createdBy: `${me.name || me.loginId || '담당자'}(${(me as any).loginId || ''})`,
         details: { create: details },
       },
@@ -162,7 +222,7 @@ export async function POST(req: NextRequest) {
           action: '수주일괄등록',
           menuId: 'sales-order-upload',
           menuName: '주문등록GSR(upload)',
-          detail: `${me.name || me.loginId} 발주현황 수주 ${detailInputs.length}건 등록 (${orderNo}, 매칭 ${matched}건, 신규 ${createdProducts}건)`,
+          detail: `${me.name || me.loginId} ${dupKeyword}[${orderType}] 수주 ${detailInputs.length}건 등록 (${orderNo}, 매칭 ${matched}건, 신규 ${createdProducts}건${appended ? ', 누적추가' : ''})`,
         },
       })
       .catch(() => {});
@@ -170,7 +230,7 @@ export async function POST(req: NextRequest) {
     await touchDashboardSnapshot();
     return NextResponse.json({
       success: true,
-      data: { orderNo, itemCount: detailInputs.length, matched, createdProducts, skipped },
+      data: { orderNo, orderType, itemCount: detailInputs.length, matched, createdProducts, skipped, appended },
     });
   } catch (error: any) {
     return NextResponse.json(

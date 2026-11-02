@@ -160,6 +160,7 @@ model Product {
   purchaseOrderDetails PurchaseOrderDetail[]
   receivingDetails   ReceivingDetail[]
   inventories        Inventory[]
+  inventorySnapshots InventorySnapshot[]
   materialLedgers    MaterialLedger[]
   workOrders         WorkOrder[]
   productionResults  ProductionResult[]
@@ -739,6 +740,42 @@ model Inventory {
   @@index([warehouse])
   @@index([expiryDate])
   @@index([lotNo])
+}
+
+/// 일자별 재고 스냅샷 (재고조사표 일자별 저장/조회용 — 현재고 Inventory와 별개)
+model InventorySnapshot {
+  id            Int      @id @default(autoincrement())
+  snapshotDate  String                // 기준일자 YYYY-MM-DD
+  productId     Int?                  // FK → Product (미매칭 시 null 허용)
+  productCode   String   @default("")
+  productName   String   @default("")
+  category      String   @default("")  // 원재료, 부자재, 포장재
+  warehouse     String   @default("")  // 보관창고
+  lotNo         String   @default("")
+  expiryDate    String   @default("")  // 유통기한
+  currentQty    Float    @default(0)   // 해당 일자 재고수량
+  dailyUsage    Float    @default(0)   // 일 사용량(박스)
+  packUnit      Float    @default(0)   // 입수량
+  boxQty        Float    @default(0)   // 박스
+  pieceQty      Float    @default(0)   // 낱개
+  unit          String   @default("")
+  unitPrice     Float    @default(0)   // 단가
+  stockAmount   Float    @default(0)   // 재고금액
+  safetyStock   Float    @default(0)   // 안전재고
+  inboundDate   String   @default("")  // 입고일
+  vendor        String   @default("")
+  itemCode      String   @default("")
+  itemType      String   @default("")
+  spec          String   @default("")
+  remark        String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@unique([snapshotDate, productCode, warehouse])
+  @@index([snapshotDate])
 }
 
 /// 자재수불부

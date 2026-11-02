@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Factory, PackageCheck, ShieldAlert, TrendingUp } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
@@ -11,6 +11,8 @@ import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
 import { WarehouseStock } from './WarehouseStock';
 import { useDashboardStats } from './useDashboardStats';
+import type { ChartPoint } from './dashboardData';
+import type { ComparePoint } from './ErpComparePanel';
 
 // Recharts는 클라이언트 환경(브라우저)에서만 로드하도록 ssr: false 설정
 const ErpChartPanel = dynamic(
@@ -27,6 +29,33 @@ const ErpChartPanel = dynamic(
     ),
   }
 );
+
+const ErpComparePanel = dynamic(
+  () => import('./ErpComparePanel').then((mod) => mod.ErpComparePanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="erp-card flex flex-col h-[340px] lg:col-span-2">
+        <div className="h-[34px] bg-[#fbfcfe] border-b border-[var(--line)]" />
+        <div className="flex-1 p-3">
+          <div className="skeleton h-full w-full rounded-md" />
+        </div>
+      </div>
+    ),
+  }
+);
+
+/** 매출/매입 시리즈를 라벨 기준으로 병합 (한쪽에만 있는 날짜는 0) */
+function zipCompare(sales: ChartPoint[], purchase: ChartPoint[]): ComparePoint[] {
+  const map = new Map<string, ComparePoint>();
+  sales.forEach((p) => map.set(p.label, { label: p.label, sales: p.value || 0, purchase: 0 }));
+  purchase.forEach((p) => {
+    const cur = map.get(p.label);
+    if (cur) cur.purchase = p.value || 0;
+    else map.set(p.label, { label: p.label, sales: 0, purchase: p.value || 0 });
+  });
+  return [...map.values()];
+}
 
 const wont = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 
@@ -47,6 +76,16 @@ export const Dashboard: React.FC = () => {
     k.yesterdaySalesAmount > 0
       ? ((k.todaySalesAmount - k.yesterdaySalesAmount) / k.yesterdaySalesAmount) * 100
       : null;
+
+  const compareMonthly = useMemo(
+    () => zipCompare(stats.sales.monthly, stats.purchase.monthly),
+    [stats.sales.monthly, stats.purchase.monthly]
+  );
+  const compareYearly = useMemo(
+    () => zipCompare(stats.sales.yearly, stats.purchase.yearly),
+    [stats.sales.yearly, stats.purchase.yearly]
+  );
+  const compareHasData = stats.hasData.sales || stats.hasData.purchase;
 
   if (loading) {
     return (
@@ -153,8 +192,16 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* 차트 2×2 */}
+      {/* 차트 2×2 + 매출/매입 비교 (전체폭) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-2">
+        <div className="lg:col-span-2">
+          <ErpComparePanel
+            monthly={compareMonthly}
+            yearly={compareYearly}
+            defaultMode="monthly"
+            hasData={compareHasData}
+          />
+        </div>
         <ErpChartPanel
           title="매출현황 (단위: 백만)"
           monthlyData={stats.sales.monthly}
@@ -170,23 +217,6 @@ export const Dashboard: React.FC = () => {
           defaultMode="monthly"
           hasData={stats.hasData.purchase}
           accent="#0ea5e9"
-        />
-        <ErpChartPanel
-          title="생산현황 (단위: 백만)"
-          monthlyData={stats.production.monthly}
-          yearlyData={stats.production.yearly}
-          defaultMode="monthly"
-          hasData={stats.hasData.production}
-          accent="#10b981"
-          showZeroLabels={false}
-        />
-        <ErpChartPanel
-          title="미납품금액 (단위: 백만)"
-          monthlyData={stats.undelivered.monthly}
-          yearlyData={stats.undelivered.yearly}
-          defaultMode="monthly"
-          hasData={stats.hasData.undelivered}
-          accent="#f59e0b"
         />
       </div>
     </div>
