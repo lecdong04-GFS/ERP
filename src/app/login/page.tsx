@@ -165,7 +165,7 @@ export default function LoginPage() {
           {/* 하단 정보 */}
           <div className="bg-gray-100 border-t border-gray-300 rounded-b-lg px-6 py-2.5 flex items-center justify-between text-[10px] text-gray-500">
             <span>© 2026 (주)GFS 정보전산팀</span>
-            <span className="text-gray-400">ProdCore ERP v2026.5.25.2239</span>
+            <span className="text-gray-400">(주)GFS ERP v2026.5.25.2239</span>
           </div>
         </div>
       </div>

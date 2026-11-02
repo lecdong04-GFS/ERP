@@ -1,5 +1,5 @@
 /**
- * ProdCore: (주)GFS 매출관리 실데이터 마스터 (원본 캡처 기반)
+ * (주)GFS 매출관리 실데이터 마스터 (원본 캡처 기반)
  */
 
 export interface SalesProductItem {

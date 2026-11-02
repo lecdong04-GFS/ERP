@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     const endDate = searchParams.get('endDate');
     const shift = searchParams.get('shift');
     const status = searchParams.get('status');
+    const orderType = searchParams.get('orderType');
 
     const where: any = {};
     if (orderDate) {
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
     }
     if (shift) where.shift = shift;
     if (status) where.status = status;
+    if (orderType) where.orderType = orderType;
 
     const orders = await prisma.salesOrder.findMany({
       where,
@@ -56,8 +58,9 @@ export async function POST(req: NextRequest) {
       shift = '1편',
       orderType = '정규',
       uploadMethod = '수기',
-      items = [], // [{ productCode, orderQty1, orderQty2, unitPrice }]
+      items = [], // [{ productCode, orderQty1, orderQty2, unitPrice, remark }]
       createdBy = 'admin',
+      remark = '',
     } = body;
 
     if (!orderDate || items.length === 0) {
@@ -96,6 +99,7 @@ export async function POST(req: NextRequest) {
         totalQty: sumQty,
         unitPrice: price,
         amount,
+        remark: String(item.remark ?? ''),
       });
     }
 
@@ -111,6 +115,7 @@ export async function POST(req: NextRequest) {
         totalAmount,
         totalQty,
         createdBy,
+        remark: String(remark ?? ''),
         details: {
           create: detailRecords,
         },

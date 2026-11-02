@@ -1,5 +1,5 @@
 /**
- * ProdCore: (주)GFS — Initial Database Seeder
+  * (주)GFS — Initial Database Seeder
  * 
  * 기존 하드코딩된 기초코드, 거래처, 계마스터, 제품, BOM 등
  * 기준정보 데이터를 SQLite 데이터베이스에 초기 적재합니다.
@@ -259,7 +259,7 @@ async function main() {
       department: '전산운영팀',
       position: '팀장',
       role: '관리자',
-      email: 'admin@prodcore-gfs.co.kr',
+      email: 'admin@gfs.co.kr',
     },
   });
 
@@ -273,7 +273,7 @@ async function main() {
       department: '생산관리팀',
       position: '과장',
       role: '생산',
-      email: 'prod@prodcore-gfs.co.kr',
+      email: 'prod@gfs.co.kr',
     },
   });
 

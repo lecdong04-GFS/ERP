@@ -19,17 +19,47 @@ import {
 } from 'lucide-react';
 import { usePrintReport, PrintDocumentType } from '@/context/PrintReportContext';
 import { usePipeline } from '@/context/PipelineContext';
+import { useSession } from 'next-auth/react';
 import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
 
 export const PrintReportModal: React.FC = () => {
   const { isPrintModalOpen, closePrintModal, activeDocType, setActiveDocType } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
+  const { data: session } = useSession();
+  const writerName = (session?.user as any)?.name || '';
 
   const [shiftFilter, setShiftFilter] = useState<'1편' | '2편'>('1편');
   const printDate = '2026-10-30';
 
   if (!isPrintModalOpen) return null;
+
+  const DOC_GROUPS: { title: string; docs: { id: PrintDocumentType; label: string; desc: string; Icon: typeof FileText }[] }[] = [
+    {
+      title: '업무 문서',
+      docs: [
+        { id: 'WORK_ORDER', label: '공정별 작업지시서', desc: 'HACCP 기준 지시서', Icon: FileText },
+        { id: 'MATERIAL_LEDGER', label: '일일 자재수불부', desc: 'FEFO 수불 현황', Icon: Package },
+        { id: 'COST_SHEET', label: '원가 및 손익계산서', desc: '제품별 원가 결산', Icon: Calculator },
+        { id: 'PURCHASE_ORDER', label: '원부자재 발주서', desc: '발주서 양식', Icon: FileText },
+      ],
+    },
+    {
+      title: '증빙',
+      docs: [
+        { id: 'HACCP_INSPECTION', label: 'HACCP 입고검수일지', desc: '원료 입고 검수', Icon: ShieldCheck },
+        { id: 'DELIVERY_STATEMENT', label: '출하 거래명세표', desc: '거래명세서', Icon: FileSpreadsheet },
+      ],
+    },
+    {
+      title: '라벨',
+      docs: [
+        { id: 'LOT_LABEL', label: 'LOT 품질 바코드 라벨', desc: '품질 라벨', Icon: Tag },
+        { id: 'DELIVERY_BOX_LABEL', label: 'GS25 납품 박스 라벨', desc: '박스 물류 라벨', Icon: Truck },
+      ],
+    },
+  ];
+  const activeDocMeta = DOC_GROUPS.flatMap((g) => g.docs).find((d) => d.id === activeDocType);
 
   const handlePrint = () => {
     window.print();
@@ -153,6 +183,14 @@ export const PrintReportModal: React.FC = () => {
     <>
       {/* Print Specific CSS to isolate printable paper */}
       <style jsx global>{`
+        #printable-report-area th {
+          text-align: center !important;
+          white-space: nowrap !important;
+        }
+        #printable-report-area td {
+          vertical-align: middle;
+          word-break: keep-all;
+        }
         @media print {
           body * {
             visibility: hidden !important;
@@ -175,6 +213,16 @@ export const PrintReportModal: React.FC = () => {
           .no-print {
             display: none !important;
           }
+          #printable-report-area thead {
+            display: table-header-group !important;
+          }
+          #printable-report-area tr {
+            break-inside: avoid !important;
+          }
+          #printable-report-area .label-card {
+            break-inside: avoid !important;
+            box-shadow: none !important;
+          }
           @page {
             size: A4 portrait;
             margin: 12mm 10mm 12mm 10mm;
@@ -182,27 +230,20 @@ export const PrintReportModal: React.FC = () => {
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-2xs flex items-center justify-center p-3 select-none no-print">
-        <div className="bg-[#f1f5f9] w-full max-w-5xl rounded-lg shadow-2xl border border-gray-400 flex flex-col max-h-[94vh] overflow-hidden">
-          {/* Header */}
-          <div className="bg-[#1e293b] text-white px-4 py-3 flex items-center justify-between border-b border-gray-700">
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-2xs flex items-center justify-center p-3 select-none print:static print:block print:p-0 print:bg-white">
+        <div className="bg-[#f1f5f9] w-full max-w-6xl rounded-lg shadow-2xl border border-gray-400 flex flex-col max-h-[94vh] overflow-hidden print:max-w-none print:rounded-none print:shadow-none print:border-0 print:max-h-none print:overflow-visible print:block">
+          {/* Header (슬림) */}
+          <div className="bg-[#1e293b] text-white px-4 py-2.5 flex items-center justify-between border-b border-gray-700 no-print">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-blue-600 rounded text-white shadow-xs">
                 <Printer className="w-5 h-5" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-[14px] text-white">
-                    ProdCore: (주)GFS 엔터프라이즈 표준 규격 출력 & 보고서 센터
-                  </h3>
-                  <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] font-semibold rounded border border-blue-500/30">
-                    A4 규격 인쇄 및 XLSX 내보내기
-                  </span>
-                </div>
-                <p className="text-[11px] text-gray-300 mt-0.5">
-                  식약처 HACCP 법정 양식 및 GS리테일 납품 공정 지시서, 일일 자재수불부, 손익계산서를 정규 서식으로 인쇄합니다.
-                </p>
-              </div>
+              <h3 className="font-bold text-[14px] text-white tracking-tight">
+                (주)GFS 표준 양식 출력
+              </h3>
+              <span className="px-1.5 py-0.5 bg-white/10 text-gray-300 text-[10px] font-semibold rounded border border-white/15">
+                A4 규격 인쇄 및 XLSX 내보내기
+              </span>
             </div>
 
             <button
@@ -213,154 +254,108 @@ export const PrintReportModal: React.FC = () => {
             </button>
           </div>
 
-          {/* Document Type Selector Tabs */}
-          <div className="bg-white border-b border-gray-300 px-4 py-2 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setActiveDocType('WORK_ORDER')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'WORK_ORDER'
-                    ? 'bg-blue-700 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>1. 공정별 작업지시서</span>
-              </button>
+          {/* Body: 좌측 문서 목록 + 우측 미리보기 */}
+          <div className="flex flex-1 min-h-0 print:block">
+            {/* Document List Sidebar */}
+            <aside className="w-52 shrink-0 bg-white border-r border-gray-300 overflow-y-auto p-2 space-y-3 no-print">
+              {DOC_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <div className="px-2 pt-1 pb-1.5 text-[10px] font-bold text-gray-400 tracking-wide">
+                    {group.title}
+                  </div>
+                  <div className="space-y-0.5">
+                    {group.docs.map(({ id, label, desc, Icon }) => {
+                      const active = activeDocType === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setActiveDocType(id)}
+                          className={`w-full text-left px-2.5 py-2 rounded-md flex items-center gap-2 transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#1e293b] text-white shadow-xs'
+                              : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-gray-400'}`} />
+                          <span className="min-w-0">
+                            <span className="block text-[12px] font-bold leading-tight truncate">{label}</span>
+                            <span className={`block text-[10px] leading-tight truncate ${active ? 'text-gray-300' : 'text-gray-400'}`}>
+                              {desc}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
-              <button
-                onClick={() => setActiveDocType('HACCP_INSPECTION')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'HACCP_INSPECTION'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>2. HACCP 원료 입고검수일지</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('MATERIAL_LEDGER')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'MATERIAL_LEDGER'
-                    ? 'bg-indigo-700 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Package className="w-3.5 h-3.5" />
-                <span>3. 일일 자재수불부</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('COST_SHEET')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'COST_SHEET'
-                    ? 'bg-amber-700 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                <span>4. 완성품 원가 및 손익계산서</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('DELIVERY_STATEMENT')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'DELIVERY_STATEMENT'
-                    ? 'bg-blue-800 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>5. 출하 거래명세표</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('PURCHASE_ORDER')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'PURCHASE_ORDER'
-                    ? 'bg-purple-800 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>6. 원부자재 발주서</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('LOT_LABEL')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'LOT_LABEL'
-                    ? 'bg-emerald-800 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Tag className="w-3.5 h-3.5" />
-                <span>7. LOT 품질 바코드 라벨</span>
-              </button>
-
-              <button
-                onClick={() => setActiveDocType('DELIVERY_BOX_LABEL')}
-                className={`px-3 py-1.5 rounded font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeDocType === 'DELIVERY_BOX_LABEL'
-                    ? 'bg-cyan-800 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Truck className="w-3.5 h-3.5" />
-                <span>8. GS25 납품 박스 라벨</span>
-              </button>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2">
+              {/* 편수 필터 (작업지시서 전용) */}
               {activeDocType === 'WORK_ORDER' && (
-                <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded border border-gray-300">
-                  <button
-                    onClick={() => setShiftFilter('1편')}
-                    className={`px-2 py-1 rounded text-xs font-bold transition-all ${
-                      shiftFilter === '1편' ? 'bg-blue-600 text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    1편 (오전)
-                  </button>
-                  <button
-                    onClick={() => setShiftFilter('2편')}
-                    className={`px-2 py-1 rounded text-xs font-bold transition-all ${
-                      shiftFilter === '2편' ? 'bg-indigo-600 text-white' : 'text-gray-600'
-                    }`}
-                  >
-                    2편 (야간)
-                  </button>
+                <div className="pt-1">
+                  <div className="px-2 pb-1.5 text-[10px] font-bold text-gray-400 tracking-wide">
+                    편수
+                  </div>
+                  <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-md border border-gray-300">
+                    {(['1편', '2편'] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setShiftFilter(s)}
+                        className={`flex-1 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                          shiftFilter === s ? 'bg-[#1e293b] text-white shadow-xs' : 'text-gray-600'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+            </aside>
 
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-400 rounded font-bold text-xs shadow-2xs transition-colors cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>엑셀 다운로드 (XLSX)</span>
-              </button>
+            {/* Preview Column */}
+            <div className="flex-1 flex flex-col min-w-0">
+              {/* Preview Toolbar */}
+              <div className="bg-white border-b border-gray-300 px-4 py-2 flex items-center justify-between text-xs shrink-0 no-print">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-bold text-gray-900 text-[13px] truncate">
+                    {activeDocMeta?.label}
+                  </span>
+                  <span className="chip bg-[#f8fafc] text-gray-600 border border-gray-300 num">
+                    <Calendar className="w-3 h-3 inline mr-1" />
+                    {printDate}
+                    {activeDocType === 'WORK_ORDER' && ` · ${shiftFilter}`}
+                  </span>
+                </div>
 
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-xs transition-colors cursor-pointer active:scale-95"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>표준 서식 인쇄 (Print)</span>
-              </button>
-            </div>
-          </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExportExcel}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>엑셀 다운로드</span>
+                  </button>
 
-          {/* Printable Report Canvas Area */}
-          <div className="p-4 flex-1 overflow-y-auto bg-gray-200 flex justify-center">
-            {/* The Document Sheet */}
-            <div
-              id="printable-report-area"
-              className="bg-white w-full max-w-[850px] p-8 shadow-md border border-gray-300 text-black font-sans leading-normal"
-            >
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-xs transition-colors cursor-pointer active:scale-95"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>표준 서식 인쇄</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Printable Report Canvas Area */}
+              <div className="p-6 flex-1 overflow-y-auto bg-[var(--canvas)] flex justify-center print:p-0 print:bg-white print:block print:overflow-visible">
+                {/* The Document Sheet */}
+                <div
+                  id="printable-report-area"
+                  className="bg-white w-[210mm] max-w-full shrink-0 h-fit p-8 shadow-[0_8px_30px_rgba(15,23,42,0.12)] border border-gray-200 text-black font-sans leading-normal tabular-nums print:w-full print:max-w-none print:shadow-none print:border-0 print:shrink"
+                >
               {/* Document Header & Stamp Box */}
               <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-4">
                 <div>
@@ -372,7 +367,7 @@ export const PrintReportModal: React.FC = () => {
                       | FRESH FOOD MANUFACTURING
                     </span>
                   </div>
-                  <h1 className="text-2xl font-black mt-2 tracking-tight">
+                  <h1 className="text-2xl font-black mt-2 tracking-wide text-black">
                     {activeDocType === 'WORK_ORDER' && '제조공정 작업지시서 [HACCP 기준]'}
                     {activeDocType === 'HACCP_INSPECTION' && '원부재료 입고 및 위생 검수 점검표'}
                     {activeDocType === 'MATERIAL_LEDGER' && '일일 원부자재 수불 현황부'}
@@ -390,7 +385,7 @@ export const PrintReportModal: React.FC = () => {
                       {activeDocType === 'COST_SHEET' && 'GFS-COST-20261030-M10'}
                     </span>
                     <span>
-                      <strong>보안등급:</strong> 대외비 (사내한)
+                      <strong>보안등급:</strong> 사내한
                     </span>
                   </div>
                 </div>
@@ -407,11 +402,11 @@ export const PrintReportModal: React.FC = () => {
                       <th className="w-16 p-1 font-semibold">승인/공장장</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr className="h-12 border-t border-black">
-                      <td className="border-r border-black align-bottom pb-1 text-[10px] text-gray-500 font-serif">
-                        전정우
-                      </td>
+                    <tbody>
+                      <tr className="h-12 border-t border-black">
+                        <td className="border border-black align-bottom pb-1 text-[10px] text-gray-800 font-serif">
+                          {writerName}
+                        </td>
                       <td className="border-r border-black align-bottom pb-1 text-[10px] text-gray-400 font-serif">
                         (인)
                       </td>
@@ -887,42 +882,35 @@ export const PrintReportModal: React.FC = () => {
 
               {/* 7. LOT 품질관리 바코드 라벨 (LOT_LABEL) */}
               {activeDocType === 'LOT_LABEL' && (
-                <div className="flex flex-col gap-2 font-sans">
+                <div className="label-card border-2 border-dashed border-gray-400 rounded-md p-4 bg-white">
                   <LotLabelPrint />
                 </div>
               )}
 
               {/* 8. GS25 납품 박스 물류라벨 (DELIVERY_BOX_LABEL) */}
               {activeDocType === 'DELIVERY_BOX_LABEL' && (
-                <div className="flex flex-col gap-2 font-sans">
+                <div className="label-card border-2 border-dashed border-gray-400 rounded-md p-4 bg-white">
                   <DeliveryBoxLabel />
                 </div>
               )}
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Modal Footer Controls */}
-          <div className="bg-[#f1f5f9] border-t border-gray-300 px-4 py-2.5 flex items-center justify-between text-xs">
-            <div className="text-gray-500 text-[11px] flex items-center gap-1.5">
+          <div className="bg-white border-t border-gray-300 px-4 py-2 flex items-center justify-between text-xs shrink-0 no-print">
+            <div className="text-gray-400 text-[11px] flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5" />
-              <span>(주)GFS 엔터프라이즈 ERP 공문서 출력 엔진</span>
+              <span>A4 세로 · 여백 12mm · 미리보기와 동일하게 인쇄됩니다</span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={closePrintModal}
-                className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded cursor-pointer transition-colors"
-              >
-                닫기
-              </button>
-              <button
-                onClick={handlePrint}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer active:scale-95"
-              >
-                <Printer className="w-4 h-4" />
-                <span>지금 인쇄하기</span>
-              </button>
-            </div>
+            <button
+              onClick={closePrintModal}
+              className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded cursor-pointer transition-colors"
+            >
+              닫기
+            </button>
           </div>
         </div>
       </div>

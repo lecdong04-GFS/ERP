@@ -32,10 +32,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/sales/delivery (납품 등록 및 확정)
+// body: { deliveryDate, centerCode?, shift?, salesOrderId?, items: [{productCode?, productName?, deliveryQty, unitPrice?, boxQty?, remark?}], createdBy? }
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { deliveryDate, centerCode, shift, items = [], createdBy = 'admin' } = body;
+    const { deliveryDate, centerCode, shift, salesOrderId, items = [], createdBy = 'admin' } = body;
 
     if (!deliveryDate || items.length === 0) {
       return NextResponse.json(
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       data: {
         deliveryNo,
         deliveryDate,
+        salesOrderId: Number(salesOrderId) > 0 ? Number(salesOrderId) : null,
         centerCode: centerCode || 'GSR-001',
         shift: shift || '1편',
         status: '완료',

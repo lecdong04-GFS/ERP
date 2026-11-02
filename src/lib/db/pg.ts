@@ -34,9 +34,36 @@ export function getPgPool(): Pool {
   return globalForPg.gfsPgPool;
 }
 
+/** 연결성 오류(간헐적 TLS/네트워크 실패) 시 1회 재시도 */
+const RETRYABLE_CODES = new Set([
+  'EPROTO',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+]);
+
+function isRetryable(error: any): boolean {
+  if (!error) return false;
+  if (RETRYABLE_CODES.has(error.code)) return true;
+  const msg = String(error.message || '');
+  return /timeout|terminat|closed|reset|handshake|TLS/i.test(msg);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function pgQuery<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[]
 ): Promise<QueryResult<T>> {
-  return getPgPool().query<T>(text, params as any[]);
+  try {
+    return await getPgPool().query<T>(text, params as any[]);
+  } catch (error: any) {
+    if (!isRetryable(error)) throw error;
+    console.error('[pg] transient connection error, retrying once:', error.code || error.message);
+    await sleep(800);
+    return getPgPool().query<T>(text, params as any[]);
+  }
 }

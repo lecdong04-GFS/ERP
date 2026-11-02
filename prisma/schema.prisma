@@ -1,5 +1,5 @@
 // =============================================================================
-// ProdCore: (주)GFS — Prisma Schema
+// (주)GFS — Prisma Schema
 // 최고의 웹기반 ERP를 위한 데이터베이스 스키마
 // =============================================================================
 
@@ -1295,6 +1295,30 @@ model WorkContact {
   @@index([senderId])
 }
 
+/// 성장전략 아이디어
+model GrowthIdea {
+  id             Int       @id @default(autoincrement())
+  ideaDate       String               // 제안일 (YYYY-MM-DD)
+  category       String    @default("업무개선") // 신제품, 원가절감, 매출확대, 업무개선, 기타
+  title          String
+  content        String    @default("")
+  expectedEffect String    @default("") // 기대효과
+  status         String    @default("제안") // 제안, 검토중, 채택, 보류, 완료
+  department     String    @default("")
+  authorId       Int?
+  authorLoginId  String    @default("")
+  authorName     String    @default("")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([status])
+  @@index([category])
+  @@index([ideaDate])
+  @@index([deletedAt])
+  @@index([authorId])
+}
+
 /// 일정관리
 model Schedule {
   id            Int       @id @default(autoincrement())
@@ -1339,4 +1363,28 @@ model WorkExecution {
   @@index([execType])
   @@index([deletedAt])
   @@index([authorId])
+}
+
+/// 업무분장관리
+model WorkRole {
+  id            Int       @id @default(autoincrement())
+  dutyName      String               // 업무명
+  category      String    @default("생산") // 생산, 매입, 매출, 재고, 경영, 관리, 기타
+  department    String    @default("")    // 담당부서
+  managerName   String    @default("")    // 정담당자
+  subManagerName String   @default("")    // 부담당자
+  cycle         String    @default("매일") // 매일, 주간, 월간, 수시
+  remark        String    @default("")
+  isUsed        Boolean   @default(true)
+  authorId      Int?
+  authorLoginId String    @default("")
+  authorName    String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([category])
+  @@index([department])
+  @@index([isUsed])
+  @@index([deletedAt])
 }
