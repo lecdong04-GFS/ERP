@@ -165,23 +165,30 @@ function findFile(candidates: string[]): string | null {
   return null;
 }
 
-/** 루트에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 및 macOS NFD 정규화 대응) */
+/** 루트 및 26년도/11월·10월에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 및 macOS NFD 정규화 대응) */
 function findLatestByPattern(pattern: RegExp): string | null {
   const root = process.cwd();
-  try {
-    const hits = fs
-      .readdirSync(root)
-      .filter((f) => !f.startsWith('~$') && pattern.test(f.normalize('NFC')))
-      .map((f) => {
-        const p = path.join(root, f);
-        return { p, m: fs.statSync(p).mtimeMs };
-      })
-      .sort((a, b) => b.m - a.m);
-    if (hits.length > 0) return hits[0].p;
-  } catch {
-    /* 읽기 실패 시 null */
+  const dirs = [
+    path.join(root, '26년도', '11월'),
+    path.join(root, '26년도', '10월'),
+    root,
+  ];
+  const hits: Array<{ p: string; m: number }> = [];
+  for (const dir of dirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      for (const f of fs.readdirSync(dir)) {
+        if (f.startsWith('~$')) continue;
+        if (!pattern.test(f.normalize('NFC'))) continue;
+        const p = path.join(dir, f);
+        hits.push({ p, m: fs.statSync(p).mtimeMs });
+      }
+    } catch {
+      /* 읽기 실패 시 무시 */
+    }
   }
-  return null;
+  hits.sort((a, b) => b.m - a.m);
+  return hits.length > 0 ? hits[0].p : null;
 }
 
 export function getAuditFilePath(): string | null {

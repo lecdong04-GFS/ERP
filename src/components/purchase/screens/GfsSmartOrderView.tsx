@@ -1,11 +1,48 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
-interface PartnerOpt {
-  id: string;
-  name: string;
+interface UnmatchedMenu {
+  menuName: string;
+  qty: number;
+}
+
+interface AutoBootPayload {
+  today: string;
+  master: {
+    hasCustom: boolean;
+    fileName: string;
+    asOf: string;
+    uploadedBy: string;
+    itemCount: number;
+    base64?: string;
+  };
+  orders: {
+    usedDate: string;
+    isToday: boolean;
+    hasTodayOrder: boolean;
+    availableDates: string[];
+    menuCount: number;
+    totalQty: number;
+    items: Array<{ menuName: string; qty: number }>;
+  };
+  stock: {
+    usedDate: string;
+    availableDates: string[];
+    itemCount: number;
+    items: Array<{
+      name: string;
+      box: number;
+      piece: number;
+      currentStock: number;
+      packQty: number;
+      unitPrice: number;
+      dailyUsage: number;
+      estDailyUsage: number;
+      sheet: string;
+    }>;
+  };
 }
 
 export const GfsSmartOrderView: React.FC = () => {
@@ -13,30 +50,67 @@ export const GfsSmartOrderView: React.FC = () => {
   const me: any = session?.user;
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [status, setStatus] = useState('대기 중');
-  const [isLoadingData, setIsLoadingData] = useState(false);
-  const [barsVisible, setBarsVisible] = useState(true);
+  const masterInputRef = useRef<HTMLInputElement>(null);
+
+  const [bootPayload, setBootPayload] = useState<AutoBootPayload | null>(null);
+  const [iframeReady, setIframeReady] = useState(false);
+  const [isBooting, setIsBooting] = useState(true);
+  const [bootCompleted, setBootCompleted] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('데이터 자동 연동 준비 중...');
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // 발주 저장 폼
-  const [orderDate, setOrderDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [partners, setPartners] = useState<PartnerOpt[]>([]);
-  const [partnerId, setPartnerId] = useState('');
-  const [memo, setMemo] = useState('');
-  const [itemsText, setItemsText] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
-  const [preview, setPreview] = useState('');
+  // 선택된 수주일자 / 재고실사일자 / 발주저장 기준일자
+  const [selectedOrderDate, setSelectedOrderDate] = useState('');
+  const [selectedStockDate, setSelectedStockDate] = useState('');
+
+  // GFS 실시간 산출 통계 및 신메뉴 BOM 미매칭 알림
+  const [unmatchedMenus, setUnmatchedMenus] = useState<UnmatchedMenu[]>([]);
+  const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
+  const [auditMatchedCount, setAuditMatchedCount] = useState(0);
+  const [orderableCount, setOrderableCount] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  // 작업 상태
+  const [isUploadingMaster, setIsUploadingMaster] = useState(false);
+  const [isOneClickSaving, setIsOneClickSaving] = useState(false);
+
+  // 현재 시각 기준 마감 임박 채널 안내
+  const [deadlineGuide, setDeadlineGuide] = useState<{
+    label: string;
+    channelId: string;
+    urgent: boolean;
+  }>({
+    label: '11시 마감(CJ저온·GS1차)',
+    channelId: 'gs_procure',
+    urgent: true,
+  });
 
   useEffect(() => {
-    fetch('/api/master/partner?type=P')
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.success && Array.isArray(j.data)) {
-          setPartners(j.data.map((p: any) => ({ id: p.id, name: p.name })));
-        }
-      })
-      .catch(() => {});
+    const updateDeadlineByClock = () => {
+      const hour = new Date().getHours();
+      if (hour < 11) {
+        setDeadlineGuide({
+          label: '🔥 11시 마감 임박 (CJ저온·GS1차)',
+          channelId: 'gs_procure',
+          urgent: true,
+        });
+      } else if (hour < 13) {
+        setDeadlineGuide({
+          label: '⏰ 13시 마감 집중 (발주고·진주·삼립)',
+          channelId: 'baljugo',
+          urgent: true,
+        });
+      } else {
+        setDeadlineGuide({
+          label: '💬 오후/직접발주 (카톡·이메일)',
+          channelId: 'direct_msg',
+          urgent: false,
+        });
+      }
+    };
+    updateDeadlineByClock();
+    const timer = setInterval(updateDeadlineByClock, 60000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -45,12 +119,328 @@ export const GfsSmartOrderView: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
-  const handleOpenNewWindow = () => {
-    window.open('/gfs/index.html', '_blank', 'width=1600,height=900');
+  // 1) 서버에서 3종 통합 데이터(발주서 마스터 + 10시 주문서 + 17시 재고조사표) 로드
+  const fetchAutoBootData = useCallback(async (ordDate?: string, stkDate?: string) => {
+    setIsBooting(true);
+    setStatusMsg('발주서(BOM) · 10시 주문서 · 17시 재고표 자동 결합 중...');
+    try {
+      const qs = new URLSearchParams({ includeMaster: '1' });
+      if (ordDate) qs.set('orderDate', ordDate);
+      if (stkDate) qs.set('stockDate', stkDate);
+
+      const res = await fetch(`/api/gfs/auto-boot?${qs.toString()}`);
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        throw new Error(json.error || '자동 부팅 데이터 로드 실패');
+      }
+      const data: AutoBootPayload = json.data;
+      setBootPayload(data);
+      setSelectedOrderDate(data.orders.usedDate);
+      setSelectedStockDate(data.stock.usedDate);
+      return data;
+    } catch (e: any) {
+      setStatusMsg(`데이터 로드 오류: ${e.message}`);
+      setIsBooting(false);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAutoBootData();
+  }, [fetchAutoBootData]);
+
+  // 2) iframe으로부터 메시지 수신 (GFS_READY, GFS_AUTO_BOOT_DONE, GFS_MASTER_APPLIED 등)
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data || {};
+      if (!d || typeof d.type !== 'string') return;
+
+      if (d.type === 'GFS_READY') {
+        setIframeReady(true);
+      } else if (d.type === 'GFS_AUTO_BOOT_DONE') {
+        setIsBooting(false);
+        setBootCompleted(true);
+        if (d.success) {
+          setUnmatchedMenus(Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : []);
+          setAuditMatchedCount(Number(d.auditMatchedCount) || 0);
+          setOrderableCount(Number(d.orderableCount) || 0);
+          setTotalAmount(Number(d.totalAmount) || 0);
+          setStatusMsg(
+            `자동 산출 완료 · 발주대상 ${d.orderableCount || 0}건 (${d.totalBoxes || 0}박스)`
+          );
+        } else {
+          setStatusMsg(`산출 오류: ${d.error || '알 수 없는 오류'}`);
+        }
+      } else if (d.type === 'GFS_ORDERS_APPLIED' && d.success) {
+        if (Array.isArray(d.unmatchedMenus)) {
+          setUnmatchedMenus(d.unmatchedMenus);
+        }
+      } else if (d.type === 'GFS_AUDIT_APPLIED' && d.success) {
+        setAuditMatchedCount(Number(d.matched) || 0);
+      } else if (d.type === 'GFS_MASTER_APPLIED') {
+        setIsUploadingMaster(false);
+        if (d.success) {
+          setUnmatchedMenus(Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : []);
+          setStatusMsg(`신메뉴 발주서(${d.fileName}) 교체 및 재산출 완료`);
+        }
+      } else if (d.type === 'GFS_MASTER_PERSISTED') {
+        setBootPayload((prev) =>
+          prev
+            ? {
+                ...prev,
+                master: {
+                  ...prev.master,
+                  hasCustom: true,
+                  fileName: d.fileName || prev.master.fileName,
+                  asOf: d.asOf || prev.master.asOf,
+                  itemCount: d.itemCount || prev.master.itemCount,
+                },
+              }
+            : prev
+        );
+      }
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  // 3) iframeReady && bootPayload 둘 다 준비되면 즉시 Zero-Upload 자동 부팅 전송
+  useEffect(() => {
+    if (!iframeReady || !bootPayload || bootCompleted) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'GFS_AUTO_BOOT', payload: bootPayload }, window.location.origin);
+  }, [iframeReady, bootPayload, bootCompleted]);
+
+  // 4) 수주일자(주문서) 변경 시 즉시 재산출
+  const handleChangeOrderDate = async (newDate: string) => {
+    setSelectedOrderDate(newDate);
+    setBootCompleted(false);
+    await fetchAutoBootData(newDate, selectedStockDate);
   };
 
-  const handleReload = () => {
-    iframeRef.current?.contentWindow?.location.reload();
+  // 5) 재고실사일자(재고표) 변경 시 즉시 재산출
+  const handleChangeStockDate = async (newDate: string) => {
+    setSelectedStockDate(newDate);
+    setBootCompleted(false);
+    await fetchAutoBootData(selectedOrderDate, newDate);
+  };
+
+  // 6) 1~2주 주기 [신메뉴+BOM 발주서] 업로드 & DB 영구 저장
+  const handleMasterFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsUploadingMaster(true);
+    setStatusMsg(`'${file.name}' 신메뉴 발주서 업로드 및 영구 저장 중...`);
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
+      }
+      const base64 = btoa(binary);
+
+      // 1. 서버 DB에 영구 저장
+      const saveRes = await fetch('/api/gfs/master-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          base64,
+        }),
+      });
+      const saveJson = await saveRes.json();
+      if (!saveJson.success) {
+        throw new Error(saveJson.error || '발주서 영구 저장 실패');
+      }
+
+      // 2. 상태 업데이트 및 GFS iframe에 즉시 반영 + 현재 수주·재고 재결합
+      setBootPayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              master: {
+                hasCustom: true,
+                fileName: file.name,
+                asOf: saveJson.data.asOf,
+                uploadedBy: saveJson.data.uploadedBy,
+                itemCount: saveJson.data.itemCount || 431,
+                base64,
+              },
+            }
+          : prev
+      );
+
+      const win = iframeRef.current?.contentWindow;
+      if (win) {
+        win.postMessage(
+          {
+            type: 'GFS_UPLOAD_MASTER',
+            fileName: file.name,
+            base64,
+            orders: bootPayload?.orders.items || [],
+            orderDate: selectedOrderDate,
+            stock: bootPayload?.stock.items || [],
+            stockDate: selectedStockDate,
+          },
+          window.location.origin
+        );
+      }
+    } catch (err: any) {
+      alert('발주서 교체 실패: ' + err.message);
+      setStatusMsg('발주서 교체 실패');
+      setIsUploadingMaster(false);
+    }
+  };
+
+  // 7) 원클릭 [ERP 발주 확정 저장] (읽기 → 품목매칭 → 스냅샷 → 발주서 생성까지 1번에 처리)
+  const handleOneClickConfirmOrder = async () => {
+    const win = iframeRef.current?.contentWindow as any;
+    if (!win) {
+      alert('스마트발주 화면이 아직 준비되지 않았습니다.');
+      return;
+    }
+
+    let raw: any[] = [];
+    try {
+      raw = win.eval('Array.isArray(state?.rawItems) ? state.rawItems : []');
+    } catch {
+      alert('GFS 산출 데이터를 읽지 못했습니다.');
+      return;
+    }
+
+    const orderables = (raw || [])
+      .filter((m: any) => !m?.is64Excluded && !m?.isBlacklisted)
+      .map((m: any) => ({
+        name: String(m?.name || '').trim(),
+        boxes: Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0),
+        packUnit: Number(m?.packUnit ?? 0),
+        bagPrice: Number(m?.unitPrice ?? 0),
+        supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
+        stockDays:
+          m?.calc?.stockDays != null && !isNaN(Number(m.calc.stockDays))
+            ? Number(m.calc.stockDays)
+            : null,
+      }))
+      .filter((x) => x.name && x.boxes > 0);
+
+    if (orderables.length === 0) {
+      alert('현재 발주 수량(박스 > 0)이 있는 품목이 없습니다.');
+      return;
+    }
+
+    const estAmt = orderables.reduce(
+      (sum, x) => sum + x.boxes * (x.packUnit > 0 ? x.packUnit : 1) * x.bagPrice,
+      0
+    );
+    const targetOrderDate = selectedOrderDate || new Date().toISOString().slice(0, 10);
+
+    const ok = window.confirm(
+      `[스마트발주 원클릭 ERP 확정]\n` +
+        `• 발주 기준일: ${targetOrderDate}\n` +
+        `• 발주 대상: 총 ${orderables.length}개 품목\n` +
+        `• 예상 발주금액: 약 ₩${Math.round(estAmt).toLocaleString()}\n\n` +
+        `현재 산출된 수량으로 ERP 발주서를 즉시 생성·저장하시겠습니까?`
+    );
+    if (!ok) return;
+
+    setIsOneClickSaving(true);
+    setStatusMsg(`1/2단계: ${orderables.length}개 품목 ERP 코드 자동 매칭 중...`);
+    try {
+      // Step A: /api/gfs/materialize 호출
+      const matRes = await fetch('/api/gfs/materialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: orderables, orderDate: targetOrderDate }),
+      });
+      const matJson = await matRes.json();
+      if (!matJson.success) {
+        throw new Error(matJson.error || '품목 매칭 실패');
+      }
+
+      const { matched = [] } = matJson.data || {};
+      const forOrder = matched
+        .filter((m: any) => m.productCode)
+        .map((m: any) => ({
+          productCode: m.productCode,
+          orderQty: m.orderQty,
+          unitPrice: m.boxPrice || 0,
+          partnerId: m.partnerId || undefined,
+        }));
+
+      if (forOrder.length === 0) {
+        throw new Error('매칭된 발주 품목이 없습니다.');
+      }
+
+      // GFS 재고유지일 스냅샷 백그라운드 저장
+      const snapItems = matched
+        .filter((m: any) => m.productCode)
+        .map((m: any) => ({
+          productCode: m.productCode,
+          productName: m.productName,
+          warehouse: m.warehouse || '',
+          stockDays: m.gfsDays != null ? m.gfsDays : null,
+        }));
+      if (snapItems.length > 0) {
+        fetch('/api/gfs/snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'gfs', items: snapItems }),
+        }).catch(() => {});
+      }
+
+      // Step B: /api/gfs/order-result 호출하여 실제 발주서(PurchaseOrder) 일괄 생성
+      setStatusMsg(`2/2단계: ERP 발주서 ${forOrder.length}건 DB 확정 저장 중...`);
+      const saveRes = await fetch('/api/gfs/order-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderDate: targetOrderDate,
+          memo: `스마트발주 자동산출 (${selectedOrderDate} 수주 / ${selectedStockDate} 재고 연동)`,
+          items: forOrder,
+        }),
+      });
+      const saveJson = await saveRes.json();
+      if (!saveJson.success) {
+        throw new Error(saveJson.error || '발주서 DB 저장 실패');
+      }
+
+      const createdOrders = (saveJson.data || []).map((o: any) => o.orderNo);
+      setStatusMsg(`발주 확정 완료: 총 ${createdOrders.length}건 전표 생성됨`);
+      alert(
+        `✅ ERP 발주 확정 완료 (${me?.name || me?.loginId || '담당자'})\n` +
+          `• 총 ${forOrder.length}개 품목 / ${createdOrders.length}개 거래처 발주서 생성\n` +
+          `• 전표번호: ${createdOrders.slice(0, 5).join(', ')}${createdOrders.length > 5 ? ` 외 ${createdOrders.length - 5}건` : ''}`
+      );
+    } catch (e: any) {
+      alert('발주 확정 실패: ' + e.message);
+      setStatusMsg(`발주 실패: ${e.message}`);
+    } finally {
+      setIsOneClickSaving(false);
+    }
+  };
+
+  // 마감 임박 채널 클릭 시 GFS 탭 즉시 포커스
+  const handleFocusDeadlineChannel = () => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(
+      { type: 'GFS_SWITCH_CHANNEL', channelId: deadlineGuide.channelId },
+      window.location.origin
+    );
+  };
+
+  // 수동 파일 업로드 화면 토글
+  const handleToggleManualUpload = () => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'GFS_TOGGLE_UPLOAD_SECTION' }, window.location.origin);
   };
 
   const handleToggleFullscreen = async () => {
@@ -61,424 +451,236 @@ export const GfsSmartOrderView: React.FC = () => {
         await containerRef.current?.requestFullscreen();
       }
     } catch {
-      alert('전체화면을 지원하지 않는 브라우저입니다. 새창으로 열기를 사용하세요.');
-    }
-  };
-
-  // ERP 기준정보(JSON) 다운로드
-  const handleDownloadErpData = async () => {
-    setIsLoadingData(true);
-    setStatus('ERP 데이터 조회 중...');
-    try {
-      const res = await fetch('/api/gfs/order-data');
-      const json = await res.json();
-      if (!json.success) {
-        alert('ERP 데이터 조회 실패: ' + (json.error || '알 수 없는 오류'));
-        setStatus('조회 실패');
-        return;
-      }
-      const blob = new Blob([JSON.stringify(json.data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `GFS_ERP_기준정보_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setStatus(`완료: 품목 ${json.data.products?.length ?? 0}건 / 재고 ${json.data.inventory?.length ?? 0}건`);
-    } catch (e: any) {
-      alert('다운로드 실패: ' + e.message);
-      setStatus('다운로드 실패');
-    } finally {
-      setIsLoadingData(false);
-    }
-  };
-
-  // GFS iframe에서 산출결과 가져오기 → ERP 매칭+자동생성 → 저장바 자동채움
-  const handleFetchGfs = async () => {
-    setIsFetching(true);
-    setStatus('GFS 결과 읽는 중...');
-    try {
-      const win = iframeRef.current?.contentWindow as any;
-      if (!win) {
-        alert('GFS 화면이 아직 로드되지 않았습니다.');
-        return;
-      }
-      let raw: any[] = [];
-      try {
-        raw = win.eval('Array.isArray(state?.rawItems) ? state.rawItems : []');
-      } catch {
-        alert('GFS 상태를 읽지 못했습니다. GFS에서 먼저 [발주 데이터 자동 산출]을 실행하세요.');
-        return;
-      }
-      if (!raw || raw.length === 0) {
-        alert('GFS에 산출 결과가 없습니다. GFS에서 엑셀 3종을 올리고 산출을 먼저 실행하세요.');
-        return;
-      }
-      const orderables = raw
-        .map((m: any) => ({
-          name: String(m?.name || '').trim(),
-          boxes: Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0),
-          packUnit: Number(m?.packUnit ?? 0),
-          bagPrice: Number(m?.unitPrice ?? 0),
-          supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
-          stockDays:
-            m?.calc?.stockDays != null && !isNaN(Number(m.calc.stockDays))
-              ? Number(m.calc.stockDays)
-              : null,
-        }))
-        .filter((x) => x.name && x.boxes > 0);
-      if (orderables.length === 0) {
-        alert('발주 대상(박스>0)이 없습니다. GFS 필터(발주 대상만 보기)를 확인하세요.');
-        setStatus('발주 대상 없음');
-        return;
-      }
-      setStatus(`GFS ${orderables.length}건 매칭 중... (최대 90초)`);
-      const ctrl = new AbortController();
-      const timer = window.setTimeout(() => ctrl.abort(), 90000);
-      let res: Response;
-      try {
-        res = await fetch('/api/gfs/materialize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: orderables, orderDate }),
-          signal: ctrl.signal,
-        });
-      } catch (e: any) {
-        if (e?.name === 'AbortError') {
-          alert('매칭 요청이 시간 초과됐습니다 (90초).\n품목이 많으면 나누어 가져오거나, 잠시 후 다시 시도하세요.');
-          setStatus('매칭 시간초과');
-        } else {
-          throw e;
-        }
-        return;
-      } finally {
-        window.clearTimeout(timer);
-      }
-      const json = await res.json();
-      if (!json.success) {
-        alert('매칭 실패: ' + (json.error || '알 수 없는 오류'));
-        setStatus('매칭 실패');
-        return;
-      }
-      const { matched = [], created = [], failed = [] } = json.data || {};
-      const newProducts = created.filter((c: any) => c.type === 'product');
-      // 저장바에 productCode 기준으로 자동채움 (order-result 규격)
-      const forOrder = matched
-        .filter((m: any) => m.productCode)
-        .map((m: any) => ({
-          productCode: m.productCode,
-          orderQty: m.orderQty,
-          unitPrice: m.boxPrice || 0,
-          partnerId: m.partnerId || undefined,
-        }));
-      setItemsText(JSON.stringify(forOrder));
-      // GFS 버팀일 스냅샷 저장 (재고조회 대조용)
-      try {
-        const snapItems = (matched as any[])
-          .filter((m: any) => m.productCode)
-          .map((m: any) => ({
-            productCode: m.productCode,
-            productName: m.productName,
-            warehouse: m.warehouse || '',
-            stockDays: m.gfsDays != null ? m.gfsDays : null,
-          }));
-      if (snapItems.length > 0) {
-        await fetch('/api/gfs/snapshot', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: 'gfs', items: snapItems }),
-        });
-      }
-      } catch {
-        /* 스냅샷 실패는 발주 흐름과 무관하게 무시 */
-      }
-      const msg =
-        `매칭 ${matched.length}건` +
-        (newProducts.length ? ` · 신규생성 ${newProducts.length}건(${newProducts.slice(0, 3).map((c: any) => c.name).join(', ')}${newProducts.length > 3 ? ' 외' : ''})` : '') +
-        (failed.length ? ` · 실패 ${failed.length}건` : '');
-      setPreview(
-        failed.length ? `미처리: ${failed.map((f: any) => f.name).join(', ')}` : ''
-      );
-      setStatus(`가져오기 완료: ${msg} → 확인 후 발주저장`);
-    } catch (e: any) {
-      alert('가져오기 실패: ' + e.message);
-      setStatus('가져오기 실패');
-    } finally {
-      setIsFetching(false);
-    }
-  };
-
-  // ERP 수주+재고를 GFS로 보내기 (GFS 파일 업로드 없이 산출)
-  const [isPushing, setIsPushing] = useState(false);
-
-  const waitGfsAck = (win: Window, type: string, timeoutMs = 10000) => {
-    return new Promise<any>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        window.removeEventListener('message', onMsg);
-        reject(new Error('GFS 응답 시간초과 (iframe이 준비되지 않았을 수 있음)'));
-      }, timeoutMs);
-      const onMsg = (e: MessageEvent) => {
-        if (e.source !== win) return;
-        const d = e.data || {};
-        if (d && d.type === type) {
-          clearTimeout(timer);
-          window.removeEventListener('message', onMsg);
-          resolve(d);
-        }
-      };
-      window.addEventListener('message', onMsg);
-    });
-  };
-
-  const handlePushToGfs = async () => {
-    setIsPushing(true);
-    setStatus('ERP 수주·재고 GFS로 전송 중...');
-    try {
-      const win = iframeRef.current?.contentWindow as Window | null;
-      if (!win) {
-        alert('GFS 화면이 아직 로드되지 않았습니다.');
-        return;
-      }
-      // 1) 당일 수주 (없으면 최근 일자)
-      let orderJson: any = await (await fetch(`/api/sales/order?orderDate=${orderDate}`)).json().catch(() => null);
-      let usedDate = orderDate;
-      if (!orderJson?.success || !Array.isArray(orderJson.data) || orderJson.data.length === 0) {
-        const all = await (await fetch('/api/sales/order')).json().catch(() => null);
-        const list = all?.success && Array.isArray(all.data) ? all.data : [];
-        if (list.length === 0) {
-          alert('ERP에 수주가 없습니다. 먼저 주문등록에서 수주를 등록하세요.');
-          setStatus('수주 없음');
-          return;
-        }
-        usedDate = list[0].orderDate;
-        orderJson = { success: true, data: list.filter((o: any) => o.orderDate === usedDate) };
-      }
-      const menuQty = new Map<string, { menuName: string; qty: number }>();
-      for (const o of orderJson.data || []) {
-        for (const d of o.details || []) {
-          const nm = String(d.product?.name || d.productName || '').trim();
-          const q = Number(d.totalQty) || 0;
-          if (!nm || !(q > 0)) continue;
-          const e = menuQty.get(nm) || { menuName: nm, qty: 0 };
-          e.qty += q;
-          menuQty.set(nm, e);
-        }
-      }
-      const orderItems = [...menuQty.values()].map((m) => ({ menuName: m.menuName, qty: m.qty }));
-      if (orderItems.length === 0) {
-        alert('수주 수량이 없습니다.');
-        setStatus('수주 수량 없음');
-        return;
-      }
-      // 2) 현재고 실사 (창고별)
-      const stockJson = await (await fetch('/api/inventory/stocktake')).json().catch(() => null);
-      const stockRows = stockJson?.success && Array.isArray(stockJson.data) ? stockJson.data : [];
-      const auditItems = stockRows
-        .filter((s: any) => s.itemName && (Number(s.boxQty) > 0 || Number(s.pieceQty) > 0 || Number(s.currentStock) > 0))
-        .map((s: any) => ({
-          name: String(s.itemName),
-          box: Number(s.boxQty) || 0,
-          piece: Number(s.pieceQty) || 0,
-          currentStock: Number(s.currentStock) || 0,
-          sheet: s.warehouse || s.sheet || '',
-        }));
-      // 3) 전송 (수주 → 재고 순)
-      const p1 = waitGfsAck(win, 'GFS_ORDERS_APPLIED');
-      (win as any).postMessage({ type: 'GFS_ORDERS', items: orderItems }, window.location.origin);
-      const ack1 = await p1;
-      if (!ack1.success) throw new Error('수주 반영 실패: ' + (ack1.error || ''));
-      let auditMsg = '';
-      if (auditItems.length > 0) {
-        const p2 = waitGfsAck(win, 'GFS_AUDIT_APPLIED');
-        (win as any).postMessage({ type: 'GFS_AUDIT', items: auditItems }, window.location.origin);
-        const ack2 = await p2;
-        if (!ack2.success) throw new Error('실사 반영 실패: ' + (ack2.error || ''));
-        auditMsg = ` · 실사 ${auditItems.length}건 매칭 ${ack2.matched ?? 0}건`;
-      }
-      setStatus(`GFS 전송 완료 (${usedDate} 수주 ${orderItems.length}종${auditMsg}) — GFS에서 산출 확인 후 [GFS결과 가져오기]`);
-      alert(`GFS로 전송 완료\n수주 ${orderItems.length}종 (${usedDate})${auditMsg}\nGFS 화면에서 산출 결과를 확인하세요.`);
-    } catch (e: any) {
-      alert('GFS 전송 실패: ' + e.message);
-      setStatus('GFS 전송 실패');
-    } finally {
-      setIsPushing(false);
-    }
-  };
-
-  // 로그인한 담당자 신원으로 발주 저장
-  const handleSaveOrder = async () => {
-    if (!itemsText.trim()) {
-      alert('발주 품목을 JSON으로 입력하세요. 예: [{"productCode":"...","orderQty":10}]');
-      return;
-    }
-    let items: any[];
-    try {
-      items = JSON.parse(itemsText);
-    } catch {
-      alert('JSON 형식이 올바르지 않습니다.');
-      return;
-    }
-    if (!Array.isArray(items) || items.length === 0) {
-      alert('발주 품목이 비어 있습니다.');
-      return;
-    }
-    setIsSaving(true);
-    setStatus(`발주 저장 중... (${items.length}건)`);
-    const ctrl = new AbortController();
-    const timer = window.setTimeout(() => ctrl.abort(), 90000);
-    try {
-      const res = await fetch('/api/gfs/order-result', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderDate, partnerId: partnerId || undefined, memo, items }),
-        signal: ctrl.signal,
-      });
-      const json = await res.json();
-      if (!json.success) {
-        alert('발주 저장 실패: ' + (json.error || '알 수 없는 오류'));
-        setStatus('발주 저장 실패');
-        return;
-      }
-      const orders = (json.data || []).map((o: any) => o.orderNo).join(', ');
-      alert(`발주 저장 완료 (${me?.name || me?.loginId || '담당자'} 명의)\n${json.message}\n${orders}`);
-      setStatus(`발주 완료: ${orders}`);
-      setItemsText('');
-    } catch (e: any) {
-      if (e?.name === 'AbortError') {
-        alert('발주 저장이 시간 초과됐습니다 (90초).\n저장이 완료됐는지 발주현황에서 확인한 뒤, 없으면 나누어 다시 시도하세요.');
-        setStatus('발주 저장 시간초과');
-      } else {
-        alert('저장 실패: ' + e.message);
-        setStatus('발주 저장 실패');
-      }
-    } finally {
-      window.clearTimeout(timer);
-      setIsSaving(false);
+      window.open('/gfs/index.html', '_blank', 'width=1600,height=900');
     }
   };
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full w-full bg-[#e2e8f0] text-[12px] overflow-hidden">
-      {/* 슬림 1줄 툴바 */}
-      <div className="h-9 shrink-0 bg-[#1e293b] text-white px-3 flex items-center gap-2 text-[12px]">
-        <span className="w-1.5 h-4 bg-emerald-500 rounded-2xs inline-block" />
-        <span className="font-bold whitespace-nowrap">스마트발주(GFS)</span>
-        <span className="text-slate-300 whitespace-nowrap hidden md:inline">
-          {me?.name || '-'}({me?.loginId || '-'})
-        </span>
-        <span className="text-slate-400 whitespace-nowrap hidden lg:inline">· {status}</span>
-        <div className="ml-auto flex items-center gap-1.5">
+    <div
+      ref={containerRef}
+      className="flex flex-col h-full w-full bg-[#0f172a] text-[12px] overflow-hidden select-none relative"
+    >
+      {/* 숨겨진 발주서 마스터(신메뉴·BOM) 교체 파일 입력 */}
+      <input
+        ref={masterInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleMasterFileChange}
+      />
+
+      {/* =================================================================== */}
+      {/* 상단 1줄 Zero-Upload 통합 관제 바 (3대 데이터 신호등 + 신메뉴 감지 + 원클릭 확정) */}
+      {/* =================================================================== */}
+      <div className="h-10 shrink-0 bg-[#0f172a] border-b border-slate-800 text-white px-3 flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+        {/* 좌측 타이틀 */}
+        <div className="flex items-center gap-1.5 shrink-0 pr-1 border-r border-slate-800">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-extrabold text-[12px] tracking-tight text-white">스마트발주</span>
+        </div>
+
+        {/* 신호등 1: 📦 발주서 마스터 (1~2주 주기 신메뉴·BOM 교체) */}
+        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+          <span className="text-[11px] text-slate-300 font-medium">📦 발주서(BOM):</span>
+          <span
+            className="text-[11px] font-bold text-white max-w-[140px] truncate"
+            title={`현재 적용된 발주서 마스터: ${bootPayload?.master.fileName || 'GFS.xlsx'} (${bootPayload?.master.asOf || ''})`}
+          >
+            {bootPayload?.master.asOf || '기본본'}
+          </span>
           <button
             type="button"
-            onClick={handlePushToGfs}
-            disabled={isPushing}
-            className="h-6 px-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded text-[11px] font-bold"
-            title="ERP 수주+재고를 GFS로 보내 산출 (파일 업로드 불필요)"
+            onClick={() => masterInputRef.current?.click()}
+            disabled={isUploadingMaster}
+            className="ml-0.5 px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white transition cursor-pointer"
+            title="1~2주 주기 신메뉴 및 BOM이 추가된 최신 발주서 양식을 업로드하면 영구 기억됩니다"
           >
-            {isPushing ? '보내는중' : 'GFS로 보내기'}
+            {isUploadingMaster ? '교체중...' : '📤 신메뉴 발주서 교체'}
           </button>
+        </div>
+
+        {/* 🚨 신메뉴 BOM 미등록 감지 경고 배지 (미매칭 완제품이 있을 때만 표시) */}
+        {unmatchedMenus.length > 0 && (
           <button
             type="button"
-            onClick={handleFetchGfs}
-            disabled={isFetching}
-            className="h-6 px-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-[11px] font-bold"
-            title="GFS 산출결과를 읽어 ERP 품목 매칭+자동생성 후 저장바에 채움"
+            onClick={() => setShowUnmatchedModal((v) => !v)}
+            className="flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-200 px-2 py-1 rounded-md text-[11px] font-bold shrink-0 animate-pulse cursor-pointer"
+            title="오늘 10시 주문서에 있으나 현재 발주서 BOM에 없는 신메뉴가 감지되었습니다. 클릭하여 확인하세요."
           >
-            {isFetching ? '가져오는중' : 'GFS결과 가져오기'}
+            <span>⚠️ 신메뉴 BOM 미매칭 {unmatchedMenus.length}종</span>
           </button>
+        )}
+
+        {/* 신호등 2: 🍱 오전 10시 완제품 주문서 자동 연동 */}
+        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              bootPayload?.orders.isToday ? 'bg-emerald-400' : 'bg-amber-400'
+            }`}
+          />
+          <span className="text-[11px] text-slate-300 font-medium">
+            {bootPayload?.orders.isToday ? '🍱 10시 주문서:' : '🍱 주문서(최근):'}
+          </span>
+          <select
+            value={selectedOrderDate}
+            onChange={(e) => handleChangeOrderDate(e.target.value)}
+            className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
+            title="연동할 완제품 수주(주문서) 일자 선택"
+          >
+            {(bootPayload?.orders.availableDates || [selectedOrderDate])
+              .filter(Boolean)
+              .map((d) => (
+                <option key={d} value={d}>
+                  {d.slice(5)}
+                </option>
+              ))}
+          </select>
+          <span className="text-[11px] font-bold text-emerald-300 font-mono">
+            {bootPayload?.orders.menuCount || 0}종 ·{' '}
+            {(bootPayload?.orders.totalQty || 0).toLocaleString()}개
+          </span>
+        </div>
+
+        {/* 신호등 3: 📋 전일 오후 5시 최신 재고조사표 자동 연동 */}
+        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+          <span className="text-[11px] text-slate-300 font-medium">📋 17시 재고표:</span>
+          <select
+            value={selectedStockDate}
+            onChange={(e) => handleChangeStockDate(e.target.value)}
+            className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
+            title="연동할 재고조사표(실사 재고) 기준일자 선택"
+          >
+            {(bootPayload?.stock.availableDates || [selectedStockDate])
+              .filter(Boolean)
+              .map((d) => (
+                <option key={d} value={d}>
+                  {d.slice(5)}
+                </option>
+              ))}
+          </select>
+          <span className="text-[11px] font-bold text-cyan-300 font-mono">
+            {auditMatchedCount || bootPayload?.stock.itemCount || 0}품목
+          </span>
+        </div>
+
+        {/* 현재 시각 기준 마감 임박 채널 원클릭 포커스 */}
+        <button
+          type="button"
+          onClick={handleFocusDeadlineChannel}
+          className={`hidden xl:flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border transition shrink-0 cursor-pointer ${
+            deadlineGuide.urgent
+              ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/50 text-rose-200'
+              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+          }`}
+          title="클릭 시 해당 마감 시간대 발주 채널 탭으로 즉시 이동합니다"
+        >
+          <span>{deadlineGuide.label}</span>
+        </button>
+
+        {/* 우측 원클릭 발주 확정 및 보조 도구 */}
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={() => setBarsVisible((v) => !v)}
-            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold"
-            title={barsVisible ? '입력바 숨기기 (발주창 넓게)' : '입력바 보이기'}
+            onClick={handleOneClickConfirmOrder}
+            disabled={isOneClickSaving || isBooting}
+            className="h-7 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-md text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+            title="현재 화면에 산출된 발주 수량을 읽어들여 품목 매칭과 ERP 발주서 생성을 원클릭으로 완료합니다"
           >
-            {barsVisible ? '▲ 바 숨기기' : '▼ 바 보이기'}
+            <span>
+              {isOneClickSaving
+                ? '⏳ 발주서 생성 중...'
+                : `✅ ERP 발주 확정 저장${orderableCount > 0 ? ` (${orderableCount}건)` : ''}`}
+            </span>
           </button>
+
           <button
             type="button"
-            onClick={handleDownloadErpData}
-            disabled={isLoadingData}
-            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold disabled:opacity-50"
+            onClick={() => {
+              setBootCompleted(false);
+              fetchAutoBootData(selectedOrderDate, selectedStockDate);
+            }}
+            disabled={isBooting}
+            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-200 transition cursor-pointer"
+            title="ERP 최신 주문서·재고표 데이터로 다시 산출"
           >
-            {isLoadingData ? '조회중' : 'ERP정보'}
+            🔄 재산출
           </button>
+
           <button
             type="button"
-            onClick={handleReload}
-            className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold"
+            onClick={handleToggleManualUpload}
+            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-300 transition cursor-pointer"
+            title="엑셀 파일을 수동으로 직접 업로드할 때만 여는 화면 토글"
           >
-            새로고침
+            📂 수동파일창
           </button>
+
           <button
             type="button"
             onClick={handleToggleFullscreen}
-            className="h-6 px-2 bg-blue-600 hover:bg-blue-500 rounded text-[11px] font-bold"
+            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-300 transition cursor-pointer"
           >
-            {isFullscreen ? '전체화면 해제' : '전체화면'}
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenNewWindow}
-            className="h-6 px-2 bg-emerald-600 hover:bg-emerald-500 rounded text-[11px] font-bold"
-          >
-            새창
+            {isFullscreen ? '축소' : '전체화면'}
           </button>
         </div>
       </div>
 
-      {/* 발주 저장바 (접기 가능) */}
-      {barsVisible && (
-        <div className="shrink-0 bg-white border-b border-gray-300 px-2 py-1 flex flex-wrap items-center gap-1.5">
-          <input
-            type="date"
-            value={orderDate}
-            onChange={(e) => setOrderDate(e.target.value)}
-            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs bg-white"
-            title="발주일자"
-          />
-          <select
-            value={partnerId}
-            onChange={(e) => setPartnerId(e.target.value)}
-            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs bg-white max-w-[180px]"
-            title="거래처 (미선택 시 기본 거래처)"
-          >
-            <option value="">거래처 자동</option>
-            {partners.map((p) => (
-              <option key={p.id} value={p.id}>{p.id} {p.name}</option>
+      {/* 신메뉴 BOM 미등록 상세 안내 팝오버 (신메뉴 감지 시 클릭으로 열림) */}
+      {showUnmatchedModal && unmatchedMenus.length > 0 && (
+        <div className="bg-amber-950/95 border-b border-amber-500/50 text-amber-100 px-4 py-2.5 flex items-center justify-between gap-4 text-[12px] z-30">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-extrabold text-amber-300">
+              🚨 현재 발주서(BOM)에 등록되지 않은 신메뉴 수주 ({unmatchedMenus.length}종):
+            </span>
+            {unmatchedMenus.map((m) => (
+              <span
+                key={m.menuName}
+                className="px-2 py-0.5 rounded bg-amber-900/80 border border-amber-600/60 font-mono text-[11px] font-bold text-white"
+              >
+                {m.menuName} ({m.qty.toLocaleString()}개)
+              </span>
             ))}
-          </select>
-          <input
-            type="text"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="메모"
-            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs w-[120px]"
-          />
-          <input
-            type="text"
-            value={itemsText}
-            onChange={(e) => setItemsText(e.target.value)}
-            placeholder='발주품목 JSON: [{"productCode":"...","orderQty":10}]'
-            className="h-6 border border-gray-300 px-1.5 text-[12px] rounded-xs flex-1 min-w-[200px] font-mono"
-          />
-          <button
-            type="button"
-            onClick={handleSaveOrder}
-            disabled={isSaving}
-            className="h-6 px-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xs text-[12px] whitespace-nowrap"
-          >
-            {isSaving ? '저장중' : '발주저장'}
-          </button>
-        </div>
-      )}
-      {barsVisible && preview && (
-        <div className="shrink-0 bg-amber-50 border-b border-amber-300 px-2 py-0.5 text-[11px] text-amber-800">
-          {preview}
+            <span className="text-[11px] text-amber-200/90 ml-1">
+              → 신메뉴 BOM이 반영된 새 발주서 양식을 <strong>[📤 신메뉴 발주서 교체]</strong>로 업로드하시면 즉시 반영·기억됩니다.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setShowUnmatchedModal(false);
+                masterInputRef.current?.click();
+              }}
+              className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[11px] cursor-pointer"
+            >
+              📤 지금 새 발주서 올리기
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUnmatchedModal(false)}
+              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] cursor-pointer"
+            >
+              닫기
+            </button>
+          </div>
         </div>
       )}
 
-      {/* GFS iframe 최대 확보 */}
-      <div className="flex-1 min-h-0 bg-white">
+      {/* =================================================================== */}
+      {/* 메인 GFS 스마트발주 관제 화면 (자동 부팅 중에는 깔끔한 로딩 배너 표시) */}
+      {/* =================================================================== */}
+      <div className="flex-1 min-h-0 bg-[#070B14] relative">
+        {isBooting && (
+          <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white">
+            <div className="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            <div className="text-sm font-extrabold tracking-tight">{statusMsg}</div>
+            <div className="text-[11px] text-slate-400 font-mono">
+              파일 업로드 없이 ERP에 등록된 최신 발주서(BOM) · 10시 주문서 · 17시 재고표를 자동으로 결합합니다
+            </div>
+          </div>
+        )}
         <iframe
           ref={iframeRef}
           src="/gfs/index.html"
