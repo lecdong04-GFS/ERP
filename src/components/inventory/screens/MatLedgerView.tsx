@@ -1,11 +1,26 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { InventoryActionBar } from '../common/InventoryActionBar';
 import { InventoryDataGrid, InventoryGridColumnDef } from '../common/InventoryDataGrid';
 import { Calendar } from 'lucide-react';
 import { usePipeline } from '@/context/PipelineContext';
 import { usePrintReport } from '@/context/PrintReportContext';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
+
+/** 로컬 자정 기준 Date → YYYY-MM-DD (UTC 변환 오차 방지) */
+function toLocalISODate(d: Date): string {
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 interface MatLedgerRow {
   id: number;
@@ -21,50 +36,48 @@ interface MatLedgerRow {
   currentStock: number; // 현재고 = 이월 + 입고 - 출고
 }
 
-const INITIAL_LEDGER_DATA: MatLedgerRow[] = [
-  { id: 1, ledgerDate: '2026-10-30', category: '원재료', partName: '국내산 경기미 햅쌀', partSpec: '20kg/포', unit: '포', warehouse: '상온', carriedOverQty: 350, inQty: 500, outQty: 420, currentStock: 430 },
-  { id: 2, ledgerDate: '2026-10-30', category: '원재료', partName: '가공 참치플레이크(오일)', partSpec: '1.8kg*6캔', unit: 'box', warehouse: '상온', carriedOverQty: 45, inQty: 20, outQty: 30, currentStock: 35 },
-  { id: 3, ledgerDate: '2026-10-30', category: '원재료', partName: '[냉장]제육불고기 토핑', partSpec: '5kg*3ea', unit: 'kg', warehouse: '냉장1', carriedOverQty: 80, inQty: 150, outQty: 160, currentStock: 70 },
-  { id: 4, ledgerDate: '2026-10-30', category: '원재료', partName: '골드마요네즈 3.2kg', partSpec: '3.2kg*4통', unit: 'box', warehouse: '상온', carriedOverQty: 60, inQty: 60, outQty: 75, currentStock: 45 },
-  { id: 5, ledgerDate: '2026-10-30', category: '원재료', partName: '슬라이스치즈(고소한맛)', partSpec: '1kg*10팩', unit: 'box', warehouse: '냉장1', carriedOverQty: 25, inQty: 30, outQty: 35, currentStock: 20 },
-  { id: 6, ledgerDate: '2026-10-30', category: '원재료', partName: '[냉장]다진맛살 10kg', partSpec: '10kg*2ea', unit: 'box', warehouse: '냉장1', carriedOverQty: 30, inQty: 40, outQty: 45, currentStock: 25 },
-  { id: 7, ledgerDate: '2026-10-30', category: '원재료', partName: '[냉동]우양지 슬라이스', partSpec: '2kg*5팩', unit: 'box', warehouse: '냉동', carriedOverQty: 18, inQty: 10, outQty: 15, currentStock: 13 },
-  { id: 8, ledgerDate: '2026-10-30', category: '원재료', partName: '[선]정제염(백설)', partSpec: '25kg/포', unit: 'kg', warehouse: '상온', carriedOverQty: 200, inQty: 80, outQty: 95, currentStock: 185 },
-  { id: 9, ledgerDate: '2026-10-30', category: '부재료', partName: '도시락용 조미김 포션', partSpec: '2g*500봉', unit: 'box', warehouse: '부자재', carriedOverQty: 12, inQty: 3, outQty: 8, currentStock: 7 },
-  { id: 10, ledgerDate: '2026-10-30', category: '부재료', partName: '두레)ET-30 용기', partSpec: '50ea*2줄', unit: 'box', warehouse: '부자재', carriedOverQty: 50, inQty: 30, outQty: 45, currentStock: 35 },
-];
-
 export const MatLedgerView: React.FC = () => {
   const { depletedMaterials, openPipelineModal } = usePipeline();
   const { openPrintModal } = usePrintReport();
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [periodType, setPeriodType] = useState('일간');
-  const [ledgerData, setLedgerData] = useState<MatLedgerRow[]>(INITIAL_LEDGER_DATA);
+  const [ledgerData, setLedgerData] = useState<MatLedgerRow[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+
+  const loadLedger = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetch('/api/inventory/ledger', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setLedgerData(json.data.map((item: any, idx: number) => ({
+          id: item.id ?? idx + 1,
+          ledgerDate: item.ledgerDate || String(item.createdAt || '').slice(0, 10),
+          category: item.category || '원재료',
+          partName: item.productName || item.product?.name || '',
+          partSpec: item.product?.spec || '',
+          unit: item.unit || 'ea',
+          warehouse: item.warehouse || '',
+          carriedOverQty: Number(item.carryOverQty) || 0,
+          inQty: Number(item.inQty) || 0,
+          outQty: Number(item.outQty) || 0,
+          currentStock: Number(item.currentQty) || 0,
+        })));
+      } else {
+        setLedgerData([]);
+      }
+    } catch (err) {
+      console.error('Fetch ledger failed:', err);
+      setLedgerData([]);
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch('/api/inventory/ledger')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const mapped: MatLedgerRow[] = json.data.map((item: any, idx: number) => ({
-            id: item.id || idx + 1,
-            ledgerDate: item.transDate || '2026-10-30',
-            category: '원재료',
-            partName: item.productCode || '자재',
-            partSpec: '표준규격',
-            unit: 'ea',
-            warehouse: item.warehouse || '상온',
-            carriedOverQty: Number(item.beforeQty) || 0,
-            inQty: Number(item.inQty) || 0,
-            outQty: Number(item.outQty) || 0,
-            currentStock: Number(item.afterQty) || 0,
-          }));
-          setLedgerData(mapped);
-        }
-      })
-      .catch((err) => console.error('Fetch ledger failed:', err));
-  }, []);
+    void loadLedger();
+  }, [loadLedger]);
 
   // Live integration with Pipeline Material Depletions
   const activeLedgerData: MatLedgerRow[] =
@@ -80,30 +93,36 @@ export const MatLedgerView: React.FC = () => {
           carriedOverQty: m.carriedOverQty,
           inQty: m.inQty,
           outQty: m.outQty,
-          currentStock: m.currentStock,
-        }))
-      : ledgerData;
+        currentStock: m.currentStock,
+      }))
+    : ledgerData;
+
+  // 기간 필터 (API는 전체 조회 → 화면에서 구간 필터)
+  const visibleLedgerData = useMemo(
+    () => activeLedgerData.filter((r) => (r.ledgerDate || '') >= startDate && (r.ledgerDate || '') <= endDate),
+    [activeLedgerData, startDate, endDate]
+  );
 
   const handleShiftDay = (direction: -1 | 1) => {
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     cur.setDate(cur.getDate() + direction);
-    const newStr = cur.toISOString().split('T')[0];
+    const newStr = toLocalISODate(cur);
     setStartDate(newStr);
     setEndDate(newStr);
   };
 
   const handlePeriodChange = (val: string) => {
     setPeriodType(val);
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     if (val === '일간') {
       setEndDate(startDate);
     } else if (val === '주간') {
       const end = new Date(cur);
       end.setDate(end.getDate() + 6);
-      setEndDate(end.toISOString().split('T')[0]);
+        setEndDate(toLocalISODate(end));
     } else if (val === '월간') {
       const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-      setEndDate(end.toISOString().split('T')[0]);
+        setEndDate(toLocalISODate(end));
     }
   };
 
@@ -142,8 +161,8 @@ export const MatLedgerView: React.FC = () => {
         buttons={[
           { key: 'pipeline', label: '⚡자동파이프라인', icon: 'search', onClick: openPipelineModal },
           { key: 'print', label: '수불부인쇄(A4)', icon: 'print', onClick: () => openPrintModal('MATERIAL_LEDGER') },
-          { key: 'search', label: '조회', icon: 'search', onClick: () => alert('자재수불부가 조회되었습니다.') },
-          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('조회 조건이 초기화되었습니다.') },
+          { key: 'search', label: '조회', icon: 'search', onClick: () => void loadLedger() },
+          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); setPeriodType('일간'); void loadLedger(); } },
         ]}
         helpContent="원재료 및 부재료의 일자별 기초 이월재고, 입고량, 생산출고량 및 기말 현재고 수불 변동을 추적합니다."
       />
@@ -208,7 +227,7 @@ export const MatLedgerView: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-300 font-semibold shadow-2xs">
-            데이터수: <span className="text-blue-700 font-bold">{activeLedgerData.length}</span> 건
+            데이터수: <span className="text-blue-700 font-bold">{visibleLedgerData.length}</span> 건
           </span>
         </div>
       </div>
@@ -217,11 +236,17 @@ export const MatLedgerView: React.FC = () => {
       <div className="flex-1 min-h-0 p-2">
         <div className="h-full flex flex-col bg-white border border-[#94a3b8] rounded shadow-xs">
           <div className="flex-1 min-h-0">
-            <InventoryDataGrid
-              columns={COLUMNS}
-              data={activeLedgerData}
-              summaryRowTitle="합계"
-            />
+            {loadingList ? (
+              <div className="h-full flex items-center justify-center bg-white text-gray-400 text-[12px]">
+                불러오는 중...
+              </div>
+            ) : (
+              <InventoryDataGrid
+                columns={COLUMNS}
+                data={visibleLedgerData}
+                summaryRowTitle="합계"
+              />
+            )}
           </div>
         </div>
       </div>

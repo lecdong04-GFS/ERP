@@ -3,8 +3,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { usePrintReport } from '@/context/PrintReportContext';
+import type { DeliveryBoxLabelData } from '@/components/print/labels/DeliveryBoxLabel';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+
+/** 박스라벨 최대 출력 매수 (과다 출력 방지) */
+const MAX_BOX_LABELS = 200;
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -41,7 +45,7 @@ const SUMMARY_COLUMNS = [
 ] as const;
 
 export const TagPrintView: React.FC = () => {
-  const { openPrintModal } = usePrintReport();
+  const { openPrintModal, setBoxPayload } = usePrintReport();
   const [delivDate, setDelivDate] = useState(kstToday());
   const [clientFilter, setClientFilter] = useState('ALL');
   const [summaries, setSummaries] = useState<TagSummaryRow[]>([]);
@@ -52,8 +56,10 @@ export const TagPrintView: React.FC = () => {
   const loadData = useCallback(async (date: string) => {
     setLoading(true);
     try {
+      // 납품일자 서버 필터 (전체 조회 후 잘라내기 방지)
+      const params = new URLSearchParams({ deliveryDate: date });
       const [delivRes, prodRes] = await Promise.all([
-        fetch('/api/sales/delivery', { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/sales/delivery?${params}`, { cache: 'no-store' }).then((r) => r.json()),
         fetch('/api/master/product', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ success: false })),
       ]);
       const boxMap = new Map<string, number>();
@@ -160,6 +166,53 @@ export const TagPrintView: React.FC = () => {
       alert('꼬리표를 출력할 거래처를 선택하세요.');
       return;
     }
+    const stamp = delivDate.replace(/-/g, '');
+    const items: DeliveryBoxLabelData[] = [];
+    selectedSummaries.forEach((s, si) => {
+      (details[s.id] || [])
+        .filter((d) => d.checked && d.actualQty > 0)
+        .forEach((d, di) => {
+          const per = Math.max(1, Math.round(d.boxInQty) || 1);
+          const full = Math.floor(d.actualQty / per);
+          const rem = d.actualQty % per;
+          const tag = `C${String(si + 1).padStart(2, '0')}-P${String(di + 1).padStart(2, '0')}`;
+          for (let i = 0; i < full && items.length < MAX_BOX_LABELS; i++) {
+            items.push({
+              boxNo: `BOX-${stamp}-${tag}-${String(i + 1).padStart(2, '0')}`,
+              orderNo: '',
+              centerName: s.clientName,
+              centerCode: s.clientName,
+              productCode: d.partNo === '-' ? '' : d.partNo,
+              productName: `${d.partName} ${per}입`,
+              boxQty: per,
+              unit: 'ea/Box',
+              shippingDate: `${delivDate} 출하`,
+              deliveryDate: delivDate,
+              coldChainTemp: '저온냉장 (0~10℃)',
+            });
+          }
+          if (rem > 0 && items.length < MAX_BOX_LABELS) {
+            items.push({
+              boxNo: `BOX-${stamp}-${tag}-${String(full + 1).padStart(2, '0')}`,
+              orderNo: '',
+              centerName: s.clientName,
+              centerCode: s.clientName,
+              productCode: d.partNo === '-' ? '' : d.partNo,
+              productName: `${d.partName} ${per}입`,
+              boxQty: rem,
+              unit: 'ea/Box',
+              shippingDate: `${delivDate} 출하`,
+              deliveryDate: delivDate,
+              coldChainTemp: '저온냉장 (0~10℃)',
+            });
+          }
+        });
+    });
+    if (items.length === 0) {
+      alert('출력할 박스라벨이 없습니다. (품목 선택·실출고 수량 확인)');
+      return;
+    }
+    setBoxPayload(items);
     openPrintModal('DELIVERY_BOX_LABEL');
   };
 
@@ -169,6 +222,50 @@ export const TagPrintView: React.FC = () => {
       alert('개별 인쇄할 품목을 선택하세요.');
       return;
     }
+    const s = summaries.find((x) => x.id === selectedSummaryId);
+    const stamp = delivDate.replace(/-/g, '');
+    const items: DeliveryBoxLabelData[] = [];
+    selected.forEach((d, di) => {
+      if (d.actualQty <= 0) return;
+      const per = Math.max(1, Math.round(d.boxInQty) || 1);
+      const full = Math.floor(d.actualQty / per);
+      const rem = d.actualQty % per;
+      for (let i = 0; i < full && items.length < MAX_BOX_LABELS; i++) {
+        items.push({
+          boxNo: `BOX-${stamp}-S01-P${String(di + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`,
+          orderNo: '',
+          centerName: s?.clientName || '-',
+          centerCode: s?.clientName || '-',
+          productCode: d.partNo === '-' ? '' : d.partNo,
+          productName: `${d.partName} ${per}입`,
+          boxQty: per,
+          unit: 'ea/Box',
+          shippingDate: `${delivDate} 출하`,
+          deliveryDate: delivDate,
+          coldChainTemp: '저온냉장 (0~10℃)',
+        });
+      }
+      if (rem > 0 && items.length < MAX_BOX_LABELS) {
+        items.push({
+          boxNo: `BOX-${stamp}-S01-P${String(di + 1).padStart(2, '0')}-${String(full + 1).padStart(2, '0')}`,
+          orderNo: '',
+          centerName: s?.clientName || '-',
+          centerCode: s?.clientName || '-',
+          productCode: d.partNo === '-' ? '' : d.partNo,
+          productName: `${d.partName} ${per}입`,
+          boxQty: rem,
+          unit: 'ea/Box',
+          shippingDate: `${delivDate} 출하`,
+          deliveryDate: delivDate,
+          coldChainTemp: '저온냉장 (0~10℃)',
+        });
+      }
+    });
+    if (items.length === 0) {
+      alert('출력할 박스라벨이 없습니다. (실출고 수량 확인)');
+      return;
+    }
+    setBoxPayload(items);
     openPrintModal('DELIVERY_BOX_LABEL');
   };
 

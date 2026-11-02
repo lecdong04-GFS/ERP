@@ -58,9 +58,9 @@ const Empty: React.FC<{ text: string; ok?: boolean }> = ({ text, ok }) => (
 export const WatchList: React.FC<WatchListProps> = ({ stockDays, onNavigate }) => {
   return (
     <div className="shrink-0">
-      {/* 재고 유지일 */}
+      {/* 재고유지일 */}
       <Panel
-        title="재고 바닥 임박"
+        title="재고유지일 현황"
         hint="재고유지일 짧은 순"
         icon={<PackageMinus className="w-3.5 h-3.5" />}
         onMore={() => onNavigate('inv-lookup')}

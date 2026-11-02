@@ -1,12 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { SalesFilterBar } from '@/components/sales/common/SalesFilterBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '../common/PurchaseDataGrid';
-import { Plus, Trash2, CheckCircle2, Clock, AlertTriangle, XCircle } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
 
 interface OrderMasterRow {
   id: number;
@@ -42,52 +51,9 @@ interface OrderDetailRow {
   remark: string;
 }
 
-const INITIAL_MASTER_DATA: OrderMasterRow[] = [
-  { id: 1, checked: false, orderNo: 'pc25345', orderDate: '2026-10-30', status: '미입고', supplier: '평화영농조합', itemCount: 1, orderAmt: 27000000, receivedAmt: 0, unreceivedAmt: 27000000, expectedDate: '2026-10-31', manager: '이창승 상무', tel: '010-3565-92XX', remark: '당일 도정미 직납' },
-  { id: 2, checked: false, orderNo: 'pc25344', orderDate: '2026-10-30', status: '미입고', supplier: '사조오양', itemCount: 1, orderAmt: 84000, receivedAmt: 0, unreceivedAmt: 84000, expectedDate: '2026-10-31', manager: '김영하 대리', tel: '010-4236-04XX', remark: '시제품 연구용' },
-  { id: 3, checked: false, orderNo: 'pc25343', orderDate: '2026-10-30', status: '부분입고', supplier: '이우유통', itemCount: 2, orderAmt: 4414600, receivedAmt: 2280000, unreceivedAmt: 2134600, expectedDate: '2026-10-31', manager: '구동서 부장', tel: '010-4717-25XX', remark: '마요네즈 선입고 완료' },
-  { id: 4, checked: false, orderNo: 'pc25342', orderDate: '2026-10-30', status: '입고완료', supplier: '야미푸드', itemCount: 1, orderAmt: 153000, receivedAmt: 153000, unreceivedAmt: 0, expectedDate: '2026-10-30', manager: '이하경 이사', tel: '010-5661-11XX', remark: '검수 통과 완료' },
-  { id: 5, checked: false, orderNo: 'pc25341', orderDate: '2026-10-30', status: '미입고', supplier: '한성기업', itemCount: 2, orderAmt: 3980400, receivedAmt: 0, unreceivedAmt: 3980400, expectedDate: '2026-10-31', manager: '정재근 대리', tel: '010-7191-71XX', remark: '콜드체인 검수필' },
-  { id: 6, checked: false, orderNo: 'pc25340', orderDate: '2026-10-30', status: '미입고', supplier: '한성기업', itemCount: 2, orderAmt: 4608600, receivedAmt: 0, unreceivedAmt: 4608600, expectedDate: '2026-10-31', manager: '정재근 대리', tel: '010-7191-71XX', remark: '크래미 및 맛살 2편' },
-  { id: 7, checked: false, orderNo: 'pc25335', orderDate: '2026-10-29', status: '입고완료', supplier: '두레', itemCount: 3, orderAmt: 1850000, receivedAmt: 1850000, unreceivedAmt: 0, expectedDate: '2026-10-30', manager: '박선영 팀장', tel: '010-2345-67XX', remark: '용기류 입고' },
-  { id: 8, checked: false, orderNo: 'pc25330', orderDate: '2026-10-29', status: '발주취소', supplier: '사조오양', itemCount: 1, orderAmt: 1360000, receivedAmt: 0, unreceivedAmt: 1360000, expectedDate: '2026-10-30', manager: '김영하 대리', tel: '010-4236-04XX', remark: '생산계획 변경 취소' },
-];
-
-const INITIAL_DETAILS: Record<number, OrderDetailRow[]> = {
-  1: [
-    { id: 101, itemCode: 'RM-RICE-01', type: '원재료', name: '국내산 경기미 백미(햅쌀)', spec: '20kg/포', unit: '포', orderQty: 500, unitPrice: 54000, orderAmt: 27000000, receivedQty: 0, unreceivedQty: 500, expectedDate: '2026-10-31', warehouse: '상온보관고', remark: '수분함량 15% 이하' },
-  ],
-  2: [
-    { id: 201, itemCode: 'RM-TUNA-01', type: '원재료', name: '가공 참치플레이크(오일)', spec: '1.8kg*6캔', unit: 'box', orderQty: 1, unitPrice: 84000, orderAmt: 84000, receivedQty: 0, unreceivedQty: 1, expectedDate: '2026-10-31', warehouse: '상온보관고', remark: '샘플 발주' },
-  ],
-  3: [
-    { id: 301, itemCode: 'RM-MAYO-01', type: '원재료', name: '골드마요네즈 3.2kg', spec: '3.2kg*4통', unit: 'box', orderQty: 60, unitPrice: 38000, orderAmt: 2280000, receivedQty: 60, unreceivedQty: 0, expectedDate: '2026-10-30', warehouse: '상온보관고', remark: '기입고 완료' },
-    { id: 302, itemCode: 'RM-CHEESE-01', type: '원재료', name: '슬라이스치즈(고소한맛)', spec: '1kg*10팩', unit: 'box', orderQty: 30, unitPrice: 71153, orderAmt: 2134600, receivedQty: 0, unreceivedQty: 30, expectedDate: '2026-10-31', warehouse: '육류냉장고', remark: '배송중' },
-  ],
-  4: [
-    { id: 401, itemCode: 'SM-GIM-01', type: '부재료', name: '도시락용 조미김 포션', spec: '2g*500봉', unit: 'box', orderQty: 3, unitPrice: 51000, orderAmt: 153000, receivedQty: 3, unreceivedQty: 0, expectedDate: '2026-10-30', warehouse: '부재료보관', remark: '검수 완료' },
-  ],
-  5: [
-    { id: 501, itemCode: 'RM-CRAB-01', type: '원재료', name: '[냉장]다진맛살 10kg', spec: '10kg*2ea', unit: 'box', orderQty: 40, unitPrice: 52000, orderAmt: 2080000, receivedQty: 0, unreceivedQty: 40, expectedDate: '2026-10-31', warehouse: '육류냉장고', remark: '김밥용 원료' },
-    { id: 502, itemCode: 'RM-GUNG-01', type: '원재료', name: '[냉동]궁채나물 1kg', spec: '1kg*10ea', unit: 'box', orderQty: 30, unitPrice: 63346, orderAmt: 1900400, receivedQty: 0, unreceivedQty: 30, expectedDate: '2026-10-31', warehouse: '냉동고', remark: '온도확인필' },
-  ],
-  6: [
-    { id: 601, itemCode: 'RM-KIMC-01', type: '원재료', name: '[냉장]볶음김치 5kg', spec: '5kg*3ea', unit: 'box', orderQty: 80, unitPrice: 42000, orderAmt: 3360000, receivedQty: 0, unreceivedQty: 80, expectedDate: '2026-10-31', warehouse: '채소류냉장', remark: '제육도시락용' },
-    { id: 602, itemCode: 'RM-BEEF-01', type: '원재료', name: '[냉동]우양지 슬라이스', spec: '2kg*5팩', unit: 'box', orderQty: 10, unitPrice: 124860, orderAmt: 1248600, receivedQty: 0, unreceivedQty: 10, expectedDate: '2026-10-31', warehouse: '냉동고', remark: '' },
-  ],
-  7: [
-    { id: 701, itemCode: 'SM-BOX-01', type: '부재료', name: '두레)ET-30 용기', spec: '50ea*2줄', unit: 'box', orderQty: 20, unitPrice: 42000, orderAmt: 840000, receivedQty: 20, unreceivedQty: 0, expectedDate: '2026-10-30', warehouse: '부재료보관', remark: '' },
-    { id: 702, itemCode: 'SM-CAP-01', type: '부재료', name: '두레)ET-30 뚜껑(PET)', spec: '100ea*1줄', unit: 'box', orderQty: 20, unitPrice: 35000, orderAmt: 700000, receivedQty: 20, unreceivedQty: 0, expectedDate: '2026-10-30', warehouse: '부재료보관', remark: '' },
-    { id: 703, itemCode: 'SM-BAND-01', type: '부재료', name: '수축 밴드(GS삼각)', spec: '1000ea/롤', unit: '롤', orderQty: 10, unitPrice: 31000, orderAmt: 310000, receivedQty: 10, unreceivedQty: 0, expectedDate: '2026-10-30', warehouse: '부재료보관', remark: '' },
-  ],
-  8: [
-    { id: 801, itemCode: 'RM-TUNA-02', type: '원재료', name: '가공 참치플레이크(오일)', spec: '1.8kg*6캔', unit: 'box', orderQty: 20, unitPrice: 68000, orderAmt: 1360000, receivedQty: 0, unreceivedQty: 20, expectedDate: '2026-10-30', warehouse: '상온보관고', remark: '계획 취소 건' },
-  ],
-};
-
 const MASTER_COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'checked', label: '선택', width: '45px', align: 'center', format: 'checkbox' },
-  { key: 'orderNo', label: '발주번호', width: '90px', align: 'center' },
+  { key: 'orderNo', label: '발주번호', width: '130px', align: 'center' },
   { key: 'orderDate', label: '발주일자', width: '90px', align: 'center', format: 'date' },
   {
     key: 'status',
@@ -109,7 +75,7 @@ const MASTER_COLUMNS: PurchaseGridColumnDef[] = [
   },
   { key: 'supplier', label: '거래처', width: '130px', align: 'left' },
   { key: 'itemCount', label: '품목수', width: '60px', align: 'right', format: 'number' },
-  { key: 'orderAmt', label: '발주금액(합계)', width: '120px', align: 'right', format: 'currency', highlight: true },
+  { key: 'orderAmt', label: '발주금액(합계)', width: '120px', align: 'right', format: 'currency' },
   { key: 'receivedAmt', label: '기입고금액', width: '110px', align: 'right', format: 'currency' },
   { key: 'unreceivedAmt', label: '미입고금액', width: '110px', align: 'right', format: 'currency' },
   { key: 'expectedDate', label: '입고예정일', width: '90px', align: 'center', format: 'date' },
@@ -134,85 +100,108 @@ const DETAIL_COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'remark', label: '비고', width: '150px', align: 'left' },
 ];
 
+
 export const OrderStatusEditView: React.FC = () => {
-  const [startDate, setStartDate] = useState('2026-10-29');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [supplierFilter, setSupplierFilter] = useState('전체');
   const [statusFilter, setStatusFilter] = useState('전체');
 
-  const [masterList, setMasterList] = useState<OrderMasterRow[]>(INITIAL_MASTER_DATA);
-  const [selectedMasterId, setSelectedMasterId] = useState<number>(1);
-  const [detailsMap, setDetailsMap] = useState<Record<number, OrderDetailRow[]>>(INITIAL_DETAILS);
+  const [masterList, setMasterList] = useState<OrderMasterRow[]>([]);
+  const [selectedMasterId, setSelectedMasterId] = useState<number | null>(null);
+  const [detailsMap, setDetailsMap] = useState<Record<number, OrderDetailRow[]>>({});
+  const [loading, setLoading] = useState(true);
 
-  // DB에서 실제 발주 내역 로드
-  useEffect(() => {
-    fetch('/api/purchase/order')
-      .then((res) => res.json())
-      .then((res) => {
-        if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-          const newMaster: OrderMasterRow[] = [];
-          const newDetails: Record<number, OrderDetailRow[]> = {};
+  // DB에서 실제 발주 내역 로드 (기간 조회)
+  const loadData = useCallback(async (s: string, e: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ startDate: s, endDate: e });
+      const res = await fetch(`/api/purchase/order?${params}`).then((r) => r.json());
+      if (!res.success || !Array.isArray(res.data)) {
+        setMasterList([]); setDetailsMap({}); setSelectedMasterId(null);
+        return;
+      }
+      const newMaster: OrderMasterRow[] = [];
+      const newDetails: Record<number, OrderDetailRow[]> = {};
 
-          res.data.forEach((po: any, idx: number) => {
-            const masterId = po.id || idx + 1;
-            const details = po.details || [];
-            const receivedAmt = details.reduce((sum: number, d: any) => sum + (d.receivedQty * d.unitPrice), 0);
-            const totalAmt = po.totalAmount || details.reduce((sum: number, d: any) => sum + d.amount, 0);
+      res.data.forEach((po: any, idx: number) => {
+        const masterId = po.id || idx + 1;
+        const details = po.details || [];
+        const receivedAmt = details.reduce((sum: number, d: any) => sum + (d.receivedQty * d.unitPrice), 0);
+        const totalAmt = po.totalAmount || details.reduce((sum: number, d: any) => sum + d.amount, 0);
 
-            newMaster.push({
-              id: masterId,
-              checked: false,
-              orderNo: po.orderNo,
-              orderDate: po.orderDate,
-              status: (po.status as any) || '미입고',
-              supplier: po.partnerName || po.partner?.name || '공급사',
-              itemCount: details.length || 1,
-              orderAmt: totalAmt,
-              receivedAmt,
-              unreceivedAmt: totalAmt - receivedAmt,
-              expectedDate: po.deliveryDate || po.orderDate,
-              manager: po.createdBy || '관리자',
-              tel: po.partner?.tel || '010-0000-0000',
-              remark: po.remark || '',
-            });
+        newMaster.push({
+          id: masterId,
+          checked: false,
+          orderNo: po.orderNo,
+          orderDate: po.orderDate,
+          status: (po.status as any) || '미입고',
+          supplier: po.partnerName || po.partner?.name || '미지정',
+          itemCount: details.length,
+          orderAmt: totalAmt,
+          receivedAmt,
+          unreceivedAmt: totalAmt - receivedAmt,
+          expectedDate: po.deliveryDate || po.orderDate,
+          manager: po.createdBy || '-',
+          tel: po.partner?.tel || '-',
+          remark: po.remark || '',
+        });
 
-            newDetails[masterId] = details.map((d: any, dIdx: number) => ({
-              id: d.id || dIdx + 1,
-              itemCode: d.productCode || `MAT-${d.productId}`,
-              type: d.category || '원재료',
-              name: d.productName || d.product?.name || '원료',
-              spec: d.product?.spec || '-',
-              unit: d.unit || 'ea',
-              orderQty: d.orderQty || 0,
-              unitPrice: d.unitPrice || 0,
-              orderAmt: d.amount || 0,
-              receivedQty: d.receivedQty || 0,
-              unreceivedQty: d.remainQty || d.orderQty || 0,
-              expectedDate: po.deliveryDate || po.orderDate,
-              warehouse: d.product?.warehouse || '상온보관고',
-              remark: d.remark || '',
-            }));
-          });
+        newDetails[masterId] = details.map((d: any, dIdx: number) => ({
+          id: d.id ?? `${masterId}-${dIdx}`,
+          itemCode: d.productCode || '',
+          type: d.category || '원재료',
+          name: d.productName || d.product?.name || '',
+          spec: d.product?.spec || '',
+          unit: d.unit || 'ea',
+          orderQty: d.orderQty || 0,
+          unitPrice: d.unitPrice || 0,
+          orderAmt: d.amount || 0,
+          receivedQty: d.receivedQty || 0,
+          unreceivedQty: Math.max(0, (d.orderQty || 0) - (d.receivedQty || 0)),
+          expectedDate: po.deliveryDate || po.orderDate,
+          warehouse: d.product?.warehouse || '상온보관고',
+          remark: d.remark || '',
+        }));
+      });
 
-          setMasterList(newMaster);
-          setDetailsMap(newDetails);
-          if (newMaster.length > 0) {
-            setSelectedMasterId(newMaster[0].id);
-          }
-        }
-      })
-      .catch((err) => console.error('Failed to load purchase orders from DB:', err));
+      setMasterList(newMaster);
+      setDetailsMap(newDetails);
+      setSelectedMasterId((prev) => {
+        if (prev !== null && newMaster.some((x) => x.id === prev)) return prev;
+        return newMaster.length > 0 ? newMaster[0].id : null;
+      });
+    } catch (err) {
+      console.error('Failed to load purchase orders from DB:', err);
+      setMasterList([]); setDetailsMap({}); setSelectedMasterId(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Filtered master list
+  useEffect(() => {
+    void loadData(startDate, endDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const filteredMasterList = masterList.filter((row) => {
     if (supplierFilter !== '전체' && row.supplier !== supplierFilter) return false;
     if (statusFilter !== '전체' && row.status !== statusFilter) return false;
     return true;
   });
 
+  const suppliers = useMemo(() => {
+    const s = new Set<string>();
+    masterList.forEach((m) => {
+      const name = String(m.supplier || '').trim();
+      if (name && name !== '미지정') s.add(name);
+    });
+    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [masterList]);
+
   const selectedMaster = masterList.find((m) => m.id === selectedMasterId);
-  const currentDetails = detailsMap[selectedMasterId] || [];
+  const currentDetails = (selectedMasterId != null && detailsMap[selectedMasterId]) || [];
 
   const handleMasterCheck = (id: number, checked: boolean) => {
     setMasterList((prev) =>
@@ -254,29 +243,16 @@ export const OrderStatusEditView: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
-    alert('발주 정보 수정사항이 안전하게 저장되었습니다.');
-  };
-
-  const handleReset = () => {
-    setMasterList(INITIAL_MASTER_DATA);
-    setDetailsMap(INITIAL_DETAILS);
-    setSupplierFilter('전체');
-    setStatusFilter('전체');
-    alert('데이터가 초기화되었습니다.');
-  };
-
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
       {/* 1. 상단 액션 바 */}
       <SalesActionBar
         title="발주현황/수정"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => alert('조회 완료되었습니다.') },
-          { key: 'save', label: '저장', icon: 'save', variant: 'primary', onClick: handleSave },
-          { key: 'delete', label: '삭제', icon: 'delete', variant: 'danger', onClick: handleDeleteChecked },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: handleReset },
-          { key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '발주현황수정', sheetName: '발주현황', columns: MASTER_COLUMNS, data: filteredMasterList }) },
+          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
+          { key: 'delete', label: '삭제', icon: 'delete', variant: 'danger', onClick: () => void handleDeleteChecked() },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); setSupplierFilter('전체'); setStatusFilter('전체'); void loadData(s, t); } },
+          { key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '발주현황', sheetName: '발주현황', columns: MASTER_COLUMNS, data: filteredMasterList }) },
         ]}
         helpContent="공급사별 발주 진행 현황을 조회하고 발주 정보 및 세부 품목 내역을 조회/수정/삭제합니다."
       />
@@ -296,19 +272,14 @@ export const OrderStatusEditView: React.FC = () => {
 
           <div className="flex items-center gap-1.5 pl-3 border-l border-gray-300">
             <span className="font-semibold text-gray-700">매입처:</span>
-            <select
-              value={supplierFilter}
-              onChange={(e) => setSupplierFilter(e.target.value)}
-              className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded focus:outline-blue-500 shadow-sm"
-            >
-              <option value="전체">전체 매입처</option>
-              <option value="평화영농조합">평화영농조합</option>
-              <option value="사조오양">사조오양</option>
-              <option value="이우유통">이우유통</option>
-              <option value="야미푸드">야미푸드</option>
-              <option value="한성기업">한성기업</option>
-              <option value="두레">두레</option>
-            </select>
+                <select
+                  value={supplierFilter}
+                  onChange={(e) => setSupplierFilter(e.target.value)}
+                  className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded focus:outline-blue-500 shadow-sm"
+                >
+                  <option value="전체">전체 매입처 ({suppliers.length})</option>
+                  {suppliers.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -403,34 +374,6 @@ export const OrderStatusEditView: React.FC = () => {
               <span className="text-[11px] text-gray-600 font-medium">
                 품목수: <span className="text-blue-700 font-bold">{currentDetails.length}</span> 건
               </span>
-              <button
-                onClick={() => {
-                  if (!selectedMaster) return;
-                  const newItem: OrderDetailRow = {
-                    id: Date.now(),
-                    itemCode: 'RM-NEW-01',
-                    type: '원재료',
-                    name: '신규 발주품목(추가)',
-                    spec: '단위규격',
-                    unit: 'box',
-                    orderQty: 10,
-                    unitPrice: 25000,
-                    orderAmt: 250000,
-                    receivedQty: 0,
-                    unreceivedQty: 10,
-                    expectedDate: selectedMaster.expectedDate,
-                    warehouse: '상온보관고',
-                    remark: '',
-                  };
-                  setDetailsMap((prev) => ({
-                    ...prev,
-                    [selectedMasterId]: [...(prev[selectedMasterId] || []), newItem],
-                  }));
-                }}
-                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded text-[11px] flex items-center gap-1 shadow-xs"
-              >
-                <Plus size={12} /> 품목 추가
-              </button>
             </div>
           </div>
 

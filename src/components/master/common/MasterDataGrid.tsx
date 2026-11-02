@@ -62,11 +62,21 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
   const [editingCell, setEditingCell] = useState<{ rowId: string | number; colKey: string } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
 
   const startEditing = (rowId: string | number, colKey: string, currentVal: any, col: MasterGridColumnDef) => {
-    if (col.format === 'checkbox' || col.format === 'button' || col.editable === false) return;
+    if (col.format === 'checkbox' || col.format === 'button' || col.format === 'dropdown' || col.editable === false) return;
     setEditingCell({ rowId, colKey });
     setEditValue(currentVal !== undefined && currentVal !== null ? String(currentVal) : '');
+  };
+
+  const handleHeaderSort = (col: MasterGridColumnDef) => {
+    if (col.sortable === false) return;
+    setSortConfig((prev) => {
+      if (!prev || prev.key !== col.key) return { key: col.key, dir: 'asc' };
+      if (prev.dir === 'asc') return { key: col.key, dir: 'desc' };
+      return null;
+    });
   };
 
   const saveEdit = (rowId: string | number, colKey: string) => {
@@ -89,12 +99,31 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     setEditingCell(null);
   };
 
+  const sortedData = useMemo(() => {
+    if (!sortConfig) return gridData;
+    const { key, dir } = sortConfig;
+    const factor = dir === 'asc' ? 1 : -1;
+    return [...gridData].sort((a, b) => {
+      const va = a[key];
+      const vb = b[key];
+      if (va == null && vb == null) return 0;
+      if (va == null || va === '') return 1;
+      if (vb == null || vb === '') return -1;
+      const na = Number(va);
+      const nb = Number(vb);
+      if (!isNaN(na) && !isNaN(nb) && typeof va !== 'boolean' && typeof vb !== 'boolean') {
+        return (na - nb) * factor;
+      }
+      return String(va).localeCompare(String(vb), 'ko') * factor;
+    });
+  }, [gridData, sortConfig]);
+
   // Pagination if total rows > 200 and enablePagination is true
   const displayData = useMemo(() => {
-    if (!enablePagination) return gridData;
+    if (!enablePagination) return sortedData;
     const start = (currentPage - 1) * pageSize;
-    return gridData.slice(start, start + pageSize);
-  }, [gridData, enablePagination, currentPage, pageSize]);
+    return sortedData.slice(start, start + pageSize);
+  }, [sortedData, enablePagination, currentPage, pageSize]);
 
   // Compute sums
   const computedSums = useMemo(() => {
@@ -176,8 +205,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
       return (
         <select
           value={rawVal || col.options[0]}
-          onChange={(e) => onCellChange?.(row.id ?? rowIndex, col.key, e.target.value)}
-          className="w-full bg-white border border-gray-300 rounded-2xs text-[12px] py-0.5 px-1.5 focus:outline-blue-500"
+          onChange={(e) => {
+            const nextVal = e.target.value;
+            setGridData((prev) =>
+              prev.map((r, idx) => {
+                const match = (r.id !== undefined && r.id === rowId) || idx === rowId;
+                return match ? { ...r, [col.key]: nextVal } : r;
+              })
+            );
+            onCellChange?.(row.id ?? rowIndex, col.key, nextVal);
+          }}
+          className="w-full bg-white border border-gray-300 rounded-2xs text-[12px] py-0.5 px-1 focus:outline-blue-500 cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         >
           {col.options.map((opt) => (
@@ -186,26 +224,6 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
             </option>
           ))}
         </select>
-      );
-    }
-
-    if (col.editable) {
-      return (
-        <input
-          type={col.format === 'number' || col.format === 'currency' ? 'number' : 'text'}
-          value={rawVal !== undefined && rawVal !== null ? rawVal : ''}
-          onChange={(e) => {
-            const val =
-              col.format === 'number' || col.format === 'currency'
-                ? e.target.value === ''
-                  ? ''
-                  : Number(e.target.value)
-                : e.target.value;
-            onCellChange?.(row.id ?? rowIndex, col.key, val);
-          }}
-          className="w-full bg-white text-right font-mono border border-blue-400 rounded-2xs px-1.5 py-0.5 text-[12px] focus:outline-blue-600"
-          onClick={(e) => e.stopPropagation()}
-        />
       );
     }
 
@@ -238,9 +256,9 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
         <table className="w-full min-w-full border-collapse table-fixed text-gray-800">
           {/* Table Header */}
           <thead className="sticky top-0 z-20 bg-[#c0c7ea] border-b border-[#9ca3af] shadow-xs">
-            <tr className="h-[32px]">
+            <tr className="h-[30px]">
               {showRowIndex && (
-                <th className="w-[42px] bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 text-[11px]">
+                <th className="w-[34px] bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 text-[11px]">
                   순번
                 </th>
               )}
@@ -253,10 +271,18 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       width: colWidth,
                       minWidth: columnWidths[col.key] ? `${columnWidths[col.key]}px` : col.minWidth,
                     }}
-                    className="relative bg-[#c2c9ee] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-800 px-2 py-1.5 text-[12.5px] whitespace-nowrap select-none"
+                    onClick={() => handleHeaderSort(col)}
+                    className={`relative bg-[#c2c9ee] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-800 px-1 py-1 text-[11.5px] whitespace-nowrap select-none ${
+                      col.sortable !== false ? 'cursor-pointer hover:bg-[#b4bCE6]' : ''
+                    }`}
                   >
-                    <div className="flex items-center justify-center">
-                      <span>{col.label}</span>
+                    <div className="flex items-center justify-center gap-0.5 overflow-hidden">
+                      <span className="truncate">{col.label}</span>
+                      {sortConfig?.key === col.key && (
+                        <span className="text-[9px] text-blue-800 shrink-0">
+                          {sortConfig.dir === 'asc' ? '▲' : '▼'}
+                        </span>
+                      )}
                     </div>
                     <ResizeHandle onMouseDown={(e) => startResizing(col.key, e)} />
                   </th>
@@ -322,7 +348,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                             }
                           }}
                           className={`border-r border-[#e5e7eb] ${
-                            isEditing ? 'p-0' : 'px-2 py-1'
+                            isEditing ? 'p-0' : 'px-1.5 py-0.5 text-[12px]'
                           } truncate whitespace-nowrap ${
                             !isReadOnly
                               ? 'cursor-text hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 transition-colors'

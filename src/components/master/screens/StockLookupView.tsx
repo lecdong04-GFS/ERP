@@ -6,30 +6,22 @@ import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { ChevronLeft, ChevronRight, RotateCw, Search } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { normName } from '@/lib/gfs/norm';
 
 // 재고조사표 정본 시트 (서버 lib/gfs/canonical.ts와 동일 기준)
 const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
 
-/** 조달일수 파싱: D+1→1, D+2→2, 없으면 2 */
+/** 조달일수 파싱: D+1→1, D+2/D-2→2, 없으면 2 */
 function parseLeadDays(s: string): number {
-  const m = /D\+(\d+)/.exec(s || '');
+  const m = /D[+-](\d+)/i.exec(s || '');
   if (m) return Math.max(1, parseInt(m[1], 10));
   return 2;
 }
 
-/** 안전재고 자동계산: ROUND(일사용량×입수량×조달일수×1.5) */
-function calcSafetyStock(dailyBox: number, pack: number, leadDays: number): number {
-  if (!(dailyBox > 0) || !(pack > 0)) return 0;
-  return Math.round(dailyBox * pack * leadDays * 1.5);
-}
-
-/** 품명 정규화: [접두어]/괄호/기호 제거 + 소문자 */
-function normName(s: unknown): string {
-  return String(s ?? '')
-    .replace(/\[.+?\]/g, '')
-    .replace(/\(.+?\)/g, '')
-    .replace(/[^가-힣a-zA-Z0-9]/g, '')
-    .toLowerCase();
+/** 안전재고 자동계산: ROUND(유효일사용량(현재고 기준 봉/낱개)×조달일수×1.5) */
+function calcSafetyStock(dailyInBaseUnit: number, _pack: number, leadDays: number): number {
+  if (!(dailyInBaseUnit > 0)) return 0;
+  return Math.max(1, Math.round(dailyInBaseUnit * leadDays * 1.5));
 }
 
 interface StockItem {
@@ -51,7 +43,9 @@ interface StockItem {
   inboundDate: string; // 입고일 (D+2 등)
   expiryDate: string; // 유통기한
   orderDay: string; // 발주일
-  dailyUsage: number; // 일사용량(박스)
+  dailyUsage: number; // 일사용량 (현재고 기준 봉/낱개/롤 단위)
+  estDailyUsage?: number; // 추정일사용량 (1개월 재고조사표 실소진량 기반, 현재고 기준 봉/낱개/롤 단위)
+  estSampleCount?: number; // 소진 관측 구간 수
   packUnit: number; // 입수량
   boxQty: number; // 박스
   pieceQty: number; // 낱개(봉)
@@ -78,7 +72,18 @@ export function calcStockStatus(current: number, safety: number): string {
   return '정상';
 }
 
-/** 재고유지일(엑셀 N열 보이는 숫자 그대로) — 계산하지 않음 */
+/** 재고유지일 실시간 계산: 현재고 ÷ 일사용량 (일사용량 미입력 시 기존 스냅샷/정본 유지일 폴백) */
+export function calcStockDays(current: number, daily: number, fallback?: number | null): number | null {
+  const cur = Number(current) || 0;
+  const d = Number(daily) || 0;
+  if (d > 0) {
+    return Math.round((cur / d) * 100) / 100;
+  }
+  if (fallback != null && !isNaN(Number(fallback))) {
+    return Math.round(Number(fallback) * 100) / 100;
+  }
+  return null;
+}
 
 /** KST 오늘 YYYY-MM-DD */
 function kstToday(): string {
@@ -91,13 +96,13 @@ function toLocalISODate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** 유통기한 임박일수 (YYYY-MM-DD만 판정, 파싱불가 -1) */
-export function expiryInDays(expiry: string, base: string): number {
+/** 유통기한 임박일수 (YYYY-MM-DD만 판정, 파싱불가 null) */
+export function expiryInDays(expiry: string, base: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec((expiry || '').trim());
-  if (!m) return -1;
+  if (!m) return null;
   const t = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).getTime();
   const b = new Date(`${base}T00:00:00`).getTime();
-  if (isNaN(t) || isNaN(b)) return -1;
+  if (isNaN(t) || isNaN(b)) return null;
   return Math.floor((t - b) / 86400000);
 }
 
@@ -580,9 +585,8 @@ export const StockLookupView: React.FC = () => {
   // 빨간펜: 업로드 시 이상행(급변·신규) 목록 — 사람은 보고 판단, 저장은 직접
   const [reviewList, setReviewList] = useState<{ id: number; name: string; kind: string; oldQty: number; curQty: number }[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
-  // 자동채움 잠금: 엑셀이 채운 셀은 기본 잠금, 수정모드에서만 편집 가능
-  // 잠금 대상: 창고명·유통기한·박스·낱개·현재고·단가 / 항상편집: 이월·입고·출고·안전재고
-  const [locked, setLocked] = useState(true);
+  // 자동채움 잠금: 기본값 false(즉시 마우스 클릭 수정 가능), 필요 시 상단 버튼으로 잠금 전환 가능
+  const [locked, setLocked] = useState(false);
   // 소진 시뮬레이터: 선택 행 품목의 LOT 순차 차감 미리보기 (DB 반영 없음)
   const [simOpen, setSimOpen] = useState(false);
   const [simQty, setSimQty] = useState('');
@@ -643,6 +647,10 @@ export const StockLookupView: React.FC = () => {
   const [mergeInfo, setMergeInfo] = useState('');
   // 날짜별 스냅샷 모드: true면 화면 데이터가 해당 날짜 확정분, false면 현재고 LIVE
   const [snapshotMode, setSnapshotMode] = useState(false);
+  const estMapRef = useRef<{
+    byWhAndKey: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
+    byKeyOnly: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
+  }>({ byWhAndKey: {}, byKeyOnly: {} });
 
   const loadStockData = (baseRows?: any[] | null, snapDate?: string) => {
     const isSnap = !!snapDate && !!baseRows;
@@ -653,8 +661,20 @@ export const StockLookupView: React.FC = () => {
         : fetch('/api/inventory/stock').then((res) => res.json()),
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
+      fetch('/api/inventory/estimated-usage').then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, orderJson, snapJson]) => {
+      .then(([json, orderJson, snapJson, estJson]) => {
+        if (estJson?.success && estJson.data) {
+          estMapRef.current = {
+            byWhAndKey: estJson.data.byWhAndKey || {},
+            byKeyOnly: estJson.data.byKeyOnly || {},
+          };
+        }
+        const lookupEst = (wh: string, normKey: string) => {
+          if (!normKey) return null;
+          return estMapRef.current.byWhAndKey[`${wh}|${normKey}`] || estMapRef.current.byKeyOnly[normKey] || null;
+        };
+
         if (json.success && json.data && json.data.length > 0) {
           // 발주서 정본 맵 (품명 정규화 기준) — 엑셀 우선
           const orderByNorm = new Map<string, any>();
@@ -666,6 +686,7 @@ export const StockLookupView: React.FC = () => {
           }
           let merged = 0;
           let added = 0;
+          let estMatched = 0;
           const snapMap: Record<string, { stockDays: number | null; asOf: string; productName: string }> =
             snapJson?.success && snapJson.data?.map ? snapJson.data.map : {};
           const snapAsOf: string = snapJson?.success ? snapJson.data?.asOf || '' : '';
@@ -683,80 +704,132 @@ export const StockLookupView: React.FC = () => {
           const loaded: StockItem[] = [];
           const seen = new Set<string>();
           json.data.forEach((inv: any, idx: number) => {
-            const safety = isSnap && Number(inv.safetyStock) > 0 ? Number(inv.safetyStock) : (inv.product?.safetyStockQty || 100);
-            const price = inv.unitPrice || (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
+            const price = Number(inv.unitPrice) > 0
+              ? Number(inv.unitPrice)
+              : (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
             const name = inv.productName || inv.product?.name || '';
+            const wh = inv.warehouse || '상온';
             const norm = normName(name);
             seen.add(norm);
-            // 엑셀 우선: 정본에 있으면 엑셀값으로 표시 (DB에만 있는 행은 그대로)
             const o = norm ? orderByNorm.get(norm) : undefined;
-            const current = o && Number(o.currentStock) > 0 ? Number(o.currentStock) : inv.currentQty || 0;
-            const pack = (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) || (isSnap ? Number(inv.packUnit) || 0 : 0) || inv.product?.boxQty || 1;
-            const box = Math.floor(current / pack);
-            const piece = Math.round((current % pack) * 10) / 10;
-            const uprice = o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price;
-            const dailyU = inv.dailyUsage ? Number(inv.dailyUsage) : (o ? Number(o.dailyUsage) || 0 : 0);
-            const nDays = o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null;
+            // DB/스냅샷에 저장된 현재고·단가 우선 반영 (없을 때만 발주서 정본 폴백)
+            const hasDbQty = inv.currentQty !== undefined && inv.currentQty !== null;
+            const current = isSnap
+              ? Number(inv.currentQty) || 0
+              : hasDbQty
+              ? Number(inv.currentQty)
+              : (o && Number(o.currentStock) > 0 ? Number(o.currentStock) : 0);
+            const pack =
+              (isSnap && Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
+              (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
+              inv.product?.boxQty ||
+              1;
+            const box = isSnap && inv.boxQty !== undefined && Number(inv.boxQty) > 0
+              ? Number(inv.boxQty)
+              : Math.floor(current / pack);
+            const piece = isSnap && inv.pieceQty !== undefined && Number(inv.pieceQty) > 0
+              ? Number(inv.pieceQty)
+              : Math.round((current % pack) * 10) / 10;
+            const uprice = Number(inv.unitPrice) > 0
+              ? Number(inv.unitPrice)
+              : (o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price);
+            const rawDailyU = Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : (o ? Number(o.dailyUsage) || 0 : 0);
+            const dailyU = Math.round(rawDailyU * 100) / 100;
+            const estEntry = lookupEst(wh, norm);
+            const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
+            const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
+            if (estDaily > 0) estMatched += 1;
+            const cleanCode = String(inv.itemCode || inv.productCode || inv.product?.productCode || '').split('#')[0];
+            const snapEntry = snapOf(cleanCode, name);
+            const fallbackDays =
+              (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null) ??
+              (o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null);
+            const effectiveDaily = dailyU > 0 ? dailyU : estDaily;
+            const inbound = inv.lastInDate
+              ? String(inv.lastInDate).slice(5)
+              : inv.inboundDate
+              ? String(inv.inboundDate)
+              : inv.product?.partner?.leadTime
+              ? `D+${inv.product.partner.leadTime}`
+              : 'D+2';
+            const autoSafety = calcSafetyStock(effectiveDaily, pack, parseLeadDays(inbound || o?.supplier || ''));
+            const safety =
+              isSnap && Number(inv.safetyStock) > 0
+                ? Number(inv.safetyStock)
+                : autoSafety > 0
+                ? autoSafety
+                : Number(inv.product?.safetyStockQty) > 0
+                ? Number(inv.product.safetyStockQty)
+                : 0;
+            const nDays = calcStockDays(current, effectiveDaily, fallbackDays);
             if (o) merged += 1;
             loaded.push({
               id: inv.id || idx + 1,
               snapId: isSnap ? inv.id : 0,
-              whName: inv.warehouse || '상온',
+              whName: wh,
               vendor: inv.vendor || inv.product?.partner?.name || inv.product?.partnerId || '',
               orderSupplier: o?.supplier || '',
               orderDays: o ? Number(o.days) || 0 : 0,
-              itemCode: inv.productCode || inv.product?.productCode || '',
+              itemCode: cleanCode,
               lotNo: inv.lotNo || '',
               lotDate: inv.lastInDate || '',
-              itemType: inv.category || inv.product?.category || '원자재',
-              category: inv.product?.kind || '원부자재',
+              itemType: inv.itemType || inv.category || inv.product?.category || '원자재',
+              category: inv.product?.kind || inv.category || '원부자재',
               itemName: name,
-              spec: inv.product?.spec || '',
-        unit: inv.unit || inv.product?.unit || 'kg',
-        inboundDate: inv.lastInDate ? String(inv.lastInDate).slice(5) : inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2',
+              spec: inv.spec || inv.product?.spec || '',
+              unit: inv.unit || inv.product?.unit || 'kg',
+              inboundDate: inbound,
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
-                dailyUsage: dailyU,
-                packUnit: pack,
-                boxQty: box,
-                pieceQty: piece,
-                prevStock: current,
-                inQty: o ? Number(o.incoming) || 0 : 0,
-                outQty: 0,
-                currentStock: current,
-                safetyStock: safety,
-                shortage: current - safety,
-                status: calcStockStatus(current, safety),
-                stockDays: nDays,
-                gfsDays: (() => {
-                  const s = snapOf(inv.productCode || inv.product?.productCode || '', name);
-                  return s && s.stockDays != null ? Number(s.stockDays) : null;
-                })(),
-                gfsAsOf: snapAsOf,
-                burnRank: 0,
-                fefoWarn: false,
-                unitPrice: uprice,
-                totalAmount: current * uprice,
-              });
+              dailyUsage: dailyU,
+              estDailyUsage: estDaily,
+              estSampleCount: estSamples,
+              packUnit: pack,
+              boxQty: box,
+              pieceQty: piece,
+              prevStock: current,
+              inQty: o ? Number(o.incoming) || 0 : 0,
+              outQty: 0,
+              currentStock: current,
+              safetyStock: safety,
+              shortage: current - safety,
+              status: calcStockStatus(current, safety),
+              stockDays: nDays,
+              gfsDays: nDays,
+              gfsAsOf: snapAsOf,
+              burnRank: 0,
+              fefoWarn: false,
+              unitPrice: uprice,
+              totalAmount: current * uprice,
+            });
           });
-          // 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
-          // 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
+          // LIVE 모드에서 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
           let tempId = -(Date.now() % 1000000) - 1;
           const freshIds = new Set<number>();
-          if (orderByNorm.size > 0) {
+          if (!isSnap && orderByNorm.size > 0) {
             orderByNorm.forEach((o: any, norm: string) => {
               if (seen.has(norm) || !o.name) return;
+              const wh = o.warehouse || '상온';
               const pack = Number(o.packUnit) > 0 ? Number(o.packUnit) : 1;
               const current = Number(o.currentStock) || 0;
               const price = Number(o.bagPrice) || 0;
               const box = Math.floor(current / pack);
               const piece = Math.round((current % pack) * 10) / 10;
-              const daily = Number(o.dailyUsage) || 0;
+              const daily = Math.round((Number(o.dailyUsage) || 0) * 100) / 100;
+              const estEntry = lookupEst(wh, norm);
+              const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
+              const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
+              if (estDaily > 0) estMatched += 1;
               const leadM = /D-(\d+)/.exec(o.supplier || '');
-              const autoSafety = calcSafetyStock(daily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
+              const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
+              const s = snapOf(o.itemId || '', o.name || '');
+              const fallbackDays =
+                (s && s.stockDays != null ? Number(s.stockDays) : null) ??
+                (o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null);
+              const rowDays = calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays);
               const row: StockItem = {
                 id: tempId--,
-                whName: o.warehouse || '상온',
+                whName: wh,
                 vendor: o.vendor || '',
                 orderSupplier: o.supplier || '',
                 orderDays: Number(o.days) || 0,
@@ -772,6 +845,8 @@ export const StockLookupView: React.FC = () => {
                 expiryDate: '',
                 orderDay: '',
                 dailyUsage: daily,
+                estDailyUsage: estDaily,
+                estSampleCount: estSamples,
                 packUnit: pack,
                 boxQty: box,
                 pieceQty: piece,
@@ -782,11 +857,8 @@ export const StockLookupView: React.FC = () => {
                 safetyStock: autoSafety,
                 shortage: current - autoSafety,
                 status: calcStockStatus(current, autoSafety),
-                stockDays: o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null,
-                gfsDays: (() => {
-                  const s = snapOf(o.itemId || '', o.name || '');
-                  return s && s.stockDays != null ? Number(s.stockDays) : null;
-                })(),
+                stockDays: rowDays,
+                gfsDays: rowDays,
                 gfsAsOf: snapAsOf,
                 burnRank: 0,
                 fefoWarn: false,
@@ -799,20 +871,18 @@ export const StockLookupView: React.FC = () => {
             });
           }
           setData(applyBurnRank(loaded));
-          const dirty = new Set<number>(freshIds);
-          setDirtyRowIds(dirty);
+          setDirtyRowIds(new Set());
           setNewRowIds(freshIds);
-          setLocked(true);
           setSnapshotMode(isSnap);
           setMergeInfo(
             (isSnap && snapDate ? `${snapDate.slice(5)} 확정분 ${loaded.length}건 · ` : '') +
             (orderByNorm.size > 0
-              ? `정본 병합: ${merged}건 반영 · 신규 ${added}건${snapAsOf ? ` · 버팀일 ${snapAsOf} 기준${snapSrc.erp ? ` (LIVE ${snapSrc.erp}건)` : ''}` : ''}`
+              ? `정본 병합: ${merged}건 반영 · 추정일사용량 ${estMatched}건${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
               : orderJson?.data?.errors?.length
               ? `정본 실패: ${orderJson.data.errors[0]}`
               : orderJson && !orderJson.success
               ? `정본 실패: ${orderJson.error || '알 수 없음'}`
-              : '정본 없음 (DB만 표시)')
+              : `추정일사용량 ${estMatched}건`)
           );
         }
       })
@@ -888,14 +958,41 @@ export const StockLookupView: React.FC = () => {
           updated.currentStock = prevStock + inQty - outQty;
         }
 
-        const currentStock = Number(updated.currentStock) || 0;
-        const safetyStock = Number(updated.safetyStock) || 0;
-        const unitPrice = Number(updated.unitPrice) || 0;
+        // 현재고(또는 이월/입고/출고) 직접 수정 시 박스/낱개 역산 동기화
+        if (
+          columnKey === 'currentStock' ||
+          columnKey === 'prevStock' ||
+          columnKey === 'inQty' ||
+          columnKey === 'outQty'
+        ) {
+          const pack = Number(updated.packUnit) || 0;
+          const cur = Number(updated.currentStock) || 0;
+          if (pack > 0) {
+            updated.boxQty = Math.floor(cur / pack);
+            updated.pieceQty = Math.round((cur % pack) * 10) / 10;
+          }
+        }
 
-        // 과부족 및 재고금액 실시간 자동 계산
-        // 재고유지일은 발주서 N열 보이는 숫자 그대로 (편집으로 바뀌지 않음)
+        const currentStock = Number(updated.currentStock) || 0;
+        const unitPrice = Number(updated.unitPrice) || 0;
+        const dailyUsage = Number(updated.dailyUsage) || 0;
+        const estDaily = Number(updated.estDailyUsage) || 0;
+        const effectiveDaily = dailyUsage > 0 ? dailyUsage : estDaily;
+
+        if (columnKey === 'dailyUsage') {
+          updated.safetyStock = calcSafetyStock(
+            effectiveDaily,
+            Number(updated.packUnit) || 1,
+            parseLeadDays(updated.inboundDate || updated.orderSupplier || '')
+          );
+        }
+        const safetyStock = Number(updated.safetyStock) || 0;
+
+        // 과부족, 재고유지일 및 재고금액 실시간 자동 계산
         updated.shortage = currentStock - safetyStock;
         updated.status = calcStockStatus(currentStock, safetyStock);
+        updated.stockDays = calcStockDays(currentStock, effectiveDaily, updated.stockDays);
+        updated.gfsDays = updated.stockDays;
         updated.totalAmount = currentStock * unitPrice;
 
         return updated;
@@ -909,7 +1006,7 @@ export const StockLookupView: React.FC = () => {
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
   };
 
-  // ERP LIVE 재계산: 금일 수주 x BOM = 자재별 일사용량 → 버팀일 스냅샷 갱신 (GFS 없이)
+  // ERP LIVE 재계산: 금일 수주 x BOM = 자재별 일사용량 → 재고유지일 스냅샷 갱신
   const handleLiveRecalc = async () => {
     setIsLiving(true);
     try {
@@ -943,7 +1040,7 @@ export const StockLookupView: React.FC = () => {
         alert('스냅샷 저장 실패: ' + (saveJson.error || '알 수 없는 오류'));
         return;
       }
-      alert(`LIVE 재계산 완료 (${json.data.asOf} 수주 ${json.data.orderCount}건 · 메뉴 ${json.data.menuCount}종)\n버팀일 ${saveJson.data.saved}건 갱신됨`);
+      alert(`LIVE 재계산 완료 (${json.data.asOf} 수주 ${json.data.orderCount}건 · 메뉴 ${json.data.menuCount}종)\n재고유지일 ${saveJson.data.saved}건 갱신됨`);
       void loadByDate(targetDate);
     } catch (e: any) {
       alert('LIVE 계산 중 오류: ' + e.message);
@@ -1011,17 +1108,28 @@ export const StockLookupView: React.FC = () => {
           const vendor = String(r[1] ?? '').trim();
           const itemId = r[2] != null && String(r[2]).trim() !== '' ? String(r[2]).trim() : '';
           const inbound = String(r[4] ?? '').trim();
-          const daily = Number(r[5]) || 0;
+          const fCell = ws[XLSX.utils.encode_cell({ r: i, c: 5 })];
+          const fFormula = String(fCell?.f || '');
+          const rawDaily = Number(r[5]) || 0;
+          const daily =
+            rawDaily > 0 && (sheet !== '부자재' || fFormula.includes('/K')) && pack > 0
+              ? Math.round(rawDaily * pack * 100) / 100
+              : Math.round(rawDaily * 100) / 100;
+          const estEntry = estMapRef.current.byWhAndKey[`${sheet}|${norm}`] || estMapRef.current.byKeyOnly[norm] || null;
+          const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
+          const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
           const expiry = r[6] != null && String(r[6]).trim() !== '' ? String(r[6]).trim() : '';
           const exist = nextByNorm.get(norm);
           // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
-          const autoSafety = calcSafetyStock(daily, pack, parseLeadDays(inbound));
+          const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, parseLeadDays(inbound));
           if (exist) {
             const oldStock = exist.currentStock;
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
-            // 유지일: 발주서 N열 보이는 숫자 그대로
+            // 유지일: 현재고 ÷ 일사용량 실시간 계산 (폴백: 발주서 정본 N열)
             const oRef = orderByNorm.get(norm);
-            const nDays = oRef && oRef.stockDays != null ? Number(oRef.stockDays) : null;
+            const fallbackDays = oRef && oRef.stockDays != null ? Number(oRef.stockDays) : exist.stockDays;
+            const effDaily = daily || exist.dailyUsage || estDaily;
+            const nDays = calcStockDays(current, effDaily, fallbackDays);
             const changed =
               exist.whName !== sheet ||
               (vendor && exist.vendor !== vendor) ||
@@ -1036,6 +1144,8 @@ export const StockLookupView: React.FC = () => {
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
             if (inbound) exist.inboundDate = inbound;
             if (daily) exist.dailyUsage = daily;
+            exist.estDailyUsage = estDaily;
+            exist.estSampleCount = estSamples;
             if (expiry) exist.expiryDate = expiry;
             if (pack > 0) exist.packUnit = pack;
             exist.boxQty = box;
@@ -1062,7 +1172,7 @@ export const StockLookupView: React.FC = () => {
             const newSafety = autoSafety > 0 ? autoSafety : 0;
             if (autoSafety > 0) autoFilled += 1;
             const oo = orderByNorm.get(norm);
-            const nDays = oo && oo.stockDays != null ? Number(oo.stockDays) : null;
+            const nDays = calcStockDays(current, daily > 0 ? daily : estDaily, oo && oo.stockDays != null ? Number(oo.stockDays) : null);
             const row: StockItem = {
               id: tempId--,
               whName: sheet,
@@ -1083,23 +1193,25 @@ export const StockLookupView: React.FC = () => {
               expiryDate: expiry,
               orderDay: '',
               dailyUsage: daily,
+              estDailyUsage: estDaily,
+              estSampleCount: estSamples,
               packUnit: pack,
               boxQty: box,
               pieceQty: piece,
-                prevStock: current,
-                inQty: 0,
-                outQty: 0,
-                currentStock: current,
-                safetyStock: newSafety,
-                shortage: current - newSafety,
-                status: calcStockStatus(current, newSafety),
-                stockDays: nDays,
-                gfsDays: null,
-                gfsAsOf: '',
-                unitPrice: price,
-                totalAmount: current * price,
-              };
-              next.push(row);
+              prevStock: current,
+              inQty: 0,
+              outQty: 0,
+              currentStock: current,
+              safetyStock: newSafety,
+              shortage: current - newSafety,
+              status: calcStockStatus(current, newSafety),
+              stockDays: nDays,
+              gfsDays: null,
+              gfsAsOf: '',
+              unitPrice: price,
+              totalAmount: current * price,
+            };
+            next.push(row);
             nextByNorm.set(norm, row);
             freshIds.add(row.id);
             dirtyIds.add(row.id);
@@ -1121,7 +1233,6 @@ export const StockLookupView: React.FC = () => {
       setReviewList(review);
       setReviewOpen(review.length > 0);
       alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건 · 확인필요 ${review.length}건\n확인 후 저장(Ctrl+S)하세요. ${targetDate} 날짜 확정분으로 저장됩니다. 신규는 저장 시 품목 자동생성됩니다.`);
-      setLocked(true);
     } catch (e: any) {
       alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
     } finally {
@@ -1145,6 +1256,7 @@ export const StockLookupView: React.FC = () => {
       const existingInv = existing.filter((d) => !(d.snapId || 0));
       const existingSnap = existing.filter((d) => (d.snapId || 0) > 0);
       const isToday = targetDate === kstToday();
+      const shouldSyncLive = isToday || !snapshotMode || existingInv.length > 0;
 
       // 1) 신규행: 품목 자동생성(materialize) — 스냅샷/재고 공통으로 품번 확보
       const codeByNorm = new Map<string, string>();
@@ -1210,14 +1322,15 @@ export const StockLookupView: React.FC = () => {
         return;
       }
 
-      // 3) 오늘분이면 현재고(Inventory)에도 반영 — 과거 날짜는 스냅샷만 저장
-      if (isToday) {
+      // 3) 오늘분이거나 LIVE 재고 수정 시 현재고(Inventory)에도 반영
+      if (shouldSyncLive) {
         // 3-1) 기존 현재고행: PUT 일괄 갱신 (스냅샷행 제외 — 품번+창고 기준 upsert로 처리)
         if (existingInv.length > 0) {
           const updates = existingInv.map((d) => ({
             id: d.id,
             warehouse: d.whName,
             currentQty: d.currentStock,
+            dailyUsage: d.dailyUsage,
             unitPrice: d.unitPrice,
             stockAmount: d.totalAmount,
             safetyStock: d.safetyStock,
@@ -1264,7 +1377,7 @@ export const StockLookupView: React.FC = () => {
 
       setDirtyRowIds(new Set());
       setNewRowIds(new Set());
-      alert(`저장 완료 (${targetDate} 확정분 ${snapJson.count}건${isToday ? ' · 현재고 반영' : ''})`);
+      alert(`저장 완료 (${targetDate} 확정분 ${snapJson.count}건${shouldSyncLive ? ' · 현재고 반영' : ''})`);
       void loadByDate(targetDate);
     } catch (err: any) {
       console.error(err);
@@ -1298,7 +1411,7 @@ export const StockLookupView: React.FC = () => {
       if (selectedStatus !== '전체' && item.status !== selectedStatus) return false;
       if (selectedExpiry !== '전체') {
         const dd = expiryInDays(item.expiryDate, targetDate);
-        if (dd < 0) return false;
+        if (dd === null) return false;
         if (selectedExpiry === '만료' && dd >= 0) return false;
         if (selectedExpiry === 'D-7' && !(dd >= 0 && dd <= 7)) return false;
         if (selectedExpiry === 'D-30' && !(dd >= 0 && dd <= 30)) return false;
@@ -1345,34 +1458,27 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'whName',
       label: locked ? '창고명 🔒' : '창고명',
-      width: '110px',
+      width: '56px',
       align: 'center',
       sortable: true,
       filterable: true,
+      editable: !locked,
       ...(locked ? { format: 'text' as const } : { format: 'dropdown' as const, options: WAREHOUSES }),
     },
     {
       key: 'vendor',
       label: '거래처',
-      width: '140px',
+      width: '82px',
       align: 'left',
       sortable: true,
       filterable: true,
       editable: false,
+      render: (v) => <span title={String(v || '')}>{v}</span>,
     },
     {
       key: 'itemCode',
       label: '품번',
-      width: '90px',
-      align: 'center',
-      sortable: true,
-      filterable: true,
-      editable: false,
-    },
-    {
-      key: 'lotNo',
-      label: 'LOT번호',
-      width: '120px',
+      width: '54px',
       align: 'center',
       sortable: true,
       filterable: true,
@@ -1381,7 +1487,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemType',
       label: '구분',
-      width: '70px',
+      width: '46px',
       align: 'center',
       sortable: true,
       editable: false,
@@ -1389,7 +1495,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'category',
       label: '품종',
-      width: '90px',
+      width: '54px',
       align: 'center',
       sortable: true,
       editable: false,
@@ -1397,52 +1503,89 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemName',
       label: '품명',
-      minWidth: '220px',
       sortable: true,
       filterable: true,
       editable: false,
-    },
-    {
-      key: 'spec',
-      label: '규격',
-      width: '90px',
-      align: 'center',
-      editable: false,
+      render: (v) => (
+        <span className="font-medium text-gray-900" title={String(v || '')}>
+          {v}
+        </span>
+      ),
     },
     {
       key: 'unit',
       label: '단위',
-      width: '60px',
+      width: '38px',
       align: 'center',
       editable: false,
     },
     {
       key: 'inboundDate',
       label: '입고일',
-      width: '70px',
+      width: '46px',
       align: 'center',
       editable: false,
     },
     {
       key: 'dailyUsage',
-      label: '일사용량',
-      width: '85px',
+      label: locked ? '일사용량 🔒' : '일사용량',
+      width: '74px',
       align: 'right',
       format: 'number',
-      editable: false,
+      sortable: true,
+      editable: !locked,
+      render: (v, row) => {
+        const num = Number(v);
+        if (!(num > 0)) return <span className="text-gray-400">-</span>;
+        const pack = Number(row.packUnit) || 1;
+        const disp = Number(num.toFixed(2)).toLocaleString();
+        const boxTxt = pack > 1 ? `(${Number((num / pack).toFixed(1))}박)` : '';
+        return (
+          <span
+            className="font-mono text-gray-800 whitespace-nowrap"
+            title={
+              pack > 1
+                ? `기준 일사용량: ${disp} (현재고 기준 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
+                : `기준 일사용량: ${disp} (현재고 기준 단위)`
+            }
+          >
+            {disp}
+            {boxTxt && <span className="ml-0.5 text-[10px] text-gray-500 font-sans">{boxTxt}</span>}
+          </span>
+        );
+      },
     },
     {
-      key: 'expiryDate',
-      label: locked ? '유통기한 🔒' : '유통기한',
-      width: '95px',
-      align: 'center',
-      format: 'date',
-      editable: !locked,
+      key: 'estDailyUsage',
+      label: '추정일사용량',
+      width: '78px',
+      align: 'right',
+      format: 'number',
+      sortable: true,
+      editable: false,
+      render: (v, row) => {
+        const num = Number(v);
+        if (!(num > 0)) return <span className="text-gray-400">-</span>;
+        const pack = Number(row.packUnit) || 1;
+        const disp = Number(num.toFixed(2)).toLocaleString();
+        const boxTxt = pack > 1 ? `(${Number((num / pack).toFixed(1))}박)` : '';
+        return (
+          <span
+            className="font-mono font-bold text-indigo-700 whitespace-nowrap"
+            title={`1개월(10/1~11/2) 재고조사표 실소진 역산 추정: 일평균 ${disp}${
+              pack > 1 ? ` (약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})` : ''
+            } · 소진관측 ${row.estSampleCount || 0}회`}
+          >
+            {disp}
+            {boxTxt && <span className="ml-0.5 text-[10px] text-indigo-500 font-normal font-sans">{boxTxt}</span>}
+          </span>
+        );
+      },
     },
     {
       key: 'packUnit',
       label: '입수량',
-      width: '70px',
+      width: '44px',
       align: 'right',
       format: 'number',
       editable: false,
@@ -1450,7 +1593,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'boxQty',
       label: locked ? '박스 🔒' : '박스',
-      width: '75px',
+      width: '44px',
       align: 'right',
       format: 'number',
       editable: !locked,
@@ -1458,22 +1601,15 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'pieceQty',
       label: locked ? '낱개 🔒' : '낱개',
-      width: '75px',
+      width: '44px',
       align: 'right',
       format: 'number',
       editable: !locked,
     },
     {
-      key: 'orderDay',
-      label: '발주일',
-      width: '80px',
-      align: 'center',
-      editable: false,
-    },
-    {
       key: 'prevStock',
       label: '이월재고',
-      width: '90px',
+      width: '56px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1482,16 +1618,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'inQty',
       label: '입고수량',
-      width: '90px',
-      align: 'right',
-      format: 'number',
-      sortable: true,
-      editable: true,
-    },
-    {
-      key: 'outQty',
-      label: '출고수량',
-      width: '90px',
+      width: '54px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1500,7 +1627,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'currentStock',
       label: locked ? '현재고 🔒' : '현재고',
-      width: '100px',
+      width: '58px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1517,69 +1644,25 @@ export const StockLookupView: React.FC = () => {
       ),
     },
     {
-      key: 'burnRank',
-      label: '소진순위',
-      width: '80px',
-      align: 'center',
-      sortable: true,
-      editable: false,
-      render: (v, row) => {
-        const circled = ['', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
-        const label = Number(v) > 0 && Number(v) <= 9 ? circled[Number(v)] : `${v}순위`;
-        return (
-          <span className="inline-flex items-center gap-1" title={row.fefoWarn ? '나중 LOT 유통기한이 더 빠름 (FEFO 역전 주의)' : `소진 ${v}순위 (선입선출)`}>
-            <span className="inline-block px-1.5 py-0.2 text-[12px] font-black rounded bg-indigo-50 text-indigo-700 border border-indigo-300">
-              {label}
-            </span>
-            {row.fefoWarn && <span className="text-[13px]" title="FEFO 역전: 나중 LOT이 먼저 상함">⚠️</span>}
-          </span>
-        );
-      },
-    },
-    {
       key: 'stockDays',
       label: '재고유지일',
-      width: '85px',
+      width: '60px',
       align: 'right',
       sortable: true,
       editable: false,
-      render: (v, row) => (
-        <span className={`font-mono ${v != null ? 'text-gray-900' : 'text-gray-400'}`}>
-          {v != null && !isNaN(Number(v)) ? `${Number(v).toFixed(2)}일` : '-'}
-        </span>
-      ),
-    },
-    {
-      key: 'gfsDays',
-      label: '버팀일(GFS)',
-      width: '85px',
-      align: 'right',
-      sortable: true,
-      editable: false,
-      render: (v) => (
-        <span className={`font-mono ${v != null ? 'text-indigo-700 font-bold' : 'text-gray-400'}`}>
-          {v != null && !isNaN(Number(v)) ? `${Number(v).toFixed(1)}일` : '-'}
-        </span>
-      ),
-    },
-    {
-      key: 'gfsDiff',
-      label: '차이',
-      width: '70px',
-      align: 'right',
-      sortable: false,
-      editable: false,
-      render: (_, row) => {
-        const a = Number(row.stockDays);
-        const b = Number(row.gfsDays);
-        if (row.stockDays == null || row.gfsDays == null || isNaN(a) || isNaN(b)) {
-          return <span className="text-gray-300">-</span>;
-        }
-        const d = b - a;
-        if (Math.abs(d) < 0.05) return <span className="text-gray-500">일치</span>;
+      render: (v) => {
+        const num = Number(v);
+        const hasVal = v != null && v !== '' && !isNaN(num);
+        const colorCls = !hasVal
+          ? 'text-gray-400'
+          : num < 1.5
+          ? 'text-red-600 font-bold'
+          : num < 3
+          ? 'text-amber-700 font-bold'
+          : 'text-indigo-700 font-bold';
         return (
-          <span className={`font-mono font-bold ${d > 0 ? 'text-blue-700' : 'text-red-600'}`}>
-            {d > 0 ? `+${d.toFixed(1)}` : d.toFixed(1)}
+          <span className={`font-mono ${colorCls}`}>
+            {hasVal ? `${num.toFixed(1)}일` : '-'}
           </span>
         );
       },
@@ -1587,15 +1670,33 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'safetyStock',
       label: '안전재고',
-      width: '85px',
+      width: '54px',
       align: 'right',
       format: 'number',
+      sortable: true,
       editable: true,
+      render: (v, row) => {
+        const num = Number(v) || 0;
+        const effDaily = Number(row.dailyUsage) > 0 ? Number(row.dailyUsage) : Number(row.estDailyUsage) || 0;
+        const lead = parseLeadDays(row.inboundDate || row.orderSupplier || '');
+        return (
+          <span
+            className="font-mono text-gray-800"
+            title={
+              effDaily > 0
+                ? `자동 산출: ROUND(일소모량 ${Number(effDaily.toFixed(2))} × 조달 ${lead}일(${row.inboundDate || 'D+2'}) × 1.5) = ${num.toLocaleString()} (클릭하여 직접 수정 가능)`
+                : '일사용량 미확인 품목 (클릭하여 직접 입력 가능)'
+            }
+          >
+            {num > 0 ? num.toLocaleString() : '-'}
+          </span>
+        );
+      },
     },
     {
       key: 'shortage',
       label: '과부족',
-      width: '90px',
+      width: '54px',
       align: 'right',
       format: 'number',
       highlightNegative: true,
@@ -1610,7 +1711,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'status',
       label: '상태',
-      width: '65px',
+      width: '44px',
       align: 'center',
       sortable: true,
       filterable: true,
@@ -1626,7 +1727,7 @@ export const StockLookupView: React.FC = () => {
             ? 'bg-amber-100 text-amber-800 border-amber-300'
             : 'bg-emerald-50 text-emerald-700 border-emerald-300';
         return (
-          <span className={`inline-block px-1.5 py-0.2 text-[11px] font-bold border rounded ${cls}`}>
+          <span className={`inline-block px-1 py-0.2 text-[10.5px] font-bold border rounded ${cls}`}>
             {s}
           </span>
         );
@@ -1635,7 +1736,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'unitPrice',
       label: locked ? '단가 🔒' : '단가',
-      width: '90px',
+      width: '60px',
       align: 'right',
       format: 'currency',
       editable: !locked,
@@ -1643,7 +1744,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'totalAmount',
       label: '재고금액',
-      width: '120px',
+      width: '80px',
       align: 'right',
       format: 'currency',
       sortable: true,
@@ -1692,7 +1793,7 @@ export const StockLookupView: React.FC = () => {
           },
           {
             key: 'live',
-            label: isLiving ? 'LIVE 계산중...' : '버팀일 LIVE 재계산',
+            label: isLiving ? 'LIVE 계산중...' : '재고유지일 LIVE 재계산',
             icon: 'search',
             onClick: handleLiveRecalc,
           },
@@ -1722,39 +1823,47 @@ export const StockLookupView: React.FC = () => {
         }}
       />
 
-      {/* 2. Filter Bar */}
-      <div className="bg-[#e4e8ee] border-b border-[#b0b8c2] px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-[12px] shrink-0">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 min-w-0">
+      {/* 2. Filter Bar (단일 1줄 레이아웃) */}
+      <div className="bg-[#e4e8ee] border-b border-[#b0b8c2] px-3 py-1 flex items-center justify-between gap-x-2.5 text-[12px] shrink-0 overflow-x-auto whitespace-nowrap">
+        <div className="flex items-center gap-x-2.5 min-w-0">
           {/* Target Date with prev/next */}
-          <div className="flex items-center gap-1">
-            <span className="font-semibold whitespace-nowrap text-gray-700">기준일자</span>
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="font-semibold text-gray-700">기준일</span>
             <button
               onClick={() => shiftDay(-1)}
-              className="p-1 bg-white border border-gray-400 rounded hover:bg-gray-100"
+              className="p-0.5 bg-white border border-gray-400 rounded hover:bg-gray-100"
+              title="이전 날짜"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <input
               type="date"
               value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
+              onChange={(e) => {
+                const next = e.target.value;
+                setTargetDate(next);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+                  void loadByDate(next);
+                }
+              }}
+              className="bg-white border border-gray-400 rounded px-1.5 py-0.5 text-[12px]"
             />
             <button
               onClick={() => shiftDay(1)}
-              className="p-1 bg-white border border-gray-400 rounded hover:bg-gray-100"
+              className="p-0.5 bg-white border border-gray-400 rounded hover:bg-gray-100"
+              title="다음 날짜"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* Warehouse */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-semibold whitespace-nowrap text-gray-700">보관창고</span>
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="font-semibold text-gray-700">창고</span>
             <select
               value={selectedWh}
               onChange={(e) => setSelectedWh(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
+              className="bg-white border border-gray-400 rounded px-1.5 py-0.5 text-[12px]"
             >
               <option value="전체">전체</option>
               {WAREHOUSES.map((w) => (
@@ -1765,30 +1874,13 @@ export const StockLookupView: React.FC = () => {
             </select>
           </div>
 
-          {/* Item Type */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-semibold whitespace-nowrap text-gray-700">품목구분</span>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
-            >
-              <option value="전체">전체</option>
-              {ITEM_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Vendor (제조사) */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-semibold whitespace-nowrap text-gray-700">거래처</span>
+          {/* Vendor (거래처) */}
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="font-semibold text-gray-700">거래처</span>
             <select
               value={selectedVendor}
               onChange={(e) => setSelectedVendor(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] max-w-[160px]"
+              className="bg-white border border-gray-400 rounded px-1.5 py-0.5 text-[12px] max-w-[130px]"
             >
               <option value="전체">전체</option>
               {vendors.map((v) => (
@@ -1800,12 +1892,12 @@ export const StockLookupView: React.FC = () => {
           </div>
 
           {/* Stock Status */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-semibold whitespace-nowrap text-gray-700">재고상태</span>
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="font-semibold text-gray-700">상태</span>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
+              className="bg-white border border-gray-400 rounded px-1.5 py-0.5 text-[12px]"
             >
               {['전체', '정상', '부족', '과잉', '품절'].map((s) => (
                 <option key={s} value={s}>
@@ -1815,66 +1907,51 @@ export const StockLookupView: React.FC = () => {
             </select>
           </div>
 
-          {/* Expiry */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-semibold whitespace-nowrap text-gray-700">유통기한</span>
-            <select
-              value={selectedExpiry}
-              onChange={(e) => setSelectedExpiry(e.target.value)}
-              className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px]"
-            >
-              {['전체', '만료', 'D-7', 'D-30'].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Search keyword */}
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center">
             <div className="relative">
               <input
                 type="text"
-                placeholder="품명/품번/품종/거래처 검색"
+                placeholder="품명/품번/거래처 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="bg-white border border-gray-400 rounded px-2 py-0.5 text-[12px] w-44"
+                className="bg-white border border-gray-400 rounded pl-2 pr-6 py-0.5 text-[12px] w-40"
               />
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1.5 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute right-1.5 top-1.5 pointer-events-none" />
             </div>
           </div>
 
           {/* Safety Shortage Filter */}
-          <label className="flex shrink-0 items-center gap-1.5 cursor-pointer whitespace-nowrap text-red-700 font-semibold">
+          <label className="flex shrink-0 items-center gap-1 cursor-pointer text-red-700 font-semibold">
             <input
               type="checkbox"
               checked={onlyShortage}
               onChange={(e) => setOnlyShortage(e.target.checked)}
               className="rounded border-red-400 text-red-600 focus:ring-0"
             />
-            <span>안전재고 미달 품목만 보기</span>
+            <span>안전재고 미달만</span>
           </label>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 ml-auto">
+        <div className="flex shrink-0 items-center gap-2 ml-auto">
           {dirtyRowIds.size > 0 && (
-            <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded text-[11px] font-bold animate-pulse">
-              수정됨: {dirtyRowIds.size}건
+            <span className="bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded text-[11px] font-bold animate-pulse">
+              수정 {dirtyRowIds.size}건
             </span>
           )}
-          <span className="text-[12px] font-bold text-gray-700">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-gray-700" title={mergeInfo}>
             {snapshotMode ? (
-              <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs">
+              <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded text-[11px] font-bold">
                 {targetDate.slice(5)} 확정분
               </span>
             ) : (
-              <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded text-[11px] font-bold shadow-2xs">
+              <span className="bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded text-[11px] font-bold">
                 현재고 LIVE
               </span>
-            )}{' '}
-            데이터수: <span className="text-blue-700">{filteredData.length.toLocaleString()}</span>
-            {mergeInfo && <span className="ml-2 text-[11px] font-medium text-emerald-700">· {mergeInfo}</span>}
+            )}
+            <span>
+              총 <span className="text-blue-700">{filteredData.length.toLocaleString()}</span>건
+            </span>
           </span>
           <button
             onClick={() => {
@@ -1886,7 +1963,7 @@ export const StockLookupView: React.FC = () => {
               setSelectedExpiry('전체');
               setOnlyShortage(false);
             }}
-            title="새로고침"
+            title="필터 초기화"
             className="p-1 text-gray-600 hover:text-black rounded hover:bg-gray-200 transition-colors"
           >
             <RotateCw className="w-3.5 h-3.5" />
@@ -2033,9 +2110,7 @@ export const StockLookupView: React.FC = () => {
             onRowClick={(row) => setSelectedRowId(row.id)}
             onCellChange={handleCellChange}
             showRowIndex={true}
-            summaryRow={true}
-            summaryRowTitle="합계"
-            summaryValues={summaries}
+            summaryRow={false}
             enablePagination={false}
           />
         </div>

@@ -10,6 +10,11 @@ function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
+
 interface UndelivSummaryRow {
   id: string;
   clientName: string;
@@ -38,8 +43,8 @@ interface UndelivDetailRow {
 }
 
 export const UndeliveredStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [summaries, setSummaries] = useState<UndelivSummaryRow[]>([]);
   const [selectedCenter, setSelectedCenter] = useState<string>('');
   const [details, setDetails] = useState<Record<string, UndelivDetailRow[]>>({});
@@ -61,8 +66,26 @@ export const UndeliveredStatusView: React.FC = () => {
           sum = { id: center, clientName: center, shift1Qty: 0, shift2Qty: 0, totalQty: 0, shift1Amt: 0, shift2Amt: 0, totalAmt: 0 };
           sumMap.set(center, sum);
         }
-        // 편수 판정: 1편 수량>0이면 1편, 2편 수량>0이면 2편 (둘 다 있으면 분할 불가 → 1편 우선 표기 대신 합산 기준으로 분리 불가이므로 원주문 편수 사용 불가 → 수량 비율 배분 제외, 주문 shift 사용)
-        const isShift2 = (r.shift || '') === '2편';
+        // 편수 판정: 주문 shift가 1편/2편이면 그대로, '전체'면明細 편수량 기준 1편 우선 배분
+        // (1편분부터 납품된 것으로 가정: 미납 = 잔여분, 합계는 미납총량과 일치)
+        const un = Number(r.unDelivQty) || 0;
+        const unAmt = Number(r.unDelivAmt) || 0;
+        const q1 = Number(r.orderQty1) || 0;
+        const q2 = Number(r.orderQty2) || 0;
+        let u1 = 0;
+        let u2 = 0;
+        if ((r.shift || '') === '2편') {
+          u2 = un;
+        } else if ((r.shift || '') === '1편' || q1 + q2 <= 0) {
+          u1 = un;
+        } else {
+          const delivered = Math.max(0, q1 + q2 - un);
+          const d1 = Math.min(delivered, q1);
+          u1 = Math.max(0, Math.round(q1 - d1));
+          u2 = Math.max(0, un - u1);
+        }
+        const ua1 = un > 0 ? Math.round((unAmt * u1) / un) : 0;
+        const ua2 = unAmt - ua1;
         //明細 단위 납품은 편수 구분이 없으므로, 주문明細의 편수별 잔량으로 계산
         if (!detMap[center]) detMap[center] = [];
         detMap[center].push({
@@ -82,13 +105,10 @@ export const UndeliveredStatusView: React.FC = () => {
         });
         sum.totalQty += r.unDelivQty || 0;
         sum.totalAmt += r.unDelivAmt || 0;
-        if (isShift2) {
-          sum.shift2Qty += r.unDelivQty || 0;
-          sum.shift2Amt += r.unDelivAmt || 0;
-        } else {
-          sum.shift1Qty += r.unDelivQty || 0;
-          sum.shift1Amt += r.unDelivAmt || 0;
-        }
+        sum.shift1Qty += u1;
+        sum.shift1Amt += ua1;
+        sum.shift2Qty += u2;
+        sum.shift2Amt += ua2;
       });
 
       const loaded = [...sumMap.values()].sort((a, b) => b.totalQty - a.totalQty);
@@ -124,9 +144,10 @@ export const UndeliveredStatusView: React.FC = () => {
   );
 
   const handleReset = () => {
+    const s = kstDaysAgo(29);
     const t = kstToday();
-    setStartDate(t); setEndDate(t);
-    void loadData(t, t);
+    setStartDate(s); setEndDate(t);
+    void loadData(s, t);
   };
 
   return (
@@ -223,7 +244,7 @@ export const UndeliveredStatusView: React.FC = () => {
 
           <div className="flex-1 overflow-auto">
             {currentDetails.length === 0 ? (
-              <div className="py-10 text-center text-gray-400">미출明细이 없습니다.</div>
+              <div className="py-10 text-center text-gray-400">미출 내역이 없습니다.</div>
             ) : (
             <EditableTableWrapper readOnly><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
               <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">

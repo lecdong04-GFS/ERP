@@ -1,6 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function toLocalISODate(d: Date): string {
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 import { InventoryActionBar } from '../common/InventoryActionBar';
 import { InventoryDataGrid, InventoryGridColumnDef } from '../common/InventoryDataGrid';
 import { Calendar, RotateCw } from 'lucide-react';
@@ -23,54 +32,73 @@ interface DiscardDetailRow {
   discardAmount: number;
 }
 
-const SAMPLE_SUMMARY: DiscardSummaryRow[] = [
-  { id: 1, discardDate: '2026-10-30', discardAmount: 184500 },
-  { id: 2, discardDate: '2026-10-29', discardAmount: 242000 },
-  { id: 3, discardDate: '2026-10-28', discardAmount: 156000 },
-];
 
-const SAMPLE_DETAILS: DiscardDetailRow[] = [
-  { id: 1, discardDate: '2026-10-30', gyeName: '성형장(김밥)', category: '반제품', itemName: '참치마요김밥(밥김)', spec: '230g*1줄', unit: 'kg', discardQty: 5.2, discardAmount: 48500 },
-  { id: 2, discardDate: '2026-10-30', gyeName: '조리실(데침/삶기)', category: '원재료', itemName: '시금치(데침용)', spec: '10kg/상자', unit: 'kg', discardQty: 8.0, discardAmount: 64000 },
-  { id: 3, discardDate: '2026-10-30', gyeName: '튀김실(튀김)', category: '반제품', itemName: '등심돈까스 튀김', spec: '120g*10ea', unit: 'kg', discardQty: 4.5, discardAmount: 72000 },
-  { id: 4, discardDate: '2026-10-29', gyeName: '성형장(도시락)', category: '반제품', itemName: '11찬도시락 밥반찬', spec: '460g*1팩', unit: 'kg', discardQty: 12.0, discardAmount: 132000 },
-  { id: 5, discardDate: '2026-10-29', gyeName: '선별실(커팅)', category: '원재료', itemName: '양배추(세척)', spec: '15kg/망', unit: 'kg', discardQty: 15.0, discardAmount: 110000 },
-  { id: 6, discardDate: '2026-10-28', gyeName: '취반(미반류)', category: '반제품', itemName: '백미 초밥미반', spec: '50kg*1통', unit: 'kg', discardQty: 20.0, discardAmount: 156000 },
-];
 
 export const DiscardStatusGsrView: React.FC = () => {
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const [startDate, setStartDate] = useState(kstToday);
+  const [endDate, setEndDate] = useState(kstToday);
   const [periodType, setPeriodType] = useState('일간');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-10-30');
-  const [details, setDetails] = useState<DiscardDetailRow[]>(SAMPLE_DETAILS);
+  const [selectedDate, setSelectedDate] = useState<string>(kstToday());
+  const [details, setDetails] = useState<DiscardDetailRow[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/production/discard')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const mapped: DiscardDetailRow[] = json.data.map((item: any, idx: number) => ({
-            id: item.id || idx + 1,
-            discardDate: item.discardDate || '2026-10-30',
-            gyeName: item.gyeName || '성형장(김밥)',
-            category: item.category || '원재료',
-            itemName: item.productName || item.productCode || '폐기품목',
-            spec: '표준규격',
-            unit: item.unit || 'kg',
-            discardQty: Number(item.discardQty) || 0,
-            discardAmount: Number(item.costAmount) || 0,
-          }));
-          setDetails(mapped);
+  const loadDiscards = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetch('/api/production/discard', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const mapped: DiscardDetailRow[] = json.data.map((item: any, idx: number) => ({
+          id: item.id ?? idx + 1,
+          discardDate: String(item.discardDate || '').slice(0, 10) || kstToday(),
+          gyeName: String(item.gyeName || item.gyeId || '미지정'),
+          category: String(item.category || '원재료'),
+          itemName: String(item.productName || item.productCode || item.name || ''),
+          spec: String(item.spec || ''),
+          unit: String(item.unit || 'ea'),
+          discardQty: Number(item.discardQty) || 0,
+          discardAmount: Math.round(Number(item.discardAmount ?? item.costAmount) || 0),
+        }));
+        setDetails(mapped);
+        const dates = [...new Set(mapped.map((d) => d.discardDate))].sort();
+        if (dates.length > 0) {
+          const latest = dates[dates.length - 1];
+          setStartDate(latest);
+          setEndDate(latest);
+          setSelectedDate(latest);
         }
-      })
-      .catch((err) => console.error('Fetch discard failed:', err));
+      } else {
+        setDetails([]);
+      }
+    } catch (err) {
+      console.error('Fetch discard failed:', err);
+      setDetails([]);
+    } finally {
+      setLoadingList(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void loadDiscards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 기간 내 일자별 합계 (요약 그리드용 — 실측 집계)
+  const summaries = useMemo(() => {
+    const map = new Map<string, number>();
+    details.forEach((d) => {
+      if (d.discardDate < startDate || d.discardDate > endDate) return;
+      map.set(d.discardDate, (map.get(d.discardDate) || 0) + (Number(d.discardAmount) || 0));
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .map(([discardDate, discardAmount], idx) => ({ id: idx + 1, discardDate, discardAmount: Math.round(discardAmount) }));
+  }, [details, startDate, endDate]);
+
   const handleShiftDay = (direction: -1 | 1) => {
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     cur.setDate(cur.getDate() + direction);
-    const newStr = cur.toISOString().split('T')[0];
+    const newStr = toLocalISODate(cur);
     setStartDate(newStr);
     setEndDate(newStr);
     setSelectedDate(newStr);
@@ -78,22 +106,22 @@ export const DiscardStatusGsrView: React.FC = () => {
 
   const handlePeriodChange = (val: string) => {
     setPeriodType(val);
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     if (val === '일간') {
       setEndDate(startDate);
     } else if (val === '주간') {
       const end = new Date(cur);
       end.setDate(end.getDate() + 6);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     } else if (val === '월간') {
       const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     }
   };
 
   // Filter details by selected date
   const filteredDetails = details.filter((d) => d.discardDate === selectedDate);
-  const displayDetails = filteredDetails.length > 0 ? filteredDetails : details;
+  const displayDetails = filteredDetails;
 
   // Left columns
   const SUMMARY_COLUMNS: InventoryGridColumnDef[] = [
@@ -125,8 +153,8 @@ export const DiscardStatusGsrView: React.FC = () => {
       <InventoryActionBar
         title="폐기현황(GSR)"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', onClick: () => alert('폐기현황이 조회되었습니다.') },
-          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('조회 조건이 초기화되었습니다.') },
+          { key: 'search', label: '조회', icon: 'search', onClick: () => void loadDiscards() },
+          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); setSelectedDate(t); setPeriodType('일간'); void loadDiscards(); } },
         ]}
         helpContent="일자별/공정별 발생한 원부자재 및 반제품 폐기 실적 및 폐기금액을 종합 조회합니다."
       />
@@ -192,7 +220,7 @@ export const DiscardStatusGsrView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => alert('새로고침')}
+            onClick={() => void loadDiscards()}
             className="p-1 text-gray-600 hover:text-blue-700 hover:bg-gray-200 rounded border border-gray-300 bg-white cursor-pointer shadow-2xs"
             title="새로고침"
           >
@@ -208,15 +236,15 @@ export const DiscardStatusGsrView: React.FC = () => {
           <div className="bg-[#dfe3ec] px-2.5 py-1 flex items-center justify-between border-b border-[#b0b8c8]">
             <span className="font-bold text-gray-800">요약</span>
             <span className="text-[11px] text-gray-600 font-medium">
-              데이터수: <span className="font-bold text-blue-700">{SAMPLE_SUMMARY.length}</span>
+                데이터수: <span className="font-bold text-blue-700">{summaries.length}</span>
             </span>
           </div>
 
           <div className="flex-1 min-h-0">
-            <InventoryDataGrid
-              columns={SUMMARY_COLUMNS}
-              data={SAMPLE_SUMMARY}
-              selectedRowId={selectedDate}
+              <InventoryDataGrid
+                columns={SUMMARY_COLUMNS}
+                data={summaries}
+                selectedRowId={summaries.find((x) => x.discardDate === selectedDate)?.id}
               onRowClick={(row) => setSelectedDate(row.discardDate)}
               summaryValues={{
                 discardAmount: 0,

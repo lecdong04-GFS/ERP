@@ -149,6 +149,12 @@ export function inferMenuKind(menu: string): string {
 
 export const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
 
+/** Next.js ESM 번들(xlsx.mjs)에서 XLSX.readFile이 _fs 미바인딩으로 실패하는 문제 방지 */
+export function readWorkbookFromFile(filePath: string): XLSX.WorkBook {
+  const buf = fs.readFileSync(filePath);
+  return XLSX.read(buf, { type: 'buffer' });
+}
+
 /** 프로젝트 루트 기준 엑셀 경로 탐색 (GFS-ERP 안에 커밋된 정본 우선) */
 function findFile(candidates: string[]): string | null {
   const root = process.cwd();
@@ -159,13 +165,13 @@ function findFile(candidates: string[]): string | null {
   return null;
 }
 
-/** 루트에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 제외) */
+/** 루트에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 및 macOS NFD 정규화 대응) */
 function findLatestByPattern(pattern: RegExp): string | null {
   const root = process.cwd();
   try {
     const hits = fs
       .readdirSync(root)
-      .filter((f) => !f.startsWith('~$') && pattern.test(f))
+      .filter((f) => !f.startsWith('~$') && pattern.test(f.normalize('NFC')))
       .map((f) => {
         const p = path.join(root, f);
         return { p, m: fs.statSync(p).mtimeMs };
@@ -293,7 +299,7 @@ export function loadCanonicalFromRepo(): {
   const orderFile = getOrderSheetFilePath();
   if (auditFile) {
     try {
-      const wb = XLSX.readFile(auditFile);
+      const wb = readWorkbookFromFile(auditFile);
       audit = [...buildAuditMap(wb).values()];
     } catch (e: any) {
       errors.push(`재고조사표 로드 실패: ${e?.message || e}`);
@@ -303,7 +309,7 @@ export function loadCanonicalFromRepo(): {
   }
   if (orderFile) {
     try {
-      const wb = XLSX.readFile(orderFile);
+      const wb = readWorkbookFromFile(orderFile);
       const parsed = parseOrderSheet(wb);
       orderItems = parsed.items;
       suppliers = parsed.suppliers;

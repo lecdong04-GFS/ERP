@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { InventoryActionBar } from '../common/InventoryActionBar';
 import { InventoryDataGrid, InventoryGridColumnDef } from '../common/InventoryDataGrid';
 import { INVENTORY_GYE_LIST, InventoryGyeItem } from '../data/inventoryMasterData';
@@ -18,81 +18,93 @@ interface ExtraIssueDetailRow {
   remark: string;
 }
 
-const SAMPLE_EXTRA_ISSUES: ExtraIssueDetailRow[] = [
-  // 성형장(김밥)
-  { id: 1, gyeId: 'GFS005', issueDate: '2026-10-30', category: '원재료', partName: '가공 참치플레이크(오일)', partSpec: '1.8kg*6캔', unit: 'box', qty: 3, remark: '김밥 추가주문 불출' },
-  { id: 2, gyeId: 'GFS005', issueDate: '2026-10-30', category: '부재료', partName: '김밥 포장필름(GS용)', partSpec: '2000매/롤', unit: '롤', qty: 2, remark: '롤 교체 파손분 보충' },
-  // 성형장(삼각김밥)
-  { id: 3, gyeId: 'GFS007', issueDate: '2026-10-30', category: '원재료', partName: '[냉장]전주비빔 소스토핑', partSpec: '10kg/통', unit: 'kg', qty: 20, remark: '야간 긴급 발주 대응' },
-  { id: 4, gyeId: 'GFS007', issueDate: '2026-10-30', category: '부재료', partName: '삼각김밥 포장필름(이지컷)', partSpec: '1000ea/롤', unit: '롤', qty: 5, remark: '' },
-  // 성형장(도시락)
-  { id: 5, gyeId: 'GFS004', issueDate: '2026-10-30', category: '원재료', partName: '[냉장]제육불고기 토핑', partSpec: '5kg*3ea', unit: 'kg', qty: 15, remark: '추가생산 요청' },
-  { id: 6, gyeId: 'GFS004', issueDate: '2026-10-30', category: '부재료', partName: '두레)ET-30 용기', partSpec: '50ea*2줄', unit: 'box', qty: 4, remark: '' },
-  // 조리실(볶음)
-  { id: 7, gyeId: 'GFS552', issueDate: '2026-10-30', category: '원재료', partName: '순창고추장 조미액', partSpec: '10kg*1통', unit: 'kg', qty: 30, remark: '양념 추가 배합' },
-  // 취반(미반류)
-  { id: 8, gyeId: 'GFS152', issueDate: '2026-10-30', category: '원재료', partName: '국내산 경기미 햅쌀', partSpec: '20kg/포', unit: '포', qty: 10, remark: '밥솥 2회 추가 가동' },
-];
+function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function kstToday(): string {
+  return toLocalISODate(new Date());
+}
 
 export const MatExtraIssueStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const [startDate, setStartDate] = useState(kstToday());
+  const [endDate, setEndDate] = useState(kstToday());
   const [periodType, setPeriodType] = useState('일간');
   const [includeCancel, setIncludeCancel] = useState(false);
   const [selectedGyeId, setSelectedGyeId] = useState<string>('GFS005');
-  const [issueList, setIssueList] = useState<ExtraIssueDetailRow[]>(SAMPLE_EXTRA_ISSUES);
+  const [issueList, setIssueList] = useState<ExtraIssueDetailRow[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+
+  const loadExtraIssues = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetch('/api/inventory/extra-issue', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const mapped: ExtraIssueDetailRow[] = json.data.map((item: any, idx: number) => ({
+          id: item.id ?? idx + 1,
+          gyeId: String(item.gyeId || 'GFS005'),
+          issueDate: String(item.issueDate || '').slice(0, 10) || kstToday(),
+          category: String(item.category || '원재료'),
+          partName: String(item.productName || item.productCode || item.name || ''),
+          partSpec: String(item.spec || ''),
+          unit: String(item.unit || 'ea'),
+          qty: Number(item.issueQty ?? item.qty) || 0,
+          remark: String(item.reason || item.remark || ''),
+        }));
+        setIssueList(mapped);
+      } else {
+        setIssueList([]);
+      }
+    } catch (err) {
+      console.error('Fetch extra issue list failed:', err);
+      setIssueList([]);
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch(`/api/inventory/extra-issue`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const mapped: ExtraIssueDetailRow[] = json.data.map((item: any, idx: number) => ({
-            id: item.id || idx + 1,
-            gyeId: item.gyeId || 'GFS005',
-            issueDate: item.issueDate || '2026-10-30',
-            category: item.category || '원재료',
-            partName: item.productName || item.productCode || '자재',
-            partSpec: '표준규격',
-            unit: item.unit || 'kg',
-            qty: Number(item.issueQty) || 0,
-            remark: item.reason || item.remark || '',
-          }));
-          setIssueList(mapped);
-        }
-      })
-      .catch((err) => console.error('Fetch extra issue list failed:', err));
+    void loadExtraIssues();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedGye = INVENTORY_GYE_LIST.find((g) => g.id === selectedGyeId) || INVENTORY_GYE_LIST[0];
 
   const handleShiftDay = (direction: -1 | 1) => {
-    const cur = new Date(startDate);
-    cur.setDate(cur.getDate() + direction);
-    const newStr = cur.toISOString().split('T')[0];
+    const [sy, sm, sd] = startDate.split('-').map(Number);
+    const cur = new Date(sy, (sm || 1) - 1, (sd || 1) + direction);
+    const newStr = toLocalISODate(cur);
     setStartDate(newStr);
     setEndDate(newStr);
   };
 
   const handlePeriodChange = (val: string) => {
     setPeriodType(val);
-    const cur = new Date(startDate);
+    const [py, pm, pd] = startDate.split('-').map(Number);
+    const cur = new Date(py, (pm || 1) - 1, (pd || 1));
     if (val === '일간') {
       setEndDate(startDate);
     } else if (val === '주간') {
       const end = new Date(cur);
       end.setDate(end.getDate() + 6);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     } else if (val === '월간') {
       const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     }
   };
 
-  const filteredDetails = issueList.filter((item) => item.gyeId === selectedGyeId);
-  const displayDetails = filteredDetails.length > 0 ? filteredDetails : [
-    { id: 991, gyeId: selectedGyeId, issueDate: startDate, category: '원부재료', partName: `${selectedGye.name} 추가불출품목`, partSpec: '표준규격', unit: 'ea', qty: 0, remark: '불출내역 없음' },
-  ];
+  const filteredDetails = useMemo(
+    () => issueList.filter(
+      (item) => item.gyeId === selectedGyeId && item.issueDate >= startDate && item.issueDate <= endDate,
+    ),
+    [issueList, selectedGyeId, startDate, endDate],
+  );
+  const displayDetails = filteredDetails;
 
   const LEFT_COLUMNS: InventoryGridColumnDef[] = [
     { key: 'name', label: '계명칭', width: '160px', align: 'left', filterable: false },
@@ -114,8 +126,16 @@ export const MatExtraIssueStatusView: React.FC = () => {
       <InventoryActionBar
         title="자재추가불출현황(GSR)"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', onClick: () => alert('자재추가불출 내역이 조회되었습니다.') },
-          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('조회 조건이 초기화되었습니다.') },
+          { key: 'search', label: '조회', icon: 'search', onClick: () => { void loadExtraIssues(); } },
+          {
+            key: 'reset', label: '초기화', icon: 'reset', onClick: () => {
+              const today = kstToday();
+              setStartDate(today);
+              setEndDate(today);
+              setPeriodType('일간');
+              setIncludeCancel(false);
+            },
+          },
         ]}
         helpContent="정규 작업지시 외에 긴급 추가생산이나 파손 보충으로 창고에서 추가 불출된 원부자재 내역을 공정별로 조회합니다."
       />
@@ -191,7 +211,8 @@ export const MatExtraIssueStatusView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => alert('새로고침')}
+            onClick={() => { void loadExtraIssues(); }}
+            disabled={loadingList}
             className="p-1 text-gray-600 hover:text-blue-700 hover:bg-gray-200 rounded border border-gray-300 bg-white cursor-pointer shadow-2xs"
             title="새로고침"
           >

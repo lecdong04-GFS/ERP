@@ -132,12 +132,28 @@ export const GfsSmartOrderView: React.FC = () => {
         setStatus('발주 대상 없음');
         return;
       }
-      setStatus(`GFS ${orderables.length}건 매칭 중...`);
-      const res = await fetch('/api/gfs/materialize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: orderables, orderDate }),
-      });
+      setStatus(`GFS ${orderables.length}건 매칭 중... (최대 90초)`);
+      const ctrl = new AbortController();
+      const timer = window.setTimeout(() => ctrl.abort(), 90000);
+      let res: Response;
+      try {
+        res = await fetch('/api/gfs/materialize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: orderables, orderDate }),
+          signal: ctrl.signal,
+        });
+      } catch (e: any) {
+        if (e?.name === 'AbortError') {
+          alert('매칭 요청이 시간 초과됐습니다 (90초).\n품목이 많으면 나누어 가져오거나, 잠시 후 다시 시도하세요.');
+          setStatus('매칭 시간초과');
+        } else {
+          throw e;
+        }
+        return;
+      } finally {
+        window.clearTimeout(timer);
+      }
       const json = await res.json();
       if (!json.success) {
         alert('매칭 실패: ' + (json.error || '알 수 없는 오류'));
@@ -307,11 +323,15 @@ export const GfsSmartOrderView: React.FC = () => {
       return;
     }
     setIsSaving(true);
+    setStatus(`발주 저장 중... (${items.length}건)`);
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 90000);
     try {
       const res = await fetch('/api/gfs/order-result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderDate, partnerId: partnerId || undefined, memo, items }),
+        signal: ctrl.signal,
       });
       const json = await res.json();
       if (!json.success) {
@@ -324,9 +344,15 @@ export const GfsSmartOrderView: React.FC = () => {
       setStatus(`발주 완료: ${orders}`);
       setItemsText('');
     } catch (e: any) {
-      alert('저장 실패: ' + e.message);
-      setStatus('발주 저장 실패');
+      if (e?.name === 'AbortError') {
+        alert('발주 저장이 시간 초과됐습니다 (90초).\n저장이 완료됐는지 발주현황에서 확인한 뒤, 없으면 나누어 다시 시도하세요.');
+        setStatus('발주 저장 시간초과');
+      } else {
+        alert('저장 실패: ' + e.message);
+        setStatus('발주 저장 실패');
+      }
     } finally {
+      window.clearTimeout(timer);
       setIsSaving(false);
     }
   };

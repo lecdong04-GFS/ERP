@@ -1,9 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { InventoryActionBar } from '../common/InventoryActionBar';
 import { InventoryDataGrid, InventoryGridColumnDef } from '../common/InventoryDataGrid';
 import { Calendar, RotateCw } from 'lucide-react';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function toLocalISODate(d: Date): string {
+  const p = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 interface FoodWasteSummaryRow {
   id: number;
@@ -18,53 +27,67 @@ interface FoodWasteDetailRow {
   wasteQty: number;
 }
 
-const SAMPLE_SUMMARY: FoodWasteSummaryRow[] = [
-  { id: 1, dischargeDate: '2026-10-30', wasteQty: 245 },
-  { id: 2, dischargeDate: '2026-10-29', wasteQty: 310 },
-  { id: 3, dischargeDate: '2026-10-28', wasteQty: 280 },
-];
-
-const SAMPLE_DETAILS: FoodWasteDetailRow[] = [
-  { id: 1, dischargeDate: '2026-10-30', gyeName: '선별실(커팅)', wasteQty: 75 },
-  { id: 2, dischargeDate: '2026-10-30', gyeName: '채소작업실(세척)', wasteQty: 60 },
-  { id: 3, dischargeDate: '2026-10-30', gyeName: '성형장(도시락)', wasteQty: 45 },
-  { id: 4, dischargeDate: '2026-10-30', gyeName: '성형장(김밥)', wasteQty: 35 },
-  { id: 5, dischargeDate: '2026-10-30', gyeName: '조리실(데침/삶기)', wasteQty: 30 },
-  { id: 6, dischargeDate: '2026-10-29', gyeName: '선별실(커팅)', wasteQty: 90 },
-  { id: 7, dischargeDate: '2026-10-29', gyeName: '채소작업실(커팅)', wasteQty: 85 },
-  { id: 8, dischargeDate: '2026-10-29', gyeName: '성형장(도시락)', wasteQty: 55 },
-  { id: 9, dischargeDate: '2026-10-29', gyeName: '조리실(볶음)', wasteQty: 45 },
-  { id: 10, dischargeDate: '2026-10-29', gyeName: '성형장(삼각김밥)', wasteQty: 35 },
-];
 
 export const FoodWasteStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
+  const [startDate, setStartDate] = useState(kstToday);
+  const [endDate, setEndDate] = useState(kstToday);
   const [periodType, setPeriodType] = useState('일간');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-10-30');
-  const [details, setDetails] = useState<FoodWasteDetailRow[]>(SAMPLE_DETAILS);
+  const [selectedDate, setSelectedDate] = useState<string>(kstToday());
+  const [details, setDetails] = useState<FoodWasteDetailRow[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
 
-  useEffect(() => {
-    fetch('/api/production/food-waste')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const mapped: FoodWasteDetailRow[] = json.data.map((item: any, idx: number) => ({
-            id: item.id || idx + 1,
-            dischargeDate: item.wasteDate || '2026-10-30',
-            gyeName: item.gyeName || '선별실(커팅)',
-            wasteQty: Number(item.wasteQty) || 0,
-          }));
-          setDetails(mapped);
+  const loadFoodWaste = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetch('/api/production/food-waste', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const mapped: FoodWasteDetailRow[] = json.data.map((item: any, idx: number) => ({
+          id: item.id ?? idx + 1,
+          dischargeDate: String(item.wasteDate || '').slice(0, 10) || kstToday(),
+          gyeName: String(item.gyeName || item.gyeId || '미지정'),
+          wasteQty: Number(item.wasteQty) || 0,
+        }));
+        setDetails(mapped);
+        const dates = [...new Set(mapped.map((d) => d.dischargeDate))].sort();
+        if (dates.length > 0) {
+          const latest = dates[dates.length - 1];
+          setStartDate(latest);
+          setEndDate(latest);
+          setSelectedDate(latest);
         }
-      })
-      .catch((err) => console.error('Fetch food-waste failed:', err));
+      } else {
+        setDetails([]);
+      }
+    } catch (err) {
+      console.error('Fetch food-waste failed:', err);
+      setDetails([]);
+    } finally {
+      setLoadingList(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void loadFoodWaste();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 기간 내 일자별 합계 (요약 그리드용 — 실측 집계)
+  const summaries = useMemo(() => {
+    const map = new Map<string, number>();
+    details.forEach((d) => {
+      if (d.dischargeDate < startDate || d.dischargeDate > endDate) return;
+      map.set(d.dischargeDate, (map.get(d.dischargeDate) || 0) + (Number(d.wasteQty) || 0));
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .map(([dischargeDate, wasteQty], idx) => ({ id: idx + 1, dischargeDate, wasteQty: Math.round(wasteQty) }));
+  }, [details, startDate, endDate]);
+
   const handleShiftDay = (direction: -1 | 1) => {
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     cur.setDate(cur.getDate() + direction);
-    const newStr = cur.toISOString().split('T')[0];
+    const newStr = toLocalISODate(cur);
     setStartDate(newStr);
     setEndDate(newStr);
     setSelectedDate(newStr);
@@ -72,21 +95,21 @@ export const FoodWasteStatusView: React.FC = () => {
 
   const handlePeriodChange = (val: string) => {
     setPeriodType(val);
-    const cur = new Date(startDate);
+    const cur = new Date(startDate + 'T00:00:00');
     if (val === '일간') {
       setEndDate(startDate);
     } else if (val === '주간') {
       const end = new Date(cur);
       end.setDate(end.getDate() + 6);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     } else if (val === '월간') {
       const end = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
-      setEndDate(end.toISOString().split('T')[0]);
+      setEndDate(toLocalISODate(end));
     }
   };
 
-  const filteredDetails = details.filter((d) => d.dischargeDate === selectedDate);
-  const displayDetails = filteredDetails.length > 0 ? filteredDetails : details.slice(0, 5);
+    const filteredDetails = details.filter((d) => d.dischargeDate === selectedDate);
+    const displayDetails = filteredDetails;
 
   const SUMMARY_COLUMNS: InventoryGridColumnDef[] = [
     { key: 'dischargeDate', label: '배출일', width: '120px', align: 'center', format: 'date' },
@@ -104,8 +127,8 @@ export const FoodWasteStatusView: React.FC = () => {
       <InventoryActionBar
         title="음식물쓰레기현황"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', onClick: () => alert('음식물쓰레기 현황이 조회되었습니다.') },
-          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('조회 조건이 초기화되었습니다.') },
+          { key: 'search', label: '조회', icon: 'search', onClick: () => void loadFoodWaste() },
+          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); setSelectedDate(t); setPeriodType('일간'); void loadFoodWaste(); } },
         ]}
         helpContent="일자별 음식물쓰레기 총 배출량 및 각 공정/작업장 계별 배출 비중을 분석합니다."
       />
@@ -171,7 +194,7 @@ export const FoodWasteStatusView: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => alert('새로고침')}
+            onClick={() => void loadFoodWaste()}
             className="p-1 text-gray-600 hover:text-blue-700 hover:bg-gray-200 rounded border border-gray-300 bg-white cursor-pointer shadow-2xs"
             title="새로고침"
           >
@@ -187,15 +210,15 @@ export const FoodWasteStatusView: React.FC = () => {
           <div className="bg-[#dfe3ec] px-2.5 py-1 flex items-center justify-between border-b border-[#b0b8c8]">
             <span className="font-bold text-gray-800">요약</span>
             <span className="text-[11px] text-gray-600 font-medium">
-              데이터수: <span className="font-bold text-blue-700">{SAMPLE_SUMMARY.length}</span>
+              데이터수: <span className="font-bold text-blue-700">{summaries.length}</span>
             </span>
           </div>
 
           <div className="flex-1 min-h-0">
             <InventoryDataGrid
               columns={SUMMARY_COLUMNS}
-              data={SAMPLE_SUMMARY}
-              selectedRowId={selectedDate}
+              data={summaries}
+              selectedRowId={summaries.find((x) => x.dischargeDate === selectedDate)?.id}
               onRowClick={(row) => setSelectedDate(row.dischargeDate)}
               summaryValues={{
                 wasteQty: 0,

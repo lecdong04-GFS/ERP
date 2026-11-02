@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
@@ -9,6 +9,11 @@ import { displayRemark } from '@/lib/gfs/docKey';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
 interface SalesRegRow {
@@ -24,6 +29,8 @@ interface SalesRegRow {
   shift: string;
   orderQty: number;
   orderAmt: number;
+  alreadyDeliv: number; // 기납품수량 (초과납품 방지용 상한 기준)
+  unitPrice: number; // 납품단가 (표시용)
   delivQty: number;
   delivAmt: number;
   unDelivQty: number;
@@ -41,7 +48,7 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'orderQty', label: '발주수량', width: '80px', align: 'right', format: 'number' },
   { key: 'delivQty', label: '납품수량', width: '80px', align: 'right', format: 'number', editable: true },
   { key: 'unDelivQty', label: '미납수량', width: '80px', align: 'right', format: 'number' },
-  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency' },
+  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency', hideSummary: true },
   { key: 'delivAmt', label: '납품금액', width: '100px', align: 'right', format: 'currency' },
   { key: 'unDelivAmt', label: '미납금액', width: '100px', align: 'right', format: 'currency' },
   { key: 'unDelivReason', label: '미납사유', width: '160px', align: 'left', editable: true },
@@ -51,8 +58,8 @@ export const UndeliveredRegView: React.FC = () => {
   const { data: session } = useSession();
   const me = session?.user as any;
 
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [delivDate, setDelivDate] = useState(kstToday());
   const [rows, setRows] = useState<SalesRegRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +91,8 @@ export const UndeliveredRegView: React.FC = () => {
             shift: r.shift || '-',
             orderQty: oQ,
             orderAmt: Math.round(oQ * price),
+            alreadyDeliv: already,
+            unitPrice: price,
             delivQty: dQ,
             delivAmt: Math.round(dQ * price),
             unDelivQty: Math.max(0, oQ - already - dQ),
@@ -109,10 +118,12 @@ export const UndeliveredRegView: React.FC = () => {
         const updated = { ...r, [key]: val };
         if (key === 'delivQty') {
           const unitPrice = r.orderQty > 0 ? Math.round(r.orderAmt / r.orderQty) : 0;
-          const dQ = Math.max(0, Math.min(Number(val) || 0, r.orderQty));
+          // 상한 = 미납잔여 (기납품분 초과 입력 방지)
+          const remain = Math.max(0, r.orderQty - (r.alreadyDeliv || 0));
+          const dQ = Math.max(0, Math.min(Number(val) || 0, remain));
           updated.delivQty = dQ;
           updated.delivAmt = dQ * unitPrice;
-          updated.unDelivQty = Math.max(0, r.orderQty - dQ);
+          updated.unDelivQty = Math.max(0, remain - dQ);
           updated.unDelivAmt = updated.unDelivQty * unitPrice;
         }
         return updated;
@@ -177,19 +188,11 @@ export const UndeliveredRegView: React.FC = () => {
   };
 
   const handleReset = () => {
+    const s = kstDaysAgo(29);
     const t = kstToday();
-    setStartDate(t); setEndDate(t); setDelivDate(t);
-    void loadData(t, t);
+    setStartDate(s); setEndDate(t); setDelivDate(t);
+    void loadData(s, t);
   };
-
-  const totals = useMemo(() => ({
-    orderQty: rows.reduce((s, r) => s + r.orderQty, 0),
-    delivQty: rows.reduce((s, r) => s + r.delivQty, 0),
-    unDelivQty: rows.reduce((s, r) => s + r.unDelivQty, 0),
-    orderAmt: rows.reduce((s, r) => s + r.orderAmt, 0),
-    delivAmt: rows.reduce((s, r) => s + r.delivAmt, 0),
-    unDelivAmt: rows.reduce((s, r) => s + r.unDelivAmt, 0),
-  }), [rows]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
@@ -225,15 +228,6 @@ export const UndeliveredRegView: React.FC = () => {
         ) : (
           <SalesDataGrid columns={COLUMNS} data={rows} onRowChange={handleRowChange} />
         )}
-      </div>
-
-      <div className="h-[26px] bg-[#fdfde0] border-t border-gray-400 px-3 flex items-center gap-6 text-[12px] font-bold shrink-0">
-        <span className="text-gray-700">합계</span>
-        <span className="text-gray-500">{rows.length}건</span>
-        <span className="num text-blue-900">주문 {totals.orderQty.toLocaleString()}</span>
-        <span className="num text-emerald-800">납품 {totals.delivQty.toLocaleString()}</span>
-        <span className="num text-rose-700">미납 {totals.unDelivQty.toLocaleString()}</span>
-        <span className="num text-blue-900 ml-auto">₩{totals.delivAmt.toLocaleString()}</span>
       </div>
     </div>
   );

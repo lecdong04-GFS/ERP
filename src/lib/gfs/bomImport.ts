@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import {
   parseOrderSheetBom,
@@ -6,6 +5,9 @@ import {
   normName,
   inferBomUnit,
   inferMenuKind,
+  getOrderSheetFilePath,
+  getAuditFilePath,
+  readWorkbookFromFile,
   type BomMaterial,
 } from './canonical';
 
@@ -55,13 +57,13 @@ export async function loadBomBundle(orderFile: string | null, auditFile: string 
   let auditMap = new Map<string, any>();
   if (auditFile && fs.existsSync(auditFile)) {
     try {
-      auditMap = buildAuditMap(XLSX.readFile(auditFile));
+      auditMap = buildAuditMap(readWorkbookFromFile(auditFile));
     } catch {}
   }
   if (!orderFile || !fs.existsSync(orderFile)) {
     throw new Error('발주서 정본 파일을 찾을 수 없습니다.');
   }
-  const wb = XLSX.readFile(orderFile);
+  const wb = readWorkbookFromFile(orderFile);
   const mats = parseOrderSheetBom(wb);
   void today;
 
@@ -83,34 +85,10 @@ export async function loadBomBundle(orderFile: string | null, auditFile: string 
 }
 
 export function findRepoFiles(): { orderFile: string | null; auditFile: string | null } {
-  const orderCandidates = [
-    `${process.cwd()}/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx`,
-    `${process.cwd()}/GFS.xlsx`,
-    '/Users/bunker/GFS/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
-  ];
-  const auditCandidates = [
-    `${process.cwd()}/일일 재고조사표 새 양식(10월 29일) (2).xlsx`,
-    '/Users/bunker/GFS/일일 재고조사표 새 양식(10월 29일) (2).xlsx',
-  ];
-  let orderFile: string | null = null;
-  let auditFile: string | null = null;
-  for (const c of orderCandidates) {
-    try {
-      if (fs.existsSync(c)) {
-        orderFile = c;
-        break;
-      }
-    } catch {}
-  }
-  for (const c of auditCandidates) {
-    try {
-      if (fs.existsSync(c)) {
-        auditFile = c;
-        break;
-      }
-    } catch {}
-  }
-  return { orderFile, auditFile };
+  return {
+    orderFile: getOrderSheetFilePath(),
+    auditFile: getAuditFilePath(),
+  };
 }
 
 export type PrismaLike = {

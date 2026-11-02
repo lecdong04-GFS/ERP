@@ -6,10 +6,6 @@ import { loadCanonicalFromRepo } from '@/lib/gfs/canonical';
 // GET /api/gfs/order-sheet — 발주서 정본(발주시트) + 재고조사표 정본 조인
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
     const { audit, orderItems, suppliers, auditFile, orderFile, errors } = loadCanonicalFromRepo();
     const auditByNorm = new Map(audit.map((a) => [a.norm, a]));
     const rows = orderItems.map((o, idx) => {

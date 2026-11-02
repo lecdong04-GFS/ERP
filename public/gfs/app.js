@@ -4960,13 +4960,13 @@ function calculateItemMetrics(item) {
   // 4) 4대 고위험 발주 '레드플래그(Red-Flag)' 자동 감사 판정
   const redFlags = [];
 
-  // ① 초긴급 결품 위험: 재고 버팀일수 1.2일 미만 & 입고예정 0 (또는 총재고 부족)
+  // ① 초긴급 결품 위험: 재고유지일 1.2일 미만 & 입고예정 0 (또는 총재고 부족)
   if (item.dailyUsage > 0 && stockDays < 1.2 && item.incoming <= 0 && !isOrderBlockedByNoFinishedOrders) {
     redFlags.push({
       id: 'CRITICAL_SHORTAGE',
       severity: 'danger',
       badgeText: '🚨 결품초임박',
-      desc: `재고 버팀일수 ${stockDays.toFixed(1)}일 (1.2일 미만) & 입고예정 0봉으로 즉시 라인 중단 위험`
+      desc: `재고유지일 ${stockDays.toFixed(1)}일 (1.2일 미만) & 입고예정 0봉으로 즉시 라인 중단 위험`
     });
   }
 
@@ -6419,7 +6419,7 @@ function renderTableView(items) {
           <th class="py-3 px-3 min-w-[190px]">품목명 (입수/단가)</th>
           <th class="py-3 px-3 text-right min-w-[90px]">현장재고</th>
           <th class="py-3 px-3 text-right min-w-[90px]">입고예정</th>
-          <th class="py-3 px-3 text-right min-w-[110px]">일소진 (버팀일)</th>
+          <th class="py-3 px-3 text-right min-w-[110px]">일소진 (재고유지일)</th>
           <th class="py-3 px-3 text-center min-w-[130px]">AI 추천</th>
           <th class="py-3 px-3 text-center min-w-[150px]">최종 발주(박스)</th>
           <th class="py-3 px-3 text-right min-w-[110px]">예상 금액</th>
@@ -7594,7 +7594,7 @@ async function exportFinalExcel() {
     '발주채널', '마감시간', '거래처명', '리드타임', '거래처특이사항메모',
     '원부자재 품목명', '연동 완제품(주문수량)', '권장발주(박스)', '박스입수', '총수량(봉)', '봉단가(원)',
     '예상금액(원)', '월(26)', '화(27)', '수(28)', '목(29)', '금(30)', '토(31)', '일(01)',
-    '주간합계(S)', '일소진(AA)', '주간금액(VAT포함)', '금일재고(봉)', '입고예정(봉)', '일사용량(봉)', '버팀일수',
+    '주간합계(S)', '일소진(AA)', '주간금액(VAT포함)', '금일재고(봉)', '입고예정(봉)', '일사용량(봉)', '재고유지일',
     '적용유지일', '소진원인(BOM)', '발주판단상세이유'
   ];
 
@@ -8505,7 +8505,7 @@ function exportTeamReviewPdf() {
             <th style="width: 4.0%;">현재재고</th>
             <th style="width: 4.0%;">입고예정</th>
             <th style="width: 4.0%;">일사용량</th>
-            <th style="width: 4.5%;">버팀일수</th>
+            <th style="width: 4.5%;">재고유지일</th>
             <th style="width: 13.0%;">연동 완제품 (수주량)</th>
             <th style="width: 4.5%; background: #334155;">표준 권장</th>
             <th class="th-highlight" style="width: 6.5%;">보수 안전</th>

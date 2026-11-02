@@ -41,7 +41,7 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'safetyStock', label: '안전재고', width: '80px', align: 'right', format: 'number', editable: true },
   { key: 'recommendStock', label: '권장재고량', width: '85px', align: 'right', format: 'number' },
   { key: 'diffQty', label: '차이수량', width: '80px', align: 'right', format: 'number', dangerIfNegative: true },
-  { key: 'stockDays', label: '재고일수', width: '75px', align: 'right' },
+  { key: 'stockDays', label: '재고유지일', width: '85px', align: 'right' },
   { key: 'inputQty', label: '투입량', width: '80px', align: 'right', format: 'number' },
   { key: 'inputChange', label: '투입량변화량', width: '90px', align: 'right', format: 'number' },
   { key: 'ratio', label: '비율(%)', width: '75px', align: 'right' },

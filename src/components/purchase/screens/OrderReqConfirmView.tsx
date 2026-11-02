@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { HelpCircle, Search, Save, RotateCcw } from 'lucide-react';
+import { HelpCircle, Search, RotateCcw } from 'lucide-react';
 
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 export interface OrderReqConfirmItem {
@@ -28,613 +28,16 @@ export interface OrderReqConfirmItem {
   stockQty: number; // 재고수량
 }
 
-// 화면 캡처 2026-10-30 155746.png 원본 스크린샷 100% 동일 26개 행 데이터 (합계: 52,381,640원)
-export const SCREENSHOT_CONFIRM_DATA: OrderReqConfirmItem[] = [
-  {
-    id: 1,
-    category: '원재료',
-    itemName: '[냉동] 볶음김치',
-    spec: '5kg*2ea',
-    unit: '봉(팩)',
-    supplier: '[네트웍스]대림',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 36,
-    unitPrice: 70000,
-    orderAmt: 2520000,
-    calcQty: 71,
-    unitQty: 2,
-    orderUnitQty: 35.5,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 107,
-    currentStock: 36,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 36,
-  },
-  {
-    id: 2,
-    category: '원재료',
-    itemName: '[상온]고운고춧가루',
-    spec: '1kg*20ea',
-    unit: '봉(팩)',
-    supplier: '[네트웍스]대림',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 13,
-    unitPrice: 175000,
-    orderAmt: 2275000,
-    calcQty: 246.266,
-    unitQty: 20,
-    orderUnitQty: 12.313,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 27,
-    currentStock: -219.266,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -219.266,
-  },
-  {
-    id: 3,
-    category: '원재료',
-    itemName: '[냉장]치킨C',
-    spec: '2kg*10ea',
-    unit: '봉(팩)',
-    supplier: '[네트웍스]대림',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 58000,
-    orderAmt: 58000,
-    calcQty: 8.081,
-    unitQty: 10,
-    orderUnitQty: 0.808,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 16,
-    currentStock: 7.919,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 7.919,
-  },
-  {
-    id: 4,
-    category: '원재료',
-    itemName: '[냉장]치킨 미',
-    spec: '2kg*9ea',
-    unit: '봉(팩)',
-    supplier: '[네트웍스]대림',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 70200,
-    orderAmt: 70200,
-    calcQty: 4.601,
-    unitQty: 9,
-    orderUnitQty: 0.511,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 6,
-    currentStock: 1.399,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 1.399,
-  },
-  {
-    id: 5,
-    category: '원재료',
-    itemName: '[냉동] 고추장불고기',
-    spec: '2kg*5ea',
-    unit: '봉(팩)',
-    supplier: '[지에스리테일]',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 23,
-    unitPrice: 63350,
-    orderAmt: 1457050,
-    calcQty: 114.082,
-    unitQty: 5,
-    orderUnitQty: 22.816,
-    leadTime: 3,
-    clientStock: 539,
-    safetyStock: 0,
-    currentStock: 424.918,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 424.918,
-  },
-  {
-    id: 6,
-    category: '원재료',
-    itemName: '[냉장]닭갈비',
-    spec: '3kg*5ea',
-    unit: '봉(팩)',
-    supplier: '다미푸드텍',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 144,
-    unitPrice: 67500,
-    orderAmt: 9720000,
-    calcQty: 718.058,
-    unitQty: 5,
-    orderUnitQty: 143.612,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -718.058,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -718.058,
-  },
-  {
-    id: 7,
-    category: '원재료',
-    itemName: '[상온]롤김',
-    spec: '300g*450매',
-    unit: 'roll',
-    supplier: '더원씨푸드',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 583200,
-    orderAmt: 583200,
-    calcQty: 6,
-    unitQty: 8,
-    orderUnitQty: 0.75,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 6,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 8,
-    category: '원재료',
-    itemName: '[냉장]시크릿소스',
-    spec: '2kg*5ea',
-    unit: '봉(팩)',
-    supplier: '동방푸드마스터',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 12,
-    unitPrice: 35000,
-    orderAmt: 420000,
-    calcQty: 57,
-    unitQty: 5,
-    orderUnitQty: 11.4,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 57,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 9,
-    category: '원재료',
-    itemName: '[냉장]자메이카소스',
-    spec: '3kg*4ea',
-    unit: '봉(팩)',
-    supplier: '동방푸드마스터',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 5,
-    unitPrice: 57600,
-    orderAmt: 288000,
-    calcQty: 19.589,
-    unitQty: 4,
-    orderUnitQty: 4.897,
-    leadTime: 2,
-    clientStock: 24,
-    safetyStock: 0,
-    currentStock: 4.411,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 4.411,
-  },
-  {
-    id: 10,
-    category: '원재료',
-    itemName: '[상온]김야채스프',
-    spec: '1kg*10ea',
-    unit: '봉(팩)',
-    supplier: '동방푸드마스터',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 198000,
-    orderAmt: 198000,
-    calcQty: 1,
-    unitQty: 10,
-    orderUnitQty: 0.1,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 1,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 11,
-    category: '원재료',
-    itemName: '[냉동]닭가슴살',
-    spec: '1KG*10EA',
-    unit: '봉(팩)',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 20,
-    unitPrice: 81000,
-    orderAmt: 1620000,
-    calcQty: 195,
-    unitQty: 10,
-    orderUnitQty: 19.5,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 195,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 12,
-    category: '원재료',
-    itemName: '차별화상회(소스)',
-    spec: '8Kg/ea',
-    unit: '통',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 8,
-    unitPrice: 6990,
-    orderAmt: 55920,
-    calcQty: 8,
-    unitQty: 1,
-    orderUnitQty: 8,
-    leadTime: 0,
-    clientStock: 0,
-    safetyStock: 8,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 13,
-    category: '원재료',
-    itemName: '[상온]치킨파우더',
-    spec: '2Kg*5ea',
-    unit: '봉(팩)',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 2,
-    unitPrice: 34000,
-    orderAmt: 68000,
-    calcQty: 7.716,
-    unitQty: 5,
-    orderUnitQty: 1.543,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -7.716,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -7.716,
-  },
-  {
-    id: 14,
-    category: '부자재',
-    itemName: '혜자)제육&김밥필름',
-    spec: '4000ea/롤',
-    unit: 'roll',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 20,
-    unitPrice: 28000,
-    orderAmt: 560000,
-    calcQty: 19.202,
-    unitQty: 1,
-    orderUnitQty: 19.202,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -19.202,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -19.202,
-  },
-  {
-    id: 15,
-    category: '부자재',
-    itemName: '혜자)제육&도시락필름',
-    spec: '4000ea/롤',
-    unit: 'roll',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 2,
-    unitPrice: 27200,
-    orderAmt: 54400,
-    calcQty: 1.082,
-    unitQty: 1,
-    orderUnitQty: 1.082,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -1.082,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -1.082,
-  },
-  {
-    id: 16,
-    category: '부자재',
-    itemName: '혜자)한돈반찬필름',
-    spec: '1500ea/롤',
-    unit: 'roll',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 341,
-    unitPrice: 78750,
-    orderAmt: 26853750,
-    calcQty: 340.985,
-    unitQty: 1,
-    orderUnitQty: 340.985,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -340.985,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -340.985,
-  },
-  {
-    id: 17,
-    category: '부자재',
-    itemName: 'Full)리챔참치필름',
-    spec: '4000ea/롤',
-    unit: 'roll',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 26,
-    unitPrice: 38000,
-    orderAmt: 988000,
-    calcQty: 25.58,
-    unitQty: 1,
-    orderUnitQty: 25.58,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -25.58,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -25.58,
-  },
-  {
-    id: 18,
-    category: '부자재',
-    itemName: '혜자)직화불고기필름',
-    spec: '1000ea/롤',
-    unit: 'roll',
-    supplier: '이프린팅',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 7,
-    unitPrice: 45000,
-    orderAmt: 315000,
-    calcQty: 7,
-    unitQty: 1,
-    orderUnitQty: 7,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -7,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -7,
-  },
-  {
-    id: 19,
-    category: '부자재',
-    itemName: '혜자)치킨마요필름',
-    spec: '1000ea/롤',
-    unit: 'roll',
-    supplier: '이프린팅',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 2,
-    unitPrice: 50000,
-    orderAmt: 100000,
-    calcQty: 2,
-    unitQty: 1,
-    orderUnitQty: 2,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 0,
-    currentStock: -2,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -2,
-  },
-  {
-    id: 20,
-    category: '원재료',
-    itemName: '[냉장]숙성치킨',
-    spec: '2kg*5ea',
-    unit: '봉(팩)',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 3,
-    unitPrice: 41000,
-    orderAmt: 123000,
-    calcQty: 10.896,
-    unitQty: 5,
-    orderUnitQty: 2.179,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 36,
-    currentStock: 25.104,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 25.104,
-  },
-  {
-    id: 21,
-    category: '원재료',
-    itemName: '[상온]검은깨',
-    spec: '1kg*10ea',
-    unit: '봉(팩)',
-    supplier: '',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 100000,
-    orderAmt: 100000,
-    calcQty: 1,
-    unitQty: 10,
-    orderUnitQty: 0.1,
-    leadTime: 2,
-    clientStock: 0,
-    safetyStock: 1,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 22,
-    category: '원재료',
-    itemName: '[냉장]델리햄',
-    spec: '1kg*8ea',
-    unit: '봉(팩)',
-    supplier: 'NS유통',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 52,
-    unitPrice: 47200,
-    orderAmt: 2454400,
-    calcQty: 414,
-    unitQty: 8,
-    orderUnitQty: 51.75,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 414,
-    currentStock: 0,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 0,
-  },
-  {
-    id: 23,
-    category: '원재료',
-    itemName: '[상온]리챔',
-    spec: '340g*24ea',
-    unit: 'can',
-    supplier: 'NS유통',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 21,
-    unitPrice: 62400,
-    orderAmt: 1310400,
-    calcQty: 490.567,
-    unitQty: 24,
-    orderUnitQty: 20.44,
-    leadTime: 1,
-    clientStock: 476,
-    safetyStock: 0,
-    currentStock: -14.567,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -14.567,
-  },
-  {
-    id: 24,
-    category: '원재료',
-    itemName: '[상온]맛소금',
-    spec: '5kg*4ea',
-    unit: '봉(팩)',
-    supplier: 'NS유통',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 1,
-    unitPrice: 30000,
-    orderAmt: 30000,
-    calcQty: 1.003,
-    unitQty: 4,
-    orderUnitQty: 0.251,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 1,
-    currentStock: -0.003,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: -0.003,
-  },
-  {
-    id: 25,
-    category: '원재료',
-    itemName: '[상온]진간장',
-    spec: '1.8L*6ea',
-    unit: '통',
-    supplier: 'NS유통',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 2,
-    unitPrice: 27300,
-    orderAmt: 54600,
-    calcQty: 7.883,
-    unitQty: 6,
-    orderUnitQty: 1.314,
-    leadTime: 1,
-    clientStock: 0,
-    safetyStock: 9,
-    currentStock: 1.117,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 1.117,
-  },
-  {
-    id: 26,
-    category: '원재료',
-    itemName: '[상온]소프트마요',
-    spec: '1kg*4ea',
-    unit: '봉(팩)',
-    supplier: 'SPC삼립',
-    orderUnit: 'box',
-    minOrderQty: 1,
-    orderQty: 14,
-    unitPrice: 7480,
-    orderAmt: 104720,
-    calcQty: 54,
-    unitQty: 4,
-    orderUnitQty: 13.5,
-    leadTime: 2,
-    clientStock: 274,
-    safetyStock: 0,
-    currentStock: 220,
-    incomingScheduledBox: 0,
-    incomingScheduled: 0,
-    stockQty: 220,
-  },
-];
+
+/** KST 오늘 YYYY-MM-DD */
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 export const OrderReqConfirmView: React.FC = () => {
   const [selectedSupplier, setSelectedSupplier] = useState('ALL');
-  const [rows, setRows] = useState<OrderReqConfirmItem[]>(SCREENSHOT_CONFIRM_DATA);
+  const [rows, setRows] = useState<OrderReqConfirmItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isDbLoaded, setIsDbLoaded] = useState<boolean>(false);
   const [editingCell, setEditingCell] = useState<{ id: number; field: string } | null>(null);
   const [editVal, setEditVal] = useState<string>('');
 
@@ -702,19 +105,21 @@ export const OrderReqConfirmView: React.FC = () => {
     );
   };
 
-  // 실시간 DB 소요량 조회
+  // 실시간 DB 소요량 조회 (DB 그대로 표시 — 빈 결과도 그대로 반영, 샘플 표시 없음)
   const fetchOrderReqs = async () => {
     setIsLoading(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = kstToday();
       const res = await fetch(`/api/purchase/order-req-confirm?date=${today}`);
       const json = await res.json();
-      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (json.success && Array.isArray(json.data)) {
         setRows(json.data);
-        setIsDbLoaded(true);
+      } else {
+        setRows([]);
       }
     } catch (e) {
-      console.warn('DB 소요량 조회 실패, 기본 데이터 유지:', e);
+      console.warn('DB 소요량 조회 실패:', e);
+      setRows([]);
     } finally {
       setIsLoading(false);
     }
@@ -724,7 +129,15 @@ export const OrderReqConfirmView: React.FC = () => {
     fetchOrderReqs();
   }, []);
 
-  // Filter by 매입처
+  // Filter by 매입처 (DB 실데이터 기준 동적 옵션)
+  const suppliers = useMemo(() => {
+    const s = new Set<string>();
+    rows.forEach((r) => {
+      const name = String(r.supplier || '').trim();
+      if (name) s.add(name);
+    });
+    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [rows]);
   const filteredRows = useMemo(() => {
     if (selectedSupplier === 'ALL') return rows;
     return rows.filter((r) => r.supplier.includes(selectedSupplier));
@@ -780,61 +193,6 @@ export const OrderReqConfirmView: React.FC = () => {
     );
   };
 
-  const handleSave = async () => {
-    const validItems = rows.filter((r) => r.orderQty > 0);
-    if (validItems.length === 0) {
-      alert('발주수량이 1 이상인 품목이 없습니다. 발주할 수량을 먼저 입력해주세요.');
-      return;
-    }
-
-    const totalOrderAmount = validItems.reduce((acc, r) => acc + r.orderAmt, 0);
-    const confirmed = window.confirm(
-      `[최종 발주 검토 및 승인]\n\n` +
-      `• 발주 대상 품목: ${validItems.length}개 품목\n` +
-      `• 총 발주 금액: ${totalOrderAmount.toLocaleString()}원\n\n` +
-      `사람이 최종 검토한 내용으로 ERP 정식 발주서를 생성하시겠습니까?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      const itemsToConfirm = validItems.map((r) => ({
-        materialCode: (r as any).materialCode || ('MAT-' + r.id.toString().padStart(4, '0')),
-        itemName: r.itemName,
-        spec: r.spec,
-        unit: r.unit,
-        category: r.category,
-        partnerId: (r as any).partnerId || r.supplier.replace(/[^a-zA-Z0-9가-힣]/g, ''),
-        supplier: r.supplier,
-        orderQty: r.orderQty,
-        unitPrice: r.unitPrice,
-        minOrderQty: r.minOrderQty,
-        orderUnitQty: r.orderUnitQty,
-        expectedBoxQty: r.incomingScheduledBox,
-        currentStock: r.currentStock,
-      }));
-
-      const res = await fetch('/api/purchase/order-req-confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderDate: new Date().toISOString().slice(0, 10),
-          items: itemsToConfirm,
-          createdBy: 'admin',
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ 발주소요량확정이 정상 완료되었습니다!\n\n' + (data.message || '협력사별 정식 발주서가 데이터베이스에 저장되었습니다.'));
-        fetchOrderReqs();
-      } else {
-        alert('발주 처리 안내: ' + (data.error || '저장 중 오류가 발생했습니다.'));
-      }
-    } catch (err: any) {
-      alert('발주소요량확정 처리 실패: ' + err.message);
-    }
-  };
-
   const handleReset = () => {
     fetchOrderReqs();
     setSelectedSupplier('ALL');
@@ -877,15 +235,6 @@ export const OrderReqConfirmView: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={handleSave}
-            className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xs text-[11px] font-bold transition-colors shadow-2xs cursor-pointer border border-blue-700"
-            title="사람이 최종 검토한 수량으로 정식 발주서를 생성합니다."
-          >
-            <Save size={12} className="stroke-[2.5]" />
-            발주확정(저장)
-          </button>
-          <button
-            type="button"
             onClick={handleReset}
             className="flex items-center gap-1 px-3 py-1 bg-[#607d8b] hover:bg-[#546e7a] text-white rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-[#455a64]"
           >
@@ -902,6 +251,11 @@ export const OrderReqConfirmView: React.FC = () => {
         </div>
       </div>
 
+      {/* 안내: 발주 확정은 스마트발주(GFS) 메뉴에서 — 이 화면은 소요량 검토용 */}
+      <div className="bg-amber-50 border-b border-amber-200 px-3 py-1 text-[11px] text-amber-800 shrink-0">
+        이 화면은 소요량 검토용입니다. 실제 발주 확정은 <b>스마트발주(GFS)</b> 메뉴에서 해주세요.
+      </div>
+
       {/* 2. 조건 검색 바 (매입처 ALL + 우측 데이터수: 76) */}
       <div className="bg-[#f5f6f8] border-b border-[#cccccc] px-3 py-1 flex items-center justify-between shrink-0 h-[30px]">
         <div className="flex items-center gap-2">
@@ -912,20 +266,14 @@ export const OrderReqConfirmView: React.FC = () => {
             className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] font-medium rounded-xs shadow-2xs w-[180px] h-[22px] outline-none focus:border-blue-500"
           >
             <option value="ALL">ALL</option>
-            <option value="대림">[네트웍스]대림</option>
-            <option value="지에스리테일">[지에스리테일]</option>
-            <option value="다미푸드텍">다미푸드텍</option>
-            <option value="더원씨푸드">더원씨푸드</option>
-            <option value="동방푸드마스터">동방푸드마스터</option>
-            <option value="차별화상회">차별화상회</option>
-            <option value="이프린팅">이프린팅</option>
-            <option value="NS유통">NS유통</option>
-            <option value="SPC삼립">SPC삼립</option>
+            {suppliers.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
         </div>
 
         <div className="text-[11px] text-gray-700 font-semibold bg-white px-2.5 py-0.5 rounded-xs border border-gray-300 shadow-2xs">
-          데이터수: <span className="font-bold text-blue-700">76</span>
+          데이터수: <span className="font-bold text-blue-700">{filteredRows.length}</span>
         </div>
       </div>
 
@@ -1058,7 +406,18 @@ export const OrderReqConfirmView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={21} className="py-10 text-center text-gray-400">불러오는 중...</td>
+                </tr>
+              ) : filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={21} className="py-10 text-center text-gray-500">
+                    해당 일자 소요량이 없습니다. (소요량은 파이프라인 실행 시 자동 계산됩니다)
+                  </td>
+                </tr>
+              ) : (
+              filteredRows.map((row) => (
                 <tr
                   key={row.id}
                   className="h-[21px] border-b border-gray-300 hover:bg-[#eef3fb] bg-white text-gray-900"
@@ -1187,7 +546,7 @@ export const OrderReqConfirmView: React.FC = () => {
                     {row.stockQty.toLocaleString()}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
 
             {/* 하단 요약 합계 행 (화면 캡처 2026-10-30 155746.png 일치: 연노랑 배경, 52,381,640원) */}

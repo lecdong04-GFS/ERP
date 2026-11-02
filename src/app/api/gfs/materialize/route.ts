@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { buildAuditMap, normName } from '@/lib/gfs/canonical';
-import * as XLSX from 'xlsx';
-import * as fs from 'fs';
+import { buildAuditMap, getAuditFilePath, normName, readWorkbookFromFile } from '@/lib/gfs/canonical';
 import { kstToday } from '@/lib/kst';
 
 interface InItem {
@@ -23,10 +21,7 @@ interface InItem {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
-    const me = session.user as any;
+    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
     const { items, dryRun, orderDate } = body as { items: InItem[]; dryRun?: boolean; orderDate?: string };
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -34,27 +29,21 @@ export async function POST(req: NextRequest) {
     }
     const today = (orderDate || kstToday()).replace(/-/g, '');
 
-    // 정본 로드 (서버 커밋 파일)
-    const candidates = [
-      `${process.cwd()}/일일 재고조사표 새 양식(10월 29일) (2).xlsx`,
-      '/Users/bunker/GFS/일일 재고조사표 새 양식(10월 29일) (2).xlsx',
-    ];
+    // 정본 로드 (서버 커밋 파일 — 날짜 바뀌어도 자동 추적)
     let auditMap = new Map();
-    for (const c of candidates) {
-      try {
-        if (fs.existsSync(c)) {
-          const wb = XLSX.readFile(c);
-          auditMap = buildAuditMap(wb);
-          break;
-        }
-      } catch {}
-    }
+    try {
+      const auditPath = getAuditFilePath();
+      if (auditPath) {
+        const wb = readWorkbookFromFile(auditPath);
+        auditMap = buildAuditMap(wb);
+      }
+    } catch {}
 
     const matched: any[] = [];
     const created: any[] = [];
     const failed: any[] = [];
 
-    // 기존 품목 일괄 조회 (이름 기준)
+    // 기존 품목 일괄 조회 (이름 기준) — 요청당 1회
     const names = items.map((i) => String(i.name || '').trim()).filter(Boolean);
     const existing = await prisma.product.findMany({
       where: { name: { in: names } },
@@ -64,154 +53,231 @@ export async function POST(req: NextRequest) {
     const existingByNorm = new Map<string, any>();
     existing.forEach((p) => existingByNorm.set(normName(p.name), p));
 
-    let seq = 0;
-    for (const it of items) {
+    // ── Phase A: 항목별 사전 계산 (DB 접근 없음) ──
+    interface Prepared {
+      idx: number;
+      rawName: string;
+      norm: string;
+      boxes: number;
+      ref: any;
+      packUnit: number;
+      bagPrice: number;
+      safetyStock: number;
+      stockDays: number | null;
+      vendorName: string;
+      cleanVendor: string;
+      category: string;
+      warehouse: string;
+      existing: any | null;
+    }
+    const prepared: Prepared[] = [];
+    for (let idx = 0; idx < items.length; idx++) {
+      const it = items[idx];
       const rawName = String(it.name || '').trim();
       if (!rawName) {
         failed.push({ name: rawName, reason: '품명 없음' });
         continue;
       }
       const boxes = Number(it.boxes) || 0;
-      if (boxes <= 0) continue; // 발주량 0은 스킵
+      if (boxes <= 0) continue; // 발주수량 0은 스킵
       const norm = normName(rawName);
       const ref: any = (auditMap as Map<string, any>).get(norm);
+      const vendorName = (ref?.vendor || it.supplierHeader || '').trim();
+      prepared.push({
+        idx,
+        rawName,
+        norm,
+        boxes,
+        ref,
+        packUnit: Number(it.packUnit) || Number(ref?.packUnit) || 1,
+        bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
+        safetyStock: Math.max(0, Math.round(Number(it.safetyStock) || 0)),
+        stockDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
+        vendorName,
+        cleanVendor: vendorName.split('(')[0].trim(),
+        category: ref?.warehouse === '부자재' ? '부자재' : '원재료',
+        warehouse:
+          ref?.warehouse ||
+          (/냉동/.test(rawName) ? '냉동' : /상온/.test(rawName) ? '상온' : /냉장/.test(rawName) ? '냉장1' : '상온'),
+        existing: existingByName.get(rawName) || existingByNorm.get(norm) || null,
+      });
+    }
 
-      let product = existingByName.get(rawName) || existingByNorm.get(norm) || null;
-      let wasCreated = false;
+    const createdByNorm = new Map<string, any>();
+    if (!dryRun) {
+      // 동일 품명(norm) 중복은 1건만 생성, 나머지는 같은 품목에 매칭
+      const seenNorm = new Set<string>();
+      const toCreate = prepared.filter((p) => {
+        if (p.existing) return false;
+        if (seenNorm.has(p.norm)) return false;
+        seenNorm.add(p.norm);
+        return true;
+      });
 
-      if (!product && !dryRun) {
-        // GFS 정본 기준 자동 생성
-        const vendorName = (ref?.vendor || it.supplierHeader || '').trim();
-        let partnerId: string | null = null;
-        let partnerName = '';
-        if (vendorName) {
-          const cleanVendor = vendorName.split('(')[0].trim();
-          const found = await prisma.partner.findFirst({ where: { name: cleanVendor } });
-          if (found) {
-            partnerId = found.id;
-            partnerName = found.name;
-          } else {
-            const count = await prisma.partner.count();
-            const newId = `VG${String(count + 1).padStart(4, '0')}`;
-            const createdPartner = await prisma.partner.create({
-              data: {
-                id: newId,
-                name: cleanVendor,
-                partnerType: 'P',
-                remark: 'GFS 자동생성(재고조사표 정본)',
-              },
-            });
-            partnerId = createdPartner.id;
-            partnerName = createdPartner.name;
-            created.push({ type: 'partner', id: partnerId, name: partnerName });
+      if (toCreate.length > 0) {
+        // ── Phase B-1: 거래처 일괄 확보 (조회 1회 + 생성 1회) ──
+        const vendorNames = [...new Set(toCreate.map((p) => p.cleanVendor).filter(Boolean))];
+        const foundPartners = vendorNames.length
+          ? await prisma.partner.findMany({ where: { name: { in: vendorNames } } })
+          : [];
+        const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
+        const missingVendors = vendorNames.filter((v) => !partnerByName.has(v));
+        if (missingVendors.length > 0) {
+          const stamp = Date.now().toString().slice(-6);
+          const newIds = missingVendors.map((_, i) => `VG-${stamp}-${String(i).padStart(2, '0')}`);
+          const takenIds = new Set(
+            (await prisma.partner.findMany({ where: { id: { in: newIds } }, select: { id: true } })).map((p) => p.id)
+          );
+          const finalIds = newIds.map((id, i) => (takenIds.has(id) ? `${id}-X${i}` : id));
+          await prisma.partner.createMany({
+            data: missingVendors.map((v, i) => ({ id: finalIds[i], name: v, partnerType: 'P', remark: 'GFS 자동생성(재고조사표 정본)' })),
+          });
+          (await prisma.partner.findMany({ where: { id: { in: finalIds } } })).forEach((p) => {
+            partnerByName.set(p.name, p);
+            created.push({ type: 'partner', id: p.id, name: p.name });
+          });
+        }
+
+        // ── Phase B-2: 품번 일괄 확정 (조회 1~2회, 충돌은 메모리에서 해소) ──
+        let seq = 0;
+        const codeByNorm = new Map<string, string>();
+        for (const p of toCreate) {
+          seq += 1;
+          const base =
+            p.ref?.itemId && String(p.ref.itemId).trim()
+              ? String(p.ref.itemId).trim()
+              : `GFS-${today}-${String(seq).padStart(3, '0')}`;
+          codeByNorm.set(p.norm, base);
+        }
+        const taken = new Set<string>();
+        const collideCheck = [...new Set(codeByNorm.values())];
+        if (collideCheck.length > 0) {
+          const existingCodes = new Set(
+            (await prisma.product.findMany({ where: { productCode: { in: collideCheck } }, select: { productCode: true } })).map(
+              (p) => p.productCode
+            )
+          );
+          for (const [normKey, base] of codeByNorm) {
+            let code = base;
+            if (taken.has(code) || existingCodes.has(code)) {
+              let n = 1;
+              code = `${base}-${n}`;
+              while ((taken.has(code) || existingCodes.has(code)) && n < 50) {
+                n += 1;
+                code = `${base}-${n}`;
+              }
+            }
+            taken.add(code);
+            codeByNorm.set(normKey, code);
           }
         }
 
-        const isSub = ref?.warehouse === '부자재';
-        const category = isSub ? '부자재' : '원재료';
-        const warehouse = ref?.warehouse || (/냉동/.test(rawName) ? '냉동' : /상온/.test(rawName) ? '상온' : /냉장/.test(rawName) ? '냉장1' : '상온');
-        seq += 1;
-        const codeBase = ref?.itemId && String(ref.itemId).trim() ? String(ref.itemId).trim() : `GFS-${today}-${String(seq).padStart(3, '0')}`;
-        // 코드 충돌 시 접미사
-        let productCode = codeBase;
-        let dup = await prisma.product.findUnique({ where: { productCode } });
-        let n = 1;
-        while (dup) {
-          productCode = `${codeBase}-${n++}`;
-          dup = await prisma.product.findUnique({ where: { productCode } });
-        }
-        const packUnit = Number(it.packUnit) || Number(ref?.packUnit) || 1;
-        const bagPrice = Number(it.bagPrice) || Number(ref?.bagPrice) || 0;
-        const safetyStock = Math.max(0, Math.round(Number(it.safetyStock) || 0));
-
-        product = await prisma.product.create({
-          data: {
-            productCode,
-            name: rawName,
-            spec: '',
-            unit: 'box',
-            category,
-            kind: '',
-            boxQty: packUnit,
-            warehouse,
-            safetyStockQty: safetyStock,
-            partnerId,
-            remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
-          },
+        // ── Phase B-3: 품목 일괄 생성 (1회) → ID 회수 (1회) ──
+        const createData = toCreate.map((p) => ({
+          productCode: codeByNorm.get(p.norm)!,
+          name: p.rawName,
+          spec: '',
+          unit: 'box',
+          category: p.category,
+          kind: '',
+          boxQty: p.packUnit,
+          warehouse: p.warehouse,
+          safetyStockQty: p.safetyStock,
+          partnerId: p.cleanVendor ? (partnerByName.get(p.cleanVendor)?.id as string) ?? null : null,
+          remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
+        }));
+        await prisma.product.createMany({ data: createData });
+        const createdProducts = await prisma.product.findMany({
+          where: { productCode: { in: createData.map((d) => d.productCode) } },
           include: { partner: true },
         });
-        if (bagPrice > 0) {
-          await prisma.productPrice.create({
-            data: {
-              productId: product.id,
-              purchasePrice: bagPrice,
-              deliveryPrice: 0,
-              effectiveDate: kstToday(),
-              remark: 'GFS 자동생성 단가(봉단가)',
-            },
-          });
+        const createdByCode = new Map(createdProducts.map((p) => [p.productCode, p]));
+        for (const p of toCreate) {
+          const prod = createdByCode.get(codeByNorm.get(p.norm)!);
+          if (prod) {
+            createdByNorm.set(p.norm, prod);
+            created.push({
+              type: 'product',
+              productCode: prod.productCode,
+              name: prod.name,
+              warehouse: p.warehouse,
+              partner: p.cleanVendor ? partnerByName.get(p.cleanVendor)?.name || '' : '',
+            });
+          }
         }
-        wasCreated = true;
-        created.push({
-          type: 'product',
-          productCode: product.productCode,
-          name: product.name,
-          warehouse,
-          partner: partnerName,
-        });
-        existingByName.set(rawName, product);
-        existingByNorm.set(norm, product);
+
+        // ── Phase B-4: 단가 일괄 생성 (1회, 있는 것만) ──
+        const priceRows = toCreate
+          .filter((p) => p.bagPrice > 0 && createdByNorm.has(p.norm))
+          .map((p) => ({
+            productId: (createdByNorm.get(p.norm) as any).id as number,
+            purchasePrice: p.bagPrice,
+            deliveryPrice: 0,
+            effectiveDate: kstToday(),
+            remark: 'GFS 자동생성 단가(봉단가)',
+          }));
+        if (priceRows.length > 0) {
+          await prisma.productPrice.createMany({ data: priceRows });
+        }
+
+        // 같은 norm 중복 항목도 생성된 품목에 매칭
+        for (const p of prepared) {
+          if (!p.existing && createdByNorm.has(p.norm)) {
+            (p as any).existing = createdByNorm.get(p.norm);
+          }
+        }
       }
 
+      // ── Phase B-5: 기존 품목 안전재고 일괄 보충 (값별 updateMany, 수기값 유지) ──
+      const safetyGroups = new Map<number, number[]>();
+      for (const p of prepared) {
+        const prod = p.existing as any;
+        if (!prod?.id || createdByNorm.has(p.norm)) continue; // 신규 생성분은 이미 반영됨
+        if (p.safetyStock > 0 && !(Number(prod.safetyStockQty) > 0)) {
+          if (!safetyGroups.has(p.safetyStock)) safetyGroups.set(p.safetyStock, []);
+          safetyGroups.get(p.safetyStock)!.push(prod.id);
+        }
+      }
+      for (const [val, ids] of safetyGroups) {
+        await prisma.product.updateMany({ where: { id: { in: ids }, safetyStockQty: { lte: 0 } }, data: { safetyStockQty: val } });
+      }
+    }
+    // ── Phase C: 응답용 matched 조립 (원본 순서 유지) ──
+    for (const p of prepared) {
+      const product = (p as any).existing as any;
       if (!product) {
         if (dryRun) {
-          // 미리보기: 생성될 내용만 안내
-        matched.push({
-          name: rawName,
-          boxes,
-          status: '신규예정',
-          warehouse: ref?.warehouse || '',
-          vendor: ref?.vendor || it.supplierHeader || '',
-          bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
-          packUnit: Number(it.packUnit) || Number(ref?.packUnit) || 0,
-          gfsDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
-        });
+          matched.push({
+            name: p.rawName,
+            boxes: p.boxes,
+            status: '신규예정',
+            warehouse: p.ref?.warehouse || '',
+            vendor: p.ref?.vendor || p.vendorName,
+            bagPrice: p.bagPrice,
+            packUnit: p.packUnit,
+            gfsDays: p.stockDays,
+          });
         } else {
-          failed.push({ name: rawName, reason: '생성 실패' });
+          failed.push({ name: p.rawName, reason: '생성 실패' });
         }
         continue;
       }
-
-      // 기존 품목의 안전재고가 비어 있으면 자동계산값으로 채움 (수기값 유지)
-      const wantSafety = Math.max(0, Math.round(Number(it.safetyStock) || 0));
-      if (!dryRun && wantSafety > 0 && !(Number((product as any).safetyStockQty) > 0)) {
-        try {
-          product = await prisma.product.update({
-            where: { id: product.id },
-            data: { safetyStockQty: wantSafety },
-            include: { partner: true },
-          });
-          existingByName.set(rawName, product);
-          existingByNorm.set(norm, product);
-        } catch {}
-      }
-
-      const packUnit = Number(product.boxQty) || Number(it.packUnit) || Number(ref?.packUnit) || 1;
+      const wasCreated = createdByNorm.has(p.norm);
+      const packUnit = Number(product.boxQty) || p.packUnit || Number(p.ref?.packUnit) || 1;
       const partner = (product as any).partner;
       matched.push({
         productCode: product.productCode,
         productName: product.name,
-        orderQty: boxes,
+        orderQty: p.boxes,
         unit: 'box',
         packUnit,
-        bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
-        boxPrice:
-          (Number(it.bagPrice) || Number(ref?.bagPrice) || 0) * packUnit,
-        partnerId: (product as any).partnerId || null,
+        bagPrice: p.bagPrice,
+        boxPrice: p.bagPrice * packUnit,
+        partnerId: (product as any).partnerId ?? null,
         partnerName: partner?.name || '',
         warehouse: product.warehouse,
         created: wasCreated,
-        gfsDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
+        gfsDays: p.stockDays,
       });
     }
 

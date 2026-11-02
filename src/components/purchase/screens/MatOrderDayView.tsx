@@ -6,10 +6,20 @@ import { HelpCircle, RotateCcw, Calendar, Save } from 'lucide-react';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { DAY_CHARS, calcRow, splitWeek, classifyPattern, type SheetRowInput } from '@/lib/gfs/orderCalc';
 
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** 로컬 자정 기준 Date → YYYY-MM-DD (UTC 변환 오차 방지) */
+function toLocalISODate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 interface SheetRow extends SheetRowInput {}
 
 export const MatOrderDayView: React.FC = () => {
-  const [orderDate, setOrderDate] = useState('2026-10-30');
+  const [orderDate, setOrderDate] = useState(kstToday);
   const [dayIdx, setDayIdx] = useState(() => {
     const t = new Date();
     t.setDate(t.getDate() + 1);
@@ -112,7 +122,7 @@ export const MatOrderDayView: React.FC = () => {
   const dayDate = useMemo(() => {
     const base = new Date(orderDate + 'T00:00:00');
     base.setDate(base.getDate() + dayIdx);
-    return base.toISOString().slice(0, 10);
+    return toLocalISODate(base);
   }, [orderDate, dayIdx]);
 
   const handleDayQtyChange = (id: number, val: string) => {

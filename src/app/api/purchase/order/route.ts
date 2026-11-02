@@ -3,15 +3,24 @@ import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 
 // GET /api/purchase/order?orderDate=2026-10-30&status=미입고
+// GET /api/purchase/order?startDate=2026-10-01&endDate=2026-10-31 (기간 조회)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const orderDate = searchParams.get('orderDate');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
     const where: any = {};
-    if (orderDate) where.orderDate = orderDate;
+    if (orderDate) {
+      where.orderDate = orderDate;
+    } else if (startDate || endDate) {
+      where.orderDate = {};
+      if (startDate) where.orderDate.gte = startDate;
+      if (endDate) where.orderDate.lte = endDate;
+    }
     if (status && status !== '전체') where.status = status;
     if (search) {
       where.OR = [

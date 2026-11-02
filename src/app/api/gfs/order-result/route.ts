@@ -73,9 +73,54 @@ export async function POST(req: NextRequest) {
 
     const createdOrders: { orderNo: string; itemCount: number }[] = [];
 
+    // ── 일괄 조회: 거래처 + 품목 (요청당 2회) ──
+    const groupIds = [...groups.keys()].filter((k) => k !== '__DEFAULT__');
+    const groupNames = new Map<string, string>();
+    for (const [pid, gi] of groups) {
+      if (pid === '__DEFAULT__') continue;
+      const nm = String(gi[0]?.partnerName || (gi[0] as any)?.supplier || '').trim();
+      if (nm) groupNames.set(pid, nm);
+    }
+    const partnerOr: any[] = [];
+    if (groupIds.length > 0) partnerOr.push({ id: { in: groupIds } });
+    const nameList = [...new Set(groupNames.values())];
+    if (nameList.length > 0) partnerOr.push({ name: { in: nameList } });
+    const foundPartners =
+      partnerOr.length > 0
+        ? await prisma.partner.findMany({ where: { OR: partnerOr }, select: { id: true, name: true } })
+        : [];
+    const partnerById = new Map(foundPartners.map((p) => [p.id, p]));
+    const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
+
+    const allCodes = [
+      ...new Set(
+        [...groups.values()]
+          .flatMap((gi) => gi.map((it) => String(it.productCode || '').trim()))
+          .filter(Boolean)
+      ),
+    ];
+    const foundProducts =
+      allCodes.length > 0
+        ? await prisma.product.findMany({ where: { productCode: { in: allCodes } } })
+        : [];
+    const productByCode = new Map(foundProducts.map((p) => [p.productCode, p]));
+
+    const logRows: {
+      logDate: string;
+      userId?: number;
+      loginId: string;
+      userName: string;
+      action: string;
+      menuId: string;
+      menuName: string;
+      detail: string;
+    }[] = [];
+    // 발주서 생성은 채번 충돌 방지를 위해 그룹별 순차 처리 (건당 2회)
     for (const [pid, groupItems] of groups) {
       const usePartnerId = pid === '__DEFAULT__' ? resolvedDefaultPartner!.id : pid;
-      const partner = await prisma.partner.findUnique({ where: { id: usePartnerId } });
+      const partner =
+        partnerById.get(usePartnerId) ??
+        (groupNames.has(pid) ? partnerByName.get(groupNames.get(pid)!) : undefined);
       if (!partner) {
         return NextResponse.json(
           { success: false, error: `거래처를 찾을 수 없습니다: ${usePartnerId}` },
@@ -90,7 +135,7 @@ export async function POST(req: NextRequest) {
       });
       const orderNo = `${prefix}-${String(countToday + 1).padStart(3, '0')}`;
 
-      // 품목 매칭 (productCode 기준)
+      // 품목 매칭 (productCode 기준, 일괄 조회 결과 사용)
       const detailData: {
         productId: number;
         productCode: string;
@@ -104,9 +149,8 @@ export async function POST(req: NextRequest) {
       }[] = [];
 
       for (const it of groupItems) {
-        const product = await prisma.product.findUnique({
-          where: { productCode: it.productCode },
-        });
+        const code = String(it.productCode || '').trim();
+        const product = code ? productByCode.get(code) : undefined;
         if (!product) continue; // 미등록 품목은 스킵
         const qty = Number(it.orderQty) || 0;
         if (qty <= 0) continue;
@@ -146,20 +190,19 @@ export async function POST(req: NextRequest) {
       });
 
       createdOrders.push({ orderNo, itemCount: detailData.length });
-
-      // 발주 감사 로그 (담당자 추적)
-      await prisma.systemLog.create({
-        data: {
-          logDate: new Date().toISOString(),
-          userId: Number(me.id) || undefined,
-          loginId: String(me.loginId || ''),
-          userName: String(me.name || ''),
-          action: 'GFS발주생성',
-          menuId: 'pur-gfs-smart-order',
-          menuName: '스마트발주(GFS)',
-          detail: `${actorLabel} 발주서 ${orderNo} 생성 (${detailData.length}품목, ${totalAmount.toLocaleString()}원)`,
-        },
-      }).catch(() => {});
+      logRows.push({
+        logDate: new Date().toISOString(),
+        ...(Number.isFinite(Number((me as any)?.id)) ? { userId: Number((me as any).id) } : {}),
+        loginId: String(me.loginId || ''),
+        userName: String(me.name || ''),
+        action: 'GFS발주생성',
+        menuId: 'pur-gfs-smart-order',
+        menuName: '스마트발주(GFS)',
+        detail: `${actorLabel} 발주서 ${orderNo} 생성 (${detailData.length}품목, ${totalAmount.toLocaleString()}원)`,
+      });
+    }
+    if (logRows.length > 0) {
+      await prisma.systemLog.createMany({ data: logRows }).catch(() => {});
     }
 
     if (createdOrders.length === 0) {
