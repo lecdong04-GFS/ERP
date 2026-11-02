@@ -1,6 +1,9 @@
 import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
+import { normName } from './norm';
+
+export { normName };
 
 export interface AuditEntry {
   name: string;
@@ -145,15 +148,6 @@ export function inferMenuKind(menu: string): string {
 }
 
 export const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
-
-/** 품명 정규화: [접두어]/괄호/기호 제거 + 소문자 */
-export function normName(s: unknown): string {
-  return String(s ?? '')
-    .replace(/\[.+?\]/g, '')
-    .replace(/\(.+?\)/g, '')
-    .replace(/[^가-힣a-zA-Z0-9]/g, '')
-    .toLowerCase();
-}
 
 /** 프로젝트 루트 기준 엑셀 경로 탐색 (GFS-ERP 안에 커밋된 정본 우선) */
 function findFile(candidates: string[]): string | null {

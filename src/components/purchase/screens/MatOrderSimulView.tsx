@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { HelpCircle, Search, RotateCcw, Calendar, Eye, Save } from 'lucide-react';
+import { HelpCircle, Search, RotateCcw, Calendar, Save } from 'lucide-react';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { classifyPattern } from '@/lib/gfs/orderCalc';
+import { normName } from '@/lib/gfs/norm';
 export interface MatOrderSimulItem {
   id: number;
   supplier: string; // 거래처
@@ -21,281 +23,167 @@ export interface MatOrderSimulItem {
   currentStock: number; // 현재고
   stockDesc: string; // 재고설명
   discontinueDate: string; // 완성품단종일
-  discontinueList: string; // 단종목록
+  discontinueList: string; // 단종목록 (원천 없음, '-' 표시)
   incomingScheduled: number; // 입고예정량
   remark: string; // 비고
+  productCode?: string; // 품번 (발주 확정 시 매칭용)
+  partnerId?: string; // 거래처 ID (발주 확정 시 그룹핑용)
+  calcQty: number; // 발주계산수량 (순소요량)
+  safetyStock: number; // 안전재고
+  dailyUse: number; // 일사용량 (발주서 H열)
+  packUnit: number; // 입수량 (발주서 E열, 없으면 기준정보)
+  orderDays: number; // 발주일수 (발주서 G열)
+  stockDays: number | null; // 재고유지일 (발주서 N열)
+  pattern: string; // 납품패턴 (공급사 납품요일)
 }
 
-export const INITIAL_SIMUL_DATA: MatOrderSimulItem[] = [
-  {
-    id: 1,
-    supplier: '[네트웍스]대림',
-    category: '원재료',
-    itemName: '[상온]1/2절김',
-    spec: '200매*30ea',
-    unit: 'box',
-    orderQty: 2,
-    unitPrice: 48000,
-    orderAmt: 96000,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 5,
-    stockDesc: '정상 재고 유지',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '시뮬레이션 자동산출',
-  },
-  {
-    id: 2,
-    supplier: '[네트웍스]대림',
-    category: '원재료',
-    itemName: '[상온]삼각김밥김',
-    spec: '100매*32ea',
-    unit: 'box',
-    orderQty: 4,
-    unitPrice: 52000,
-    orderAmt: 208000,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 8,
-    stockDesc: '안전재고 임박',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 3,
-    supplier: '[네트웍스]두레',
-    category: '부재료',
-    itemName: '두레)ET-30 용기',
-    spec: '50ea*2줄',
-    unit: 'box',
-    orderQty: 10,
-    unitPrice: 38000,
-    orderAmt: 380000,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 12,
-    stockDesc: '용기류 정기발주',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 4,
-    supplier: '[네트웍스]CJ',
-    category: '원재료',
-    itemName: '[냉장]계란구이',
-    spec: '1020g*12ea',
-    unit: 'box',
-    orderQty: 6,
-    unitPrice: 78000,
-    orderAmt: 468000,
-    leadTime: '1일',
-    recvDate: '2026-10-31',
-    recvDay: '토',
-    currentStock: 6,
-    stockDesc: '콜드체인 냉장',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 5,
-    supplier: '[네트웍스]오뚜기',
-    category: '원재료',
-    itemName: '[상온]케찹포션',
-    spec: '3kg*4ea',
-    unit: 'box',
-    orderQty: 2,
-    unitPrice: 34000,
-    orderAmt: 68000,
-    leadTime: '1일',
-    recvDate: '2026-10-31',
-    recvDay: '토',
-    currentStock: 2,
-    stockDesc: '상온 안정재고',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 6,
-    supplier: '[네트웍스]성경',
-    category: '원재료',
-    itemName: '[상온]성경김가루',
-    spec: '500g*6ea',
-    unit: 'box',
-    orderQty: 5,
-    unitPrice: 42000,
-    orderAmt: 210000,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 7,
-    stockDesc: '정상 재고',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 7,
-    supplier: '[네트웍스]아이',
-    category: '부재료',
-    itemName: '혜자)순창/제육용기',
-    spec: '600ea/box',
-    unit: 'box',
-    orderQty: 4,
-    unitPrice: 65000,
-    orderAmt: 260000,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 9,
-    stockDesc: '전용용기',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 8,
-    supplier: '[네트웍스]한성',
-    category: '원재료',
-    itemName: '[냉동]궁채나물',
-    spec: '1kg*10ea',
-    unit: 'box',
-    orderQty: 2,
-    unitPrice: 63346,
-    orderAmt: 126692,
-    leadTime: '2일',
-    recvDate: '2026-11-01',
-    recvDay: '일',
-    currentStock: 3,
-    stockDesc: '냉동 보관',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 9,
-    supplier: '[네트웍스]한성',
-    category: '원재료',
-    itemName: '[냉장]다진맛살',
-    spec: '10kg*2ea',
-    unit: 'box',
-    orderQty: 6,
-    unitPrice: 52000,
-    orderAmt: 312000,
-    leadTime: '1일',
-    recvDate: '2026-10-31',
-    recvDay: '토',
-    currentStock: 5,
-    stockDesc: '냉장 원료육',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-  {
-    id: 10,
-    supplier: '[네트웍스]한성',
-    category: '원재료',
-    itemName: '[냉장]볶음김치',
-    spec: '5kg*3ea',
-    unit: 'box',
-    orderQty: 15,
-    unitPrice: 42000,
-    orderAmt: 630000,
-    leadTime: '1일',
-    recvDate: '2026-10-31',
-    recvDay: '토',
-    currentStock: 11,
-    stockDesc: '주요 김밥 토핑',
-    discontinueDate: '',
-    discontinueList: '',
-    incomingScheduled: 0,
-    remark: '',
-  },
-];
+/** KST 오늘 YYYY-MM-DD */
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 뒤 YYYY-MM-DD + 요일(월=0) */
+function kstAddDays(baseYmd: string, n: number): { date: string; dow: number } {
+  const d = new Date(baseYmd + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  const p = (v: number) => String(v).padStart(2, '0');
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return { date, dow: (d.getDay() + 6) % 7 };
+}
+
+const WEEK_KO = ['월', '화', '수', '목', '금', '토', '일'];
 
 export const MatOrderSimulView: React.FC = () => {
   const [supplierFilter, setSupplierFilter] = useState('ALL');
-  const [rows, setRows] = useState<MatOrderSimulItem[]>(INITIAL_SIMUL_DATA);
+  const [rows, setRows] = useState<MatOrderSimulItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const todayStr = kstToday();
+  const todayLabel = (() => {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return `${y}년 ${m}월 ${d}일 ${['일', '월', '화', '수', '목', '금', '토'][dt.getDay()]}요일`;
+  })();
+
+  // 실데이터 로드 (DB 그대로 표시 — 빈 결과도 그대로, 샘플 없음)
+  // 발주서 정본에서 계산근거(발주일수/일사용량/재고유지일/납품패턴)를 품명 매칭으로 보완
+  const loadSimulData = async () => {
+    setIsLoading(true);
+    try {
+      const [reqRes, sheetRes] = await Promise.all([
+        fetch('/api/purchase/order-req-confirm', { cache: 'no-store' }).then((r) => r.json()),
+        fetch('/api/gfs/order-sheet', { cache: 'no-store' }).then((r) => r.json()).catch(() => null),
+      ]);
+      const sheetByNorm = new Map<string, any>();
+      if (sheetRes?.success && Array.isArray(sheetRes.data?.rows)) {
+        sheetRes.data.rows.forEach((o: any) => {
+          const k = normName(o.name || '');
+          if (k && !sheetByNorm.has(k)) sheetByNorm.set(k, o);
+        });
+      }
+      const json = reqRes;
+      if (json.success && Array.isArray(json.data)) {
+        const loaded: MatOrderSimulItem[] = json.data.map((r: any, idx: number) => {
+          const lead = Math.max(0, Math.round(Number(r.leadTime) || 0));
+          const recv = kstAddDays(todayStr, lead);
+          const ref = sheetByNorm.get(normName(r.itemName || ''));
+          return {
+            id: r.id ?? idx + 1,
+            productCode: r.materialCode || '',
+            partnerId: r.partnerId || '',
+            supplier: r.supplier || '미지정거래처',
+            category: r.category || '원재료',
+            itemName: r.itemName || '',
+            spec: r.spec || '',
+            unit: r.unit || 'ea',
+            orderQty: Math.max(0, Math.round(Number(r.orderQty) || 0)),
+            unitPrice: Math.max(0, Math.round(Number(r.unitPrice) || 0)),
+            orderAmt: Math.max(0, Math.round(Number(r.orderQty) || 0)) * Math.max(0, Math.round(Number(r.unitPrice) || 0)),
+            leadTime: lead > 0 ? `${lead}일` : '-',
+            recvDate: recv.date,
+            recvDay: WEEK_KO[recv.dow],
+            currentStock: Number(r.currentStock) || 0,
+            stockDesc: r.status || '',
+            discontinueDate: '',
+            discontinueList: '',
+            incomingScheduled: Number(r.incomingScheduled) || 0,
+            remark: '',
+            calcQty: Number(r.calcQty) || 0,
+            safetyStock: Math.max(0, Math.round(Number(r.safetyStock) || 0)),
+            packUnit: ref && Number(ref.packUnit) > 0 ? Number(ref.packUnit) : (Number(r.unitQty) || 0),
+            dailyUse: ref && Number(ref.dailyUsage) > 0 ? Number(ref.dailyUsage) : 0,
+            orderDays: ref && Number(ref.days) > 0 ? Number(ref.days) : 0,
+            stockDays: ref && ref.stockDays != null && !isNaN(Number(ref.stockDays)) ? Number(ref.stockDays) : null,
+            pattern: ref?.supplier ? classifyPattern(ref.supplier) : '기타',
+          };
+        });
+        setRows(loaded);
+      } else {
+        setRows([]);
+      }
+    } catch (err) {
+      console.error('Failed to load simul order requirements', err);
+      setRows([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetch('/api/purchase/order-req-confirm')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const loaded: MatOrderSimulItem[] = json.data.map((r: any, idx: number) => ({
-            id: r.id || idx + 1,
-            supplier: r.partnerName || '[네트웍스]광주식품',
-            category: r.category || '원재료',
-            variety: '원부자재',
-            itemName: r.materialName || '원료',
-            spec: r.spec || '',
-            unit: r.unit || 'kg',
-            orderQty: r.requiredQty || 10,
-            unitPrice: r.unitPrice || 2500,
-            orderAmt: (r.requiredQty || 10) * (r.unitPrice || 2500),
-            inDate: '2026-10-31',
-            minOrderQty: 10,
-            unitQty: 1,
-            safetyStock: 50,
-            currentStock: r.currentStock || 0,
-            incomingScheduled: 0,
-            remark: r.remark || '',
-          }));
-          setRows(loaded);
-        }
-      })
-      .catch((err) => console.error('Failed to load simul order requirements', err));
+    void loadSimulData();
   }, []);
 
   const handleSaveOrder = async () => {
+    const targets = rows.filter((r) => Number(r.orderQty) > 0);
+    if (targets.length === 0) {
+      alert('발주수량이 1 이상인 품목이 없습니다.');
+      return;
+    }
+    if (!window.confirm(`시뮬레이션 발주 ${targets.length}건 (${targets.reduce((s, r) => s + Math.round(Number(r.orderQty) || 0), 0).toLocaleString()}박스)을 확정할까요?\n거래처별 정식 발주서가 생성됩니다.`)) return;
+    setIsSaving(true);
     try {
       const res = await fetch('/api/purchase/order-req-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'confirm_and_order',
-          deliveryDate: '2026-10-31',
-          items: rows.map((r) => ({
-            materialCode: `MAT-${r.id}`,
-            materialName: r.itemName,
+          orderDate: todayStr,
+          createdBy: 'simul',
+          items: targets.map((r) => ({
+            materialCode: r.productCode || undefined,
+            itemName: r.itemName,
             category: r.category,
-            requiredQty: r.orderQty,
-            currentStock: r.currentStock,
-            shortageQty: r.orderQty,
-            orderQty: r.orderQty,
-            unitPrice: r.unitPrice,
-            amount: r.orderAmt,
-            partnerId: 'V001',
+            spec: r.spec,
+            unit: r.unit,
+            orderQty: Math.round(Number(r.orderQty)),
+            unitPrice: Math.round(Number(r.unitPrice)),
+            partnerId: r.partnerId || undefined,
             partnerName: r.supplier,
           })),
         }),
       });
       const json = await res.json();
       if (json.success) {
-        alert('시뮬레이션 발주 데이터가 확정되어 발주서가 생성되었습니다.');
+        alert(`발주 확정 완료\n${json.message || ''}`);
+        void loadSimulData();
       } else {
         alert('발주 실패: ' + json.error);
       }
     } catch (err: any) {
       alert('발주 저장 중 오류: ' + err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  // 매입처 목록 (실데이터 기준 동적)
+  const suppliers = useMemo(() => {
+    const s = new Set<string>();
+    rows.forEach((r) => {
+      const name = String(r.supplier || '').trim();
+      if (name) s.add(name);
+    });
+    return [...s].sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
     if (supplierFilter === 'ALL') return rows;
@@ -341,16 +229,12 @@ export const MatOrderSimulView: React.FC = () => {
   };
 
   const handleSearch = () => {
-    alert('시뮬레이션 발주 소요량이 재조회되었습니다.');
+    void loadSimulData();
   };
 
   const handleReset = () => {
-    setRows(INITIAL_SIMUL_DATA);
     setSupplierFilter('ALL');
-  };
-
-  const handleViewProducts = (item: MatOrderSimulItem) => {
-    alert(`[${item.itemName}]의 사용 제품 레시피 및 BOM 연결 정보를 조회합니다.`);
+    void loadSimulData();
   };
 
   return (
@@ -365,11 +249,12 @@ export const MatOrderSimulView: React.FC = () => {
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={handleSaveOrder}
-            className="flex items-center gap-1 px-3 py-1 bg-[#2e7d32] hover:bg-[#1b5e20] text-white rounded-xs text-[11px] font-bold transition-colors shadow-2xs cursor-pointer border border-[#1b5e20]"
+            onClick={() => void handleSaveOrder()}
+            disabled={isSaving}
+            className="flex items-center gap-1 px-3 py-1 bg-[#2e7d32] hover:bg-[#1b5e20] disabled:opacity-50 text-white rounded-xs text-[11px] font-bold transition-colors shadow-2xs cursor-pointer border border-[#1b5e20]"
           >
             <Save size={12} className="stroke-[2.5]" />
-            발주확정
+            {isSaving ? '저장 중...' : '발주확정'}
           </button>
           <button
             type="button"
@@ -402,11 +287,11 @@ export const MatOrderSimulView: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-gray-700 text-[11px]">발주일자</span>
-            <div className="flex items-center bg-white border border-gray-300 px-2 py-0.5 rounded-xs shadow-2xs text-[11px]">
-              <span className="font-medium text-gray-800 mr-2">2026년 10월 30일 금요일</span>
-              <Calendar size={12} className="text-gray-500" />
+              <div className="flex items-center bg-white border border-gray-300 px-2 py-0.5 rounded-xs shadow-2xs text-[11px]">
+                <span className="font-medium text-gray-800 mr-2">{todayLabel}</span>
+                <Calendar size={12} className="text-gray-500" />
+              </div>
             </div>
-          </div>
 
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-gray-700 text-[11px]">매입처</span>
@@ -415,14 +300,10 @@ export const MatOrderSimulView: React.FC = () => {
               onChange={(e) => setSupplierFilter(e.target.value)}
               className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] font-medium rounded-xs shadow-2xs w-[160px] h-[22px] outline-none focus:border-blue-500"
             >
-              <option value="ALL">ALL</option>
-              <option value="[네트웍스]대림">[네트웍스]대림</option>
-              <option value="[네트웍스]두레">[네트웍스]두레</option>
-              <option value="[네트웍스]CJ">[네트웍스]CJ</option>
-              <option value="[네트웍스]오뚜기">[네트웍스]오뚜기</option>
-              <option value="[네트웍스]성경">[네트웍스]성경</option>
-              <option value="[네트웍스]아이">[네트웍스]아이</option>
-              <option value="[네트웍스]한성">[네트웍스]한성</option>
+              <option value="ALL">ALL ({suppliers.length})</option>
+              {suppliers.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -439,7 +320,7 @@ export const MatOrderSimulView: React.FC = () => {
             <thead className="sticky top-0 z-20 bg-[#c5cbf0] text-gray-900 font-semibold border-b border-[#9098aa]">
               <tr className="h-[32px] leading-tight text-center whitespace-nowrap font-bold">
                 {/* 거래처 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[160px] text-center">
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[110px] text-center">
                   <div className="flex items-center justify-center gap-0.5">
                     <span>거래처</span>
                     
@@ -447,7 +328,7 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 구분 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 w-[55px] min-w-[55px] text-center">
+                <th className="border border-[#9098aa] px-1 py-0.5 w-[48px] min-w-[48px] text-center">
                   <div className="flex items-center justify-center gap-0.5">
                     <span>구분</span>
                     
@@ -455,7 +336,7 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 품명 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[280px] text-center">
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[150px] text-center">
                   <div className="flex items-center justify-center gap-0.5">
                     <span>품명</span>
                     
@@ -463,7 +344,7 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 규격 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[120px] text-center">
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[90px] text-center">
                   <div className="flex items-center justify-center gap-0.5">
                     <span>규격</span>
                     
@@ -471,7 +352,7 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 단위 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 w-[45px] min-w-[45px] text-center">
+                <th className="border border-[#9098aa] px-1 py-0.5 w-[40px] min-w-[40px] text-center">
                   <div className="flex items-center justify-center gap-0.5">
                     <span>단위</span>
                     
@@ -493,9 +374,44 @@ export const MatOrderSimulView: React.FC = () => {
                   발주금액
                 </th>
 
+                {/* 발주계산수량 (순소요량) */}
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-center">
+                  발주계산수량
+                </th>
+
+                {/* 안전재고 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[64px] text-center">
+                  안전재고
+                </th>
+
+                {/* 일사용량 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px] text-center">
+                  일사용량
+                </th>
+
+                {/* 재고유지일 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[64px] text-center">
+                  재고유지일
+                </th>
+
+                {/* 입수량 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[56px] text-center">
+                  입수량
+                </th>
+
+                {/* 발주일수 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[56px] text-center">
+                  발주일수
+                </th>
+
                 {/* 조달기간 (2줄) */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[55px] text-center">
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[48px] text-center">
                   <span>조달기간</span>
+                </th>
+
+                {/* 납품패턴 */}
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[70px] text-center">
+                  납품패턴
                 </th>
 
                 {/* 입고일 */}
@@ -507,7 +423,7 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 입고요일 */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[55px] text-center">
+                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[40px] text-center">
                   입고요일
                 </th>
 
@@ -517,22 +433,12 @@ export const MatOrderSimulView: React.FC = () => {
                 </th>
 
                 {/* 재고설명 */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-center">
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[70px] text-center">
                   재고설명
                 </th>
 
-                {/* 완성품단종일 (2줄) */}
-                <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px] text-center">
-                  <span>완성품단종일</span>
-                </th>
-
-                {/* 단종목록 */}
-                <th className="border border-[#9098aa] px-1.5 py-0.5 min-w-[65px] text-center">
-                  단종목록
-                </th>
-
                 {/* 입고예정량 (2줄) */}
-                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[75px] text-center">
+                <th className="border border-[#9098aa] px-2 py-0.5 min-w-[70px] text-center">
                   <span>입고예정량</span>
                 </th>
 
@@ -540,29 +446,37 @@ export const MatOrderSimulView: React.FC = () => {
                 <th className="border border-[#9098aa] px-2 py-0.5 min-w-[85px] text-center">
                   비고
                 </th>
-
-                {/* 사용제품보기 (2줄) */}
-                <th className="border border-[#9098aa] px-1.5 py-0.5 min-w-[65px] text-center">
-                  <span>사용제품보기</span>
-                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={22} className="py-10 text-center text-gray-500">
+                    불러오는 중입니다...
+                  </td>
+                </tr>
+              ) : filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={22} className="py-10 text-center text-gray-500">
+                    해당 일자 소요량이 없습니다. (소요량은 파이프라인 실행 시 자동 계산됩니다)
+                  </td>
+                </tr>
+              ) : (
+              filteredRows.map((row) => (
                 <tr
                   key={row.id}
                   className="h-[21px] border-b border-gray-300 hover:bg-[#eef3fb] bg-white text-gray-900"
                 >
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium ">
+                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium truncate max-w-[160px]" title={row.supplier}>
                     {row.supplier}
                   </td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700">
                     {row.category}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium text-gray-900 ">
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-medium text-gray-900 truncate max-w-[260px]" title={row.itemName}>
                     {row.itemName}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-center text-gray-700 ">
+                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-center text-gray-700 truncate max-w-[130px]" title={row.spec}>
                     {row.spec}
                   </td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700">
@@ -579,12 +493,33 @@ export const MatOrderSimulView: React.FC = () => {
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
                     {row.unitPrice.toLocaleString()}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-medium text-gray-900">
-                    {row.orderAmt.toLocaleString()}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-700">
-                    {row.leadTime}
-                  </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-medium text-gray-900">
+                      {row.orderAmt.toLocaleString()}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-indigo-800" title="순소요량 (소요량+안전재고-현재고-입고예정)">
+                      {row.calcQty ? row.calcQty.toLocaleString() : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-700">
+                      {row.safetyStock ? row.safetyStock.toLocaleString() : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-700">
+                      {row.dailyUse ? row.dailyUse.toLocaleString() : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">
+                      {row.stockDays != null ? row.stockDays : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-700">
+                      {row.packUnit > 0 ? row.packUnit.toLocaleString() : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-700">
+                      {row.orderDays > 0 ? row.orderDays : '-'}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-700">
+                      {row.leadTime}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-bold text-teal-700">
+                      {row.pattern}
+                    </td>
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-800">
                     {row.recvDate}
                   </td>
@@ -594,33 +529,18 @@ export const MatOrderSimulView: React.FC = () => {
                   <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
                     {row.currentStock.toLocaleString()}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-center text-gray-700 ">
-                    {row.stockDesc}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center font-mono text-gray-600">
-                    {row.discontinueDate || '-'}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-600">
-                    {row.discontinueList || '-'}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-700">
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-center text-gray-700 truncate max-w-[110px]" title={row.stockDesc}>
+                      {row.stockDesc}
+                    </td>
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-700">
                     {row.incomingScheduled.toLocaleString()}
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-left text-gray-600 ">
-                    {row.remark}
-                  </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleViewProducts(row)}
-                      className="px-1.5 py-0.5 bg-[#4a6b82] hover:bg-[#3b5568] text-white rounded-2xs text-[10px] flex items-center justify-center gap-0.5 mx-auto shadow-2xs"
-                    >
-                      <Eye size={10} />
-                      보기
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-left text-gray-600 truncate max-w-[200px]" title={row.remark}>
+                      {row.remark}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
 
             {/* 하단 요약 합계 행 (101246.png 일치: 연노랑 배경) */}
@@ -645,8 +565,12 @@ export const MatOrderSimulView: React.FC = () => {
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
+                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
+                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
+                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
+                <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-2 py-1"></td>
                 <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-[#9098aa] px-1 py-1"></td>
               </tr>
             </tfoot>
