@@ -1,21 +1,12 @@
 'use client';
 
 import React from 'react';
-import { ArrowRight, Clock3, PackageMinus, ShieldCheck, Timer } from 'lucide-react';
-import { FefoRow, StockDayRow } from './dashboardData';
+import { ArrowRight, Clock3, PackageMinus, ShieldCheck } from 'lucide-react';
+import { StockDayRow } from './dashboardData';
 
 interface WatchListProps {
-  fefo: FefoRow[];
   stockDays: StockDayRow[];
   onNavigate: (menuId: string) => void;
-}
-
-function dayChip(days: number) {
-  if (days < 0) return { cls: 'bg-[#fff1f2] text-[#be123c] border-[#fecdd3]', text: `만료 ${Math.abs(days)}일` };
-  if (days === 0) return { cls: 'bg-[#fff1f2] text-[#be123c] border-[#fecdd3]', text: 'D-DAY' };
-  if (days <= 3) return { cls: 'bg-[#fff1f2] text-[#be123c] border-[#fecdd3]', text: `D-${days}` };
-  if (days <= 7) return { cls: 'bg-[#fffbeb] text-[#b45309] border-[#fde68a]', text: `D-${days}` };
-  return { cls: 'bg-[#f8fafc] text-[var(--ink-600)] border-[var(--line)]', text: `D-${days}` };
 }
 
 function stockBar(days: number) {
@@ -32,10 +23,10 @@ const Panel: React.FC<{
   children: React.ReactNode;
 }> = ({ title, hint, icon, onMore, children }) => (
   <section className="erp-card flex flex-col min-w-0 overflow-hidden">
-    <header className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--line)] bg-[#fbfcfe]">
-      <div className="flex items-center gap-2 min-w-0">
+    <header className="erp-panel-head">
+      <div className="erp-panel-title">
         <span className="text-[var(--ink-600)]">{icon}</span>
-        <h3 className="text-[12px] font-bold text-[var(--ink-900)] truncate">{title}</h3>
+        <h3 className="truncate">{title}</h3>
         <span className="text-[10px] text-[var(--ink-400)] truncate hidden sm:inline">{hint}</span>
       </div>
       {onMore && (
@@ -54,59 +45,19 @@ const Panel: React.FC<{
 );
 
 const Empty: React.FC<{ text: string; ok?: boolean }> = ({ text, ok }) => (
-  <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center">
+  <div className="erp-empty">
     {ok ? (
       <ShieldCheck className="w-5 h-5 text-[#059669]" />
     ) : (
       <Clock3 className="w-5 h-5 text-[var(--ink-400)]" />
     )}
-    <span className={`text-[11px] ${ok ? 'text-[#047857] font-semibold' : 'text-[var(--ink-400)]'}`}>
-      {text}
-    </span>
+    <span className={ok ? 'text-[#047857] font-semibold' : undefined}>{text}</span>
   </div>
 );
 
-export const WatchList: React.FC<WatchListProps> = ({ fefo, stockDays, onNavigate }) => {
+export const WatchList: React.FC<WatchListProps> = ({ stockDays, onNavigate }) => {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0">
-      {/* FEFO */}
-      <Panel
-        title="유통기한 임박 (FEFO)"
-        hint="선입선출 우선 출고"
-        icon={<Timer className="w-3.5 h-3.5" />}
-        onMore={() => onNavigate('inv-expiry-discard-mgmt')}
-      >
-        {fefo.length === 0 ? (
-          <Empty ok text="D-7 이내 임박 재고가 없습니다" />
-        ) : (
-          <ul className="divide-y divide-[var(--line)]">
-            {fefo.map((r) => {
-              const chip = dayChip(r.daysLeft);
-              return (
-                <li
-                  key={`${r.code}｜${r.warehouse}`}
-                  className="flex items-center gap-2 px-3.5 py-1.5 hover:bg-[#f8fafc]"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[11.5px] font-semibold text-[var(--ink-900)] truncate">
-                      {r.name || r.code}
-                    </div>
-                    <div className="text-[10px] text-[var(--ink-400)] truncate">
-                      [{r.warehouse || '창고미지정'}] {r.code}
-                    </div>
-                  </div>
-                  <span className="num text-[11px] text-[var(--ink-600)] shrink-0">
-                    {r.qty.toLocaleString()}
-                    <span className="text-[9.5px] text-[var(--ink-400)] ml-0.5">{r.unit || 'ea'}</span>
-                  </span>
-                  <span className={`chip border shrink-0 ${chip.cls}`}>{chip.text}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
-
+    <div className="shrink-0">
       {/* 재고 유지일 */}
       <Panel
         title="재고 바닥 임박"

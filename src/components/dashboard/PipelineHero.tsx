@@ -57,7 +57,7 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
   const prodRatio = pipeline.prodTarget > 0 ? pipeline.prodDone / pipeline.prodTarget : 0;
 
   return (
-    <section className="relative overflow-hidden rounded-lg bg-[#111a2b] text-white shadow-[0_6px_18px_rgba(15,23,42,0.18)] shrink-0">
+    <section className="relative overflow-hidden rounded-[10px] bg-[#111a2b] text-white shadow-[0_6px_18px_rgba(15,23,42,0.18)] ring-1 ring-white/10 shrink-0">
       <div className="absolute inset-0 bg-[radial-gradient(120%_140%_at_0%_0%,rgba(43,125,233,0.28),transparent_55%),radial-gradient(90%_120%_at_100%_0%,rgba(16,185,129,0.16),transparent_60%)]" />
       <div className="relative flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         {/* 시계 */}
@@ -91,7 +91,7 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
               <span className="text-[10.5px] text-slate-400">생산 진척</span>
               <span className="num text-[13px] font-bold text-emerald-300">{prodPct}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700"
                 style={{ width: `${prodPct}%` }}

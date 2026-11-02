@@ -3,14 +3,23 @@ import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 
 // GET /api/sales/delivery?deliveryDate=2026-10-30
+// GET /api/sales/delivery?startDate=2026-10-01&endDate=2026-10-31 (기간 조회)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const deliveryDate = searchParams.get('deliveryDate');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
     const status = searchParams.get('status');
 
     const where: any = {};
-    if (deliveryDate) where.deliveryDate = deliveryDate;
+    if (deliveryDate) {
+      where.deliveryDate = deliveryDate;
+    } else if (startDate || endDate) {
+      where.deliveryDate = {};
+      if (startDate) where.deliveryDate.gte = startDate;
+      if (endDate) where.deliveryDate.lte = endDate;
+    }
     if (status && status !== '전체') where.status = status;
 
     const deliveries = await prisma.delivery.findMany({

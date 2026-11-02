@@ -94,10 +94,10 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
   return (
     <div className="erp-card flex flex-col overflow-hidden text-[12.5px]">
       {/* Panel Header */}
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--line)] bg-[#fbfcfe] select-none">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-[3px] h-3.5 rounded-full" style={{ background: accent }} />
-          <span className="font-bold text-[var(--ink-900)] text-[12.5px] truncate">{title}</span>
+      <div className="erp-panel-head">
+        <div className="erp-panel-title">
+          <span className="erp-panel-accent" style={{ background: accent }} />
+          <span className="truncate">{title}</span>
           {!hasData && (
             <span className="chip bg-[#f8fafc] text-[var(--ink-400)] border border-[var(--line)]">
               데이터 없음
@@ -147,13 +147,13 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
                 tickLine={false}
                 axisLine={{ stroke: '#dbe3ee' }}
               />
-              <YAxis
-                domain={yDomain ?? [0, (dataMax: number) => Math.ceil((dataMax || 10) * 1.15)]}
-                tick={{ fontSize: 9.5, fill: '#94a3b8' }}
-                tickLine={false}
-                axisLine={false}
-                width={34}
-              />
+                <YAxis
+                  domain={yDomain ?? [0, (dataMax: number) => Math.ceil((dataMax || 10) * 1.15)]}
+                  tick={{ fontSize: 9.5, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={40}
+                />
               {average > 0 && (
                 <ReferenceLine
                   y={Math.round(average)}

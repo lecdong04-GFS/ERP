@@ -100,13 +100,13 @@ export const ErpComparePanel: React.FC<ErpComparePanelProps> = ({
   return (
     <div className="erp-card flex flex-col overflow-hidden text-[12.5px]">
       {/* Panel Header */}
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--line)] bg-[#fbfcfe] select-none">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="erp-panel-head">
+        <div className="erp-panel-title">
           <span
-            className="w-[3px] h-3.5 rounded-full"
+            className="erp-panel-accent"
             style={{ background: `linear-gradient(180deg, ${SALES}, ${PURCHASE})` }}
           />
-          <span className="font-bold text-[var(--ink-900)] text-[12.5px] truncate">{title}</span>
+          <span className="truncate">{title}</span>
           {!hasData && (
             <span className="chip bg-[#f8fafc] text-[var(--ink-400)] border border-[var(--line)]">
               데이터 없음
@@ -114,12 +114,12 @@ export const ErpComparePanel: React.FC<ErpComparePanelProps> = ({
           )}
           {/* 범례 */}
           <span className="hidden sm:flex items-center gap-1.5 ml-1">
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-[var(--ink-600)]">
-              <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: SALES }} />
+            <span className="chip bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]">
+              <span className="w-2 h-2 rounded-[2px]" style={{ background: SALES }} />
               매출
             </span>
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-[var(--ink-600)]">
-              <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: PURCHASE }} />
+            <span className="chip bg-[#fffbeb] text-[#b45309] border border-[#fde68a]">
+              <span className="w-2 h-2 rounded-[2px]" style={{ background: PURCHASE }} />
               매입
             </span>
           </span>

@@ -2,11 +2,10 @@
 
 import React, { useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Factory, PackageCheck, ShieldAlert, TrendingUp } from 'lucide-react';
+import { Factory, PackageCheck, TrendingUp } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { PipelineHero } from './PipelineHero';
-import { ActionQueue } from './ActionQueue';
 import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
 import { WarehouseStock } from './WarehouseStock';
@@ -91,8 +90,8 @@ export const Dashboard: React.FC = () => {
     return (
       <div className="flex flex-col w-full h-full bg-[var(--canvas)] overflow-hidden p-3 gap-3">
         <div className="skeleton h-[70px] rounded-lg" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {[0, 1, 2].map((i) => (
             <div key={i} className="skeleton h-[92px] rounded-[10px]" />
           ))}
         </div>
@@ -124,10 +123,8 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      <ActionQueue items={stats.actionQueue} onNavigate={navigate} />
-
-      {/* KPI 4열 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
+      {/* KPI 3열 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 shrink-0">
         <KpiCard
           label="금일 GS25 수주액"
           value={k.todaySalesAmount}
@@ -153,7 +150,7 @@ export const Dashboard: React.FC = () => {
         />
         <KpiCard
           label="생산 진척률"
-          value={k.productionRate}
+          value={stats.pipeline.prodPct}
           format={(n) => `${Math.round(n)} %`}
           sub={
             stats.pipeline.prodTarget > 0
@@ -165,25 +162,12 @@ export const Dashboard: React.FC = () => {
           spark={stats.spark.production}
           sparkTone="ok"
         />
-        <KpiCard
-          label="유통기한 임박 (D-3)"
-          value={k.expiryUrgentCount}
-          format={(n) => `${Math.round(n)} 건`}
-          sub={
-            k.safetyShortageCount > 0
-              ? `안전재고 미달 ${k.safetyShortageCount}품목`
-              : '안전재고 정상'
-          }
-          tone="act"
-          icon={ShieldAlert}
-          subTone={k.safetyShortageCount > 0 ? 'warn' : 'ok'}
-        />
       </div>
 
       {/* FEFO / 재고유지일 / 창고별 재고금액 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 shrink-0">
         <div className="xl:col-span-2">
-          <WatchList fefo={stats.fefoTop} stockDays={stats.stockDaysTop} onNavigate={navigate} />
+          <WatchList stockDays={stats.stockDaysTop} onNavigate={navigate} />
         </div>
         <WarehouseStock
           rows={stats.warehouseStock}

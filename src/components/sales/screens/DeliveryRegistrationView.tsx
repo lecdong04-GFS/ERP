@@ -1,12 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
 interface DeliveryHeaderRow {
@@ -27,6 +33,7 @@ interface DeliveryHeaderRow {
 interface DeliveryDetailRow {
   id: string | number;
   gubun: string;
+  productCode: string; // 품번 (미출 차감 매칭용, 저장 시 전송)
   partName: string;
   spec: string;
   unit: string;
@@ -46,8 +53,10 @@ const STATUS_META: Record<string, string> = {
 };
 
 export const DeliveryRegistrationView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const { data: session } = useSession();
+  const me = session?.user as any;
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [delivDate, setDelivDate] = useState(kstToday());
   const [headers, setHeaders] = useState<DeliveryHeaderRow[]>([]);
   const [selectedHeaderId, setSelectedHeaderId] = useState<number | null>(null);
@@ -108,6 +117,7 @@ export const DeliveryRegistrationView: React.FC = () => {
           return {
             id: dt.id ?? `${so.id}-${idx}`,
             gubun: dt.product?.category || '완성품',
+            productCode: dt.product?.productCode || '',
             partName: dt.product?.name || '',
             spec: dt.product?.spec || '',
             unit: dt.product?.unit || 'ea',
@@ -159,7 +169,7 @@ export const DeliveryRegistrationView: React.FC = () => {
     const items = list
       .filter((d) => Number(d.delivQty) > 0)
       .map((d) => ({
-        productCode: '',
+        productCode: d.productCode || '',
         productName: d.partName,
         deliveryQty: Math.round(Number(d.delivQty)),
         unitPrice: d.unitPrice,
@@ -176,7 +186,7 @@ export const DeliveryRegistrationView: React.FC = () => {
         centerCode: h.clientName,
         shift: h.shift !== '-' ? h.shift : '1편',
         salesOrderId: h.id,
-        createdBy: '담당자',
+        createdBy: me?.name || me?.loginId || '담당자',
         items,
       }),
     });
@@ -254,7 +264,7 @@ export const DeliveryRegistrationView: React.FC = () => {
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
           { key: 'save', label: saving ? '저장 중...' : '저장', icon: 'save', variant: 'secondary', onClick: () => void handleSave() },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); void loadData(t, t); } },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); void loadData(s, t); } },
           { key: 'batchSave', label: '일괄저장', icon: 'batchSave', variant: 'success', onClick: () => void handleBatchSave() },
         ]}
         helpContent="미납 잔량이 있는 주문을 불러와 납품수량을 입력하고 확정합니다. 저장 즉시 수주와 연결되어 미출현황에 반영됩니다."

@@ -23,10 +23,10 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
 
   return (
     <section className="erp-card flex flex-col overflow-hidden min-w-0">
-      <header className="flex items-center justify-between px-3.5 py-2 border-b border-[var(--line)] bg-[#fbfcfe]">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="erp-panel-head">
+        <div className="erp-panel-title">
           <Boxes className="w-3.5 h-3.5 text-[var(--ink-600)]" />
-          <h3 className="text-[12px] font-bold text-[var(--ink-900)]">창고별 재고금액</h3>
+          <h3 className="truncate">창고별 재고금액</h3>
           <span className="chip bg-[#fff7ed] text-[#b45309] border border-[#fed7aa] num">
             합계 {compactWon(total)}
           </span>
@@ -43,9 +43,9 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
 
       <div className="px-3.5 pt-1.5 pb-2 flex-1 flex flex-col">
         {rows.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-5 text-center">
+          <div className="erp-empty flex-1">
             <Boxes className="w-5 h-5 text-[var(--ink-400)]" />
-            <span className="text-[11px] text-[var(--ink-400)]">재고 데이터가 없습니다</span>
+            <span>재고 데이터가 없습니다</span>
           </div>
         ) : (
           <ul className="flex flex-col gap-2">

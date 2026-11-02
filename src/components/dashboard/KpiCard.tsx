@@ -136,7 +136,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
           <div className="text-[11px] font-bold text-[var(--ink-600)] tracking-tight truncate">
             {label}
           </div>
-          <div className={`num text-[23px] font-black leading-tight mt-1 ${t.value}`}>
+          <div className="num text-[26px] font-black leading-tight mt-1 tracking-tight ${t.value}">
             {format(animated)}
           </div>
         </div>
@@ -148,10 +148,10 @@ export const KpiCard: React.FC<KpiCardProps> = ({
         <div className="min-w-0">
           {hasDelta && (
             <span
-              className={`chip mr-1.5 ${
+              className={`chip num mr-1.5 ${
                 delta! > 0
-                  ? 'bg-[#ecfdf5] text-[#047857]'
-                  : 'bg-[#fff1f2] text-[#be123c]'
+                  ? 'bg-[#ecfdf5] text-[#047857] border border-[#a7f3d0]'
+                  : 'bg-[#fff1f2] text-[#be123c] border border-[#fecdd3]'
               }`}
             >
               {delta! > 0 ? '▲' : '▼'} {Math.abs(delta!).toFixed(1)}%

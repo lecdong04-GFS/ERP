@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
+import { displayRemark } from '@/lib/gfs/docKey';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -75,7 +76,7 @@ export const UndeliveredRegView: React.FC = () => {
             salesOrderId: r.salesOrderId,
             orderDate: r.orderDate,
             centerCode: r.centerCode || '-',
-            storeName: r.storeName || '-',
+            storeName: displayRemark(r.storeName) || '-',
             productCode: r.productCode || '',
             productName: r.productName || '',
             spec: r.spec || '',

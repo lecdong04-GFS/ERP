@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
@@ -8,6 +8,11 @@ import { exportGridToExcel } from '@/lib/excelExport';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
 interface OrderCancelRow {
@@ -35,15 +40,15 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'partName', minWidth: '260px', label: '품명', align: 'left' },
   { key: 'spec', label: '규격', width: '70px', align: 'center' },
   { key: 'unit', label: '단위', width: '45px', align: 'center' },
-  { key: 'orderPrice', label: '주문단가', width: '85px', align: 'right', format: 'currency' },
+  { key: 'orderPrice', label: '주문단가', width: '85px', align: 'right', format: 'currency', hideSummary: true },
   { key: 'orderQty', label: '주문수량', width: '80px', align: 'right', format: 'number' },
   { key: 'orderAmt', label: '주문금액', width: '100px', align: 'right', format: 'currency' },
   { key: 'remark', label: '취소사유', width: '200px', align: 'left' },
 ];
 
 export const OrderCancelStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday);
-  const [endDate, setEndDate] = useState(kstToday);
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [rows, setRows] = useState<OrderCancelRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -88,11 +93,6 @@ export const OrderCancelStatusView: React.FC = () => {
 
   useEffect(() => { void loadData(startDate, endDate); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totals = useMemo(() => ({
-    qty: rows.reduce((s, r) => s + r.orderQty, 0),
-    amt: rows.reduce((s, r) => s + r.orderAmt, 0),
-  }), [rows]);
-
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
       <SalesActionBar
@@ -121,13 +121,6 @@ export const OrderCancelStatusView: React.FC = () => {
         ) : (
           <SalesDataGrid columns={COLUMNS} data={rows} />
         )}
-      </div>
-
-      <div className="h-[26px] bg-[#fdfde0] border-t border-gray-400 px-3 flex items-center gap-6 text-[12px] font-bold shrink-0">
-        <span className="text-gray-700">합계</span>
-        <span className="text-gray-500">{rows.length}건</span>
-        <span className="num text-blue-900">{totals.qty.toLocaleString()} ea</span>
-        <span className="num text-blue-900 ml-auto">₩{totals.amt.toLocaleString()}</span>
       </div>
     </div>
   );

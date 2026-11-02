@@ -10,6 +10,11 @@ function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
+
 interface ItemSummary {
   code: string;
   partName: string;
@@ -39,8 +44,8 @@ const SUMMARY_COLUMNS = [
 ] as const;
 
 export const ItemDeliveryStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [detailsMap, setDetailsMap] = useState<Record<string, ItemDetail[]>>({});
   const [selectedCode, setSelectedCode] = useState<string>('');
@@ -49,7 +54,9 @@ export const ItemDeliveryStatusView: React.FC = () => {
   const loadData = useCallback(async (s: string, e: string) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/sales/delivery', { cache: 'no-store' }).then((r) => r.json());
+      // 기간 조회는 서버에서 필터 (전체 조회 후 잘라내기 방지)
+      const params = new URLSearchParams({ startDate: s, endDate: e });
+      const res = await fetch(`/api/sales/delivery?${params}`, { cache: 'no-store' }).then((r) => r.json());
       let list: any[] = res.success && Array.isArray(res.data) ? res.data : [];
       list = list.filter((d: any) => d.status !== '취소' && d.deliveryDate >= s && d.deliveryDate <= e);
 
@@ -116,7 +123,7 @@ export const ItemDeliveryStatusView: React.FC = () => {
         title="품목별납품현황"
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); void loadData(t, t); } },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); void loadData(s, t); } },
           {
             key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'secondary',
             onClick: () => exportGridToExcel({ filename: '품목별납품현황', sheetName: '품목별납품현황', columns: [...SUMMARY_COLUMNS], data: items }),

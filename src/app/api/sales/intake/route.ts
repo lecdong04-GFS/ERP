@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { normName } from '@/lib/gfs/canonical';
+import { docHashOf } from '@/lib/gfs/docKey';
 import { kstToday, makeDocNo } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
@@ -18,17 +19,7 @@ interface IntakeItem {
 
 // POST /api/sales/intake — 발주현황/본발주 수주 일괄등록
 // body: { orderDate?, centerCode?, orderType? (정규/추가/슈퍼), uploadMethod?, replaceByDate?, docKeys?: string[], items: [...] }
-// - 같은 날짜라도 orderType(정규/추가/슈퍼)별로 따로 저장 → 하루 3종(본발주/1편주문/슈퍼) 누적
-// - 같은 파일 재업로드(docKeys 일치)는 등록 없이 스킵
-function docHashOf(keys: unknown): string | null {
-  if (!Array.isArray(keys)) return null;
-  const uniq = [...new Set(keys.map((k) => String(k ?? '').trim()).filter(Boolean))].sort();
-  if (uniq.length === 0) return null;
-  let h = 5381;
-  const s = uniq.join('|');
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return `${(h >>> 0).toString(16)}:${uniq.length}`;
-}
+// 같은 날짜라도 orderType별로 따로 저장(누적) · 같은 파일 재업로드(docKeys 일치)는 스킵
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

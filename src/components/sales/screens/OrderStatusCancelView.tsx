@@ -10,6 +10,11 @@ function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
+
 interface OrderHeaderRow {
   id: number;
   checked: boolean;
@@ -50,8 +55,8 @@ const STATUS_META: Record<string, string> = {
 };
 
 export const OrderStatusCancelView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [includeCanceled, setIncludeCanceled] = useState(false);
   const [headers, setHeaders] = useState<OrderHeaderRow[]>([]);
   const [selectedHeaderId, setSelectedHeaderId] = useState<number | null>(null);
@@ -219,7 +224,7 @@ export const OrderStatusCancelView: React.FC = () => {
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
           { key: 'cancel', label: '주문취소', icon: 'delete', variant: 'danger', onClick: () => void handleCancelSelected() },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); setIncludeCanceled(false); void loadData(t, t); } },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); setIncludeCanceled(false); void loadData(s, t); } },
         ]}
         helpContent="접수된 GS리테일 주문 건의 현황을 조회하고, 선택 건을 취소합니다. 취소된 수주는 집계·파이프라인에서 제외됩니다."
       />

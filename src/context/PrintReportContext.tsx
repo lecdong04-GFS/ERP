@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import type { DeliveryBoxLabelData } from '@/components/print/labels/DeliveryBoxLabel';
 
 export type PrintDocumentType =
   | 'WORK_ORDER'
@@ -12,12 +13,31 @@ export type PrintDocumentType =
   | 'LOT_LABEL'
   | 'DELIVERY_BOX_LABEL';
 
+export interface DeliveryStatementPayload {
+  deliveryNo: string;
+  deliveryDate: string;
+  centerCode: string;
+  shift: string;
+  items: {
+    code: string;
+    name: string;
+    spec: string;
+    unit: string;
+    qty: number;
+    price: number;
+  }[];
+}
+
 interface PrintReportContextType {
   isPrintModalOpen: boolean;
   activeDocType: PrintDocumentType;
   openPrintModal: (docType?: PrintDocumentType) => void;
   closePrintModal: () => void;
   setActiveDocType: (docType: PrintDocumentType) => void;
+  printPayload: DeliveryStatementPayload | null;
+  setPrintPayload: (payload: DeliveryStatementPayload | null) => void;
+  boxPayload: DeliveryBoxLabelData[] | null;
+  setBoxPayload: (payload: DeliveryBoxLabelData[] | null) => void;
 }
 
 const PrintReportContext = createContext<PrintReportContextType | null>(null);
@@ -25,6 +45,8 @@ const PrintReportContext = createContext<PrintReportContextType | null>(null);
 export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [activeDocType, setActiveDocType] = useState<PrintDocumentType>('WORK_ORDER');
+  const [printPayload, setPrintPayload] = useState<DeliveryStatementPayload | null>(null);
+  const [boxPayload, setBoxPayload] = useState<DeliveryBoxLabelData[] | null>(null);
 
   const openPrintModal = (docType?: PrintDocumentType) => {
     if (docType) {
@@ -35,6 +57,8 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const closePrintModal = () => {
     setIsPrintModalOpen(false);
+    setPrintPayload(null);
+    setBoxPayload(null);
   };
 
   return (
@@ -45,6 +69,10 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
         openPrintModal,
         closePrintModal,
         setActiveDocType,
+        printPayload,
+        setPrintPayload,
+        boxPayload,
+        setBoxPayload,
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { displayRemark } from '@/lib/gfs/docKey';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -77,7 +78,7 @@ export const UndeliveredStatusView: React.FC = () => {
           unitPrice: r.unitPrice || 0,
           unDelivQty: r.unDelivQty || 0,
           unDelivAmt: r.unDelivAmt || 0,
-          remark: r.storeName || '',
+          remark: displayRemark(r.storeName || ''),
         });
         sum.totalQty += r.unDelivQty || 0;
         sum.totalAmt += r.unDelivAmt || 0;

@@ -5,9 +5,15 @@ import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { displayRemark } from '@/lib/gfs/docKey';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
 interface ExtraOrderSummaryRow {
@@ -37,8 +43,8 @@ interface ExtraOrderDetailRow {
 }
 
 export const ExtraOrderStatusView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [includeCanceled, setIncludeCanceled] = useState(false);
   const [summaries, setSummaries] = useState<ExtraOrderSummaryRow[]>([]);
   const [selectedSummaryId, setSelectedSummaryId] = useState<number | null>(null);
@@ -91,7 +97,7 @@ export const ExtraOrderStatusView: React.FC = () => {
           shift: o.shift || '-',
           orderNo: o.orderNo,
           clientName: o.centerCode || '-',
-          storeName: o.remark || '-',
+          storeName: displayRemark(o.remark) || '-',
           status: o.status || '접수',
           extraCount: (o.details || []).length,
           orderQtyTotal: Number(o.totalQty) || 0,
@@ -120,9 +126,10 @@ export const ExtraOrderStatusView: React.FC = () => {
   const currentDetails = (selectedSummaryId !== null && details[selectedSummaryId]) || [];
 
   const handleReset = () => {
+    const s = kstDaysAgo(29);
     const t = kstToday();
-    setStartDate(t); setEndDate(t); setIncludeCanceled(false);
-    void loadData(t, t);
+    setStartDate(s); setEndDate(t); setIncludeCanceled(false);
+    void loadData(s, t);
   };
 
   const summaryTotals = visibleSummaries.reduce(

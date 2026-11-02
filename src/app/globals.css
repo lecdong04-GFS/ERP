@@ -114,6 +114,47 @@ input, select, textarea {
   white-space: nowrap;
 }
 
+/* ── 대시보드 패널 헤더 규격 (제목 + 우측 액션) ── */
+.erp-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfe;
+  user-select: none;
+}
+.erp-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink-900);
+}
+.erp-panel-accent {
+  width: 3px;
+  height: 14px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+/* ── 빈 상태 규격 ── */
+.erp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-400);
+}
+
 /* 스켈레톤 쉬머 */
 .skeleton {
   position: relative;

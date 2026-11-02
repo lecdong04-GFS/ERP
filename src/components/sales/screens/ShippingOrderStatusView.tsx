@@ -4,11 +4,15 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { usePrintReport } from '@/context/PrintReportContext';
+import type { DeliveryBoxLabelData } from '@/components/print/labels/DeliveryBoxLabel';
 import { exportGridToExcel } from '@/lib/excelExport';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
+
+/** 박스라벨 최대 출력 매수 (과다 출력 방지) */
+const MAX_BOX_LABELS = 200;
 
 interface ShippingOrderRow {
   id: string;
@@ -31,7 +35,7 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'delivQty', label: '납품수량', width: '80px', align: 'right', format: 'number' },
   { key: 'excludeQty', label: '제외수량', width: '80px', align: 'right', format: 'number', editable: true },
   { key: 'actualQty', label: '실출력수량', width: '85px', align: 'right', format: 'number' },
-  { key: 'boxInQty', label: '박스내입수', width: '80px', align: 'right', format: 'number' },
+  { key: 'boxInQty', label: '박스내입수', width: '80px', align: 'right', format: 'number', hideSummary: true },
   { key: 'qtyInfo', label: '수량정보', width: '110px', align: 'center' },
   { key: 'boxCount', label: 'BOX수량', width: '75px', align: 'right', format: 'number' },
 ];
@@ -41,13 +45,15 @@ export const ShippingOrderStatusView: React.FC = () => {
   const [shiftFilter, setShiftFilter] = useState<'1편' | '2편' | '모두'>('모두');
   const [rows, setRows] = useState<ShippingOrderRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const { openPrintModal } = usePrintReport();
+  const { openPrintModal, setBoxPayload } = usePrintReport();
 
   const loadData = useCallback(async (date: string) => {
     setLoading(true);
     try {
+      // 납품일자 서버 필터 (전체 조회 후 잘라내기 방지)
+      const params = new URLSearchParams({ deliveryDate: date });
       const [delivRes, prodRes] = await Promise.all([
-        fetch('/api/sales/delivery', { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`/api/sales/delivery?${params}`, { cache: 'no-store' }).then((r) => r.json()),
         fetch('/api/master/product', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ success: false })),
       ]);
       const boxMap = new Map<string, number>();
@@ -112,15 +118,55 @@ export const ShippingOrderStatusView: React.FC = () => {
     );
   };
 
-  const totals = filteredRows.reduce(
-    (acc, r) => ({
-      delivQty: acc.delivQty + r.delivQty,
-      excludeQty: acc.excludeQty + r.excludeQty,
-      actualQty: acc.actualQty + r.actualQty,
-      boxCount: acc.boxCount + r.boxCount,
-    }),
-    { delivQty: 0, excludeQty: 0, actualQty: 0, boxCount: 0 }
-  );
+  // 납품박스라벨 인쇄: 화면의 실출고 기준으로 박스별 라벨 생성 (최대 200매)
+  const handleBoxLabel = () => {
+    const stamp = delivDate.replace(/-/g, '');
+    const items: DeliveryBoxLabelData[] = [];
+    filteredRows.forEach((r, idx) => {
+      const act = Math.max(0, Math.round(r.actualQty));
+      if (act <= 0) return;
+      const per = Math.max(1, Math.round(r.boxInQty) || 1);
+      const full = Math.floor(act / per);
+      const rem = act % per;
+      const tag = String(idx + 1).padStart(2, '0');
+      for (let i = 0; i < full && items.length < MAX_BOX_LABELS; i++) {
+        items.push({
+          boxNo: `BOX-${stamp}-${tag}-${String(i + 1).padStart(2, '0')}`,
+          orderNo: '',
+          centerName: r.clientName,
+          centerCode: r.clientName,
+          productCode: r.partNo === '-' ? '' : r.partNo,
+          productName: `${r.partName} ${per}입`,
+          boxQty: per,
+          unit: 'ea/Box',
+          shippingDate: `${delivDate} 출하`,
+          deliveryDate: delivDate,
+          coldChainTemp: '저온냉장 (0~10℃)',
+        });
+      }
+      if (rem > 0 && items.length < MAX_BOX_LABELS) {
+        items.push({
+          boxNo: `BOX-${stamp}-${tag}-${String(full + 1).padStart(2, '0')}`,
+          orderNo: '',
+          centerName: r.clientName,
+          centerCode: r.clientName,
+          productCode: r.partNo === '-' ? '' : r.partNo,
+          productName: `${r.partName} ${per}입`,
+          boxQty: rem,
+          unit: 'ea/Box',
+          shippingDate: `${delivDate} 출하`,
+          deliveryDate: delivDate,
+          coldChainTemp: '저온냉장 (0~10℃)',
+        });
+      }
+    });
+    if (items.length === 0) {
+      alert('출력할 박스라벨이 없습니다. (실출고 수량 확인)');
+      return;
+    }
+    setBoxPayload(items);
+    openPrintModal('DELIVERY_BOX_LABEL');
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
@@ -130,7 +176,7 @@ export const ShippingOrderStatusView: React.FC = () => {
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(delivDate) },
           { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const t = kstToday(); setDelivDate(t); setShiftFilter('모두'); void loadData(t); } },
           { key: 'centerPrint', label: '센터용출력', icon: 'print', variant: 'secondary', onClick: () => openPrintModal('WORK_ORDER') },
-          { key: 'boxLabel', label: '납품박스라벨인쇄', icon: 'print', variant: 'secondary', onClick: () => openPrintModal('DELIVERY_BOX_LABEL') },
+          { key: 'boxLabel', label: '납품박스라벨인쇄', icon: 'print', variant: 'secondary', onClick: () => void handleBoxLabel() },
           {
             key: 'excel',
             label: '엑셀다운로드',
@@ -179,15 +225,6 @@ export const ShippingOrderStatusView: React.FC = () => {
         ) : (
           <SalesDataGrid columns={COLUMNS} data={filteredRows} onRowChange={handleRowChange} />
         )}
-      </div>
-
-      <div className="h-[26px] bg-[#fdfde0] border-t border-gray-400 px-3 flex items-center gap-6 text-[12px] font-bold shrink-0">
-        <span className="text-gray-700">합계</span>
-        <span className="text-gray-500">{filteredRows.length}건</span>
-        <span className="num text-blue-900">납품 {totals.delivQty.toLocaleString()}</span>
-        <span className="num text-gray-600">제외 {totals.excludeQty.toLocaleString()}</span>
-        <span className="num text-emerald-800">실출고 {totals.actualQty.toLocaleString()}</span>
-        <span className="num text-blue-900 ml-auto">{totals.boxCount.toLocaleString()} BOX</span>
       </div>
     </div>
   );

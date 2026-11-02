@@ -23,6 +23,7 @@ interface StatementSummaryRow {
 interface StatementDetailRow {
   id: string;
   checked: boolean;
+  productCode: string;
   partName: string;
   spec: string;
   unit: string;
@@ -32,7 +33,7 @@ interface StatementDetailRow {
 }
 
 export const StatementIssueView: React.FC = () => {
-  const { openPrintModal } = usePrintReport();
+  const { openPrintModal, setPrintPayload } = usePrintReport();
   const [delivDate, setDelivDate] = useState(kstToday());
   const [clientFilter, setClientFilter] = useState('ALL');
   const [summaries, setSummaries] = useState<StatementSummaryRow[]>([]);
@@ -40,13 +41,27 @@ export const StatementIssueView: React.FC = () => {
   const [details, setDetails] = useState<StatementDetailRow[]>([]);
   const [loading, setLoading] = useState(true);
   const rawRef = React.useRef<any[]>([]);
+  // 품번 → {규격, 단위} (명세서 표시용, 납품明細에 없음)
+  const prodMapRef = React.useRef<Map<string, { spec: string; unit: string }>>(new Map());
 
   const loadData = useCallback(async (date: string) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/sales/delivery', { cache: 'no-store' }).then((r) => r.json());
-      let list: any[] = res.success && Array.isArray(res.data) ? res.data : [];
-      list = list.filter((d: any) => d.deliveryDate === date && d.status !== '취소');
+      const [delivRes, prodRes] = await Promise.all([
+        fetch(`/api/sales/delivery?deliveryDate=${date}`, { cache: 'no-store' }).then((r) => r.json()),
+        prodMapRef.current.size > 0
+          ? Promise.resolve(null)
+          : fetch('/api/master/product', { cache: 'no-store' }).then((r) => r.json()).catch(() => null),
+      ]);
+      if (prodRes?.success && Array.isArray(prodRes.data)) {
+        const m = new Map<string, { spec: string; unit: string }>();
+        prodRes.data.forEach((p: any) => {
+          if (p.productCode) m.set(String(p.productCode), { spec: String(p.spec || ''), unit: String(p.unit || 'ea') });
+        });
+        prodMapRef.current = m;
+      }
+      let list: any[] = delivRes.success && Array.isArray(delivRes.data) ? delivRes.data : [];
+      list = list.filter((d: any) => d.status !== '취소');
       rawRef.current = list;
 
       const sums: StatementSummaryRow[] = list.map((d: any) => ({
@@ -98,6 +113,29 @@ export const StatementIssueView: React.FC = () => {
       alert('발행할 거래명세서 품목을 선택하세요.');
       return;
     }
+    const summary = summaries.find((s) => s.id === selectedKey);
+    if (!summary) {
+      alert('납품서를 먼저 선택하세요.');
+      return;
+    }
+    // 선택 품목 실데이터 → 인쇄 페이로드 (샘플 아님)
+    setPrintPayload({
+      deliveryNo: summary.deliveryNo,
+      deliveryDate: summary.delivDate,
+      centerCode: summary.clientName,
+      shift: summary.shift,
+      items: selected.map((d) => {
+        const su = prodMapRef.current.get(d.productCode) || { spec: d.spec || '', unit: d.unit || 'ea' };
+        return {
+          code: d.productCode,
+          name: d.partName,
+          spec: su.spec,
+          unit: su.unit,
+          qty: d.delivQtyTotal,
+          price: d.unitPrice,
+        };
+      }),
+    });
     openPrintModal('DELIVERY_STATEMENT');
   };
 
@@ -272,7 +310,8 @@ export const StatementIssueView: React.FC = () => {
 function aggregateDetails(details: any[]): StatementDetailRow[] {
   const map = new Map<string, StatementDetailRow>();
   details.forEach((dt: any, idx: number) => {
-    const key = `${dt.productCode || ''}|${dt.unitPrice || 0}`;
+    const code = String(dt.productCode || '');
+    const key = `${code}|${dt.unitPrice || 0}`;
     const cur = map.get(key);
     const q = Number(dt.deliveryQty) || 0;
     if (cur) {
@@ -282,7 +321,8 @@ function aggregateDetails(details: any[]): StatementDetailRow[] {
       map.set(key, {
         id: `${dt.id ?? idx}`,
         checked: true,
-        partName: dt.productName || dt.productCode || '',
+        productCode: code,
+        partName: dt.productName || code || '',
         spec: '',
         unit: 'ea',
         unitPrice: Number(dt.unitPrice) || 0,

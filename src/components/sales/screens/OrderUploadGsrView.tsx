@@ -8,6 +8,7 @@ import { usePipeline } from '@/context/PipelineContext';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
 import { parseBonbaljuRows, BonbaljuParseResult } from '@/lib/gfs/bonbaljuIntake';
+import { displayRemark } from '@/lib/gfs/docKey';
 import { CheckCircle2, Loader2, Search, Trash2 } from 'lucide-react';
 
 interface OrderUploadRow {
@@ -219,7 +220,7 @@ export const OrderUploadGsrView: React.FC = () => {
               shipTo: o.centerCode || '',
               poNo: o.orderNo,
               shift: o.shift || '',
-              remark: o.remark || '',
+              remark: displayRemark(o.remark || ''),
               status: o.status || '',
               orderCreatedAt: o.createdAt || '',
             });

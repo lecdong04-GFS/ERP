@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
+import { displayRemark } from '@/lib/gfs/docKey';
 
 interface ExtraOrderItem {
   id: number;
@@ -33,7 +34,7 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'shift', label: '편수', width: '55px', align: 'center', editable: true },
   { key: 'storeName', label: '편의점명', width: '130px', align: 'left', editable: true },
   { key: 'currentStock', label: '현재고', width: '75px', align: 'right', format: 'number' },
-  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency', editable: true },
+  { key: 'unitPrice', label: '납품단가', width: '85px', align: 'right', format: 'currency', hideSummary: true, editable: true },
   { key: 'orderAmt', label: '주문금액', width: '100px', align: 'right', format: 'currency' },
   { key: 'poNo', label: 'P/O no.', width: '125px', align: 'center' },
   { key: 'remark', label: '비고', width: '130px', align: 'left', editable: true },
@@ -111,7 +112,7 @@ export const OrderExtraRegGsrView: React.FC = () => {
               orderQty: dt.totalQty ?? 0,
               delivDate: o.orderDate,
               shift: o.shift || '1편',
-              storeName: dt.remark || o.remark || '',
+              storeName: displayRemark(dt.remark || o.remark || ''),
               currentStock: code ? stockMap.get(code) ?? 0 : 0,
               unitPrice: dt.unitPrice ?? 0,
               orderAmt: dt.amount ?? 0,

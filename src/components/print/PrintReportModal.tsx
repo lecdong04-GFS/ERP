@@ -24,7 +24,7 @@ import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
 
 export const PrintReportModal: React.FC = () => {
-  const { isPrintModalOpen, closePrintModal, activeDocType, setActiveDocType } = usePrintReport();
+  const { isPrintModalOpen, closePrintModal, activeDocType, setActiveDocType, printPayload, boxPayload } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
   const { data: session } = useSession();
   const writerName = (session?.user as any)?.name || '';
@@ -139,16 +139,29 @@ export const PrintReportModal: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, ws, '원가손익계산서');
       XLSX.writeFile(wb, `GFS_완성품원가_및_손익계산서_${printDate}.xlsx`);
     } else if (activeDocType === 'DELIVERY_STATEMENT') {
-      const data = [
-        { 순번: 1, 품목명: '넷플)더담은K떡볶이김밥', 규격: '230g', 단위: '개', 납품수량: 82, 단가: 2545, 공급가액: 208690, 세액: 20869 },
-        { 순번: 2, 품목명: '혜자)돌아온제육도시락', 규격: '460g', 단위: 'ea', 납품수량: 45, 단가: 3915, 공급가액: 176175, 세액: 17618 },
-        { 순번: 3, 품목명: '더큰)스팸계란볶음밥', 규격: '150g', 단위: 'ea', 납품수량: 209, 단가: 1180, 공급가액: 246620, 세액: 24662 },
-        { 순번: 4, 품목명: '참치김치볶음김밥', 규격: '210g', 단위: '개', 납품수량: 77, 단가: 2084, 공급가액: 160468, 세액: 16047 },
-        { 순번: 5, 품목명: 'THE근본김밥 1편', 규격: '200g', 단위: '개', 납품수량: 115, 단가: 1660, 공급가액: 190900, 세액: 19090 },
-      ];
+      // 거래명세서: 발행 화면에서 넘긴 실데이터 (없으면 빈 양식 안내, 샘플 출력 금지)
+      const items = (printPayload?.items || []).filter((it) => Number(it.qty) > 0);
+      if (items.length === 0) {
+        alert('발행할 거래명세서 품목이 없습니다. 거래명세서발행 화면에서 품목을 선택한 뒤 출력하세요.');
+        return;
+      }
+      const data = items.map((it, idx) => {
+        const supply = Math.round(Number(it.qty) * Number(it.price));
+        return {
+          순번: idx + 1,
+          품목명: it.name,
+          규격: it.spec || '',
+          단위: it.unit || 'ea',
+          납품수량: Number(it.qty),
+          단가: Number(it.price),
+          공급가액: supply,
+          세액: Math.round(supply * 0.1),
+        };
+      });
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, '거래명세표');
-      XLSX.writeFile(wb, `GFS_출하거래명세표_${printDate}.xlsx`);
+      const stamp = (printPayload?.deliveryDate || printDate).replace(/-/g, '');
+      XLSX.writeFile(wb, `GFS_출하거래명세표_${printPayload?.deliveryNo || stamp}.xlsx`);
     } else if (activeDocType === 'PURCHASE_ORDER') {
       const data = [
         { 순번: 1, 발주번호: 'PC25345', 공급처: '평화영농조합', 품목명: '국내산 경기미 백미(햅쌀)', 규격: '20kg/포', 단위: '포', 발주수량: 500, 단가: 54000, 발주금액: 27000000, 납기일자: '2026-10-31' },
@@ -169,10 +182,25 @@ export const PrintReportModal: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, ws, 'LOT라벨');
       XLSX.writeFile(wb, `GFS_LOT품질라벨_${printDate}.xlsx`);
     } else if (activeDocType === 'DELIVERY_BOX_LABEL') {
-      const data = [
-        { 박스번호: 'BOX-261031-KM01', 물류센터: 'GS리테일 김해일배센터', 센터코드: 'GSR-KMH', 품번: '10002015', 품명: '참치마요삼각김밥 30입', 박스입수: 30, 출하일시: '2026-10-31 16:00', 온도대: '저온(0~10℃)' },
-        { 박스번호: 'BOX-261031-KM02', 물류센터: 'GS리테일 김해일배센터', 센터코드: 'GSR-KMH', 품번: '10002018', 품명: '전주비빔삼각김밥 30입', 박스입수: 30, 출하일시: '2026-10-31 16:00', 온도대: '저온(0~10℃)' },
-      ];
+      // 납품박스라벨: 출하지시현황에서 넘긴 실데이터 (없으면 안내, 샘플 출력 금지)
+      const items = (boxPayload || []).filter((it) => Number(it.boxQty) > 0);
+      if (items.length === 0) {
+        alert('출력할 박스라벨이 없습니다. 출하지시현황에서 실출고 수량을 확인한 뒤 [납품박스라벨인쇄]를 눌러주세요.');
+        return;
+      }
+      const data = items.map((it, idx) => ({
+        순번: idx + 1,
+        박스번호: it.boxNo,
+        물류센터: it.centerName,
+        센터코드: it.centerCode,
+        품번: it.productCode,
+        품명: it.productName,
+        박스입수: it.boxQty,
+        단위: it.unit,
+        출하일시: it.shippingDate,
+        납품일자: it.deliveryDate,
+        온도대: it.coldChainTemp,
+      }));
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, '납품박스라벨');
       XLSX.writeFile(wb, `GFS_GS25납품박스물류라벨_${printDate}.xlsx`);
@@ -687,17 +715,36 @@ export const PrintReportModal: React.FC = () => {
                 </div>
               )}
 
-              {/* 5. 출하 거래명세표 (DELIVERY_STATEMENT) */}
-              {activeDocType === 'DELIVERY_STATEMENT' && (
+              {/* 5. 출하 거래명세표 (DELIVERY_STATEMENT) — 발행 화면 선택 실데이터 */}
+              {activeDocType === 'DELIVERY_STATEMENT' && (() => {
+                const items = (printPayload?.items || []).filter((it) => Number(it.qty) > 0);
+                const rows = items.map((it, idx) => {
+                  const supply = Math.round(Number(it.qty) * Number(it.price));
+                  return { no: idx + 1, name: it.name, spec: it.spec || '', unit: it.unit || 'ea', qty: Number(it.qty), price: Number(it.price), supply, vat: Math.round(supply * 0.1) };
+                });
+                const totQty = rows.reduce((s, r) => s + r.qty, 0);
+                const totSupply = rows.reduce((s, r) => s + r.supply, 0);
+                const totVat = rows.reduce((s, r) => s + r.vat, 0);
+                const docDate = printPayload?.deliveryDate || printDate;
+                const docNo = printPayload?.deliveryNo || `TR-${printDate.replace(/-/g, '')}-0000`;
+                const docCenter = printPayload?.centerCode || 'GS리테일';
+                if (rows.length === 0) {
+                  return (
+                    <div className="py-10 text-center text-sm text-gray-500">
+                      발행할 품목이 없습니다.<br />거래명세서발행 화면에서 품목을 선택한 뒤 [거래명세서일괄출력]을 눌러주세요.
+                    </div>
+                  );
+                }
+                return (
                 <div className="flex flex-col gap-3 font-serif">
                   <div className="text-center pb-2 border-b-2 border-black">
                     <h1 className="text-2xl font-black tracking-widest text-black underline underline-offset-4">
                       거 래 명 세 표 (공급받는자 보관용)
                     </h1>
                     <div className="flex justify-between items-center text-xs mt-2 font-sans">
-                      <span>발행일자: 2026년 10월 30일</span>
-                      <span>거래처: GS리테일 (수도권 센터)</span>
-                      <span>전표번호: TR-20261030-0192</span>
+                      <span>발행일자: {docDate.slice(0, 4)}년 {docDate.slice(5, 7)}월 {docDate.slice(8, 10)}일</span>
+                      <span>거래처: {docCenter}</span>
+                      <span>전표번호: {docNo}</span>
                     </div>
                   </div>
 
@@ -771,14 +818,7 @@ export const PrintReportModal: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        { no: 1, name: '넷플)더담은K떡볶이김밥', spec: '230g', unit: '개', qty: 82, price: 2545, supply: 208690, vat: 20869 },
-                        { no: 2, name: '혜자)돌아온제육도시락', spec: '460g', unit: 'ea', qty: 45, price: 3915, supply: 176175, vat: 17618 },
-                        { no: 3, name: '더큰)스팸계란볶음밥', spec: '150g', unit: 'ea', qty: 209, price: 1180, supply: 246620, vat: 24662 },
-                        { no: 4, name: '참치김치볶음김밥', spec: '210g', unit: '개', qty: 77, price: 2084, supply: 160468, vat: 16047 },
-                        { no: 5, name: 'THE근본김밥 1편', spec: '200g', unit: '개', qty: 115, price: 1660, supply: 190900, vat: 19090 },
-                        { no: 6, name: '혜자)통등심돈까스도시락', spec: '450g', unit: 'ea', qty: 103, price: 4900, supply: 504700, vat: 50470 },
-                      ].map((row) => (
+                      {rows.map((row) => (
                         <tr key={row.no} className="hover:bg-gray-50">
                           <td className="border border-black py-1 px-1 text-center">{row.no}</td>
                           <td className="border border-black py-1 px-2 font-bold">{row.name}</td>
@@ -792,20 +832,21 @@ export const PrintReportModal: React.FC = () => {
                       ))}
                       <tr className="bg-gray-100 font-bold">
                         <td colSpan={4} className="border border-black py-1 px-2 text-center">합 계</td>
-                        <td className="border border-black py-1 px-2 text-right">631</td>
+                        <td className="border border-black py-1 px-2 text-right">{totQty.toLocaleString()}</td>
                         <td className="border border-black py-1 px-2 text-center">-</td>
-                        <td className="border border-black py-1 px-2 text-right">1,487,553</td>
-                        <td className="border border-black py-1 px-2 text-right">148,756</td>
+                        <td className="border border-black py-1 px-2 text-right">{totSupply.toLocaleString()}</td>
+                        <td className="border border-black py-1 px-2 text-right">{totVat.toLocaleString()}</td>
                       </tr>
                     </tbody>
                   </table>
 
                   <div className="text-[11px] font-sans border border-black p-2 bg-gray-50 flex justify-between items-center mt-2">
-                    <span><strong>총 청구금액:</strong> 일백육십삼만육천삼백구원 (₩ 1,636,309)</span>
+                    <span><strong>총 청구금액:</strong> ₩ {(totSupply + totVat).toLocaleString()} (공급가액 ₩{totSupply.toLocaleString()} + 세액 ₩{totVat.toLocaleString()})</span>
                     <span>인수자 확인: ___________________ (서명)</span>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* 6. 원부자재 발주서 (PURCHASE_ORDER) */}
               {activeDocType === 'PURCHASE_ORDER' && (
@@ -887,10 +928,16 @@ export const PrintReportModal: React.FC = () => {
                 </div>
               )}
 
-              {/* 8. GS25 납품 박스 물류라벨 (DELIVERY_BOX_LABEL) */}
+              {/* 8. GS25 납품 박스 물류라벨 (DELIVERY_BOX_LABEL) — 출하지시 실데이터 */}
               {activeDocType === 'DELIVERY_BOX_LABEL' && (
                 <div className="label-card border-2 border-dashed border-gray-400 rounded-md p-4 bg-white">
-                  <DeliveryBoxLabel />
+                  {(boxPayload || []).length > 0 ? (
+                    <DeliveryBoxLabel items={boxPayload!} />
+                  ) : (
+                    <div className="py-10 text-center text-sm text-gray-500">
+                      출력할 박스라벨이 없습니다.<br />출하지시현황에서 실출고 수량을 확인한 뒤 [납품박스라벨인쇄]를 눌러주세요.
+                    </div>
+                  )}
                 </div>
               )}
                 </div>

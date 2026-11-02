@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 
 const STATUSES = ['접수', '확정', '취소'] as const;
 
@@ -29,7 +30,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       data: {
         status,
         cancelReason: status === '취소' ? String(body.cancelReason ?? '') : '',
-        cancelDate: status === '취소' ? new Date().toISOString().slice(0, 10) : null,
+        cancelDate: status === '취소' ? kstToday() : null,
       },
     });
 

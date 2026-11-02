@@ -10,6 +10,11 @@ function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+/** KST 기준 N일 전 YYYY-MM-DD */
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
+
 interface SummaryRow {
   id: number;
   checked: boolean;
@@ -57,8 +62,8 @@ const SUMMARY_COLUMNS: GridColumnDef[] = [
 const STATUS_OPTIONS = ['대기', '출하', '완료', '취소'] as const;
 
 export const DeliveryStatusEditView: React.FC = () => {
-  const [startDate, setStartDate] = useState(kstToday());
-  const [endDate, setEndDate] = useState(kstToday());
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  const [endDate, setEndDate] = useState(() => kstToday());
   const [clientFilter, setClientFilter] = useState('ALL');
   const [summaries, setSummaries] = useState<SummaryRow[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -68,9 +73,9 @@ export const DeliveryStatusEditView: React.FC = () => {
   const loadData = useCallback(async (s: string, e: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ deliveryDate: '' });
-      void params;
-      const res = await fetch('/api/sales/delivery', { cache: 'no-store' }).then((r) => r.json());
+      // 기간 조회는 서버에서 필터 (전체 조회 후 잘라내기 방지)
+      const params = new URLSearchParams({ startDate: s, endDate: e });
+      const res = await fetch(`/api/sales/delivery?${params}`, { cache: 'no-store' }).then((r) => r.json());
       let list: any[] = res.success && Array.isArray(res.data) ? res.data : [];
       list = list.filter((d: any) => d.deliveryDate >= s && d.deliveryDate <= e);
       const mapped: SummaryRow[] = list
@@ -187,7 +192,7 @@ export const DeliveryStatusEditView: React.FC = () => {
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
           { key: 'cancel', label: '납품취소', icon: 'delete', variant: 'danger', onClick: () => void cancelChecked() },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const t = kstToday(); setStartDate(t); setEndDate(t); setClientFilter('ALL'); void loadData(t, t); } },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => { const s = kstDaysAgo(29); const t = kstToday(); setStartDate(s); setEndDate(t); setClientFilter('ALL'); void loadData(s, t); } },
           {
             key: 'excel',
             label: '엑셀다운로드',
@@ -298,11 +303,11 @@ export const DeliveryStatusEditView: React.FC = () => {
                   <tr><td colSpan={3} className="py-8 text-center text-gray-400">품목이 없습니다</td></tr>
                 ) : (
                   currentLeftRows.map((d) => (
-                    <tr
-                      key={d.id}
-                      onClick={() => setHistoryProduct(d.productCode)}
-                      className={`cursor-pointer ${historyProduct === d.productCode ? 'bg-blue-100/70 font-semibold' : 'hover:bg-blue-50/40'}`}
-                    >
+                  <tr
+                    key={d.id}
+                    onClick={() => setHistoryProduct(d.productCode || '')}
+                    className={`cursor-pointer ${historyProduct && historyProduct === d.productCode ? 'bg-blue-100/70 font-semibold' : 'hover:bg-blue-50/40'}`}
+                  >
                       <td className="py-1 px-2 font-sans text-left border-r border-gray-200" title={d.productCode}>{d.productName}</td>
                       <td className="py-1 px-1 text-right border-r border-gray-200">{d.deliveryQty.toLocaleString()}</td>
                       <td className="py-1 px-1 text-right">{d.amount.toLocaleString()}</td>
