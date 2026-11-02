@@ -41,7 +41,7 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
         </button>
       </header>
 
-      <div className="px-3.5 py-2 flex-1 flex flex-col justify-center">
+      <div className="px-3.5 pt-1.5 pb-2 flex-1 flex flex-col">
         {rows.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-5 text-center">
             <Boxes className="w-5 h-5 text-[var(--ink-400)]" />

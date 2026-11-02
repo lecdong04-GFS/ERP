@@ -47,6 +47,26 @@ const COLUMNS: GridColumnDef[] = [
   { key: 'status', label: '상태', width: '60px', align: 'center' },
 ];
 
+interface IntakePayloadItem {
+  menuName: string;
+  category?: string;
+  qty1?: number;
+  qty2?: number;
+  total?: number;
+}
+
+interface IntakeResult {
+  ok: boolean;
+  orderNo?: string;
+  itemCount?: number;
+  matched?: number;
+  createdProducts?: number;
+  skipped?: number;
+  error?: string;
+  duplicate?: boolean;
+  duplicateInfo?: string;
+}
+
 type DateMode = 'day' | 'week' | 'month' | '30days';
 
 function kstToday(): string {
@@ -92,6 +112,19 @@ export const OrderUploadGsrView: React.FC = () => {
   const [filterDate, setFilterDate] = useState(kstToday);
   const [keyword, setKeyword] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+
+  // 수주 등록용 일자 (기본 오늘, 백필 시 과거일자 지정)
+  const [intakeDate, setIntakeDate] = useState(kstToday);
+
+  // 일괄 업로드 (멀티파일 + 파일별 날짜)
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchRows, setBatchRows] = useState<{ key: number; file: File; date: string }[]>([]);
+  const [batchStart, setBatchStart] = useState(kstToday);
+  const [batchReplace, setBatchReplace] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchReport, setBatchReport] = useState<Record<number, string>>({});
+  const batchKey = useRef(0);
+  const batchFileRef = useRef<HTMLInputElement>(null);
 
   const dateRange = useMemo(() => computeRange(dateMode, filterDate), [dateMode, filterDate]);
 
@@ -143,52 +176,70 @@ export const OrderUploadGsrView: React.FC = () => {
 
   useEffect(() => { void loadOrders(); }, [loadOrders]);
 
+  // 발주현황 엑셀 파싱 (시트 자동탐색)
+  const parseIntakeFile = async (file: File): Promise<IntakePayloadItem[] | null> => {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const names = pickOrderSheetName(wb.SheetNames);
+    for (const n of names) {
+      const ws = wb.Sheets[n];
+      if (!ws) continue;
+      const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      const r = parseOrderStatusRows(rows);
+      if (r && r.length > 0) return r;
+    }
+    return null;
+  };
+
+  const postIntake = async (
+    orderDate: string,
+    items: IntakePayloadItem[],
+    replaceByDate: boolean
+  ): Promise<IntakeResult> => {
+    const res = await fetch('/api/sales/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderDate, items, replaceByDate }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      return {
+        ok: true,
+        orderNo: json.data.orderNo,
+        itemCount: json.data.itemCount,
+        matched: json.data.matched,
+        createdProducts: json.data.createdProducts,
+        skipped: json.data.skipped,
+      };
+    }
+    if (json.code === 'DUPLICATE_ORDER') {
+      return { ok: false, duplicate: true, duplicateInfo: json.error, error: json.error };
+    }
+    return { ok: false, error: json.error || '알 수 없는 오류' };
+  };
+
   const handleIntakeFile = async (file: File) => {
     setIsIntaking(true);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const names = pickOrderSheetName(wb.SheetNames);
-      let parsed: ReturnType<typeof parseOrderStatusRows> = null;
-      let usedSheet = '';
-      for (const n of names) {
-        const ws = wb.Sheets[n];
-        if (!ws) continue;
-        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-        const r = parseOrderStatusRows(rows);
-        if (r && r.length > 0) { parsed = r; usedSheet = n; break; }
-      }
-      if (!parsed || parsed.length === 0) {
+      const parsed = await parseIntakeFile(file);
+      if (!parsed) {
         alert('발주현황 시트를 찾지 못했습니다. (분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      const orderDate = kstToday();
-      const intakeBody = {
-        orderDate,
-        items: parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total })),
-      };
-
-      let res = await fetch('/api/sales/intake', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(intakeBody),
-      });
-      let json = await res.json();
+      const items = parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total }));
+      let result = await postIntake(intakeDate, items, false);
 
       // 중복 감지 → 교체 등록 확인
-      if (json.code === 'DUPLICATE_ORDER') {
-        if (!window.confirm(`${json.error}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) return;
-        res = await fetch('/api/sales/intake', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...intakeBody, replaceByDate: true }),
-        });
-        json = await res.json();
+      if (result.duplicate) {
+        if (!window.confirm(`${result.duplicateInfo}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) return;
+        result = await postIntake(intakeDate, items, true);
       }
 
-      if (json.success) {
-        alert(`수주 등록 완료 (${json.data.orderNo})\n매칭 ${json.data.matched}건 · 신규 ${json.data.createdProducts}건 · 제외 ${json.data.skipped}건`);
+      if (result.ok) {
+        alert(`수주 등록 완료 (${intakeDate} / ${result.orderNo})\n매칭 ${result.matched}건 · 신규 ${result.createdProducts}건 · 제외 ${result.skipped}건`);
         void loadOrders();
       } else {
-        alert('수주 등록 실패: ' + (json.error || '알 수 없는 오류'));
+        alert('수주 등록 실패: ' + (result.error || '알 수 없는 오류'));
       }
     } catch (e: any) {
       alert('파일 처리 중 오류: ' + e.message);
@@ -196,6 +247,64 @@ export const OrderUploadGsrView: React.FC = () => {
       setIsIntaking(false);
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  // ── 일괄 업로드 ──
+  const handleBatchFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const rows = Array.from(files).map((file) => ({ key: batchKey.current++, file, date: '' }));
+    setBatchRows((prev) => [...prev, ...rows]);
+    setBatchReport({});
+    if (batchFileRef.current) batchFileRef.current.value = '';
+  };
+
+  const autofillBatchDates = () => {
+    if (!batchStart) return;
+    const d = new Date(batchStart + 'T00:00:00');
+    setBatchRows((prev) =>
+      prev.map((r, i) => {
+        const dd = new Date(d);
+        dd.setDate(d.getDate() + i);
+        return { ...r, date: dd.toISOString().slice(0, 10) };
+      })
+    );
+  };
+
+  const runBatch = async () => {
+    const targets = batchRows.filter((r) => r.date);
+    if (targets.length === 0) {
+      alert('날짜가 지정된 파일이 없습니다. 각 파일의 수주일자를 입력하세요.');
+      return;
+    }
+    if (targets.length !== batchRows.length) {
+      if (!window.confirm(`날짜 미지정 ${batchRows.length - targets.length}개 파일은 건너뜁니다. 계속할까요?`)) return;
+    }
+    setBatchRunning(true);
+    const report: Record<number, string> = {};
+    for (const row of targets) {
+      try {
+        const parsed = await parseIntakeFile(row.file);
+        if (!parsed) {
+          report[row.key] = '실패: 발주현황 시트를 찾지 못함';
+          setBatchReport({ ...report });
+          continue;
+        }
+        const items = parsed.map((p) => ({ menuName: p.menuName, category: p.category, qty1: p.qty1, qty2: p.qty2, total: p.total }));
+        let result = await postIntake(row.date, items, batchReplace);
+        if (result.duplicate && !batchReplace) {
+          report[row.key] = '중복: 이미 등록됨 (교체 미지정)';
+        } else if (result.ok) {
+          report[row.key] = `완료: ${result.itemCount}건 (매칭 ${result.matched}·신규 ${result.createdProducts}·제외 ${result.skipped})`;
+        } else {
+          report[row.key] = `실패: ${result.error}`;
+        }
+      } catch (e: any) {
+        report[row.key] = `실패: ${e.message}`;
+      }
+      setBatchReport({ ...report });
+    }
+    setBatchRunning(false);
+    void loadOrders();
   };
 
   const handleDeleteByDate = async () => {
@@ -261,6 +370,7 @@ export const OrderUploadGsrView: React.FC = () => {
           { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data: filteredData }) },
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'intake', label: isIntaking ? '등록 중...' : '발주현황 업로드', icon: 'excel', variant: 'primary', onClick: () => fileRef.current?.click() },
+          { key: 'batch', label: '일괄 업로드', icon: 'excel', variant: 'secondary', onClick: () => setBatchOpen(true) },
           { key: 'deleteDate', label: '일자 삭제', icon: 'delete', variant: 'secondary', onClick: () => void handleDeleteByDate() },
         ]}
         helpContent="GS리테일 B2B EDI 시스템에서 내려받은 점포별/센터별 발주 엑셀 파일을 업로드하여 생산 및 출하 시스템으로 일괄 등록합니다. [발주현황 업로드]는 카톡 발주현황 엑셀(완제품 1편/2편)을 수주로 일괄 등록합니다."
@@ -324,6 +434,13 @@ export const OrderUploadGsrView: React.FC = () => {
             className="bg-white border border-gray-400 px-2 py-0.5 text-[12px] rounded-xs w-44 outline-none focus:border-blue-500" />
         </div>
 
+        {/* 수주일자 (등록용) */}
+        <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-300">
+          <span className="text-[11px] font-bold text-gray-600">수주일자(등록용)</span>
+          <input type="date" value={intakeDate} onChange={(e) => setIntakeDate(e.target.value)}
+            className="bg-white border border-gray-400 px-1.5 py-0.5 text-[12px] font-mono outline-none focus:border-blue-500" />
+        </div>
+
         <span className="ml-auto text-[11px] text-gray-600 font-semibold bg-white px-2 py-0.5 rounded border border-gray-300">
           <span className="text-blue-700 font-bold">{filteredData.length}</span>건
         </span>
@@ -372,6 +489,86 @@ export const OrderUploadGsrView: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* 일괄 업로드 모달 */}
+      {batchOpen && (
+        <div className="fixed inset-0 z-[400] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-[680px] max-w-full max-h-[85vh] flex flex-col text-[12px]">
+            <div className="px-4 py-2.5 border-b border-gray-300 flex items-center justify-between bg-[#f8fafc]">
+              <span className="font-bold text-[13px]">수주 일괄 업로드 (파일별 일자 지정)</span>
+              <button type="button" onClick={() => { if (!batchRunning) setBatchOpen(false); }}
+                className="px-2 py-0.5 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold">닫기</button>
+            </div>
+            <div className="px-4 py-2 border-b border-gray-200 flex flex-wrap items-center gap-2 bg-white">
+              <button type="button" onClick={() => batchFileRef.current?.click()} disabled={batchRunning}
+                className="px-2.5 py-1 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold disabled:opacity-50">
+                파일 선택(여러 개)
+              </button>
+              <input ref={batchFileRef} type="file" accept=".xlsx,.xls" multiple className="hidden"
+                onChange={(e) => handleBatchFiles(e.target.files)} />
+              <span className="text-gray-500">시작일</span>
+              <input type="date" value={batchStart} onChange={(e) => setBatchStart(e.target.value)} disabled={batchRunning}
+                className="bg-white border border-gray-400 px-1.5 py-0.5 font-mono outline-none disabled:opacity-50" />
+              <button type="button" onClick={autofillBatchDates} disabled={batchRunning || batchRows.length === 0}
+                className="px-2.5 py-1 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold disabled:opacity-50">
+                날짜 자동채움(1일씩)
+              </button>
+              <label className="flex items-center gap-1 ml-auto text-gray-700">
+                <input type="checkbox" checked={batchReplace} onChange={(e) => setBatchReplace(e.target.checked)} disabled={batchRunning} />
+                중복 시 교체 등록
+              </label>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-2 min-h-[120px]">
+              {batchRows.length === 0 ? (
+                <div className="py-8 text-center text-gray-400">
+                  파일을 선택하세요. 각 파일의 수주일자를 지정한 뒤 일괄 등록합니다.<br />
+                  (파일명에 날짜가 없어도 됩니다)
+                </div>
+              ) : (
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-200">
+                      <th className="py-1 pr-2 font-semibold">파일명</th>
+                      <th className="py-1 pr-2 font-semibold w-[130px]">수주일자</th>
+                      <th className="py-1 font-semibold">결과</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchRows.map((r) => (
+                      <tr key={r.key} className="border-b border-gray-100">
+                        <td className="py-1 pr-2 truncate max-w-[280px]" title={r.file.name}>{r.file.name}</td>
+                        <td className="py-1 pr-2">
+                          <input type="date" value={r.date} disabled={batchRunning}
+                            onChange={(e) => setBatchRows((prev) => prev.map((x) => x.key === r.key ? { ...x, date: e.target.value } : x))}
+                            className="bg-white border border-gray-400 px-1 py-0.5 font-mono text-[11px] outline-none disabled:opacity-50" />
+                        </td>
+                        <td className="py-1 text-[11px] text-gray-700">{batchReport[r.key] || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="px-4 py-2 border-t border-gray-300 flex items-center justify-between bg-[#f8fafc]">
+              <span className="text-gray-600">
+                총 {batchRows.length}개
+                {Object.keys(batchReport).length > 0 &&
+                  ` · 완료 ${Object.values(batchReport).filter((v) => v.startsWith('완료')).length} / 실패·중복 ${Object.values(batchReport).filter((v) => !v.startsWith('완료')).length}`}
+              </span>
+              <div className="flex items-center gap-2">
+                {batchRows.length > 0 && !batchRunning && (
+                  <button type="button" onClick={() => { setBatchRows([]); setBatchReport({}); }}
+                    className="px-2.5 py-1 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold">목록 비우기</button>
+                )}
+                <button type="button" onClick={() => void runBatch()} disabled={batchRunning || batchRows.length === 0}
+                  className="px-3 py-1 rounded bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50">
+                  {batchRunning ? '등록 중...' : '일괄 등록'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

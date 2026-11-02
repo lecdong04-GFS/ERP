@@ -84,7 +84,7 @@ export const WatchList: React.FC<WatchListProps> = ({ fefo, stockDays, onNavigat
               const chip = dayChip(r.daysLeft);
               return (
                 <li
-                  key={`${r.code}-${r.warehouse}-${r.daysLeft}`}
+                  key={`${r.code}｜${r.warehouse}`}
                   className="flex items-center gap-2 px-3.5 py-1.5 hover:bg-[#f8fafc]"
                 >
                   <div className="min-w-0 flex-1">

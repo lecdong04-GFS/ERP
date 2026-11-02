@@ -986,6 +986,12 @@
             <span class="hidden sm:inline">주간 요일 분할</span>
           </button>
 
+          <!-- Demand Forecast Panel Toggle (수주 히스토리 기반 수요예측) -->
+          <button type="button" id="btnToggleForecast" class="btn-tactile px-2.5 py-1.5 text-xs font-bold rounded-xl border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 hover:border-violet-500 flex items-center gap-1.5 transition shadow-2xs" title="수주 히스토리(주문등록GSR) 기반 내일·모레 수요예측 패널">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">수요예측</span>
+          </button>
+
           <!-- 3-Mode Weekly Strategy Presets (JIT / Fresh / Bulk) -->
           <div id="weeklyStrategyGroup" class="hidden items-center bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-xl border border-neutral-200 dark:border-neutral-700 shadow-2xs">
             <button type="button" data-strategy="jit" class="btn-tactile px-2 py-1 text-[11px] font-black rounded-lg bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs transition" title="JIT 최소재고: 1일 소진량(AA열) 기반 당일 소진 분할">JIT 최소재고</button>
@@ -1039,6 +1045,23 @@
         <nav class="flex space-x-2" aria-label="Tabs" id="channelTabNav">
           <!-- Dynamically Injected Tabs -->
         </nav>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- 수요예측 패널 (수주 히스토리 기반 내일·모레 예측) -->
+    <!-- ========================================================================= -->
+    <section id="forecastPanel" class="hidden">
+      <div class="bg-white dark:bg-neutral-900 border border-violet-200 dark:border-violet-800 rounded-2xl shadow-xs overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-violet-100 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/30">
+          <i data-lucide="trending-up" class="w-4 h-4 text-violet-600 dark:text-violet-400"></i>
+          <span class="text-sm font-black text-neutral-800 dark:text-neutral-100">수요예측 (수주 히스토리 기반)</span>
+          <span id="forecastMeta" class="text-[11px] text-neutral-500 dark:text-neutral-400"></span>
+          <button type="button" id="btnForecastRefresh" class="ml-auto btn-tactile px-2.5 py-1 text-[11px] font-bold rounded-lg border border-violet-300 dark:border-violet-700 bg-white dark:bg-neutral-800 text-violet-700 dark:text-violet-300 hover:border-violet-500 flex items-center gap-1" title="예측 새로고침">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i>새로고침
+          </button>
+        </div>
+        <div id="forecastBody" class="p-3.5"></div>
       </div>
     </section>
 

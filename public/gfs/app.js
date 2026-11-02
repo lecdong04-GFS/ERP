@@ -67,6 +67,9 @@ const state = {
   isTwoColumn: true,
   viewMode: 'excel',         // 'excel' (원조 정준오 발주시트 엑셀 그리드 뷰 기본) | 'cards' | 'table'
   expandAllBomRows: false,   // 엑셀 뷰에서 완제품(BOM) 하위 행 전체 펼침 여부
+  forecastOpen: false,       // 수요예측 패널 표시 여부
+  forecastData: null,        // /api/sales/forecast 응답 캐시
+  forecastLoading: false,
   expandedBomItemIds: new Set(), // 개별 펼쳐진 품목 ID Set
   fileName: '',
   masterFileName: '',
@@ -1281,6 +1284,16 @@ function setupEventListeners() {
   const btnExcelViewExport = document.getElementById('btnExcelViewExport');
   if (btnExcelViewExport) {
     btnExcelViewExport.addEventListener('click', exportFinalExcel);
+  }
+
+  // 수요예측 패널 토글 (수주 히스토리 기반)
+  const btnToggleForecast = document.getElementById('btnToggleForecast');
+  if (btnToggleForecast) {
+    btnToggleForecast.addEventListener('click', () => toggleForecastPanel());
+  }
+  const btnForecastRefresh = document.getElementById('btnForecastRefresh');
+  if (btnForecastRefresh) {
+    btnForecastRefresh.addEventListener('click', () => loadForecastData(true));
   }
 
   // 엑셀 뷰 상단: ⚡ 발주 필요만 보기 vs 📋 0박스 포함 전체 보기 토글 버튼
@@ -5638,6 +5651,166 @@ function renderCards() {
     });
   }
 
+  initLucide();
+}
+
+// =========================================================================
+// 수요예측 패널 (주문등록GSR 수주 히스토리 → /api/sales/forecast)
+// - 메뉴별: 같은 요일 과거 평균 → 내일·모레 예측수량
+// - 자재별: 예측수량 × BOM 개당소요 → 예측소요 − 가용재고 → 예측 부족박스
+// =========================================================================
+function toggleForecastPanel() {
+  state.forecastOpen = !state.forecastOpen;
+  const panel = document.getElementById('forecastPanel');
+  if (panel) {
+    panel.classList.toggle('hidden', !state.forecastOpen);
+    if (state.forecastOpen) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!state.forecastData && !state.forecastLoading) loadForecastData(false);
+      else renderForecastPanel();
+    }
+  }
+}
+
+async function loadForecastData(force) {
+  if (state.forecastLoading) return;
+  state.forecastLoading = true;
+  renderForecastPanel();
+  try {
+    const res = await fetch('/api/sales/forecast', { cache: 'no-store' });
+    const json = await res.json();
+    if (json.success && json.data) {
+      state.forecastData = json.data;
+    } else {
+      state.forecastData = { error: json.error || '예측 데이터를 불러오지 못했습니다.' };
+    }
+  } catch (err) {
+    state.forecastData = { error: '예측 API 호출 실패: ' + (err.message || err) + ' (ERP 로그인이 필요합니다)' };
+  } finally {
+    state.forecastLoading = false;
+    renderForecastPanel();
+  }
+}
+
+function computeForecastMaterials(forecastItems) {
+  const norm = (s) => String(s || '').replace(/\s+/g, '');
+  const menuQty = new Map();
+  (forecastItems || []).forEach((f) => {
+    const k = norm(f.productName);
+    if (!k) return;
+    menuQty.set(k, (menuQty.get(k) || 0) + (f.totalPredicted || 0));
+  });
+  const out = [];
+  (state.rawItems || []).forEach((item) => {
+    if (!item.bomChildren || item.bomChildren.length === 0) return;
+    let req = 0;
+    item.bomChildren.forEach((ch) => {
+      const q = menuQty.get(norm(ch.menuName)) || 0;
+      if (q > 0 && (ch.perUnitUsage || 0) > 0) req += q * ch.perUnitUsage;
+    });
+    if (req <= 0) return;
+    const stock = (item.currentStock || 0) + (item.incoming || 0);
+    const shortage = Math.max(0, req - stock);
+    const boxes = item.packUnit > 0 ? Math.ceil(shortage / item.packUnit) : 0;
+    out.push({
+      name: item.name,
+      supplier: (item.supplier && item.supplier.name) || '',
+      req: Math.round(req),
+      stock: Math.round(stock),
+      shortage: Math.round(shortage),
+      boxes,
+      current: item.calc ? item.calc.finalBoxes : null,
+    });
+  });
+  out.sort((a, b) => b.shortage - a.shortage);
+  return out;
+}
+
+function renderForecastPanel() {
+  const body = document.getElementById('forecastBody');
+  const meta = document.getElementById('forecastMeta');
+  if (!body) return;
+
+  if (state.forecastLoading) {
+    if (meta) meta.textContent = '불러오는 중...';
+    body.innerHTML = '<div class="py-10 text-center text-sm text-neutral-400">수요예측을 계산하고 있습니다...</div>';
+    return;
+  }
+
+  const data = state.forecastData;
+  if (!data) {
+    if (meta) meta.textContent = '';
+    body.innerHTML = '<div class="py-10 text-center text-sm text-neutral-400">수요예측 패널을 열면 표시됩니다.</div>';
+    return;
+  }
+  if (data.error) {
+    if (meta) meta.textContent = '';
+    body.innerHTML = '<div class="py-10 text-center text-sm text-rose-600">' + data.error + '</div>';
+    return;
+  }
+
+  const targets = data.targets || [];
+  const items = (data.items || []).filter((i) => (i.totalPredicted || 0) > 0).slice(0, 60);
+  if (meta) {
+    meta.textContent = `기준 ${data.from}~${data.to} (${data.orderDayCount || 0}일간 수주) → 예측 ${targets.join(', ')}`;
+  }
+
+  let html = '';
+  if ((data.orderDayCount || 0) === 0) {
+    html += '<div class="py-8 text-center text-sm text-neutral-500">수주 히스토리가 없습니다. 매출관리 → 주문등록GSR에서 발주현황을 업로드하면 예측이 표시됩니다.</div>';
+  } else if (items.length === 0) {
+    html += '<div class="py-8 text-center text-sm text-neutral-500">예측 기간의 수요가 0입니다.</div>';
+  } else {
+    html += '<div class="text-[11px] font-bold text-neutral-500 mb-1.5">완제품 메뉴별 예측수량 (같은 요일 과거 평균, 괄호=표본 건수)</div>';
+    html += '<div class="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-700 mb-4"><table class="w-full text-xs">';
+    html += '<thead><tr class="bg-neutral-50 dark:bg-neutral-800 text-neutral-500">';
+    html += '<th class="text-left px-2.5 py-1.5 font-bold">메뉴</th>';
+    targets.forEach((t) => { html += '<th class="text-right px-2.5 py-1.5 font-bold">' + t.slice(5) + '</th>'; });
+    html += '<th class="text-right px-2.5 py-1.5 font-bold">합계</th></tr></thead><tbody>';
+    items.forEach((it) => {
+      html += '<tr class="border-t border-neutral-100 dark:border-neutral-800">';
+      html += '<td class="px-2.5 py-1.5 font-semibold text-neutral-800 dark:text-neutral-100">' + it.productName + '</td>';
+      (it.predictions || []).forEach((p) => {
+        const flag = p.method === 'overall' ? '*' : '';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono" title="표본 ' + p.samples + '건">' + (p.qty || 0).toLocaleString() + flag + '</td>';
+      });
+      html += '<td class="text-right px-2.5 py-1.5 font-mono font-black">' + (it.totalPredicted || 0).toLocaleString() + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div class="text-[10px] text-neutral-400 mb-4">* 표시: 같은 요일 표본이 없어 전체 일평균으로 대체한 값입니다.</div>';
+  }
+
+  // 자재별 예측 소요 (마스터가 로드된 경우)
+  if (state.rawItems && state.rawItems.length > 0 && items.length > 0) {
+    const mats = computeForecastMaterials(items).slice(0, 60);
+    html += '<div class="text-[11px] font-bold text-neutral-500 mb-1.5">원부자재별 예측 소요 vs 현재고 (예측수량 × BOM 개당소요)</div>';
+    if (mats.length === 0) {
+      html += '<div class="py-4 text-center text-xs text-neutral-400">예측 메뉴와 연결된 BOM 자재가 없습니다.</div>';
+    } else {
+      html += '<div class="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-700"><table class="w-full text-xs">';
+      html += '<thead><tr class="bg-neutral-50 dark:bg-neutral-800 text-neutral-500">';
+      html += '<th class="text-left px-2.5 py-1.5 font-bold">자재</th><th class="text-left px-2.5 py-1.5 font-bold">거래처</th>';
+      html += '<th class="text-right px-2.5 py-1.5 font-bold">예측소요</th><th class="text-right px-2.5 py-1.5 font-bold">가용재고</th>';
+      html += '<th class="text-right px-2.5 py-1.5 font-bold">부족분</th><th class="text-right px-2.5 py-1.5 font-bold">예측 박스</th>';
+      html += '<th class="text-right px-2.5 py-1.5 font-bold">현재 산출</th></tr></thead><tbody>';
+      mats.forEach((m) => {
+        const diff = (m.current === null || m.current === undefined) ? '-' : String(m.current);
+        html += '<tr class="border-t border-neutral-100 dark:border-neutral-800">';
+        html += '<td class="px-2.5 py-1.5 font-semibold text-neutral-800 dark:text-neutral-100">' + m.name + '</td>';
+        html += '<td class="px-2.5 py-1.5 text-neutral-500">' + m.supplier + '</td>';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono">' + m.req.toLocaleString() + '</td>';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono">' + m.stock.toLocaleString() + '</td>';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono font-bold ' + (m.shortage > 0 ? 'text-rose-600' : 'text-emerald-600') + '">' + m.shortage.toLocaleString() + '</td>';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono font-black">' + m.boxes + '</td>';
+        html += '<td class="text-right px-2.5 py-1.5 font-mono text-neutral-500">' + diff + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+  } else if (items.length > 0) {
+    html += '<div class="py-3 text-center text-xs text-neutral-400">원부자재 발주서(마스터)를 올리면 자재별 예측 소요도 표시됩니다.</div>';
+  }
+
+  body.innerHTML = html;
   initLucide();
 }
 

@@ -126,6 +126,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
           unit: true,
           expiryDate: true,
         },
+        orderBy: { expiryDate: 'asc' },
         take: 300,
       }),
       prisma.inventory.findMany({
@@ -212,17 +213,35 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       ),
     };
 
-    // ── 3. FEFO 임박 ───────────────────────────────────────
-    const fefoTop: FefoRow[] = expiryCandidates
-      .map((r) => ({
-        code: r.productCode,
-        name: r.productName,
-        warehouse: r.warehouse,
-        qty: Number(r.currentQty) || 0,
-        unit: r.unit,
-        daysLeft: expiryInDays(r.expiryDate, today),
-      }))
-      .filter((r): r is FefoRow => r.daysLeft !== null)
+    // ── 3. FEFO 임박 (품목+창고 기준 1행으로 합산 → 같은 이름 중복 표시 방지) ──
+    const fefoGroups = new Map<string, FefoRow>();
+    for (const r of expiryCandidates) {
+      const daysLeft = expiryInDays(r.expiryDate, today);
+      if (daysLeft === null) continue;
+      const code = (r.productCode || '').trim();
+      const warehouse = (r.warehouse || '').trim();
+      const key = `${code}｜${warehouse}`;
+      const qty = Number(r.currentQty) || 0;
+      const cur = fefoGroups.get(key);
+      if (!cur) {
+        fefoGroups.set(key, {
+          code,
+          name: r.productName,
+          warehouse,
+          qty,
+          unit: r.unit,
+          daysLeft,
+        });
+      } else {
+        cur.qty += qty;
+        // 가장 임박한 LOT 기준으로 표시
+        if (daysLeft < cur.daysLeft) {
+          cur.daysLeft = daysLeft;
+          if (r.productName) cur.name = r.productName;
+        }
+      }
+    }
+    const fefoTop: FefoRow[] = [...fefoGroups.values()]
       .sort((a, b) => a.daysLeft - b.daysLeft)
       .slice(0, 5);
 
@@ -302,7 +321,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     // ── 6. 창고별 재고금액 ─────────────────────────────────
     const whMap = new Map<string, { items: number; amount: number }>();
     for (const r of warehouseRows) {
-      const key = r.warehouse || '창고미지정';
+      const key = (r.warehouse || '').trim() || '창고미지정';
       const amount =
         Number(r.stockAmount) || (Number(r.currentQty) || 0) * (Number(r.unitPrice) || 0);
       const cur = whMap.get(key) || { items: 0, amount: 0 };
