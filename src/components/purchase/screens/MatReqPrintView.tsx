@@ -409,11 +409,10 @@ export const MatReqPrintView: React.FC = () => {
 
           {/* 결품/부족 발생 */}
           <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${
-              summary.totalShortageCount > 0
-                ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${summary.totalShortageCount > 0
+              ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse'
+              : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
           >
             <AlertTriangle size={13} className={summary.totalShortageCount > 0 ? 'text-rose-600' : 'text-slate-400'} />
             <span className="font-bold">

@@ -127,6 +127,11 @@ export async function POST(req: NextRequest) {
       return await handleDeleteDetail(Number(detailId || id));
     }
 
+    // 3-2) 다중 발주 품목 일괄 삭제
+    if (action === 'delete_details' && Array.isArray(body.detailIds) && body.detailIds.length > 0) {
+      return await handleDeleteDetails(body.detailIds.map(Number));
+    }
+
     if (action === 'update_status' && id) {
       const updated = await prisma.purchaseOrder.update({
         where: { id: Number(id) },
@@ -380,5 +385,62 @@ async function handleDeleteDetail(detailId: number) {
   return NextResponse.json({
     success: true,
     message: `품목 [${detail.productName || detail.productCode}]이(가) 발주서에서 삭제되었습니다.`,
+  });
+}
+
+/** 다중 발주 품목 일괄 삭제 로직 */
+async function handleDeleteDetails(detailIds: number[]) {
+  if (!Array.isArray(detailIds) || detailIds.length === 0) {
+    return NextResponse.json({ success: false, error: '삭제할 품목 ID 목록이 없습니다.' }, { status: 400 });
+  }
+
+  const details = await prisma.purchaseOrderDetail.findMany({
+    where: { id: { in: detailIds } },
+    select: { id: true, purchaseOrderId: true, receivedQty: true, productName: true, productCode: true },
+  });
+
+  if (details.length === 0) {
+    return NextResponse.json({ success: false, error: '삭제할 품목을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
+  const received = details.filter((d) => (d.receivedQty || 0) > 0);
+  if (received.length > 0) {
+    return NextResponse.json(
+      { success: false, error: '이미 입고 처리된 품목이 포함되어 있어 삭제할 수 없습니다.' },
+      { status: 400 }
+    );
+  }
+
+  const parentOrderIds = [...new Set(details.map((d) => d.purchaseOrderId))];
+
+  await prisma.$transaction(async (tx) => {
+    // 1. 해당 품목들 일괄 삭제
+    await tx.purchaseOrderDetail.deleteMany({
+      where: { id: { in: detailIds } },
+    });
+
+    // 2. 각 부모 발주서의 남은 품목 재확인 및 합계금액 갱신 또는 헤더 삭제
+    for (const pId of parentOrderIds) {
+      const remaining = await tx.purchaseOrderDetail.findMany({
+        where: { purchaseOrderId: pId },
+        select: { amount: true },
+      });
+
+      if (remaining.length === 0) {
+        await tx.purchaseOrder.delete({ where: { id: pId } });
+      } else {
+        const newTotal = remaining.reduce((sum, d) => sum + (d.amount || 0), 0);
+        await tx.purchaseOrder.update({
+          where: { id: pId },
+          data: { totalAmount: newTotal },
+        });
+      }
+    }
+  });
+
+  return NextResponse.json({
+    success: true,
+    message: `선택하신 ${details.length}개 품목이 발주서에서 완전히 삭제되었습니다.`,
+    deletedCount: details.length,
   });
 }
