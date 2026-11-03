@@ -13,25 +13,11 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
 
-  <!-- Tailwind CSS (Local & CDN Dual Fallback) -->
+  <!-- Core Libraries (Fast Local Static Loading) -->
   <script src="tailwind.min.js"></script>
-  <script>if (typeof tailwind === 'undefined') { document.write('<script src="https://cdn.tailwindcss.com"><\/script>') }</script>
-
-  <!-- SheetJS (Local & CDN Dual Fallback) -->
   <script src="xlsx.full.min.js"></script>
-  <script>if (typeof XLSX === 'undefined') { document.write('<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"><\/script>') }</script>
-
-  <!-- JSZip (Local & CDN Dual Fallback for 100% Lossless Excel Formatting Preservation) -->
   <script src="jszip.min.js"></script>
-  <script>if (typeof JSZip === 'undefined') { document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>') }</script>
-
-  <!-- Lucide Icons (Local & CDN Dual Fallback) -->
   <script src="lucide.min.js"></script>
-  <script>if (typeof lucide === 'undefined') { document.write('<script src="https://unpkg.com/lucide@latest"><\/script>') }</script>
-
-  <!-- Three.js 3D Engine (Local & CDN Dual Fallback) -->
-  <script src="three.min.js"></script>
-  <script>if (typeof THREE === 'undefined') { document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>') }</script>
 
   <script>
     tailwind.config = {

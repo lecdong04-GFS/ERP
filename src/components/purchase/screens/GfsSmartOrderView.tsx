@@ -50,34 +50,52 @@ interface AutoBootPayload {
   };
 }
 
+// 탭 전환 시 매번 재다운로드/재산출하지 않도록 모듈 레벨 메모리 캐시 유지
+let memoryBootPayload: AutoBootPayload | null = null;
+let memoryStats: {
+  unmatchedMenus: UnmatchedMenu[];
+  auditMatchedCount: number;
+  orderableCount: number;
+  activeMaterialCount: number;
+  dormantCount: number;
+  totalMaterialCount: number;
+  filterMode: 'order_only' | 'active_only' | 'all';
+  totalAmount: number;
+} | null = null;
+
 export const GfsSmartOrderView: React.FC = () => {
   const { data: session } = useSession();
   const me: any = session?.user;
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const masterInputRef = useRef<HTMLInputElement>(null);
+  const bootSentRef = useRef(false);
 
-  const [bootPayload, setBootPayload] = useState<AutoBootPayload | null>(null);
+  const [bootPayload, setBootPayload] = useState<AutoBootPayload | null>(() => memoryBootPayload);
   const [iframeReady, setIframeReady] = useState(false);
-  const [isBooting, setIsBooting] = useState(true);
+  const [isBooting, setIsBooting] = useState(() => !memoryBootPayload);
   const [bootCompleted, setBootCompleted] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('데이터 자동 연동 준비 중...');
+  const [statusMsg, setStatusMsg] = useState(() =>
+    memoryBootPayload ? '최근 데이터로 즉시 연결되었습니다' : '데이터 자동 연동 준비 중...'
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 선택된 수주일자 / 재고실사일자 / 발주저장 기준일자
-  const [selectedOrderDate, setSelectedOrderDate] = useState('');
-  const [selectedStockDate, setSelectedStockDate] = useState('');
+  const [selectedOrderDate, setSelectedOrderDate] = useState(() => memoryBootPayload?.orders.usedDate || '');
+  const [selectedStockDate, setSelectedStockDate] = useState(() => memoryBootPayload?.stock.usedDate || '');
 
   // GFS 실시간 산출 통계 및 신메뉴 BOM 미매칭 알림
-  const [unmatchedMenus, setUnmatchedMenus] = useState<UnmatchedMenu[]>([]);
+  const [unmatchedMenus, setUnmatchedMenus] = useState<UnmatchedMenu[]>(() => memoryStats?.unmatchedMenus || []);
   const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
-  const [auditMatchedCount, setAuditMatchedCount] = useState(0);
-  const [orderableCount, setOrderableCount] = useState(0);
-  const [activeMaterialCount, setActiveMaterialCount] = useState(0);
-  const [dormantCount, setDormantCount] = useState(0);
-  const [totalMaterialCount, setTotalMaterialCount] = useState(442);
-  const [filterMode, setFilterMode] = useState<'order_only' | 'active_only' | 'all'>('order_only');
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [auditMatchedCount, setAuditMatchedCount] = useState(() => memoryStats?.auditMatchedCount || 0);
+  const [orderableCount, setOrderableCount] = useState(() => memoryStats?.orderableCount || 0);
+  const [activeMaterialCount, setActiveMaterialCount] = useState(() => memoryStats?.activeMaterialCount || 0);
+  const [dormantCount, setDormantCount] = useState(() => memoryStats?.dormantCount || 0);
+  const [totalMaterialCount, setTotalMaterialCount] = useState(() => memoryStats?.totalMaterialCount || 442);
+  const [filterMode, setFilterMode] = useState<'order_only' | 'active_only' | 'all'>(
+    () => memoryStats?.filterMode || 'order_only'
+  );
+  const [totalAmount, setTotalAmount] = useState(() => memoryStats?.totalAmount || 0);
 
   // 작업 상태
   const [isUploadingMaster, setIsUploadingMaster] = useState(false);
@@ -129,9 +147,11 @@ export const GfsSmartOrderView: React.FC = () => {
   }, []);
 
   // 1) 서버에서 3종 통합 데이터(발주서 마스터 + 10시 주문서 + 17시 재고조사표) 로드
-  const fetchAutoBootData = useCallback(async (ordDate?: string, stkDate?: string) => {
-    setIsBooting(true);
-    setStatusMsg('발주서(BOM) · 10시 주문서 · 17시 재고표 자동 결합 중...');
+  const fetchAutoBootData = useCallback(async (ordDate?: string, stkDate?: string, isSilent = false) => {
+    if (!isSilent) {
+      setIsBooting(true);
+      setStatusMsg('발주서(BOM) · 10시 주문서 · 17시 재고표 자동 결합 중...');
+    }
     try {
       const qs = new URLSearchParams({ includeMaster: '1' });
       if (ordDate) qs.set('orderDate', ordDate);
@@ -143,19 +163,27 @@ export const GfsSmartOrderView: React.FC = () => {
         throw new Error(json.error || '자동 부팅 데이터 로드 실패');
       }
       const data: AutoBootPayload = json.data;
+      memoryBootPayload = data;
       setBootPayload(data);
       setSelectedOrderDate(data.orders.usedDate);
       setSelectedStockDate(data.stock.usedDate);
       return data;
     } catch (e: any) {
-      setStatusMsg(`데이터 로드 오류: ${e.message}`);
-      setIsBooting(false);
+      if (!isSilent) {
+        setStatusMsg(`데이터 로드 오류: ${e.message}`);
+        setIsBooting(false);
+      }
       return null;
     }
   }, []);
 
   useEffect(() => {
-    fetchAutoBootData();
+    if (memoryBootPayload) {
+      // 캐시가 있으면 사용자 체감 0ms 유지하면서 백그라운드 갱신
+      fetchAutoBootData(undefined, undefined, true);
+    } else {
+      fetchAutoBootData();
+    }
   }, [fetchAutoBootData]);
 
   // 2) iframe으로부터 메시지 수신 (GFS_READY, GFS_AUTO_BOOT_DONE, GFS_MASTER_APPLIED 등)
@@ -171,16 +199,37 @@ export const GfsSmartOrderView: React.FC = () => {
         setIsBooting(false);
         setBootCompleted(true);
         if (d.success) {
-          setUnmatchedMenus(Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : []);
-          setAuditMatchedCount(Number(d.auditMatchedCount) || 0);
-          setOrderableCount(Number(d.orderableCount) || 0);
-          setActiveMaterialCount(Number(d.activeCount) || 0);
-          setDormantCount(Number(d.dormantCount) || 0);
-          setTotalMaterialCount(Number(d.totalCount) || 442);
-          if (d.filterDisplayMode) setFilterMode(d.filterDisplayMode);
-          setTotalAmount(Number(d.totalAmount) || 0);
+          const uMenus = Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : [];
+          const aCount = Number(d.auditMatchedCount) || 0;
+          const oCount = Number(d.orderableCount) || 0;
+          const actCount = Number(d.activeCount) || 0;
+          const dCount = Number(d.dormantCount) || 0;
+          const tCount = Number(d.totalCount) || 442;
+          const fMode = d.filterDisplayMode || 'order_only';
+          const totAmt = Number(d.totalAmount) || 0;
+
+          setUnmatchedMenus(uMenus);
+          setAuditMatchedCount(aCount);
+          setOrderableCount(oCount);
+          setActiveMaterialCount(actCount);
+          setDormantCount(dCount);
+          setTotalMaterialCount(tCount);
+          if (d.filterDisplayMode) setFilterMode(fMode);
+          setTotalAmount(totAmt);
+
+          memoryStats = {
+            unmatchedMenus: uMenus,
+            auditMatchedCount: aCount,
+            orderableCount: oCount,
+            activeMaterialCount: actCount,
+            dormantCount: dCount,
+            totalMaterialCount: tCount,
+            filterMode: fMode,
+            totalAmount: totAmt,
+          };
+
           setStatusMsg(
-            `산출 완료 · 실발주 ${d.orderableCount || 0}건 (${d.totalBoxes || 0}박스) · 휴면 ${d.dormantCount || 0}건 제외`
+            `산출 완료 · 실발주 ${oCount}건 (${d.totalBoxes || 0}박스) · 휴면 ${dCount}건 제외`
           );
         } else {
           setStatusMsg(`산출 오류: ${d.error || '알 수 없는 오류'}`);
@@ -191,6 +240,13 @@ export const GfsSmartOrderView: React.FC = () => {
         if (d.activeCount != null) setActiveMaterialCount(Number(d.activeCount) || 0);
         if (d.dormantCount != null) setDormantCount(Number(d.dormantCount) || 0);
         if (d.totalCount != null) setTotalMaterialCount(Number(d.totalCount) || 442);
+        if (memoryStats) {
+          if (d.mode) memoryStats.filterMode = d.mode;
+          if (d.orderableCount != null) memoryStats.orderableCount = Number(d.orderableCount) || 0;
+          if (d.activeCount != null) memoryStats.activeMaterialCount = Number(d.activeCount) || 0;
+          if (d.dormantCount != null) memoryStats.dormantCount = Number(d.dormantCount) || 0;
+          if (d.totalCount != null) memoryStats.totalMaterialCount = Number(d.totalCount) || 442;
+        }
       } else if (d.type === 'GFS_ORDERS_APPLIED' && d.success) {
         if (Array.isArray(d.unmatchedMenus)) {
           setUnmatchedMenus(d.unmatchedMenus);
@@ -229,24 +285,35 @@ export const GfsSmartOrderView: React.FC = () => {
 
   // 3) iframeReady && bootPayload 둘 다 준비되면 즉시 Zero-Upload 자동 부팅 전송
   useEffect(() => {
-    if (!iframeReady || !bootPayload || bootCompleted) return;
+    if (!iframeReady || !bootPayload || bootSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
+    bootSentRef.current = true;
     win.postMessage({ type: 'GFS_AUTO_BOOT', payload: bootPayload }, window.location.origin);
-  }, [iframeReady, bootPayload, bootCompleted]);
+  }, [iframeReady, bootPayload]);
 
   // 4) 수주일자(주문서) 변경 시 즉시 재산출
   const handleChangeOrderDate = async (newDate: string) => {
     setSelectedOrderDate(newDate);
     setBootCompleted(false);
-    await fetchAutoBootData(newDate, selectedStockDate);
+    bootSentRef.current = false;
+    const data = await fetchAutoBootData(newDate, selectedStockDate);
+    if (data && iframeRef.current?.contentWindow) {
+      bootSentRef.current = true;
+      iframeRef.current.contentWindow.postMessage({ type: 'GFS_AUTO_BOOT', payload: data }, window.location.origin);
+    }
   };
 
   // 5) 재고실사일자(재고표) 변경 시 즉시 재산출
   const handleChangeStockDate = async (newDate: string) => {
     setSelectedStockDate(newDate);
     setBootCompleted(false);
-    await fetchAutoBootData(selectedOrderDate, newDate);
+    bootSentRef.current = false;
+    const data = await fetchAutoBootData(selectedOrderDate, newDate);
+    if (data && iframeRef.current?.contentWindow) {
+      bootSentRef.current = true;
+      iframeRef.current.contentWindow.postMessage({ type: 'GFS_AUTO_BOOT', payload: data }, window.location.origin);
+    }
   };
 
   // 6) 1~2주 주기 [신메뉴+BOM 발주서] 업로드 & DB 영구 저장
@@ -883,16 +950,13 @@ export const GfsSmartOrderView: React.FC = () => {
       )}
 
       {/* =================================================================== */}
-      {/* 메인 GFS 스마트발주 관제 화면 (자동 부팅 중에는 깔끔한 로딩 배너 표시) */}
+      {/* 메인 GFS 스마트발주 관제 화면 (로딩 중에도 화면을 차단하지 않고 상단 플로팅 인디케이터 표시) */}
       {/* =================================================================== */}
       <div className="flex-1 min-h-0 bg-[#070B14] relative">
         {isBooting && (
-          <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white">
-            <div className="w-8 h-8 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-            <div className="text-sm font-extrabold tracking-tight">{statusMsg}</div>
-            <div className="text-[11px] text-slate-400 font-mono">
-              파일 업로드 없이 ERP에 등록된 최신 발주서(BOM) · 10시 주문서 · 17시 재고표를 자동으로 결합합니다
-            </div>
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-emerald-500/60 shadow-2xl rounded-full px-4 py-1.5 flex items-center gap-2.5 text-white text-[12px] animate-pulse pointer-events-none backdrop-blur-md">
+            <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span className="font-bold tracking-tight">{statusMsg}</span>
           </div>
         )}
         <iframe

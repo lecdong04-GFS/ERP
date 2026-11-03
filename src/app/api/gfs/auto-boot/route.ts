@@ -6,6 +6,15 @@ import { canonNormName } from '@/lib/gfs/norm';
 
 const MASTER_KEY = 'gfs_master_workbook';
 
+// 서버 인메모리 캐시 (60초간 응답 1ms 즉시 반환)
+interface AutoBootCacheEntry {
+  key: string;
+  payload: any;
+  cachedAt: number;
+}
+let autoBootCache: AutoBootCacheEntry | null = null;
+const CACHE_TTL_MS = 60 * 1000;
+
 // GET /api/gfs/auto-boot?orderDate=YYYY-MM-DD&stockDate=YYYY-MM-DD&includeMaster=1
 export async function GET(req: NextRequest) {
   try {
@@ -13,7 +22,13 @@ export async function GET(req: NextRequest) {
     const reqOrderDate = searchParams.get('orderDate') || '';
     const reqStockDate = searchParams.get('stockDate') || '';
     const includeMaster = searchParams.get('includeMaster') !== '0';
+    const force = searchParams.get('force') === '1';
     const today = kstToday();
+
+    const cacheKey = `${reqOrderDate}|${reqStockDate}|${includeMaster}`;
+    if (!force && autoBootCache && autoBootCache.key === cacheKey && Date.now() - autoBootCache.cachedAt < CACHE_TTL_MS) {
+      return NextResponse.json({ success: true, data: autoBootCache.payload, fromCache: true });
+    }
 
     // 1. 병렬 메타 조회: (A) 발주서 마스터, (B) 수주일자 목록, (C) 재고조사표 스냅샷 일자 목록, (D) 추정일사용량
     const [masterSnap, orderDateRows, stockDateRows, estUsageResult] = await Promise.all([
@@ -235,32 +250,40 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    const responseData = {
+      today,
+      master: masterInfo,
+      dormantMeta: {
+        recent14MenuMap,
+        menuTrendMap,
+        estUsageMap,
+      },
+      orders: {
+        usedDate: usedOrderDate,
+        isToday: usedOrderDate === today && orderItems.length > 0,
+        hasTodayOrder,
+        availableDates: availableOrderDates,
+        menuCount: orderItems.length,
+        totalQty: totalOrderQty,
+        items: orderItems,
+      },
+      stock: {
+        usedDate: usedStockDate,
+        availableDates: availableStockDates,
+        itemCount: stockItems.length,
+        items: stockItems,
+      },
+    };
+
+    autoBootCache = {
+      key: cacheKey,
+      payload: responseData,
+      cachedAt: Date.now(),
+    };
+
     return NextResponse.json({
       success: true,
-      data: {
-        today,
-        master: masterInfo,
-        dormantMeta: {
-          recent14MenuMap,
-          menuTrendMap,
-          estUsageMap,
-        },
-        orders: {
-          usedDate: usedOrderDate,
-          isToday: usedOrderDate === today && orderItems.length > 0,
-          hasTodayOrder,
-          availableDates: availableOrderDates,
-          menuCount: orderItems.length,
-          totalQty: totalOrderQty,
-          items: orderItems,
-        },
-        stock: {
-          usedDate: usedStockDate,
-          availableDates: availableStockDates,
-          itemCount: stockItems.length,
-          items: stockItems,
-        },
-      },
+      data: responseData,
     });
   } catch (error: any) {
     return NextResponse.json(

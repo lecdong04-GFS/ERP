@@ -134,7 +134,7 @@
       throw new Error('GFS 엔진 스크립트가 아직 준비되지 않았습니다.');
     }
     var buffer = base64ToArrayBuffer(b64);
-    var wb = XLSX.read(buffer, { type: 'array', cellDates: true, cellFormula: true });
+    var wb = XLSX.read(buffer, { type: 'array', cellDates: false, cellFormula: false });
     state.uploadedFileBuffer = buffer;
     state.pendingMaster = {
       name: fileName || 'GFS_발주서_마스터.xlsx',
