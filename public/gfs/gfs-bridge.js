@@ -481,8 +481,155 @@
     } catch (err) { /* ignore */ }
   });
 
+  // =========================================================================
+  // 하단 플로팅 DOCK 마우스 드래그 자유 이동 & 호버링 관리 모듈
+  // =========================================================================
+  function initDraggableDock() {
+    var dock = document.getElementById('floatingDock');
+    var handle = document.getElementById('dockDragHandle');
+    var resetBtn = document.getElementById('btnResetDockPos');
+    if (!dock) return;
+
+    // 저장된 위치가 있으면 복원
+    var savedPos = null;
+    try {
+      var raw = localStorage.getItem('gfs_floating_dock_pos');
+      if (raw) savedPos = JSON.parse(raw);
+    } catch (e) {}
+
+    function applyPosition(left, top) {
+      dock.style.left = left + 'px';
+      dock.style.top = top + 'px';
+      dock.style.bottom = 'auto';
+      dock.style.transform = 'none';
+    }
+
+    function resetPosition() {
+      dock.style.left = '';
+      dock.style.top = '';
+      dock.style.bottom = '';
+      dock.style.transform = '';
+      try {
+        localStorage.removeItem('gfs_floating_dock_pos');
+      } catch (e) {}
+    }
+
+    if (savedPos && typeof savedPos.left === 'number' && typeof savedPos.top === 'number') {
+      var maxL = Math.max(8, window.innerWidth - 120);
+      var maxT = Math.max(8, window.innerHeight - 60);
+      var safeL = Math.max(8, Math.min(maxL, savedPos.left));
+      var safeT = Math.max(8, Math.min(maxT, savedPos.top));
+      applyPosition(safeL, safeT);
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        resetPosition();
+      });
+    }
+
+    var isDragging = false;
+    var startX = 0, startY = 0;
+    var initialLeft = 0, initialTop = 0;
+    var activePointerTarget = null;
+
+    function onPointerDown(e) {
+      // 버튼, 인풋, 드로어 내부 등 인터랙티브 영역은 드래그에서 제외
+      if (
+        e.target.closest('button') ||
+        e.target.closest('input') ||
+        e.target.closest('select') ||
+        e.target.closest('a') ||
+        e.target.closest('#dockIntelligenceDrawer')
+      ) {
+        return;
+      }
+      isDragging = true;
+      activePointerTarget = e.currentTarget;
+      startX = e.clientX;
+      startY = e.clientY;
+      var rect = dock.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      try {
+        if (e.pointerId && activePointerTarget.setPointerCapture) {
+          activePointerTarget.setPointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+
+      dock.style.transition = 'none';
+      document.body.style.userSelect = 'none';
+      dock.classList.add('ring-2', 'ring-cyan-400', 'shadow-[0_25px_70px_rgba(0,0,0,0.9),0_0_35px_rgba(0,240,255,0.3)]');
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      var deltaX = e.clientX - startX;
+      var deltaY = e.clientY - startY;
+
+      var newLeft = initialLeft + deltaX;
+      var newTop = initialTop + deltaY;
+
+      var dockRect = dock.getBoundingClientRect();
+      var maxLeft = window.innerWidth - dockRect.width - 8;
+      var maxTop = window.innerHeight - dockRect.height - 8;
+
+      newLeft = Math.max(8, Math.min(maxLeft, newLeft));
+      newTop = Math.max(8, Math.min(maxTop, newTop));
+
+      applyPosition(newLeft, newTop);
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      document.body.style.userSelect = '';
+      dock.style.transition = '';
+      dock.classList.remove('ring-2', 'ring-cyan-400', 'shadow-[0_25px_70px_rgba(0,0,0,0.9),0_0_35px_rgba(0,240,255,0.3)]');
+
+      try {
+        if (e && e.pointerId && activePointerTarget && activePointerTarget.releasePointerCapture) {
+          activePointerTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch (err) {}
+
+      var rect = dock.getBoundingClientRect();
+      try {
+        localStorage.setItem('gfs_floating_dock_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+      } catch (err) {}
+    }
+
+    if (handle) {
+      handle.addEventListener('pointerdown', onPointerDown);
+      handle.addEventListener('pointermove', onPointerMove);
+      handle.addEventListener('pointerup', onPointerUp);
+      handle.addEventListener('pointercancel', onPointerUp);
+    }
+
+    dock.addEventListener('pointerdown', onPointerDown);
+    dock.addEventListener('pointermove', onPointerMove);
+    dock.addEventListener('pointerup', onPointerUp);
+    dock.addEventListener('pointercancel', onPointerUp);
+
+    window.addEventListener('resize', function () {
+      if (!dock.style.top || dock.style.top === 'auto') return;
+      var rect = dock.getBoundingClientRect();
+      var maxL = Math.max(8, window.innerWidth - rect.width - 8);
+      var maxT = Math.max(8, window.innerHeight - rect.height - 8);
+      var curL = parseInt(dock.style.left, 10) || rect.left;
+      var curT = parseInt(dock.style.top, 10) || rect.top;
+      if (curL > maxL || curT > maxT) {
+        applyPosition(Math.max(8, Math.min(maxL, curL)), Math.max(8, Math.min(maxT, curT)));
+      }
+    });
+  }
+
   function onReady() {
     hookInternalMasterUpload();
+    initDraggableDock();
     if (window.parent && window.parent !== window) {
       sendBack(window.parent, window.location.origin, { type: 'GFS_READY', bridge: 2 });
     } else {

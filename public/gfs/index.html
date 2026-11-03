@@ -1472,7 +1472,27 @@
   <!-- Sticky Floating Bottom Action Dock & Dynamic Intelligence Sheet (BIFF Editorial) -->
   <!-- ========================================================================= -->
   <aside id="floatingDock"
-    class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-7xl w-[96%] bg-neutral-950 text-white border-2 border-neutral-800 rounded-2xl shadow-2xl shadow-black/80 flex flex-col transition-all duration-300 overflow-hidden">
+    class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-7xl w-[96%] bg-neutral-950/85 backdrop-blur-2xl text-white border border-cyan-500/35 hover:border-cyan-400/60 rounded-2xl shadow-[0_22px_60px_-10px_rgba(0,0,0,0.85),0_0_25px_rgba(0,240,255,0.12)] hover:shadow-[0_28px_70px_-8px_rgba(0,0,0,0.92),0_0_35px_rgba(0,240,255,0.22)] ring-1 ring-white/10 flex flex-col overflow-hidden transition-shadow duration-200">
+
+    <!-- 0. Sleek Draggable Grip Handle Bar (마우스로 잡고 자유 이동) -->
+    <div id="dockDragHandle"
+      class="w-full py-1.5 px-4 bg-neutral-900/90 hover:bg-neutral-800/90 border-b border-neutral-800/80 cursor-grab active:cursor-grabbing flex items-center justify-between transition-colors select-none group"
+      title="마우스로 클릭한 채 드래그하여 화면 원하는 위치로 이동시킬 수 있습니다">
+      <div class="flex items-center gap-2.5">
+        <span class="w-8 h-1 rounded-full bg-neutral-600 group-hover:bg-cyan-400 transition-colors"></span>
+        <span class="text-[11px] text-neutral-400 group-hover:text-cyan-300 font-bold tracking-tight flex items-center gap-1.5 transition-colors font-mono">
+          <span>⋮⋮</span>
+          <span>DOCK (마우스로 드래그하여 원하는 위치로 자유 이동)</span>
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnResetDockPos" type="button"
+          class="text-[10px] font-bold text-neutral-400 hover:text-white px-2 py-0.5 rounded bg-neutral-800/90 hover:bg-neutral-700 border border-neutral-700/80 transition cursor-pointer"
+          title="하단 기본 위치로 되돌리기">
+          하단 원위치 ↩
+        </button>
+      </div>
+    </div>
 
     <!-- 1. Expandable Live Intelligence Drawer -->
     <div id="dockIntelligenceDrawer"
