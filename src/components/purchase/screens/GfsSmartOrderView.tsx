@@ -311,9 +311,12 @@ export const GfsSmartOrderView: React.FC = () => {
           window.location.origin
         );
       }
+      setStatusMsg(`최신 발주서('${file.name}') 업로드 및 시스템 전체 실시간 반영 완료!`);
+      alert(`✅ 최신 발주서 업로드 및 즉시 반영 완료!\n• 파일명: ${file.name}\n• 스마트발주(원조 엑셀뷰)와 재고조회/발주 전산에 즉시 동기화되었습니다.`);
     } catch (err: any) {
-      alert('발주서 교체 실패: ' + err.message);
-      setStatusMsg('발주서 교체 실패');
+      alert('발주서 업로드 반영 실패: ' + err.message);
+      setStatusMsg('발주서 업로드 실패');
+    } finally {
       setIsUploadingMaster(false);
     }
   };
@@ -553,13 +556,13 @@ export const GfsSmartOrderView: React.FC = () => {
             <span className="font-extrabold text-[12px] tracking-tight text-white">스마트발주</span>
           </div>
 
-          {/* 신호등 1: 📦 발주서 마스터 (1~2주 주기 신메뉴·BOM 교체) */}
+          {/* 신호등 1: 📦 최신 발주서(BOM) 업로드 & 연동 */}
           <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            <span className="text-[11px] text-slate-300 font-medium">📦 발주서(BOM):</span>
+            <span className="text-[11px] text-slate-300 font-medium">📦 최신 발주서:</span>
             <span
               className="text-[11px] font-bold text-white max-w-[120px] truncate"
-              title={`현재 적용된 발주서 마스터: ${bootPayload?.master.fileName || 'GFS.xlsx'} (${bootPayload?.master.asOf || ''})`}
+              title={`현재 적용된 발주서: ${bootPayload?.master.fileName || 'GFS.xlsx'} (${bootPayload?.master.asOf || ''})`}
             >
               {bootPayload?.master.asOf || '기본본'}
             </span>
@@ -567,10 +570,10 @@ export const GfsSmartOrderView: React.FC = () => {
               type="button"
               onClick={() => masterInputRef.current?.click()}
               disabled={isUploadingMaster}
-              className="ml-0.5 px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white transition cursor-pointer"
-              title="1~2주 주기 신메뉴 및 BOM이 추가된 최신 발주서 양식을 업로드하면 영구 기억됩니다"
+              className="ml-0.5 px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white transition cursor-pointer shadow-2xs"
+              title="매일 최신의 발주서 엑셀을 업로드하면 스마트발주 화면(원조 엑셀뷰 포함)과 ERP 재고조회 등 전체 시스템에 즉시 동기화 반영됩니다."
             >
-              {isUploadingMaster ? '교체중...' : '📤 신메뉴 교체'}
+              {isUploadingMaster ? '⏳ 업로드 반영중...' : '📤 최신 발주서 업로드 (즉시 반영)'}
             </button>
           </div>
 

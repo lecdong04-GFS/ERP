@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       })
       .catch(() => {});
 
-    // 재고(prisma.inventory) 테이블에 최신 발주서 현재고/일사용량/단가 자동 동기화
+    // 재고(prisma.inventory) 및 GFS 재고유지일(prisma.gfsSnapshot)에 최신 발주서 현재고/일사용량/단가/유지일 자동 동기화
     try {
       const buf = Buffer.from(base64, 'base64');
       const wb = XLSX.read(buf, { type: 'buffer' });
@@ -123,15 +123,40 @@ export async function POST(req: NextRequest) {
           const k = normName(inv.productName);
           const o = orderNorms.get(k);
           if (o) {
+            const finalPrice = o.bagPrice > 0 ? o.bagPrice : inv.unitPrice;
+            const stockDays = o.dailyUsage > 0 ? Math.round((o.currentStock / o.dailyUsage) * 10) / 10 : null;
+
             await prisma.inventory.update({
               where: { id: inv.id },
               data: {
                 currentQty: o.currentStock,
                 dailyUsage: o.dailyUsage,
-                unitPrice: o.bagPrice > 0 ? o.bagPrice : inv.unitPrice,
-                stockAmount: o.currentStock * (o.bagPrice > 0 ? o.bagPrice : inv.unitPrice),
+                unitPrice: finalPrice,
+                stockAmount: o.currentStock * finalPrice,
               },
             });
+
+            // GFS 재고유지일 스냅샷(재고조회 화면 표시용) 즉시 동기화
+            if (inv.productCode) {
+              await prisma.gfsSnapshot.upsert({
+                where: { productCode: inv.productCode },
+                update: {
+                  productName: inv.productName,
+                  warehouse: inv.warehouse || '',
+                  stockDays: stockDays,
+                  asOf,
+                  source: 'gfs',
+                },
+                create: {
+                  productCode: inv.productCode,
+                  productName: inv.productName,
+                  warehouse: inv.warehouse || '',
+                  stockDays: stockDays,
+                  asOf,
+                  source: 'gfs',
+                },
+              });
+            }
           }
         }
       }
