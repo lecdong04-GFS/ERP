@@ -1749,11 +1749,19 @@
 
         <!-- Excel Export Button -->
         <button id="btnDockExportExcel"
-          class="btn-tactile text-xs font-black px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-md transition"
+          class="btn-tactile text-xs font-black px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 flex items-center gap-1.5 shadow-md transition"
           title="원조 정준오 발주시트 서식 100% 보존 엑셀 다운로드">
-          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-white"></i>
+          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-400"></i>
           <span class="hidden sm:inline">원조 엑셀 다운로드</span>
           <span class="sm:hidden">엑셀</span>
+        </button>
+
+        <!-- ★ 핵심: ERP 발주 확정 저장 Button in DOCK ★ -->
+        <button id="btnDockConfirmOrder"
+          class="btn-tactile text-xs font-black px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white flex items-center gap-1.5 shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-400/80 transition shrink-0 cursor-pointer animate-pulse"
+          title="현재 산출된 발주 수량으로 ERP 발주서를 일괄 생성 및 확정 저장합니다">
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-white"></i>
+          <span class="font-black text-xs sm:text-sm tracking-tight whitespace-nowrap">✅ ERP 발주 확정 저장</span>
         </button>
 
         <!-- Scroll to Top -->

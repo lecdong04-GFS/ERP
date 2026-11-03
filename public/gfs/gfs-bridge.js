@@ -627,9 +627,27 @@
     });
   }
 
+  function hookDockConfirmOrder() {
+    var btn = document.getElementById('btnDockConfirmOrder');
+    if (!btn) return;
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+    btn.addEventListener('click', function () {
+      if (window.parent && window.parent !== window) {
+        sendBack(window.parent, window.location.origin, { type: 'GFS_REQUEST_CONFIRM_ORDER' });
+      } else if (window.opener) {
+        sendBack(window.opener, window.location.origin, { type: 'GFS_REQUEST_CONFIRM_ORDER' });
+      } else {
+        toast('ERP 화면 상단의 [ERP 발주 확정 저장]을 실행합니다.', 'info');
+      }
+    });
+  }
+
   function onReady() {
     hookInternalMasterUpload();
     initDraggableDock();
+    hookDockConfirmOrder();
     if (window.parent && window.parent !== window) {
       sendBack(window.parent, window.location.origin, { type: 'GFS_READY', bridge: 2 });
     } else {

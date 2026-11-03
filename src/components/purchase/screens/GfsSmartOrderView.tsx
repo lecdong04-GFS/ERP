@@ -203,6 +203,8 @@ export const GfsSmartOrderView: React.FC = () => {
           setUnmatchedMenus(Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : []);
           setStatusMsg(`신메뉴 발주서(${d.fileName}) 교체 및 재산출 완료`);
         }
+      } else if (d.type === 'GFS_REQUEST_CONFIRM_ORDER') {
+        handleOneClickConfirmOrder();
       } else if (d.type === 'GFS_MASTER_PERSISTED') {
         setBootPayload((prev) =>
           prev
