@@ -289,16 +289,14 @@ export const Dashboard: React.FC = () => {
       <DemandTrendPanel trendData={stats.demandTrend} onNavigate={navigate} />
 
       {/* ===================================================================== */}
-      {/* 4. 실시간 긴급 관제 보드: 결품위험/FEFO(좌측 2열) + 창고별 실보유액(우측 1열) */}
+      {/* 4. 실시간 긴급 관제 보드: 결품위험/FEFO(50%) + 창고별 실보유액(50%) 1:1 반반 분할 */}
       {/* ===================================================================== */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3.5 shrink-0">
-        <div className="xl:col-span-2">
-          <WatchList
-            stockDays={stats.stockDaysTop}
-            fefoTop={stats.fefoTop}
-            onNavigate={navigate}
-          />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
+        <WatchList
+          stockDays={stats.stockDaysTop}
+          fefoTop={stats.fefoTop}
+          onNavigate={navigate}
+        />
         <WarehouseStock
           rows={stats.warehouseStock}
           total={stats.warehouseStockTotal}

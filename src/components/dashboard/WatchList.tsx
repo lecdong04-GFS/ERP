@@ -77,7 +77,7 @@ export const WatchList: React.FC<WatchListProps> = ({ stockDays = [], fefoTop = 
       </header>
 
       {/* Content List */}
-      <div className="flex-1 min-h-[180px] max-h-[250px] overflow-y-auto">
+      <div className="flex-1 min-h-[260px] max-h-[300px] overflow-y-auto">
         {activeTab === 'stock' ? (
           stockDays.length === 0 ? (
             <div className="h-44 flex flex-col items-center justify-center text-slate-400 gap-2.5 text-sm">
