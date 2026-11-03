@@ -87,28 +87,58 @@ export async function GET(req: NextRequest) {
       qty,
     }));
 
-    // (B-2) 최근 14일간 수주가 있었던 완제품 목록 (휴면/미사용 원부자재 정밀 필터링용)
-    const recent14Dates = availableOrderDates.slice(0, 14);
-    const recent14Orders = recent14Dates.length > 0
+    // (B-2) 최근 14일간 수주가 있었던 완제품 목록 및 7일 vs 직전 7일 모멘텀 추세 분석
+    const recent7Dates = availableOrderDates.slice(0, 7);
+    const prev7Dates = availableOrderDates.slice(7, 14);
+
+    const recent14Orders = (recent7Dates.length > 0 || prev7Dates.length > 0)
       ? await prisma.salesOrderDetail.findMany({
           where: {
             salesOrder: {
-              orderDate: { in: recent14Dates },
+              orderDate: { in: [...recent7Dates, ...prev7Dates] },
             },
           },
-          include: {
+          select: {
+            salesOrder: { select: { orderDate: true } },
             product: { select: { name: true } },
+            totalQty: true,
           },
         })
       : [];
 
+    const recent7MenuMap: Record<string, number> = {};
+    const prev7MenuMap: Record<string, number> = {};
     const recent14MenuMap: Record<string, number> = {};
+
     for (const d of recent14Orders) {
       const nm = String(d.product?.name || '').trim();
-      if (!nm) continue;
+      const dt = String(d.salesOrder?.orderDate || '');
       const q = Number(d.totalQty) || 0;
+      if (!nm || !(q > 0)) continue;
+
       recent14MenuMap[nm] = (recent14MenuMap[nm] || 0) + q;
+      if (recent7Dates.includes(dt)) {
+        recent7MenuMap[nm] = (recent7MenuMap[nm] || 0) + q;
+      } else if (prev7Dates.includes(dt)) {
+        prev7MenuMap[nm] = (prev7MenuMap[nm] || 0) + q;
+      }
     }
+
+    const menuTrendMap: Record<string, { status: 'EXTINCT' | 'DECLINING' | 'SURGING' | 'STABLE'; changePct: number; qty7: number; qtyPrev: number }> = {};
+    const allKnownMenus = new Set([...Object.keys(recent7MenuMap), ...Object.keys(prev7MenuMap)]);
+    allKnownMenus.forEach((menu) => {
+      const q7 = recent7MenuMap[menu] || 0;
+      const qp = prev7MenuMap[menu] || 0;
+      if (q7 === 0) {
+        menuTrendMap[menu] = { status: 'EXTINCT', changePct: -100, qty7: 0, qtyPrev: qp };
+      } else if (qp > 0) {
+        const pct = Math.round(((q7 - qp) / qp) * 100);
+        const status = pct <= -35 ? 'DECLINING' : (pct >= 35 ? 'SURGING' : 'STABLE');
+        menuTrendMap[menu] = { status, changePct: pct, qty7: q7, qtyPrev: qp };
+      } else {
+        menuTrendMap[menu] = { status: 'SURGING', changePct: 100, qty7: q7, qtyPrev: 0 };
+      }
+    });
 
     // (C) 재고조사표(전일 17시 마감 실사) 대상 일자 결정 및 조회
     const availableStockDates = stockDateRows.map((r) => r.snapshotDate).filter(Boolean);
@@ -201,6 +231,7 @@ export async function GET(req: NextRequest) {
         master: masterInfo,
         dormantMeta: {
           recent14MenuMap,
+          menuTrendMap,
           estUsageMap,
         },
         orders: {

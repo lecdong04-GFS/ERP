@@ -1662,9 +1662,9 @@ function updateFilterModeUi() {
   if (btnActive) btnActive.className = state.filterDisplayMode === 'active_only' ? activeCls : inactiveCls;
   if (btnAll) btnAll.className = state.filterDisplayMode === 'all' ? activeCls : inactiveCls;
 
-  const orderCount = (state.rawItems || []).filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant).length;
-  const activeCount = (state.rawItems || []).filter(i => i.isRelatedToOrders && !i.isDormant).length;
-  const dormantCount = (state.rawItems || []).filter(i => i.isDormant).length;
+  const orderCount = (state.rawItems || []).filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT').length;
+  const activeCount = (state.rawItems || []).filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT').length;
+  const dormantCount = (state.rawItems || []).filter(i => i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked).length;
   const totalCount = (state.rawItems || []).length;
 
   const lblOrder = document.getElementById('labelFilterModeOrderOnly');
@@ -1679,13 +1679,13 @@ function updateFilterModeUi() {
   if (excelViewCountBadge) {
     if (state.filterDisplayMode === 'order_only') {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-mono";
-      excelViewCountBadge.textContent = `🔥 실발주 대상 ${orderCount}개 품목 표시 (휴면 ${dormantCount}개 제외)`;
+      excelViewCountBadge.textContent = `🔥 실발주 대상 ${orderCount}개 품목 표시 (과잉/단종/휴면 ${dormantCount}개 제외)`;
     } else if (state.filterDisplayMode === 'active_only') {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-mono";
       excelViewCountBadge.textContent = `📦 금일 생산 연동 ${activeCount}개 품목 표시 (0박스 포함)`;
     } else {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono";
-      excelViewCountBadge.textContent = `📋 전체 ${totalCount}개 품목 표시 (휴면 ${dormantCount}개 포함)`;
+      excelViewCountBadge.textContent = `📋 전체 ${totalCount}개 품목 표시 (과잉/휴면 ${dormantCount}개 포함)`;
     }
   }
 
@@ -2053,6 +2053,23 @@ function parseVegetableCalculator(rows) {
 /**
  * ★ 완제품 주문량을 원부자재 BOM 및 일사용량에 실시간 동적 반영
  */
+function getMenuTrendInfo(menuName) {
+  if (!state.dormantMeta || !state.dormantMeta.menuTrendMap) return null;
+  const trendMap = state.dormantMeta.menuTrendMap;
+  if (trendMap[menuName]) return trendMap[menuName];
+  const norm = String(menuName || '').replace(/\s+/g, '');
+  if (trendMap[norm]) return trendMap[norm];
+  const clean = norm.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+  if (!clean || clean.length < 2) return null;
+  for (const [k, v] of Object.entries(trendMap)) {
+    const cleanK = k.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+    if (cleanK && (cleanK.includes(clean) || clean.includes(cleanK))) {
+      return v;
+    }
+  }
+  return null;
+}
+
 function applyFinishedGoodsOrdersToMaterials() {
   if (!state.rawItems || state.rawItems.length === 0) return 0;
   if (!state.vegetableOrdersMap || Object.keys(state.vegetableOrdersMap).length === 0) return 0;
@@ -2112,7 +2129,6 @@ function applyFinishedGoodsOrdersToMaterials() {
       });
 
       // 일사용량(dailyUsage) 동적 재산출
-      // 벌크 kg 제수는 getRawItemDivisor()를 통해 g 단위로 정규화되어 sumProduct(g)와 단위 일치
       const effectiveDivisor = getRawItemDivisor(item, 'g');
       if (sumProduct === 0) {
         item.dailyUsage = 0;
@@ -2128,6 +2144,35 @@ function applyFinishedGoodsOrdersToMaterials() {
         totalUpdated++;
       }
 
+      // ★ [핵심 혁신] 완제품 7~14일 수주 모멘텀 추세 대조 및 전용/공용 자재 자동 분류
+      item.isDedicated = (item.bomChildren.length === 1);
+
+      let totalQty7 = 0;
+      let totalQtyPrev = 0;
+      let extinctChildCount = 0;
+
+      item.bomChildren.forEach(child => {
+        const trend = getMenuTrendInfo(child.menuName);
+        if (trend) {
+          child.trendStatus = trend.status;
+          child.trendChangePct = trend.changePct;
+          child.qty7 = trend.qty7;
+          child.qtyPrev = trend.qtyPrev;
+          totalQty7 += trend.qty7;
+          totalQtyPrev += trend.qtyPrev;
+          if (trend.status === 'EXTINCT') extinctChildCount++;
+        } else {
+          child.trendStatus = child.prodQty > 0 ? 'STABLE' : 'EXTINCT';
+          child.trendChangePct = 0;
+          child.qty7 = child.prodQty > 0 ? child.prodQty : 0;
+          child.qtyPrev = 0;
+          if (child.prodQty > 0) totalQty7 += child.prodQty;
+          else extinctChildCount++;
+        }
+      });
+
+      const isAllChildrenExtinct = (extinctChildCount === item.bomChildren.length && sumProduct === 0);
+
       // 최근 14일 수주 이력 대조 (휴면/미사용 판정)
       const recentMap = (state.dormantMeta && state.dormantMeta.recent14MenuMap) || {};
       const hasRecent14Order = item.bomChildren.some(child => {
@@ -2142,21 +2187,69 @@ function applyFinishedGoodsOrdersToMaterials() {
         return false;
       });
 
-      if (sumProduct === 0) {
-        if (!hasRecent14Order) {
+      if (item.bomChildren.length === 1) {
+        // [전용 자재]: 단일 완제품 전용 투입 품목
+        const singleChild = item.bomChildren[0];
+        const singleTrend = getMenuTrendInfo(singleChild.menuName);
+        if (isAllChildrenExtinct || !hasRecent14Order || (singleTrend && singleTrend.status === 'EXTINCT' && sumProduct === 0)) {
+          item.trendStatus = 'EXTINCT';
+          item.trendChangePct = -100;
+          item.trendText = '소멸(단종)';
           item.isDormant = true;
-          item.dormantReason = '최근 14일간 수주 메뉴 없음 (휴면 자재)';
-        } else {
+          item.dormantReason = `전용 메뉴 [${singleChild.menuName}] 수주 소멸 (단종/미수주)`;
+          item.dailyUsage = 0;
+        } else if (singleTrend) {
+          item.trendStatus = singleTrend.status;
+          item.trendChangePct = singleTrend.changePct;
+          item.trendText = singleTrend.status === 'DECLINING' ? `하향(${singleTrend.changePct}%)` : (singleTrend.status === 'SURGING' ? `급증(+${singleTrend.changePct}%)` : '안정━');
           item.isDormant = false;
-          item.dormantReason = '금일 미생산 (최근 14일 내 가동 이력 있음)';
+          item.dormantReason = '';
+        } else {
+          item.trendStatus = sumProduct > 0 ? 'STABLE' : 'EXTINCT';
+          item.trendChangePct = 0;
+          item.trendText = sumProduct > 0 ? '안정━' : '소멸(미수주)';
+          item.isDormant = sumProduct === 0;
+          item.dormantReason = sumProduct === 0 ? '수주 없음' : '';
         }
       } else {
-        item.isDormant = false;
-        item.dormantReason = '';
+        // [공용 자재]: 복수 완제품에 투입되는 범용 자재
+        if (isAllChildrenExtinct || (!hasRecent14Order && sumProduct === 0)) {
+          item.trendStatus = 'EXTINCT';
+          item.trendChangePct = -100;
+          item.trendText = '소멸(단종)';
+          item.isDormant = true;
+          item.dormantReason = '공용 완제품 전 메뉴 수주 소멸 (단종/휴면)';
+          item.dailyUsage = 0;
+        } else {
+          item.isDormant = false;
+          item.dormantReason = sumProduct === 0 ? '금일 미생산 (최근 14일 내 가동 이력 있음)' : '';
+          if (totalQtyPrev > 0) {
+            const pct = Math.round(((totalQty7 - totalQtyPrev) / totalQtyPrev) * 100);
+            item.trendChangePct = pct;
+            if (pct <= -35) {
+              item.trendStatus = 'DECLINING';
+              item.trendText = `하향(${pct}%)`;
+            } else if (pct >= 35) {
+              item.trendStatus = 'SURGING';
+              item.trendText = `급증(+${pct}%)`;
+            } else {
+              item.trendStatus = 'STABLE';
+              item.trendText = '안정━';
+            }
+          } else if (totalQty7 > 0) {
+            item.trendStatus = 'SURGING';
+            item.trendChangePct = 100;
+            item.trendText = '급증▲';
+          } else {
+            item.trendStatus = 'STABLE';
+            item.trendChangePct = 0;
+            item.trendText = '안정━';
+          }
+        }
       }
 
-      // 일사용량이 0이 된 품목이나 휴면 자재는 자동 배제, 0 초과 시 자동 해제
-      if (item.dailyUsage <= 0 || item.isDormant) {
+      // 일사용량이 0이 된 품목이나 휴면/단종 자재는 자동 배제, 0 초과 시 자동 해제
+      if (item.dailyUsage <= 0 || item.isDormant || item.trendStatus === 'EXTINCT') {
         item.isBlacklisted = true;
       } else if (!item.is64Excluded && !item.userExcluded) {
         item.isBlacklisted = false;
@@ -2177,14 +2270,20 @@ function applyFinishedGoodsOrdersToMaterials() {
         })
       );
 
+      item.isDedicated = false;
+
       if (!isCommonCore && !isSuppLinked && estUsage <= 0) {
         // BOM 없고, 공통자재 아니고, 보조시트 연동도 없으며, 30일간 실사용량 0인 자재 -> 100% 휴면/미사용 자재!
         item.dailyUsage = 0;
         item.isDormant = true;
+        item.trendStatus = 'EXTINCT';
+        item.trendText = '소멸(미사용)';
         item.dormantReason = '30일간 실소진 0건 (장기 미사용 휴면 자재)';
         item.isBlacklisted = true;
       } else {
         item.isDormant = false;
+        item.trendStatus = 'STABLE';
+        item.trendText = '안정━';
         item.dormantReason = '';
         if (isCommonCore && estUsage > 0 && (!item.dailyUsage || item.dailyUsage <= 0)) {
           item.dailyUsage = estUsage;
@@ -4712,7 +4811,7 @@ function parseOrderSheetDynamic(rows, worksheet) {
  */
 function assessFinishedGoodsLinkage(items) {
   items.forEach(item => {
-    if (item.isDormant) {
+    if (item.isDormant || item.trendStatus === 'EXTINCT') {
       item.activeBomChildren = [];
       item.activeBomCount = 0;
       item.isRelatedToOrders = false;
@@ -5075,28 +5174,40 @@ function calculateItemMetrics(item) {
 
   const totalStock = item.incoming + item.currentStock;
   const stockDays = item.dailyUsage > 0 ? (totalStock / item.dailyUsage) : (totalStock > 0 ? 99 : 0);
+  item.runwayDays = stockDays;
 
-  // ★ 완제품 주문 연동 및 휴면 여부 검사: 오늘 완제품 주문이 없거나 휴면인 품목은 발주량 0으로 강제 배제!
-  const isOrderBlockedByNoFinishedOrders = item.isDormant || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
+  // ★ 60일 이상 과잉보유(Runway) 판정:
+  const isOverstocked = (stockDays >= 60 && totalStock > 0);
+  item.isOverstocked = isOverstocked;
+  if (isOverstocked) {
+    item.overstockReason = `재고 ${Math.round(stockDays)}일치 보유 (60일치 초과 과잉재고)`;
+  } else {
+    item.overstockReason = '';
+  }
+
+  const isExtinct = (item.trendStatus === 'EXTINCT');
+
+  // ★ 완제품 주문 연동 및 휴면/단종/과잉 여부 검사: 오늘 완제품 주문이 없거나 휴면/단종/과잉인 품목은 발주량 0으로 강제 배제!
+  const isOrderBlockedByNoFinishedOrders = item.isDormant || isExtinct || isOverstocked || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
 
   // 1) 표준 AI 권장 발주량 계산 (Standard Recommendation)
   const standardRequiredQty = item.dailyUsage * standardTargetDays;
   const standardShortage = standardRequiredQty - totalStock;
   let standardBoxes = 0;
-  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && standardShortage > 0) {
+  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && standardShortage > 0) {
     standardBoxes = Math.ceil(standardShortage / item.packUnit);
   }
 
   // 2) 보수적 안전 권장 발주량 계산 (Conservative Safety Mode)
   // - 거래처 납기 지연 스트레스 테스트 (+1.0일 가산)
   // - 공정 불량/감모 로스율 버퍼 (+5% 가산)
-  const conservativeTargetDays = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && item.dailyUsage > 0)
+  const conservativeTargetDays = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && item.dailyUsage > 0)
     ? (standardTargetDays + state.conservativeLeadTimeDelay)
     : standardTargetDays;
   const conservativeRequiredQty = (item.dailyUsage * conservativeTargetDays) * (1 + state.conservativeLossRate);
   const conservativeShortage = conservativeRequiredQty - totalStock;
   let conservativeBoxes = 0;
-  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && conservativeShortage > 0) {
+  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && conservativeShortage > 0) {
     conservativeBoxes = Math.ceil(conservativeShortage / item.packUnit);
   }
   const bufferBoxes = Math.max(0, conservativeBoxes - standardBoxes);
@@ -5105,19 +5216,19 @@ function calculateItemMetrics(item) {
   const targetDays = state.conservativeMode ? conservativeTargetDays : standardTargetDays;
   const requiredQty = state.conservativeMode ? conservativeRequiredQty : standardRequiredQty;
   const shortage = state.conservativeMode ? conservativeShortage : standardShortage;
-  const calculatedBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && shortage > 0) ? (shortage / item.packUnit) : 0;
+  const calculatedBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && shortage > 0) ? (shortage / item.packUnit) : 0;
   const recommendedBoxes = state.conservativeMode ? conservativeBoxes : standardBoxes;
 
   const origRequired = item.dailyUsage * item.excelDefaultDays;
   const origShortage = origRequired - totalStock;
-  const origBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && origShortage > 0) ? Math.ceil(origShortage / item.packUnit) : 0;
+  const origBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && origShortage > 0) ? Math.ceil(origShortage / item.packUnit) : 0;
   const savedBoxes = Math.max(0, origBoxes - recommendedBoxes);
 
-  const finalBoxes = (item.isDormant ? 0 : (item.manualBoxes !== null ? item.manualBoxes : recommendedBoxes));
+  const finalBoxes = ((item.isDormant || isOverstocked || isExtinct) ? 0 : (item.manualBoxes !== null ? item.manualBoxes : recommendedBoxes));
   const finalTotalAmount = finalBoxes * item.packUnit * item.unitPrice;
 
-  const isExcluded = item.isBlacklisted || item.userExcluded || item.isDormant || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
-  const isOrderNeeded = finalBoxes > 0 && !isExcluded && !item.isDormant;
+  const isExcluded = item.isBlacklisted || item.userExcluded || item.isDormant || isOverstocked || isExtinct || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
+  const isOrderNeeded = finalBoxes > 0 && !isExcluded && !item.isDormant && !isOverstocked && !isExtinct;
 
   // 4) 4대 고위험 발주 '레드플래그(Red-Flag)' 자동 감사 판정
   const redFlags = [];
@@ -5160,6 +5271,26 @@ function calculateItemMetrics(item) {
       severity: 'info',
       badgeText: '💰 고액승인',
       desc: `단일 품목 발주액 ￦${(finalTotalAmount).toLocaleString()}원으로 100만원 이상 집중 지출`
+    });
+  }
+
+  // ⑤ 60일 이상 과잉 보유 차단 레드플래그
+  if (isOverstocked) {
+    redFlags.push({
+      id: 'OVERSTOCKED_RUNWAY',
+      severity: 'warning',
+      badgeText: `⚠️과잉(${Math.round(stockDays)}일치)`,
+      desc: `현재 재고 ${totalStock.toLocaleString()}봉으로 소진 런웨이 ${Math.round(stockDays)}일치(60일 이상) 과잉 보유 상태이므로 신규 발주가 자동 0박스로 차단되었습니다.`
+    });
+  }
+
+  // ⑥ 완제품 단종/수주소멸 레드플래그
+  if (isExtinct) {
+    redFlags.push({
+      id: 'EXTINCT_MENU',
+      severity: 'danger',
+      badgeText: '📉단종소멸',
+      desc: item.dormantReason || '완제품 수주가 최근 전무하여 자재 발주가 0박스로 차단되었습니다.'
     });
   }
 
@@ -5213,7 +5344,11 @@ function calculateItemMetrics(item) {
 
 function generate4LineBriefing(item, calc) {
   let line1 = '';
-  if (!item.isRelatedToOrders) {
+  if (item.isOverstocked) {
+    line1 = `⚠️ 현재고 ${item.currentStock.toLocaleString()}봉 + 입고예정 ${item.incoming.toLocaleString()}봉으로 향후 ${Math.round(item.runwayDays)}일간 소진 가능한 과잉 재고입니다. (신규 발주 0박스 자동 차단)`;
+  } else if (item.trendStatus === 'EXTINCT') {
+    line1 = `📉 본 원자재와 연결된 완제품(${item.isDedicated ? '전용' : '공용'})의 최근 수주가 전무하여 단종 소멸 추세입니다. (발주 0박스 자동 차단)`;
+  } else if (!item.isRelatedToOrders) {
     line1 = `금일 수주된 완제품 중 본 원자재를 사용하는 생산 메뉴가 없습니다. (오늘 완제품 수주량 0개로 발주 제외)`;
   } else if (item.activeBomChildren && item.activeBomChildren.length > 0) {
     const activeBOM = item.activeBomChildren;
@@ -5667,16 +5802,16 @@ function getItemsForTab(tabId) {
   const list = [...state.rawItems];
 
   if (tabId === 'excluded_tab') {
-    return list.filter(i => (i.calc && i.calc.isExcluded) || i.isDormant || (state.filterDisplayMode === 'active_only' && !i.isRelatedToOrders));
+    return list.filter(i => (i.calc && i.calc.isExcluded) || i.isDormant || i.isOverstocked || i.trendStatus === 'EXTINCT' || (state.filterDisplayMode === 'active_only' && !i.isRelatedToOrders));
   }
 
   let activeList;
   if (state.filterDisplayMode === 'order_only') {
-    // 실발주 대상만 보기: 발주량(박스) > 0 이고 휴면/제외가 아닌 품목만!
-    activeList = list.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isBlacklisted && !i.userExcluded);
+    // 실발주 대상만 보기: 발주량(박스) > 0 이고 휴면/제외/과잉/단종이 아닌 품목만!
+    activeList = list.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isBlacklisted && !i.userExcluded);
   } else if (state.filterDisplayMode === 'active_only') {
-    // 금일 완제품 생산 연동 품목: 0박스 포함, 오늘 생산에 투입되는 모든 자재 (휴면 제외)
-    activeList = list.filter(i => i.isRelatedToOrders && !i.isDormant && !i.userExcluded);
+    // 금일 완제품 생산 연동 품목: 0박스 포함, 오늘 생산에 투입되는 모든 자재 (휴면/단종 제외)
+    activeList = list.filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.userExcluded);
   } else {
     // 전체 보기: 휴면 자재 포함 442개 전체
     activeList = list.filter(i => !i.userExcluded);
@@ -5750,9 +5885,9 @@ function renderCards() {
 
   // 지능형 필터링: 실발주 대상만 (기본) vs 생산 연동만 vs 전체
   if (state.filterDisplayMode === 'order_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
-    items = items.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant);
+    items = items.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT');
   } else if (state.filterDisplayMode === 'active_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
-    items = items.filter(i => i.isRelatedToOrders && !i.isDormant);
+    items = items.filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT');
   }
 
   // 12시 이전 긴급 마감 필터링
@@ -6285,9 +6420,16 @@ function createCardElement(item) {
       
       <!-- 1) 품목명 & 입수/단가 -->
       <div class="flex items-baseline justify-between gap-3">
-        <h4 class="text-base sm:text-[17px] font-black text-neutral-900 dark:text-white tracking-tight leading-snug min-w-0 truncate" title="${item.name}">
-          ${item.name}
-        </h4>
+        <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
+          <h4 class="text-base sm:text-[17px] font-black tracking-tight leading-snug truncate ${item.isDormant || item.trendStatus === 'EXTINCT' ? 'line-through text-neutral-400 dark:text-neutral-500' : 'text-neutral-900 dark:text-white'}" title="${item.name}">
+            ${item.name}
+          </h4>
+          ${item.isDedicated ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-mono shrink-0">전용</span>` : (item.bomChildren && item.bomChildren.length > 0 ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono shrink-0">공용</span>` : '')}
+          ${item.trendStatus === 'EXTINCT' ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 shrink-0">📉소멸</span>` : ''}
+          ${item.trendStatus === 'DECLINING' ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0">▼하향(${item.trendChangePct}%)</span>` : ''}
+          ${item.trendStatus === 'SURGING' ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">▲급증(+${item.trendChangePct}%)</span>` : ''}
+          ${item.isOverstocked ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
+        </div>
         <span class="text-xs font-mono font-bold text-neutral-400 shrink-0 whitespace-nowrap">
           ${item.packUnit}입/박스 · ￦${item.unitPrice.toLocaleString()}/봉
         </span>
@@ -6867,8 +7009,15 @@ function renderTableView(items) {
           ${supplier.specialNotice ? `<div class="text-[9.5px] text-neutral-600 dark:text-neutral-400 font-medium truncate max-w-[170px] mt-0.5" title="${supplier.specialNotice}">💡 ${supplier.specialNotice}</div>` : ''}
         </td>
         <td class="py-2.5 px-3">
-          <div class="font-black text-neutral-900 dark:text-white text-xs">
-            ${item.name}
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-black text-xs ${item.isDormant || item.trendStatus === 'EXTINCT' ? 'line-through text-neutral-400 dark:text-neutral-500' : 'text-neutral-900 dark:text-white'}">
+              ${item.name}
+            </span>
+            ${item.isDedicated ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-mono shrink-0">전용</span>` : (item.bomChildren && item.bomChildren.length > 0 ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono shrink-0">공용</span>` : '')}
+            ${item.trendStatus === 'EXTINCT' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 shrink-0">📉소멸</span>` : ''}
+            ${item.trendStatus === 'DECLINING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0">▼하향</span>` : ''}
+            ${item.trendStatus === 'SURGING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">▲급증</span>` : ''}
+            ${item.isOverstocked ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
           </div>
           <div class="text-[10px] text-neutral-400 font-mono flex items-center gap-1.5 flex-wrap mt-0.5">
             <span>${item.packUnit}입/박스</span> · 
@@ -7083,7 +7232,11 @@ function renderClassicExcelView(items) {
 
       // 4대 위험 감사 뱃지
       let auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">정상</span>`;
-      if (calc.stockDays < 1.2 && (item.incoming || 0) === 0) {
+      if (item.isOverstocked) {
+        auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 ring-1 ring-amber-400/40">⚠️과잉차단</span>`;
+      } else if (item.trendStatus === 'EXTINCT') {
+        auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">📉단종소멸</span>`;
+      } else if (calc.stockDays < 1.2 && (item.incoming || 0) === 0) {
         auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ring-1 ring-rose-400/40 animate-pulse">🚨결품임박</span>`;
       } else if (calc.stockDays >= 2.8 && (item.incoming || 0) > (item.dailyUsage || 1) * 1.5) {
         auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">⚠️중복의심</span>`;
@@ -7104,15 +7257,20 @@ function renderClassicExcelView(items) {
         
         <!-- C. 품목명 (Sticky Left Column) -->
         <td class="py-2 px-3 border-r border-neutral-200 dark:border-neutral-800 sticky left-0 z-10 bg-white dark:bg-neutral-900 group-hover:bg-neutral-50 shadow-xs">
-          <div class="flex items-center gap-1.5 min-w-[200px]">
+          <div class="flex items-center gap-1.5 min-w-[210px]">
             ${hasBom ? `
               <button type="button" data-action="toggle-bom" class="btn-tactile w-4 h-4 rounded text-[10px] font-black border border-neutral-300 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center hover:bg-neutral-200 shrink-0" title="연동 완제품(BOM) 펼치기/접기">
                 ${isExpanded ? '−' : '+'}
               </button>
             ` : `<span class="w-4 h-4 inline-block shrink-0"></span>`}
-            <span class="font-bold text-xs truncate max-w-[190px] ${item.isDormant ? 'text-neutral-400 dark:text-neutral-500 line-through' : 'text-neutral-900 dark:text-neutral-100'}" title="${item.name}">${item.name}</span>
+            <span class="font-bold text-xs truncate max-w-[160px] ${item.isDormant || item.trendStatus === 'EXTINCT' ? 'text-neutral-400 dark:text-neutral-500 line-through' : 'text-neutral-900 dark:text-neutral-100'}" title="${item.name}">${item.name}</span>
             ${hasBom ? `<span class="text-[9.5px] text-neutral-400 font-mono">(${bomChildren.length})</span>` : ''}
-            ${item.isDormant ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason || '휴면 자재'}">💤휴면</span>` : ''}
+            ${item.isDedicated ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-mono shrink-0" title="단일 완제품 전용 자재">전용</span>` : (hasBom ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono shrink-0" title="다수 완제품 공용 자재">공용</span>` : '')}
+            ${item.trendStatus === 'EXTINCT' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 shrink-0" title="${item.dormantReason || '수주 소멸'}">📉소멸</span>` : ''}
+            ${item.trendStatus === 'DECLINING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0" title="수주 급감 (${item.trendChangePct}%)">▼하향</span>` : ''}
+            ${item.trendStatus === 'SURGING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0" title="수주 급증 (+${item.trendChangePct}%)">▲급증</span>` : ''}
+            ${item.isOverstocked ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse" title="${item.overstockReason}">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
+            ${item.isDormant && item.trendStatus !== 'EXTINCT' ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason || '휴면 자재'}">💤휴면</span>` : ''}
           </div>
         </td>
 
@@ -7223,7 +7381,10 @@ function renderClassicExcelView(items) {
               ${(child.prodQty != null ? child.prodQty : (child.qty || 0)).toLocaleString()}개
             </td>
             <td class="py-1.5 px-3 border-r border-neutral-200 dark:border-neutral-800 sticky left-0 z-10 bg-neutral-50 dark:bg-neutral-950 font-mono text-neutral-500 pl-6 shadow-xs">
-              원단위: <span class="font-bold text-neutral-700 dark:text-neutral-300">${child.perUnitUsage || 0}g</span> / 개
+              <span class="text-[10px]">1개당 ${(child.perUnitUsage || 0)}g</span>
+              ${child.trendStatus === 'EXTINCT' ? `<span class="ml-1 px-1 py-0.2 rounded text-[8.5px] font-bold bg-rose-100 text-rose-700">단종</span>` : ''}
+              ${child.trendStatus === 'DECLINING' ? `<span class="ml-1 px-1 py-0.2 rounded text-[8.5px] font-bold bg-orange-100 text-orange-700">▼하향</span>` : ''}
+              ${child.trendStatus === 'SURGING' ? `<span class="ml-1 px-1 py-0.2 rounded text-[8.5px] font-bold bg-emerald-100 text-emerald-700">▲급증</span>` : ''}
             </td>
             <td colspan="4" class="py-1.5 px-2 text-center text-[10px] text-neutral-400 font-mono border-r border-neutral-200 dark:border-neutral-800">
               완제품 BOM 소진 연동

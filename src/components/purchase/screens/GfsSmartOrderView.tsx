@@ -20,6 +20,7 @@ interface AutoBootPayload {
   };
   dormantMeta?: {
     recent14MenuMap: Record<string, number>;
+    menuTrendMap?: Record<string, { status: 'EXTINCT' | 'DECLINING' | 'SURGING' | 'STABLE'; changePct: number; qty7: number; qtyPrev: number }>;
     estUsageMap: Record<string, { estDailyUsage: number; sampleCount: number; observedDays: number }>;
   };
   orders: {
@@ -768,7 +769,7 @@ export const GfsSmartOrderView: React.FC = () => {
         )}
         <iframe
           ref={iframeRef}
-          src="/gfs/index.html?v=20261103_filter_v3"
+          src="/gfs/index.html?v=20261103_trend_v4"
           title="GFS 스마트발주"
           className="w-full h-full border-0 block"
           allow="clipboard-read; clipboard-write"

@@ -471,9 +471,9 @@
           sendBack(e.source, e.origin, {
             type: 'GFS_FILTER_MODE_CHANGED',
             mode: msg.mode,
-            orderableCount: (state.rawItems || []).filter(function (i) { return i.calc && i.calc.finalBoxes > 0 && !i.isDormant; }).length,
-            activeCount: (state.rawItems || []).filter(function (i) { return i.isRelatedToOrders && !i.isDormant; }).length,
-            dormantCount: (state.rawItems || []).filter(function (i) { return i.isDormant; }).length,
+            orderableCount: (state.rawItems || []).filter(function (i) { return i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT'; }).length,
+            activeCount: (state.rawItems || []).filter(function (i) { return i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT'; }).length,
+            dormantCount: (state.rawItems || []).filter(function (i) { return i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked; }).length,
             totalCount: (state.rawItems || []).length,
           });
         }
