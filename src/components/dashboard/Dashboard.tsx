@@ -9,6 +9,7 @@ import { PipelineHero } from './PipelineHero';
 import { KpiCard } from './KpiCard';
 import { WatchList } from './WatchList';
 import { WarehouseStock } from './WarehouseStock';
+import { DemandTrendPanel } from './DemandTrendPanel';
 import { useDashboardStats } from './useDashboardStats';
 import type { ChartPoint } from './dashboardData';
 import type { ComparePoint } from './ErpComparePanel';
@@ -163,6 +164,9 @@ export const Dashboard: React.FC = () => {
           sparkTone="ok"
         />
       </div>
+
+      {/* 수주 트렌드 & 품목 모멘텀 레이더 */}
+      <DemandTrendPanel trendData={stats.demandTrend} onNavigate={navigate} />
 
       {/* FEFO / 재고유지일 / 창고별 재고금액 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 shrink-0">

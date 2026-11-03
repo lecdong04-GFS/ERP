@@ -5,6 +5,8 @@ import {
   ChartPoint,
   ChartSeries,
   DashboardStats,
+  DemandTrendItem,
+  DemandTrendStats,
   FefoRow,
   StockDayRow,
   WarehouseStockRow,
@@ -387,6 +389,120 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       });
     }
 
+    // ── 7.5. 수주 트렌드 & 품목 모멘텀 인텔리전스 (실데이터 기반) ──
+    const recentBonOrders = await prisma.salesOrder.findMany({
+      where: {
+        status: { not: '취소' },
+        uploadMethod: { contains: '본발주' },
+      },
+      include: {
+        details: {
+          select: {
+            totalQty: true,
+            orderQty1: true,
+            orderQty2: true,
+            amount: true,
+            product: { select: { productCode: true, name: true, category: true, kind: true } },
+          },
+        },
+      },
+      orderBy: { orderDate: 'desc' },
+      take: 35,
+    });
+
+    const dateMap = new Map<string, typeof recentBonOrders>();
+    for (const o of recentBonOrders) {
+      if (!dateMap.has(o.orderDate)) dateMap.set(o.orderDate, []);
+      dateMap.get(o.orderDate)!.push(o);
+    }
+
+    const allDates = Array.from(dateMap.keys()).sort();
+    const baseDate = allDates[allDates.length - 1] || today;
+    const last14Dates = allDates.slice(-14);
+    const last7Dates = allDates.slice(-7);
+    const prev7Dates = allDates.slice(-14, -7);
+
+    const prodMap = new Map<
+      string,
+      { code: string; name: string; category: string; daily: Record<string, number>; s1: number; s2: number }
+    >();
+    let totShift1 = 0;
+    let totShift2 = 0;
+
+    for (const d of last14Dates) {
+      const ords = dateMap.get(d) || [];
+      for (const o of ords) {
+        for (const dt of o.details) {
+          const code = dt.product?.productCode || 'UNKNOWN';
+          const name = dt.product?.name || '알 수 없음';
+          const cat = dt.product?.kind || dt.product?.category || '완성품';
+          if (!prodMap.has(code)) {
+            prodMap.set(code, { code, name, category: cat, daily: {}, s1: 0, s2: 0 });
+          }
+          const p = prodMap.get(code)!;
+          p.daily[d] = (p.daily[d] || 0) + (dt.totalQty || 0);
+          if (last7Dates.includes(d)) {
+            p.s1 += dt.orderQty1 || 0;
+            p.s2 += dt.orderQty2 || 0;
+            totShift1 += dt.orderQty1 || 0;
+            totShift2 += dt.orderQty2 || 0;
+          }
+        }
+      }
+    }
+
+    const trendItems: DemandTrendItem[] = [];
+    for (const p of prodMap.values()) {
+      const sumLast7 = last7Dates.reduce((s, d) => s + (p.daily[d] || 0), 0);
+      const sumPrev7 = prev7Dates.reduce((s, d) => s + (p.daily[d] || 0), 0);
+      const diff = sumLast7 - sumPrev7;
+      const pct = sumPrev7 > 0 ? (diff / sumPrev7) * 100 : (sumLast7 > 0 ? 100 : 0);
+      const spark14 = last14Dates.map((d) => p.daily[d] || 0);
+
+      trendItems.push({
+        code: p.code,
+        name: p.name,
+        category: p.category,
+        avgDailyQty: Math.round(sumLast7 / Math.max(1, last7Dates.length)),
+        sumLast7,
+        sumPrev7,
+        pct: Math.round(pct * 10) / 10,
+        spark14,
+        recommendation: '모니터링',
+      });
+    }
+
+    const surge: DemandTrendItem[] = trendItems
+      .filter((it) => it.sumPrev7 >= 50 || it.sumLast7 >= 100)
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5)
+      .map((it) => ({ ...it, recommendation: '자재 안전확보' }));
+
+    const drop: DemandTrendItem[] = trendItems
+      .filter((it) => it.sumPrev7 >= 50)
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 5)
+      .map((it) => ({ ...it, recommendation: '포장재 발주동결' }));
+
+    const volume: DemandTrendItem[] = [...trendItems]
+      .sort((a, b) => b.sumLast7 - a.sumLast7)
+      .slice(0, 5)
+      .map((it) => ({ ...it, recommendation: '안정 연속생산' }));
+
+    const totShift = totShift1 + totShift2;
+    const shiftRatio = {
+      shift1Pct: totShift > 0 ? Math.round((totShift1 / totShift) * 1000) / 10 : 50,
+      shift2Pct: totShift > 0 ? Math.round((totShift2 / totShift) * 1000) / 10 : 50,
+    };
+
+    const demandTrend: DemandTrendStats = {
+      surge,
+      drop,
+      volume,
+      shiftRatio,
+      baseDate,
+    };
+
     // ── 8. 알림 문구 (실데이터) ────────────────────────────
     const notifications: string[] = [];
     if (expiryUrgentCount > 0) notifications.push(`유통기한 D-3 이내 ${expiryUrgentCount}건 — FEFO 선출고 필요`);
@@ -446,6 +562,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       warehouseStock,
       warehouseStockTotal,
       spark,
+      demandTrend,
       fetchedAt: new Date().toISOString(),
     };
 

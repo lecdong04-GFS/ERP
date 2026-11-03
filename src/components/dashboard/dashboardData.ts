@@ -86,6 +86,26 @@ export interface KpiSummary {
   safetyShortageCount: number;
 }
 
+export interface DemandTrendItem {
+  code: string;
+  name: string;
+  category?: string;
+  avgDailyQty: number;
+  sumLast7: number;
+  sumPrev7: number;
+  pct: number;
+  spark14: number[];
+  recommendation: '자재 안전확보' | '안정 연속생산' | '포장재 발주동결' | '모니터링';
+}
+
+export interface DemandTrendStats {
+  surge: DemandTrendItem[];
+  drop: DemandTrendItem[];
+  volume: DemandTrendItem[];
+  shiftRatio: { shift1Pct: number; shift2Pct: number };
+  baseDate: string;
+}
+
 export interface DashboardStats {
   sales: ChartSeries;
   purchase: ChartSeries;
@@ -102,6 +122,7 @@ export interface DashboardStats {
   warehouseStock: WarehouseStockRow[];
   warehouseStockTotal: number;
   spark: { sales: number[]; purchase: number[]; production: number[] };
+  demandTrend: DemandTrendStats;
   fetchedAt: string;
 }
 
@@ -165,5 +186,12 @@ export const EMPTY_STATS: DashboardStats = {
   warehouseStock: [],
   warehouseStockTotal: 0,
   spark: { sales: [0, 0, 0, 0, 0, 0, 0], purchase: [0, 0, 0, 0, 0, 0, 0], production: [0, 0, 0, 0, 0, 0, 0] },
+  demandTrend: {
+    surge: [],
+    drop: [],
+    volume: [],
+    shiftRatio: { shift1Pct: 50, shift2Pct: 50 },
+    baseDate: '',
+  },
   fetchedAt: '',
 };
