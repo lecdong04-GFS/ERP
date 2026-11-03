@@ -24,13 +24,21 @@ import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
 
 export const PrintReportModal: React.FC = () => {
-  const { isPrintModalOpen, closePrintModal, activeDocType, setActiveDocType, printPayload, boxPayload } = usePrintReport();
+  const {
+    isPrintModalOpen,
+    closePrintModal,
+    activeDocType,
+    setActiveDocType,
+    printPayload,
+    boxPayload,
+    matReqPayload,
+  } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
   const { data: session } = useSession();
   const writerName = (session?.user as any)?.name || '';
 
   const [shiftFilter, setShiftFilter] = useState<'1편' | '2편'>('1편');
-  const printDate = '2026-10-30';
+  const printDate = matReqPayload?.date || '2026-10-30';
 
   if (!isPrintModalOpen) return null;
 
@@ -39,6 +47,7 @@ export const PrintReportModal: React.FC = () => {
       title: '업무 문서',
       docs: [
         { id: 'WORK_ORDER', label: '공정별 작업지시서', desc: 'HACCP 기준 지시서', Icon: FileText },
+        { id: 'MATERIAL_REQUIREMENT', label: '자재소요량 명세서', desc: '공정/계별 소요량', Icon: FileSpreadsheet },
         { id: 'MATERIAL_LEDGER', label: '일일 자재수불부', desc: 'FEFO 수불 현황', Icon: Package },
         { id: 'COST_SHEET', label: '원가 및 손익계산서', desc: '제품별 원가 결산', Icon: Calculator },
         { id: 'PURCHASE_ORDER', label: '원부자재 발주서', desc: '발주서 양식', Icon: FileText },
@@ -89,6 +98,27 @@ export const PrintReportModal: React.FC = () => {
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, '작업지시서');
       XLSX.writeFile(wb, `GFS_공정별작업지시서_${shiftFilter}_${printDate}.xlsx`);
+    } else if (activeDocType === 'MATERIAL_REQUIREMENT') {
+      const rows = matReqPayload?.rows || [];
+      const data = rows.map((r, idx) => ({
+        순번: idx + 1,
+        파트구분: r.partCategory,
+        자재코드: r.partCode,
+        자재명: r.partName,
+        규격: r.partSpec,
+        단위: r.partUnit,
+        투입공정: r.gyeName,
+        소요계산량: r.reqCalcQty,
+        현재고: r.currentStock,
+        부족수량: r.shortageQty,
+        추천발주량: r.orderQty,
+        발주단위: r.orderUnit,
+        거래처: r.supplier,
+        상태: r.remark,
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, '자재소요량');
+      XLSX.writeFile(wb, `GFS_자재소요량명세서_${matReqPayload?.date || printDate}.xlsx`);
     } else if (activeDocType === 'HACCP_INSPECTION') {
       const sampleHaccp = [
         { 순번: 1, 공급업체: '동원에프앤비', 품명: '참치통조림', 규격: '1.88kg*6캔', 입고량: 120, 유통기한: '2027-10-20', 차량청결: '적합(O)', 입고온도: '상온(21.4℃)', 외관상태: '적합(O)', 표시상태: '적합(O)', 종합판정: '합격' },
@@ -397,6 +427,7 @@ export const PrintReportModal: React.FC = () => {
                   </div>
                   <h1 className="text-2xl font-black mt-2 tracking-wide text-black">
                     {activeDocType === 'WORK_ORDER' && '제조공정 작업지시서 [HACCP 기준]'}
+                    {activeDocType === 'MATERIAL_REQUIREMENT' && '일일 자재소요량 명세서 [BOM 연계]'}
                     {activeDocType === 'HACCP_INSPECTION' && '원부재료 입고 및 위생 검수 점검표'}
                     {activeDocType === 'MATERIAL_LEDGER' && '일일 원부자재 수불 현황부'}
                     {activeDocType === 'COST_SHEET' && '제품별 원가 및 손익분석 결산서'}
@@ -408,6 +439,7 @@ export const PrintReportModal: React.FC = () => {
                     <span>
                       <strong>문서번호:</strong>{' '}
                       {activeDocType === 'WORK_ORDER' && `GFS-SOP-20261030-${shiftFilter === '1편' ? '01' : '02'}`}
+                      {activeDocType === 'MATERIAL_REQUIREMENT' && `GFS-MAT-REQ-${printDate.replace(/-/g, '')}`}
                       {activeDocType === 'HACCP_INSPECTION' && 'GFS-QA-20261030-H01'}
                       {activeDocType === 'MATERIAL_LEDGER' && 'GFS-INV-20261030-01'}
                       {activeDocType === 'COST_SHEET' && 'GFS-COST-20261030-M10'}
@@ -507,6 +539,84 @@ export const PrintReportModal: React.FC = () => {
 
                   <div className="text-[10px] text-gray-500 border-t border-gray-300 pt-2 flex justify-between items-center">
                     <span>* 본 작업지시서는 식품위생법 및 HACCP 선행요건에 의거하여 2년간 보관됩니다.</span>
+                    <span>페이지 1 / 1</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 1-2. MATERIAL REQUIREMENT VIEW */}
+              {activeDocType === 'MATERIAL_REQUIREMENT' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-xs font-semibold bg-gray-100 p-2 border border-gray-300">
+                    <div>
+                      <span>기준일자: </span>
+                      <span className="font-extrabold text-blue-900 mr-3">{matReqPayload?.date || printDate}</span>
+                      <span>편수: </span>
+                      <span className="font-bold text-gray-900 mr-3">{matReqPayload?.shift || '전체'}</span>
+                      <span>공정(계): </span>
+                      <span className="font-bold text-gray-900">{matReqPayload?.gyeName || '전체 (ALL)'}</span>
+                    </div>
+                    <div>
+                      <span>산출 자재수: </span>
+                      <span className="font-mono font-bold text-blue-900">
+                        {matReqPayload?.rows.length || 0}품목
+                      </span>
+                    </div>
+                  </div>
+
+                  <table className="w-full text-xs border-collapse border border-black">
+                    <thead className="bg-gray-100 text-center font-bold border-b-2 border-black">
+                      <tr>
+                        <th className="border border-black py-1.5 px-1 w-8">No</th>
+                        <th className="border border-black py-1.5 px-1.5 w-14">구분</th>
+                        <th className="border border-black py-1.5 px-2 text-left">자재명</th>
+                        <th className="border border-black py-1.5 px-1 w-16">규격</th>
+                        <th className="border border-black py-1.5 px-1 w-10">단위</th>
+                        <th className="border border-black py-1.5 px-2 w-24 text-left">투입공정(계)</th>
+                        <th className="border border-black py-1.5 px-1.5 text-right w-16">소요계산량</th>
+                        <th className="border border-black py-1.5 px-1.5 text-right w-14">현재고</th>
+                        <th className="border border-black py-1.5 px-1.5 text-right w-14">부족량</th>
+                        <th className="border border-black py-1.5 px-1.5 text-right w-14">추천발주</th>
+                        <th className="border border-black py-1.5 px-2 text-left w-20">매입처</th>
+                        <th className="border border-black py-1.5 px-1.5 w-16">상태</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-300">
+                      {(matReqPayload?.rows || []).map((r, idx) => (
+                        <tr key={r.id || idx} className="text-center">
+                          <td className="border border-black py-1 px-1 font-mono">{idx + 1}</td>
+                          <td className="border border-black py-1 px-1 text-[11px] font-medium">{r.partCategory}</td>
+                          <td className="border border-black py-1 px-2 font-bold text-left">{r.partName}</td>
+                          <td className="border border-black py-1 px-1 text-[10px] text-gray-700">{r.partSpec}</td>
+                          <td className="border border-black py-1 px-1">{r.partUnit}</td>
+                          <td className="border border-black py-1 px-2 text-left font-medium text-slate-800">{r.gyeName}</td>
+                          <td className="border border-black py-1 px-1.5 font-mono font-extrabold text-right text-blue-900">
+                            {r.reqCalcQty.toLocaleString()}
+                          </td>
+                          <td className="border border-black py-1 px-1.5 font-mono text-right text-gray-800">
+                            {r.currentStock.toLocaleString()}
+                          </td>
+                          <td className={`border border-black py-1 px-1.5 font-mono text-right ${r.shortageQty > 0 ? 'text-rose-600 font-black' : 'text-gray-400'}`}>
+                            {r.shortageQty > 0 ? r.shortageQty.toLocaleString() : '-'}
+                          </td>
+                          <td className="border border-black py-1 px-1.5 font-mono font-bold text-right text-emerald-800">
+                            {r.orderQty > 0 ? `${r.orderQty.toLocaleString()} ${r.orderUnit}` : '-'}
+                          </td>
+                          <td className="border border-black py-1 px-2 text-left text-[11px] truncate max-w-[80px]">{r.supplier}</td>
+                          <td className="border border-black py-1 px-1 text-[10px]">
+                            {r.shortageQty > 0 ? (
+                              <span className="text-rose-700 font-bold">부족</span>
+                            ) : (
+                              <span className="text-slate-600">정상</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="text-[10px] text-gray-500 border-t border-gray-300 pt-2 flex justify-between items-center">
+                    <span>* GS25 완제품 발주량 기준 BOM(레시피) 정밀 소요량 산출표입니다. 생산 투입 및 긴급 발주 확인용으로 사용됩니다.</span>
                     <span>페이지 1 / 1</span>
                   </div>
                 </div>

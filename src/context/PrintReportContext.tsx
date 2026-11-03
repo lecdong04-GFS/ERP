@@ -11,7 +11,31 @@ export type PrintDocumentType =
   | 'DELIVERY_STATEMENT'
   | 'PURCHASE_ORDER'
   | 'LOT_LABEL'
-  | 'DELIVERY_BOX_LABEL';
+  | 'DELIVERY_BOX_LABEL'
+  | 'MATERIAL_REQUIREMENT';
+
+export interface MatReqPrintPayload {
+  date: string;
+  shift: string;
+  gyeName: string;
+  totalFinishedOrderQty?: number;
+  rows: {
+    id: number;
+    partCategory: string;
+    partCode: string;
+    partName: string;
+    partSpec: string;
+    partUnit: string;
+    gyeName: string;
+    reqCalcQty: number;
+    currentStock: number;
+    shortageQty: number;
+    orderQty: number;
+    orderUnit: string;
+    supplier: string;
+    remark: string;
+  }[];
+}
 
 export interface DeliveryStatementPayload {
   deliveryNo: string;
@@ -38,6 +62,8 @@ interface PrintReportContextType {
   setPrintPayload: (payload: DeliveryStatementPayload | null) => void;
   boxPayload: DeliveryBoxLabelData[] | null;
   setBoxPayload: (payload: DeliveryBoxLabelData[] | null) => void;
+  matReqPayload: MatReqPrintPayload | null;
+  setMatReqPayload: (payload: MatReqPrintPayload | null) => void;
 }
 
 const PrintReportContext = createContext<PrintReportContextType | null>(null);
@@ -47,6 +73,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [activeDocType, setActiveDocType] = useState<PrintDocumentType>('WORK_ORDER');
   const [printPayload, setPrintPayload] = useState<DeliveryStatementPayload | null>(null);
   const [boxPayload, setBoxPayload] = useState<DeliveryBoxLabelData[] | null>(null);
+  const [matReqPayload, setMatReqPayload] = useState<MatReqPrintPayload | null>(null);
 
   const openPrintModal = (docType?: PrintDocumentType) => {
     if (docType) {
@@ -59,6 +86,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
     setIsPrintModalOpen(false);
     setPrintPayload(null);
     setBoxPayload(null);
+    setMatReqPayload(null);
   };
 
   return (
@@ -73,6 +101,8 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
         setPrintPayload,
         boxPayload,
         setBoxPayload,
+        matReqPayload,
+        setMatReqPayload,
       }}
     >
       {children}
