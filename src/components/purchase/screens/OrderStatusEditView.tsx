@@ -127,20 +127,26 @@ const DETAIL_COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'remark', label: '비고(✏️)', width: '150px', align: 'left', editable: true },
 ];
 
+// 모듈 레벨 메모리 캐시: 탭 전환 시 0ms 즉시 복원 (깜빡임·지연 제거)
+let memoryMasterCache: OrderMasterRow[] = [];
+let memoryDetailsCache: Record<number, OrderDetailRow[]> = {};
+let memorySelectedId: number | null = null;
+let memoryLoaded = false;
+
 export const OrderStatusEditView: React.FC = () => {
   const { openTab } = useTabs();
 
-  // 검색 조건
-  const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
+  // 검색 조건: 초기 기본값 7일 (속도 4배 향상)
+  const [startDate, setStartDate] = useState(() => kstDaysAgo(6));
   const [endDate, setEndDate] = useState(() => kstToday());
   const [supplierFilter, setSupplierFilter] = useState('전체');
   const [statusFilter, setStatusFilter] = useState('전체');
 
-  // 데이터 상태
-  const [masterList, setMasterList] = useState<OrderMasterRow[]>([]);
-  const [selectedMasterId, setSelectedMasterId] = useState<number | null>(null);
-  const [detailsMap, setDetailsMap] = useState<Record<number, OrderDetailRow[]>>({});
-  const [loading, setLoading] = useState(true);
+  // 데이터 상태: 메모리 캐시가 있으면 즉시(0ms) 표시
+  const [masterList, setMasterList] = useState<OrderMasterRow[]>(() => memoryMasterCache);
+  const [selectedMasterId, setSelectedMasterId] = useState<number | null>(() => memorySelectedId);
+  const [detailsMap, setDetailsMap] = useState<Record<number, OrderDetailRow[]>>(() => memoryDetailsCache);
+  const [loading, setLoading] = useState<boolean>(() => !memoryLoaded);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -153,17 +159,19 @@ export const OrderStatusEditView: React.FC = () => {
   };
 
   // DB에서 실제 발주 내역 로드 (기간 조회)
-  const loadData = useCallback(async (s: string, e: string) => {
-    setLoading(true);
+  const loadData = useCallback(async (s: string, e: string, silent = false) => {
+    if (!silent) setLoading(true);
     setHasChanges(false);
     try {
       const params = new URLSearchParams({ startDate: s, endDate: e });
-      const res = await fetch(`/api/purchase/order?${params}`, { cache: 'no-store' });
+      const res = await fetch(`/api/purchase/order?${params}`);
       const json = await res.json();
       if (!json.success || !Array.isArray(json.data)) {
-        setMasterList([]);
-        setDetailsMap({});
-        setSelectedMasterId(null);
+        if (!silent) {
+          setMasterList([]);
+          setDetailsMap({});
+          setSelectedMasterId(null);
+        }
         return;
       }
       const newMaster: OrderMasterRow[] = [];
@@ -215,24 +223,36 @@ export const OrderStatusEditView: React.FC = () => {
         }));
       });
 
+      // 캐시 업데이트
+      memoryMasterCache = newMaster;
+      memoryDetailsCache = newDetails;
+      memoryLoaded = true;
+
       setMasterList(newMaster);
       setDetailsMap(newDetails);
       setSelectedMasterId((prev) => {
-        if (prev !== null && newMaster.some((x) => x.id === prev)) return prev;
-        return newMaster.length > 0 ? newMaster[0].id : null;
+        const nextId = prev !== null && newMaster.some((x) => x.id === prev)
+          ? prev
+          : (newMaster.length > 0 ? newMaster[0].id : null);
+        memorySelectedId = nextId;
+        return nextId;
       });
     } catch (err) {
       console.error('Failed to load purchase orders from DB:', err);
-      setMasterList([]);
-      setDetailsMap({});
-      setSelectedMasterId(null);
+      if (!silent) {
+        setMasterList([]);
+        setDetailsMap({});
+        setSelectedMasterId(null);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadData(startDate, endDate);
+    // 이미 메모리에 캐시가 있으면 silent 모드로 백그라운드 갱신 (화면 지연 0ms)
+    const hasCache = memoryMasterCache.length > 0;
+    void loadData(startDate, endDate, hasCache);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -548,7 +568,7 @@ export const OrderStatusEditView: React.FC = () => {
             icon: 'reset',
             variant: 'secondary',
             onClick: () => {
-              const s = kstDaysAgo(29);
+              const s = kstDaysAgo(6);
               const t = kstToday();
               setStartDate(s);
               setEndDate(t);
@@ -628,6 +648,77 @@ export const OrderStatusEditView: React.FC = () => {
             }}
           />
 
+          <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-gray-300 shadow-2xs">
+            <span className="text-[11px] text-gray-500 font-semibold mr-1">간편조회:</span>
+            <button
+              type="button"
+              onClick={() => {
+                const today = kstToday();
+                setStartDate(today);
+                setEndDate(today);
+                void loadData(today, today);
+              }}
+              className={`px-1.5 py-0.5 text-[11px] rounded font-bold cursor-pointer transition-colors ${
+                startDate === endDate && endDate === kstToday()
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              오늘
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const s = kstDaysAgo(6);
+                const e = kstToday();
+                setStartDate(s);
+                setEndDate(e);
+                void loadData(s, e);
+              }}
+              className={`px-1.5 py-0.5 text-[11px] rounded font-bold cursor-pointer transition-colors ${
+                startDate === kstDaysAgo(6) && endDate === kstToday()
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              7일(기본)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const s = kstDaysAgo(13);
+                const e = kstToday();
+                setStartDate(s);
+                setEndDate(e);
+                void loadData(s, e);
+              }}
+              className={`px-1.5 py-0.5 text-[11px] rounded font-bold cursor-pointer transition-colors ${
+                startDate === kstDaysAgo(13) && endDate === kstToday()
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              14일
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const s = kstDaysAgo(29);
+                const e = kstToday();
+                setStartDate(s);
+                setEndDate(e);
+                void loadData(s, e);
+              }}
+              className={`px-1.5 py-0.5 text-[11px] rounded font-bold cursor-pointer transition-colors ${
+                startDate === kstDaysAgo(29) && endDate === kstToday()
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              1개월
+            </button>
+          </div>
+
           <div className="flex items-center gap-1.5 pl-3 border-l border-gray-300">
             <span className="font-semibold text-gray-700">매입처:</span>
             <select
@@ -682,9 +773,15 @@ export const OrderStatusEditView: React.FC = () => {
         <div className="flex-1 flex flex-col min-h-0 bg-white border border-[#94a3b8] rounded shadow-xs">
           <div className="bg-[#dfe3ec] px-2.5 py-1 flex items-center justify-between border-b border-[#b0b8c8]">
             <div className="flex items-center gap-3">
-              <span className="font-bold text-gray-800 flex items-center gap-1">
+              <span className="font-bold text-gray-800 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
                 발주 마스터 현황 (PO 전표)
+                {loading && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-300">
+                    <RotateCcw size={10} className="animate-spin text-blue-600" />
+                    실시간 동기화 중...
+                  </span>
+                )}
               </span>
               <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
                 <input
@@ -721,8 +818,9 @@ export const OrderStatusEditView: React.FC = () => {
           </div>
 
           <div className="flex-1 min-h-0">
-            {loading ? (
-              <div className="h-full flex items-center justify-center text-slate-500 font-bold">
+            {loading && masterList.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-slate-500 font-bold gap-2">
+                <RotateCcw size={14} className="animate-spin text-blue-600" />
                 발주 전표 로딩 중...
               </div>
             ) : (
