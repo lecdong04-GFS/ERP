@@ -57,18 +57,18 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: 'inf
           : 'text-[#be123c]';
   const bg =
     tone === 'info'
-      ? 'bg-blue-50/70 border-blue-100'
+      ? 'bg-blue-50/80 border-blue-200'
       : tone === 'warn'
-        ? 'bg-amber-50/70 border-amber-100'
+        ? 'bg-amber-50/80 border-amber-200'
         : tone === 'ok'
-          ? 'bg-emerald-50/70 border-emerald-100'
-          : 'bg-rose-50/70 border-rose-100';
+          ? 'bg-emerald-50/80 border-emerald-200'
+          : 'bg-rose-50/80 border-rose-200';
   return (
-    <div className={`flex-1 min-w-0 rounded-md border px-2.5 py-1.5 ${bg}`}>
-      <div className="text-[10px] font-semibold text-[var(--ink-400)] truncate">{label}</div>
-      <div className={`num text-[18px] font-extrabold truncate ${color}`}>
+    <div className={`flex-1 min-w-0 rounded-xl border px-3.5 py-2.5 ${bg} shadow-2xs`}>
+      <div className="text-[12px] font-bold text-slate-600 truncate">{label}</div>
+      <div className={`num text-[22px] sm:text-[24px] font-black tracking-tight truncate ${color} mt-0.5`}>
         {value}
-        <span className="text-[9.5px] font-normal text-[var(--ink-400)] ml-1">백만원</span>
+        <span className="text-[12px] font-bold text-slate-500 ml-1.5">백만원</span>
       </div>
     </div>
   );
@@ -98,43 +98,43 @@ export const ErpComparePanel: React.FC<ErpComparePanelProps> = ({
   const purchRate = totalSales > 0 ? (totalPurchase / totalSales) * 100 : 0;
 
   return (
-    <div className="erp-card flex flex-col overflow-hidden text-[12.5px]">
+    <div className="erp-card flex flex-col overflow-hidden text-[13px] bg-white rounded-2xl border border-slate-200 shadow-xs">
       {/* Panel Header */}
-      <div className="erp-panel-head">
-        <div className="erp-panel-title">
+      <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <span
-            className="erp-panel-accent"
+            className="w-1.5 h-4.5 rounded-full"
             style={{ background: `linear-gradient(180deg, ${SALES}, ${PURCHASE})` }}
           />
-          <span className="truncate">{title}</span>
+          <span className="text-[15px] font-black text-slate-900 tracking-tight">{title}</span>
           {!hasData && (
-            <span className="chip bg-[#f8fafc] text-[var(--ink-400)] border border-[var(--line)]">
+            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
               데이터 없음
             </span>
           )}
           {/* 범례 */}
-          <span className="hidden sm:flex items-center gap-1.5 ml-1">
-            <span className="chip bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe]">
-              <span className="w-2 h-2 rounded-[2px]" style={{ background: SALES }} />
+          <span className="hidden sm:flex items-center gap-2 ml-2">
+            <span className="px-2 py-0.5 rounded-md text-[12px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: SALES }} />
               매출
             </span>
-            <span className="chip bg-[#fffbeb] text-[#b45309] border border-[#fde68a]">
-              <span className="w-2 h-2 rounded-[2px]" style={{ background: PURCHASE }} />
+            <span className="px-2 py-0.5 rounded-md text-[12px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: PURCHASE }} />
               매입
             </span>
           </span>
         </div>
         {/* 세그먼트 컨트롤 */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#eef2f7] border border-[var(--line)]">
+        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-200/80 border border-slate-300">
           {(['monthly', 'yearly'] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`px-2.5 py-[3px] text-[11px] font-bold rounded-[5px] transition-all cursor-pointer ${
+              className={`px-3 py-1 text-[12px] font-extrabold rounded-md transition-all cursor-pointer ${
                 mode === m
-                  ? 'bg-white text-[var(--ink-900)] shadow-[0_1px_2px_rgba(15,23,42,0.12)]'
-                  : 'text-[var(--ink-600)] hover:text-[var(--ink-900)]'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {m === 'monthly' ? '30일' : '년'}
@@ -144,7 +144,7 @@ export const ErpComparePanel: React.FC<ErpComparePanelProps> = ({
       </div>
 
       {/* Summary Strip */}
-      <div className="flex items-stretch gap-2 px-3.5 pt-2.5">
+      <div className="flex items-stretch gap-3 px-4 pt-3.5 pb-2">
         <Stat label={`기간 매출합 (${mode === 'monthly' ? '30일' : '년'})`} value={num(totalSales)} tone="info" />
         <Stat label={`기간 매입합 (${mode === 'monthly' ? '30일' : '년'})`} value={num(totalPurchase)} tone="warn" />
         <Stat

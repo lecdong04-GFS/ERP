@@ -22,53 +22,53 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
   const max = useMemo(() => Math.max(1, ...rows.map((r) => r.amount)), [rows]);
 
   return (
-    <section className="erp-card flex flex-col overflow-hidden min-w-0">
-      <header className="erp-panel-head">
-        <div className="erp-panel-title">
-          <Boxes className="w-3.5 h-3.5 text-[var(--ink-600)]" />
-          <h3 className="truncate">창고별 재고금액</h3>
-          <span className="chip bg-[#fff7ed] text-[#b45309] border border-[#fed7aa] num">
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden min-w-0">
+      <header className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Boxes className="w-4.5 h-4.5 text-slate-700" />
+          <h3 className="text-[15px] font-black text-slate-900 tracking-tight">창고별 재고금액</h3>
+          <span className="px-2.5 py-0.5 rounded-lg text-[12.5px] font-black bg-amber-50 text-amber-900 border border-amber-300">
             합계 {compactWon(total)}
           </span>
         </div>
         <button
           type="button"
           onClick={() => onNavigate('inv-lookup')}
-          className="flex items-center gap-0.5 text-[10.5px] font-semibold text-[var(--info)] hover:underline cursor-pointer shrink-0"
+          className="flex items-center gap-1 text-[12.5px] font-extrabold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer shrink-0"
         >
-          재고조회
-          <ArrowRight className="w-3 h-3" />
+          <span>재고조회</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </header>
 
-      <div className="px-3.5 pt-1.5 pb-2 flex-1 flex flex-col">
+      <div className="px-4.5 py-3 flex-1 flex flex-col justify-center">
         {rows.length === 0 ? (
-          <div className="erp-empty flex-1">
-            <Boxes className="w-5 h-5 text-[var(--ink-400)]" />
-            <span>재고 데이터가 없습니다</span>
+          <div className="h-44 flex flex-col items-center justify-center text-slate-400 gap-2 text-sm">
+            <Boxes className="w-8 h-8 text-slate-400" />
+            <span className="font-bold text-slate-500">재고 데이터가 없습니다</span>
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-3">
             {rows.map((r, i) => {
               const color = COLORS[i % COLORS.length];
               const pct = Math.max(2, Math.round((r.amount / max) * 100));
               return (
                 <li key={r.warehouse}>
-                  <div className="flex items-baseline justify-between gap-2 mb-1">
-                    <span className="text-[11.5px] font-semibold text-[var(--ink-900)] truncate">
+                  <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                    <span className="text-[14px] font-bold text-slate-900 truncate">
                       {r.warehouse}
-                      <span className="text-[10px] font-normal text-[var(--ink-400)] ml-1.5">
+                      <span className="text-[12px] font-bold text-slate-500 ml-2">
                         {r.items}품목
                       </span>
                     </span>
                     <span
-                      className="num text-[11.5px] font-bold text-[var(--ink-700)] shrink-0"
+                      className="font-mono text-[14.5px] font-black text-slate-900 shrink-0"
                       title={`₩${r.amount.toLocaleString('ko-KR')}`}
                     >
                       {compactWon(r.amount)}
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-[#eef2f7] overflow-hidden">
+                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden shadow-inner">
                     <div
                       className="h-full rounded-full transition-[width] duration-700"
                       style={{ width: `${pct}%`, background: color }}

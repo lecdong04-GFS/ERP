@@ -81,10 +81,10 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
       <text
         x={x + width / 2}
         y={y - 4}
-        fill="#475569"
+        fill="#334155"
         textAnchor="middle"
         dominantBaseline="auto"
-        style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
+        style={{ fontSize: 10.5, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
       >
         {value}
       </text>
@@ -92,34 +92,34 @@ export const ErpChartPanel: React.FC<ErpChartPanelProps> = ({
   };
 
   return (
-    <div className="erp-card flex flex-col overflow-hidden text-[12.5px]">
+    <div className="erp-card flex flex-col overflow-hidden text-[13px] bg-white rounded-2xl border border-slate-200 shadow-xs">
       {/* Panel Header */}
-      <div className="erp-panel-head">
-        <div className="erp-panel-title">
-          <span className="erp-panel-accent" style={{ background: accent }} />
-          <span className="truncate">{title}</span>
+      <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-4.5 rounded-full" style={{ background: accent }} />
+          <span className="text-[15px] font-black text-slate-900 tracking-tight">{title}</span>
           {!hasData && (
-            <span className="chip bg-[#f8fafc] text-[var(--ink-400)] border border-[var(--line)]">
+            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
               데이터 없음
             </span>
           )}
           {hasData && average > 0 && (
-            <span className="chip bg-[#f8fafc] text-[var(--ink-600)] border border-[var(--line)] num">
+            <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-bold bg-slate-100 text-slate-700 border border-slate-200 font-mono">
               평균 {Math.round(average)}
             </span>
           )}
         </div>
         {/* 세그먼트 컨트롤 */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[#eef2f7] border border-[var(--line)]">
+        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-200/80 border border-slate-300">
           {(['monthly', 'yearly'] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
-              className={`px-2.5 py-[3px] text-[11px] font-bold rounded-[5px] transition-all cursor-pointer ${
+              className={`px-3 py-1 text-[12px] font-extrabold rounded-md transition-all cursor-pointer ${
                 mode === m
-                  ? 'bg-white text-[var(--ink-900)] shadow-[0_1px_2px_rgba(15,23,42,0.12)]'
-                  : 'text-[var(--ink-600)] hover:text-[var(--ink-900)]'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               {m === 'monthly' ? '30일' : '년'}

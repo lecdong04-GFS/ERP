@@ -132,7 +132,7 @@ export const Dashboard: React.FC = () => {
   const actualSalesAmount = k.todaySalesAmount > 0 ? k.todaySalesAmount : 40630000;
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#f1f5f9] overflow-y-auto p-3.5 gap-3.5">
+    <div className="flex flex-col w-full h-full bg-[#f1f5f9] overflow-y-auto p-4 sm:p-5 gap-4 sm:gap-5">
       {/* 1. 최상단 실시간 공장 관제 스트립 (KST 시계 + 3단계 실물 플로우 + 마감안내) */}
       <PipelineHero
         pipeline={stats.pipeline}
@@ -145,12 +145,12 @@ export const Dashboard: React.FC = () => {
       />
 
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-[12px] text-rose-800 flex items-center justify-between shadow-2xs">
-          <span>{error}</span>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-800 flex items-center justify-between shadow-2xs">
+          <span className="font-semibold">{error}</span>
           <button
             type="button"
             onClick={() => refresh()}
-            className="text-xs font-bold text-rose-700 underline cursor-pointer"
+            className="text-sm font-extrabold text-rose-700 underline cursor-pointer"
           >
             다시 시도
           </button>
@@ -158,29 +158,29 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ===================================================================== */}
-      {/* 2. 4대 실물 핵심 액션 카드 (추상적인 달성률·진척률 대신 구체적 실물 수량 표기) */}
+      {/* 2. 4대 실물 핵심 액션 카드 (시인성 극대화: 큼직한 수량 & 선명한 색상 배제) */}
       {/* ===================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
         {/* 카드 1: 금일 GS25 완제품 수주량 */}
         <div
           onClick={() => navigate('sales-order-summary-gsr')}
-          className="bg-white hover:bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11.5px] font-bold text-slate-500">🍱 금일 GS25 완제품 수주</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <TrendingUp className="w-4 h-4" />
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">🍱 금일 GS25 완제품 수주</span>
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              <TrendingUp className="w-5.5 h-5.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-black font-mono tracking-tight text-slate-900 leading-none">
+            <div className="text-3xl sm:text-[34px] font-black font-mono tracking-tight text-slate-900 leading-none">
               {actualOrderQty.toLocaleString()}
-              <span className="text-xs font-bold text-slate-400 ml-1">ea</span>
+              <span className="text-sm font-extrabold text-slate-500 ml-1.5">ea</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
-              <span>수주총액: ₩{Math.round(actualSalesAmount).toLocaleString()}</span>
-              <span className="text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
-                수주집계 보기 <ArrowRight className="w-3 h-3 ml-0.5" />
+            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-slate-700 font-bold">수주총액: ₩{Math.round(actualSalesAmount).toLocaleString()}</span>
+              <span className="text-blue-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px]">
+                수주집계 보기 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
@@ -189,30 +189,30 @@ export const Dashboard: React.FC = () => {
         {/* 카드 2: 금일 스마트발주(GFS) 필요량 */}
         <div
           onClick={() => navigate('pur-gfs-smart-order')}
-          className="bg-white hover:bg-slate-50/90 border border-emerald-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50 border border-emerald-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11.5px] font-bold text-slate-500">📦 스마트발주 산출량</span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">📦 스마트발주 산출량</span>
+              <span className="px-2 py-0.5 rounded text-[11.5px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 연동완료
               </span>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <PackageCheck className="w-4 h-4" />
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              <PackageCheck className="w-5.5 h-5.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-black font-mono tracking-tight text-emerald-700 leading-none">
-              43<span className="text-xs font-bold text-slate-500 ml-1">품목</span>
-              <span className="text-base font-extrabold text-slate-700 ml-2">
-                468<span className="text-xs font-bold text-slate-400 ml-0.5">박스</span>
+            <div className="text-3xl sm:text-[34px] font-black font-mono tracking-tight text-emerald-700 leading-none">
+              43<span className="text-sm font-bold text-slate-500 ml-1">품목</span>
+              <span className="text-xl sm:text-2xl font-black text-slate-800 ml-2.5">
+                468<span className="text-sm font-bold text-slate-500 ml-1">박스</span>
               </span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
-              <span>발주서 BOM 자동 연산</span>
-              <span className="text-emerald-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
-                스마트발주 열기 <ArrowRight className="w-3 h-3 ml-0.5" />
+            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-emerald-700 font-bold">BOM 소요량 자동연산</span>
+              <span className="text-emerald-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px]">
+                스마트발주 열기 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
@@ -221,30 +221,30 @@ export const Dashboard: React.FC = () => {
         {/* 카드 3: 재고 결품 / 소진 임박 자재 (알기 쉬운 실물 경고) */}
         <div
           onClick={() => navigate('inv-lookup')}
-          className="bg-white hover:bg-slate-50/90 border border-rose-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50 border border-rose-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11.5px] font-bold text-slate-500">🚨 재고 소진 임박 자재</span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">🚨 재고 소진 임박 자재</span>
+              <span className="px-2 py-0.5 rounded text-[11.5px] font-black bg-rose-100 text-rose-700 border border-rose-300 animate-pulse">
                 D-1.5 미달
               </span>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <AlertTriangle className="w-4 h-4" />
+            <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              <AlertTriangle className="w-5.5 h-5.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-black font-mono tracking-tight text-rose-600 leading-none">
+            <div className="text-3xl sm:text-[34px] font-black font-mono tracking-tight text-rose-600 leading-none">
               {stats.stockDaysTop.length > 0 ? stats.stockDaysTop.length : 3}
-              <span className="text-xs font-bold text-slate-400 ml-1">품목 주의</span>
+              <span className="text-sm font-bold text-slate-500 ml-1.5">품목 주의</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
-              <span className="truncate max-w-[150px]">
+            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="truncate max-w-[170px] text-slate-700 font-bold">
                 {stats.stockDaysTop[0]?.name || '[냉장]프릴아이스 등'}
               </span>
-              <span className="text-rose-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center shrink-0">
-                실사재고 조회 <ArrowRight className="w-3 h-3 ml-0.5" />
+              <span className="text-rose-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+                실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
@@ -253,30 +253,30 @@ export const Dashboard: React.FC = () => {
         {/* 카드 4: 유통기한 FEFO 선출고 대상 */}
         <div
           onClick={() => navigate('pur-expiry-status')}
-          className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50 border border-amber-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11.5px] font-bold text-slate-500">⏳ 유통기한 FEFO 선출고</span>
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">⏳ 유통기한 FEFO 선출고</span>
+              <span className="px-2 py-0.5 rounded text-[11.5px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
                 D-3 이내
               </span>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-              <Clock className="w-4 h-4" />
+            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              <Clock className="w-5.5 h-5.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-black font-mono tracking-tight text-amber-700 leading-none">
+            <div className="text-3xl sm:text-[34px] font-black font-mono tracking-tight text-amber-700 leading-none">
               {stats.fefoTop.length > 0 ? stats.fefoTop.length : 3}
-              <span className="text-xs font-bold text-slate-400 ml-1">품목 선입선출</span>
+              <span className="text-sm font-bold text-slate-500 ml-1.5">품목 선출고</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
-              <span className="truncate max-w-[150px]">
+            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="truncate max-w-[170px] text-slate-700 font-bold">
                 {stats.fefoTop[0]?.name || '[냉장]치즈콕콕소시지 등'}
               </span>
-              <span className="text-amber-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center shrink-0">
-                유통기한 현황 <ArrowRight className="w-3 h-3 ml-0.5" />
+              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+                유통기한 현황 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
