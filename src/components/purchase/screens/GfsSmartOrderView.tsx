@@ -470,22 +470,66 @@ export const GfsSmartOrderView: React.FC = () => {
     win.postMessage({ type: 'GFS_TOGGLE_UPLOAD_SECTION' }, window.location.origin);
   };
 
+  // 전체화면 상태 감지 (HTML5 Fullscreen + ESC 키 감지)
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, []);
+
+  // 이동 가능한 독립 전체화면 팝업창 열기 (듀얼 모니터 이동 및 ERP 멀티태스킹 지원)
+  const handleOpenPopupWindow = () => {
+    const width = typeof window !== 'undefined' ? (window.screen.availWidth || 1920) : 1600;
+    const height = typeof window !== 'undefined' ? (window.screen.availHeight || 1080) : 900;
+    const left = typeof window !== 'undefined' ? ((window.screen as any).availLeft || 0) : 0;
+    const top = typeof window !== 'undefined' ? ((window.screen as any).availTop || 0) : 0;
+    const features = [
+      `width=${width}`,
+      `height=${height}`,
+      `left=${left}`,
+      `top=${top}`,
+      'resizable=yes',
+      'scrollbars=yes',
+      'status=no',
+      'toolbar=no',
+      'menubar=no',
+      'location=no',
+    ].join(',');
+    const pop = window.open('/gfs/index.html?v=20261103_frozen_v5', 'GFS_SmartOrder_Window', features);
+    if (pop) {
+      pop.focus();
+    }
+  };
+
   const handleToggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) {
         await document.exitFullscreen();
+        setIsFullscreen(false);
+      } else if (containerRef.current?.requestFullscreen) {
+        await containerRef.current.requestFullscreen();
+        setIsFullscreen(true);
       } else {
-        await containerRef.current?.requestFullscreen();
+        setIsFullscreen((prev) => !prev);
       }
     } catch {
-      window.open('/gfs/index.html', '_blank', 'width=1600,height=900');
+      // OS/브라우저 전체화면 권한 차단 시 CSS 기반 창 전체화면으로 매끄럽게 토글
+      setIsFullscreen((prev) => !prev);
     }
   };
 
   return (
     <div
       ref={containerRef}
-      className="flex flex-col h-full w-full bg-[#0f172a] text-[12px] overflow-hidden select-none relative"
+      className={`flex flex-col bg-[#0f172a] text-[12px] overflow-hidden select-none relative transition-all duration-200 ${
+        isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen' : 'h-full w-full'
+      }`}
     >
       {/* 숨겨진 발주서 마스터(신메뉴·BOM) 교체 파일 입력 */}
       <input
@@ -705,10 +749,24 @@ export const GfsSmartOrderView: React.FC = () => {
 
           <button
             type="button"
-            onClick={handleToggleFullscreen}
-            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-300 transition cursor-pointer"
+            onClick={handleOpenPopupWindow}
+            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400 rounded-md text-[11px] font-bold text-white transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+            title="클릭 시 전체화면 크기의 독립 팝업창이 열립니다. 창을 드래그하여 다른 모니터로 이동시키고, 원래 ERP 창에서는 재고조회 등 다른 업무를 동시에 자유롭게 진행할 수 있습니다."
           >
-            {isFullscreen ? '축소' : '전체화면'}
+            🗗 전체화면 (새 창 팝업)
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleFullscreen}
+            className={`h-7 px-2 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
+              isFullscreen
+                ? 'bg-amber-600 hover:bg-amber-500 text-white border border-amber-400'
+                : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300'
+            }`}
+            title={isFullscreen ? '원래 화면 크기로 복귀 (ESC)' : '새 창을 띄우지 않고 현재 탭 안에서만 화면을 꽉 채웁니다.'}
+          >
+            {isFullscreen ? '🗗 축소 (ESC)' : '🗖 탭 내 꽉채우기'}
           </button>
         </div>
       </div>
@@ -772,7 +830,8 @@ export const GfsSmartOrderView: React.FC = () => {
           src="/gfs/index.html?v=20261103_frozen_v5"
           title="GFS 스마트발주"
           className="w-full h-full border-0 block"
-          allow="clipboard-read; clipboard-write"
+          allow="fullscreen; clipboard-read; clipboard-write"
+          allowFullScreen={true}
         />
       </div>
     </div>
