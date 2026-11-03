@@ -541,176 +541,189 @@ export const GfsSmartOrderView: React.FC = () => {
       />
 
       {/* =================================================================== */}
-      {/* 상단 1줄 Zero-Upload 통합 관제 바 (3대 데이터 신호등 + 신메뉴 감지 + 원클릭 확정) */}
+      {/* 2단 인텔리전트 관제 툴바: 스크롤 없이 한눈에 모든 기능이 다 보이도록 최적화 */}
       {/* =================================================================== */}
-      <div className="h-10 shrink-0 bg-[#0f172a] border-b border-slate-800 text-white px-3 flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
-        {/* 좌측 타이틀 */}
-        <div className="flex items-center gap-1.5 shrink-0 pr-1 border-r border-slate-800">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-extrabold text-[12px] tracking-tight text-white">스마트발주</span>
-        </div>
+      {/* 1단 (상단): 3대 데이터 연동 신호등 및 지능형 필터 바 */}
+      <div className="py-1 bg-[#090d16] border-b border-slate-800/80 text-white px-3 flex flex-wrap items-center justify-between gap-2 text-[11px] shrink-0">
+        {/* 좌측: 3대 데이터 연동 신호등 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 타이틀 뱃지 */}
+          <div className="flex items-center gap-1.5 shrink-0 pr-1.5 border-r border-slate-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-extrabold text-[12px] tracking-tight text-white">스마트발주</span>
+          </div>
 
-        {/* 신호등 1: 📦 발주서 마스터 (1~2주 주기 신메뉴·BOM 교체) */}
-        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-          <span className="text-[11px] text-slate-300 font-medium">📦 발주서(BOM):</span>
-          <span
-            className="text-[11px] font-bold text-white max-w-[140px] truncate"
-            title={`현재 적용된 발주서 마스터: ${bootPayload?.master.fileName || 'GFS.xlsx'} (${bootPayload?.master.asOf || ''})`}
-          >
-            {bootPayload?.master.asOf || '기본본'}
-          </span>
-          <button
-            type="button"
-            onClick={() => masterInputRef.current?.click()}
-            disabled={isUploadingMaster}
-            className="ml-0.5 px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white transition cursor-pointer"
-            title="1~2주 주기 신메뉴 및 BOM이 추가된 최신 발주서 양식을 업로드하면 영구 기억됩니다"
-          >
-            {isUploadingMaster ? '교체중...' : '📤 신메뉴 발주서 교체'}
-          </button>
-        </div>
-
-        {/* 🚨 신메뉴 BOM 미등록 감지 경고 배지 (미매칭 완제품이 있을 때만 표시) */}
-        {unmatchedMenus.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowUnmatchedModal((v) => !v)}
-            className="flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-200 px-2 py-1 rounded-md text-[11px] font-bold shrink-0 animate-pulse cursor-pointer"
-            title="오늘 10시 주문서에 있으나 현재 발주서 BOM에 없는 신메뉴가 감지되었습니다. 클릭하여 확인하세요."
-          >
-            <span>⚠️ 신메뉴 BOM 미매칭 {unmatchedMenus.length}종</span>
-          </button>
-        )}
-
-        {/* 신호등 2: 🍱 오전 10시 완제품 주문서 자동 연동 */}
-        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
-          <span
-            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-              bootPayload?.orders.isToday ? 'bg-emerald-400' : 'bg-amber-400'
-            }`}
-          />
-          <span className="text-[11px] text-slate-300 font-medium">
-            {bootPayload?.orders.isToday ? '🍱 10시 주문서:' : '🍱 주문서(최근):'}
-          </span>
-          <select
-            value={selectedOrderDate}
-            onChange={(e) => handleChangeOrderDate(e.target.value)}
-            className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
-            title="연동할 완제품 수주(주문서) 일자 선택"
-          >
-            {(bootPayload?.orders.availableDates || [selectedOrderDate])
-              .filter(Boolean)
-              .map((d) => (
-                <option key={d} value={d}>
-                  {d.slice(5)}
-                </option>
-              ))}
-          </select>
-          <span className="text-[11px] font-bold text-emerald-300 font-mono">
-            {bootPayload?.orders.menuCount || 0}종 ·{' '}
-            {(bootPayload?.orders.totalQty || 0).toLocaleString()}개
-          </span>
-        </div>
-
-        {/* 신호등 3: 📋 전일 오후 5시 최신 재고조사표 자동 연동 */}
-        <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-1 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-          <span className="text-[11px] text-slate-300 font-medium">📋 17시 재고표:</span>
-          <select
-            value={selectedStockDate}
-            onChange={(e) => handleChangeStockDate(e.target.value)}
-            className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
-            title="연동할 재고조사표(실사 재고) 기준일자 선택"
-          >
-            {(bootPayload?.stock.availableDates || [selectedStockDate])
-              .filter(Boolean)
-              .map((d) => (
-                <option key={d} value={d}>
-                  {d.slice(5)}
-                </option>
-              ))}
-          </select>
-          <span className="text-[11px] font-bold text-cyan-300 font-mono">
-            {auditMatchedCount || bootPayload?.stock.itemCount || 0}품목
-          </span>
-        </div>
-
-        {/* 3단 지능형 필터 세그먼트 (실발주만 | 생산연동 | 전체) */}
-        <div className="flex items-center bg-slate-900/90 p-0.5 rounded-md border border-slate-700 shrink-0">
-          <button
-            type="button"
-            onClick={() => handleSetFilterMode('order_only')}
-            className={`px-2 py-0.5 text-[11px] font-extrabold rounded flex items-center gap-1 transition cursor-pointer ${
-              filterMode === 'order_only'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="오늘 실제 발주해야 하는 품목만 표시 (휴면자재 및 0박스 자동 숨김)"
-          >
-            <span>🔥 실발주만</span>
-            {orderableCount > 0 && (
-              <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-amber-200">
-                {orderableCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSetFilterMode('active_only')}
-            className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
-              filterMode === 'active_only'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="오늘 완제품 생산 레시피에 들어가는 모든 자재 표시 (0박스 포함)"
-          >
-            <span>📦 생산연동</span>
-            {activeMaterialCount > 0 && (
-              <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-indigo-200">
-                {activeMaterialCount}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSetFilterMode('all')}
-            className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
-              filterMode === 'all'
-                ? 'bg-slate-700 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="휴면 자재 포함 442개 전체 품목 표시"
-          >
-            <span>📋 전체</span>
-            <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-slate-300">
-              {totalMaterialCount}
+          {/* 신호등 1: 📦 발주서 마스터 (1~2주 주기 신메뉴·BOM 교체) */}
+          <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="text-[11px] text-slate-300 font-medium">📦 발주서(BOM):</span>
+            <span
+              className="text-[11px] font-bold text-white max-w-[120px] truncate"
+              title={`현재 적용된 발주서 마스터: ${bootPayload?.master.fileName || 'GFS.xlsx'} (${bootPayload?.master.asOf || ''})`}
+            >
+              {bootPayload?.master.asOf || '기본본'}
             </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => masterInputRef.current?.click()}
+              disabled={isUploadingMaster}
+              className="ml-0.5 px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white transition cursor-pointer"
+              title="1~2주 주기 신메뉴 및 BOM이 추가된 최신 발주서 양식을 업로드하면 영구 기억됩니다"
+            >
+              {isUploadingMaster ? '교체중...' : '📤 신메뉴 교체'}
+            </button>
+          </div>
+
+          {/* 🚨 신메뉴 BOM 미등록 감지 경고 배지 (미매칭 완제품이 있을 때만 표시) */}
+          {unmatchedMenus.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowUnmatchedModal((v) => !v)}
+              className="flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/60 text-amber-200 px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0 animate-pulse cursor-pointer"
+              title="오늘 10시 주문서에 있으나 현재 발주서 BOM에 없는 신메뉴가 감지되었습니다. 클릭하여 확인하세요."
+            >
+              <span>⚠️ 신메뉴 {unmatchedMenus.length}종</span>
+            </button>
+          )}
+
+          {/* 신호등 2: 🍱 오전 10시 완제품 주문서 자동 연동 */}
+          <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 shrink-0">
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                bootPayload?.orders.isToday ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            />
+            <span className="text-[11px] text-slate-300 font-medium">🍱 10시 주문서:</span>
+            <select
+              value={selectedOrderDate}
+              onChange={(e) => handleChangeOrderDate(e.target.value)}
+              className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
+              title="연동할 완제품 수주(주문서) 일자 선택"
+            >
+              {(bootPayload?.orders.availableDates || [selectedOrderDate])
+                .filter(Boolean)
+                .map((d) => (
+                  <option key={d} value={d}>
+                    {d.slice(5)}
+                  </option>
+                ))}
+            </select>
+            <span className="text-[11px] font-bold text-emerald-300 font-mono">
+              {bootPayload?.orders.menuCount || 0}종 · {(bootPayload?.orders.totalQty || 0).toLocaleString()}개
+            </span>
+          </div>
+
+          {/* 신호등 3: 📋 전일 오후 5시 최신 재고조사표 자동 연동 */}
+          <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="text-[11px] text-slate-300 font-medium">📋 17시 재고표:</span>
+            <select
+              value={selectedStockDate}
+              onChange={(e) => handleChangeStockDate(e.target.value)}
+              className="bg-slate-900 text-white font-mono font-bold text-[11px] px-1 py-0.5 rounded border border-slate-700 focus:outline-none cursor-pointer"
+              title="연동할 재고조사표(실사 재고) 기준일자 선택"
+            >
+              {(bootPayload?.stock.availableDates || [selectedStockDate])
+                .filter(Boolean)
+                .map((d) => (
+                  <option key={d} value={d}>
+                    {d.slice(5)}
+                  </option>
+                ))}
+            </select>
+            <span className="text-[11px] font-bold text-cyan-300 font-mono">
+              {auditMatchedCount || bootPayload?.stock.itemCount || 0}품목
+            </span>
+          </div>
         </div>
 
-        {dormantCount > 0 && filterMode === 'order_only' && (
-          <span className="text-[10px] font-medium text-slate-400 shrink-0 hidden 2xl:inline bg-slate-900/60 px-1.5 py-0.5 rounded border border-slate-800">
-            💤 휴면 {dormantCount}개 자동제외
+        {/* 우측: 3단 지능형 필터 세그먼트 & 마감 안내 */}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <div className="flex items-center bg-slate-900/90 p-0.5 rounded-md border border-slate-700 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleSetFilterMode('order_only')}
+              className={`px-2 py-0.5 text-[11px] font-extrabold rounded flex items-center gap-1 transition cursor-pointer ${
+                filterMode === 'order_only'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="오늘 실제 발주해야 하는 품목만 표시 (휴면자재 및 0박스 자동 숨김)"
+            >
+              <span>🔥 실발주만</span>
+              {orderableCount > 0 && (
+                <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-amber-200">
+                  {orderableCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetFilterMode('active_only')}
+              className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
+                filterMode === 'active_only'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="오늘 완제품 생산 레시피에 들어가는 모든 자재 표시 (0박스 포함)"
+            >
+              <span>📦 생산연동</span>
+              {activeMaterialCount > 0 && (
+                <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-indigo-200">
+                  {activeMaterialCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetFilterMode('all')}
+              className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
+                filterMode === 'all'
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="휴면 자재 포함 442개 전체 품목 표시"
+            >
+              <span>📋 전체</span>
+              <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-slate-300">
+                {totalMaterialCount}
+              </span>
+            </button>
+          </div>
+
+          {/* 현재 시각 기준 마감 임박 채널 원클릭 포커스 */}
+          <button
+            type="button"
+            onClick={handleFocusDeadlineChannel}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border transition shrink-0 cursor-pointer ${
+              deadlineGuide.urgent
+                ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/50 text-rose-200'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+            }`}
+            title="클릭 시 해당 마감 시간대 발주 채널 탭으로 즉시 이동합니다"
+          >
+            <span>{deadlineGuide.label}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2단 (하단): 실시간 발주 통계 요약 + 핵심 액션 버튼 (가로 스크롤 없이 한눈에 100% 노출) */}
+      <div className="h-10 shrink-0 bg-[#0f172a] border-b border-slate-800 text-white px-3 flex items-center justify-between gap-2 text-[11px]">
+        {/* 좌측: 실시간 현황 통계 요약 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 font-bold text-[11px]">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>오늘 실발주 대상: <strong className="text-white font-mono">{orderableCount}</strong>개 품목</span>
           </span>
-        )}
+          {dormantCount > 0 && filterMode === 'order_only' && (
+            <span className="text-[11px] font-medium text-slate-400 hidden sm:inline bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
+              💤 미사용 휴면 {dormantCount}개 자동제외
+            </span>
+          )}
+        </div>
 
-        {/* 현재 시각 기준 마감 임박 채널 원클릭 포커스 */}
-        <button
-          type="button"
-          onClick={handleFocusDeadlineChannel}
-          className={`hidden xl:flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border transition shrink-0 cursor-pointer ${
-            deadlineGuide.urgent
-              ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/50 text-rose-200'
-              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-          }`}
-          title="클릭 시 해당 마감 시간대 발주 채널 탭으로 즉시 이동합니다"
-        >
-          <span>{deadlineGuide.label}</span>
-        </button>
-
-        {/* 우측 원클릭 발주 확정 및 보조 도구 */}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        {/* 우측: 핵심 실행 액션 버튼들 (스크롤 없이 바로 보이고 클릭 가능) */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={handleOneClickConfirmOrder}
@@ -720,7 +733,7 @@ export const GfsSmartOrderView: React.FC = () => {
           >
             <span>
               {isOneClickSaving
-                ? '⏳ 발주서 생성 중...'
+                ? '⏳ 저장 중...'
                 : `✅ ERP 발주 확정 저장${orderableCount > 0 ? ` (${orderableCount}건)` : ''}`}
             </span>
           </button>
@@ -732,7 +745,7 @@ export const GfsSmartOrderView: React.FC = () => {
               fetchAutoBootData(selectedOrderDate, selectedStockDate);
             }}
             disabled={isBooting}
-            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-200 transition cursor-pointer"
+            className="h-7 px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-200 transition cursor-pointer flex items-center gap-1"
             title="ERP 최신 주문서·재고표 데이터로 다시 산출"
           >
             🔄 재산출
@@ -741,17 +754,18 @@ export const GfsSmartOrderView: React.FC = () => {
           <button
             type="button"
             onClick={handleToggleManualUpload}
-            className="h-7 px-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-300 transition cursor-pointer"
+            className="h-7 px-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-[11px] font-bold text-slate-300 transition cursor-pointer flex items-center gap-1"
             title="엑셀 파일을 수동으로 직접 업로드할 때만 여는 화면 토글"
           >
             📂 수동파일창
           </button>
 
+          {/* 🗗 전체화면 (새 창 팝업) - 스크롤 없이 항상 한눈에 띄는 인디고 하이라이트 버튼 */}
           <button
             type="button"
             onClick={handleOpenPopupWindow}
-            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400 rounded-md text-[11px] font-bold text-white transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-            title="클릭 시 전체화면 크기의 독립 팝업창이 열립니다. 창을 드래그하여 다른 모니터로 이동시키고, 원래 ERP 창에서는 재고조회 등 다른 업무를 동시에 자유롭게 진행할 수 있습니다."
+            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400 rounded-md text-[11px] font-bold text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm ring-1 ring-indigo-400/50"
+            title="독립된 전체화면 팝업창을 열어 다른 모니터로 이동시키고, 원래 ERP 창에서는 재고조회 등 다른 업무를 동시에 작업할 수 있습니다."
           >
             🗗 전체화면 (새 창 팝업)
           </button>
@@ -759,7 +773,7 @@ export const GfsSmartOrderView: React.FC = () => {
           <button
             type="button"
             onClick={handleToggleFullscreen}
-            className={`h-7 px-2 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
+            className={`h-7 px-2.5 rounded-md text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
               isFullscreen
                 ? 'bg-amber-600 hover:bg-amber-500 text-white border border-amber-400'
                 : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300'
