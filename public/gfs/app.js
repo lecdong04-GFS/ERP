@@ -7327,9 +7327,10 @@ function renderClassicExcelView(items) {
     let supTotalAmount = 0;
     const isOriginalModeGlobal = state.excelViewSourceMode !== 'live';
     supItems.forEach(it => {
-      const b = (it.manualBoxes !== null && it.manualBoxes !== undefined)
+      const rawB = (it.manualBoxes !== null && it.manualBoxes !== undefined)
         ? it.manualBoxes
-        : (isOriginalModeGlobal && it.originalExcelBoxes !== undefined ? it.originalExcelBoxes : (it.calc && it.calc.finalBoxes || 0));
+        : (isOriginalModeGlobal && it.originalExcelBoxes !== undefined ? Math.ceil(Number(it.originalExcelBoxes) || 0) : (it.calc && it.calc.finalBoxes || 0));
+      const b = Math.max(0, Math.ceil(Number(rawB) || 0));
       const p = it.originalPackUnit || it.packUnit || 1;
       const pr = isOriginalModeGlobal && it.originalUnitPrice !== undefined ? it.originalUnitPrice : (it.unitPrice || 0);
       const a = isOriginalModeGlobal && it.originalAmount !== undefined ? it.originalAmount : (it.calc && it.calc.finalTotalAmount || Math.round(b * p * pr));
@@ -7370,9 +7371,10 @@ function renderClassicExcelView(items) {
       const split = calc.weeklySplit || {};
       const isOriginalMode = state.excelViewSourceMode !== 'live';
 
-      const displayBoxes = (item.manualBoxes !== null && item.manualBoxes !== undefined)
+      const rawBoxes = (item.manualBoxes !== null && item.manualBoxes !== undefined)
         ? item.manualBoxes
-        : (isOriginalMode && item.originalExcelBoxes !== undefined ? item.originalExcelBoxes : (calc.finalBoxes || 0));
+        : (isOriginalMode && item.originalExcelBoxes !== undefined ? Math.ceil(Number(item.originalExcelBoxes) || 0) : (calc.finalBoxes || 0));
+      const displayBoxes = Math.max(0, Math.ceil(Number(rawBoxes) || 0));
 
       const displayPackUnit = item.originalPackUnit || item.packUnit || 1;
 
@@ -7480,10 +7482,10 @@ function renderClassicExcelView(items) {
           </div>
         </td>
 
-        <!-- D. 발주량박스 (직접 수정 가능 인풋) -->
+        <!-- D. 발주량박스 (직접 수정 가능 인풋 - 정수 박스 단위) -->
         <td class="py-1 px-1.5 border-r border-neutral-200 dark:border-neutral-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
           <div class="inline-flex items-center gap-1">
-            <input type="number" min="0" value="${displayBoxes}" data-action="excel-box-input" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
+            <input type="number" min="0" step="1" value="${displayBoxes}" data-action="excel-box-input" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
             ${isOriginalMode && calc.finalBoxes !== item.originalExcelBoxes ? `<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="오늘 10시 수주·실사재고 기준 AI추천: ${calc.finalBoxes}박스">(AI:${calc.finalBoxes})</span>` : ''}
             ${!isOriginalMode && calc.bufferBoxes > 0 ? `<span class="text-[9px] font-bold text-indigo-600 font-mono shrink-0" title="보수적 안전 버퍼 +${calc.bufferBoxes}박스 가산됨">(+${calc.bufferBoxes})</span>` : ''}
           </div>
@@ -7548,12 +7550,13 @@ function renderClassicExcelView(items) {
         <td class="py-2 px-2 text-center">${auditBadge}</td>
       `;
 
-      // 인풋 변경 시 수량 재계산
+      // 인풋 변경 시 수량 재계산 (박스 단위 정수 보정)
       const boxInput = tr.querySelector('[data-action="excel-box-input"]');
       if (boxInput) {
         boxInput.addEventListener('change', (e) => {
-          const val = parseInt(e.target.value, 10);
-          item.manualBoxes = isNaN(val) || val < 0 ? 0 : val;
+          const val = Math.max(0, Math.ceil(parseFloat(e.target.value) || 0));
+          e.target.value = val;
+          item.manualBoxes = val;
           item.manualWeeklySplit = null;
           recalculateAll();
         });

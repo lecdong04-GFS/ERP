@@ -174,9 +174,9 @@ export const MatOrderNormalView: React.FC = () => {
     return { boxes, amt };
   }, [filtered]);
 
-  // 수기 발주량 변경 핸들러
+  // 수기 발주량 변경 핸들러 (정수 박스 단위)
   const handleFinalChange = (id: number, val: string) => {
-    const num = Math.max(0, Number(val) || 0);
+    const num = Math.max(0, Math.ceil(Number(val) || 0));
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, finalBoxes: num, manual: true } : r))
     );
@@ -708,6 +708,8 @@ export const MatOrderNormalView: React.FC = () => {
                           <td className="border border-gray-300 p-0 text-right font-mono bg-amber-50/50">
                             <input
                               type="number"
+                              min="0"
+                              step="1"
                               value={row.manual ? row.finalBoxes : c.suggest}
                               onChange={(e) => handleFinalChange(row.id, e.target.value)}
                               className="w-full h-full text-right font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
