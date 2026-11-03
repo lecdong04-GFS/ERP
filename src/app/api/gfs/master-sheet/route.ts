@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import * as XLSX from 'xlsx';
+import { parseOrderSheet } from '@/lib/gfs/canonical';
+import { normName } from '@/lib/gfs/norm';
 
 const MASTER_KEY = 'gfs_master_workbook';
 
@@ -107,6 +110,34 @@ export async function POST(req: NextRequest) {
         },
       })
       .catch(() => {});
+
+    // 재고(prisma.inventory) 테이블에 최신 발주서 현재고/일사용량/단가 자동 동기화
+    try {
+      const buf = Buffer.from(base64, 'base64');
+      const wb = XLSX.read(buf, { type: 'buffer' });
+      const parsed = parseOrderSheet(wb);
+      if (parsed.items.length > 0) {
+        const orderNorms = new Map(parsed.items.map((o) => [o.norm, o]));
+        const invs = await prisma.inventory.findMany();
+        for (const inv of invs) {
+          const k = normName(inv.productName);
+          const o = orderNorms.get(k);
+          if (o) {
+            await prisma.inventory.update({
+              where: { id: inv.id },
+              data: {
+                currentQty: o.currentStock,
+                dailyUsage: o.dailyUsage,
+                unitPrice: o.bagPrice > 0 ? o.bagPrice : inv.unitPrice,
+                stockAmount: o.currentStock * (o.bagPrice > 0 ? o.bagPrice : inv.unitPrice),
+              },
+            });
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.error('master-sheet inventory auto-sync failed:', syncErr);
+    }
 
     return NextResponse.json({
       success: true,

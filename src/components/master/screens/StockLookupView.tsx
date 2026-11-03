@@ -72,15 +72,20 @@ export function calcStockStatus(current: number, safety: number): string {
   return '정상';
 }
 
-/** 재고유지일 실시간 계산: 현재고 ÷ 일사용량 (일사용량 미입력 시 기존 스냅샷/정본 유지일 폴백) */
-export function calcStockDays(current: number, daily: number, fallback?: number | null): number | null {
-  const cur = Number(current) || 0;
+/** 재고유지일 계산: 발주서 정본 N열(재고유지일) 최우선, 없으면 총재고(현재고+입고량) ÷ 일사용량 */
+export function calcStockDays(
+  current: number,
+  daily: number,
+  fallback?: number | null,
+  incoming: number = 0
+): number | null {
+  if (fallback != null && !isNaN(Number(fallback))) {
+    return Math.round(Number(fallback) * 10) / 10;
+  }
+  const tot = (Number(current) || 0) + (Number(incoming) || 0);
   const d = Number(daily) || 0;
   if (d > 0) {
-    return Math.round((cur / d) * 100) / 100;
-  }
-  if (fallback != null && !isNaN(Number(fallback))) {
-    return Math.round(Number(fallback) * 100) / 100;
+    return Math.round((tot / d) * 10) / 10;
   }
   return null;
 }
@@ -712,13 +717,20 @@ export const StockLookupView: React.FC = () => {
             const norm = normName(name);
             seen.add(norm);
             const o = norm ? orderByNorm.get(norm) : undefined;
-            // DB/스냅샷에 저장된 현재고·단가 우선 반영 (없을 때만 발주서 정본 폴백)
-            const hasDbQty = inv.currentQty !== undefined && inv.currentQty !== null;
+            // 스마트발주 최신 발주서 마스터(o) 최우선 반영
+            const inQty = (o && o.incoming != null && !isNaN(Number(o.incoming)))
+              ? Number(o.incoming)
+              : (Number(inv.inQty) || 0);
+
+            // 현재고: LIVE 모드에서는 최신 발주서 o.currentStock 최우선, 스냅샷 모드에서는 스냅샷 실사값 유지
             const current = isSnap
-              ? Number(inv.currentQty) || 0
-              : hasDbQty
-              ? Number(inv.currentQty)
-              : (o && Number(o.currentStock) > 0 ? Number(o.currentStock) : 0);
+              ? (Number(inv.currentQty) || 0)
+              : (o && o.currentStock != null && !isNaN(Number(o.currentStock))
+                  ? Number(o.currentStock)
+                  : (inv.currentQty !== undefined && inv.currentQty !== null
+                      ? Number(inv.currentQty)
+                      : 0));
+
             // 스마트발주 최신 발주서 마스터(o) 우선: 입수량 및 일사용량 일원화
             const pack =
               (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
@@ -731,9 +743,9 @@ export const StockLookupView: React.FC = () => {
             const piece = isSnap && inv.pieceQty !== undefined && Number(inv.pieceQty) > 0
               ? Number(inv.pieceQty)
               : Math.round((current % pack) * 10) / 10;
-            const uprice = Number(inv.unitPrice) > 0
-              ? Number(inv.unitPrice)
-              : (o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price);
+            const uprice = (o && Number(o.bagPrice) > 0)
+              ? Number(o.bagPrice)
+              : (Number(inv.unitPrice) > 0 ? Number(inv.unitPrice) : price);
             const rawDailyU = (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage)))
               ? Number(o.dailyUsage)
               : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0);
@@ -745,8 +757,8 @@ export const StockLookupView: React.FC = () => {
             const cleanCode = String(inv.itemCode || inv.productCode || inv.product?.productCode || '').split('#')[0];
             const snapEntry = snapOf(cleanCode, name);
             const fallbackDays =
-              (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null) ??
-              (o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null);
+              (o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
+              (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null);
             const effectiveDaily = dailyU > 0 ? dailyU : estDaily;
             const inbound = inv.lastInDate
               ? String(inv.lastInDate).slice(5)
@@ -764,7 +776,7 @@ export const StockLookupView: React.FC = () => {
                 : Number(inv.product?.safetyStockQty) > 0
                 ? Number(inv.product.safetyStockQty)
                 : 0;
-            const nDays = calcStockDays(current, effectiveDaily, fallbackDays);
+            const nDays = calcStockDays(current, effectiveDaily, fallbackDays, inQty);
             if (o) merged += 1;
             loaded.push({
               id: inv.id || idx + 1,
@@ -791,7 +803,7 @@ export const StockLookupView: React.FC = () => {
               boxQty: box,
               pieceQty: piece,
               prevStock: current,
-              inQty: o ? Number(o.incoming) || 0 : 0,
+              inQty: inQty,
               outQty: 0,
               currentStock: current,
               safetyStock: safety,
@@ -827,14 +839,17 @@ export const StockLookupView: React.FC = () => {
               const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
               const s = snapOf(o.itemId || '', o.name || '');
               const fallbackDays =
-                (s && s.stockDays != null ? Number(s.stockDays) : null) ??
-                (o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null);
-              const rowDays = calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays);
+                (o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
+                (s && s.stockDays != null ? Number(s.stockDays) : null);
+              const inQty = Number(o.incoming) || 0;
+              const rowDays = (o.stockDays != null && !isNaN(Number(o.stockDays)))
+                ? Math.round(Number(o.stockDays) * 10) / 10
+                : calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays, inQty);
               const row: StockItem = {
                 id: tempId--,
                 whName: wh,
-                vendor: o.vendor || '',
-                orderSupplier: o.supplier || '',
+                vendor: o.vendor || o.supplierHeader || '',
+                orderSupplier: o.supplier || o.supplierHeader || '',
                 orderDays: Number(o.days) || 0,
                 itemCode: o.itemId || '',
                 lotNo: '',
@@ -854,7 +869,7 @@ export const StockLookupView: React.FC = () => {
                 boxQty: box,
                 pieceQty: piece,
                 prevStock: current,
-                inQty: Number(o.incoming) || 0,
+                inQty: inQty,
                 outQty: 0,
                 currentStock: current,
                 safetyStock: autoSafety,
@@ -908,19 +923,9 @@ export const StockLookupView: React.FC = () => {
   };
 
   useEffect(() => {
-    // 진입 시 최신 스냅샷 날짜로 이동 (없으면 오늘)
-    (async () => {
-      try {
-        const res = await fetch('/api/inventory/snapshot?latest=1', { cache: 'no-store' });
-        const json = await res.json();
-        const latest: string | null = json?.data?.date ?? null;
-        const init = latest && /^\d{4}-\d{2}-\d{2}$/.test(latest) ? latest : kstToday();
-        setTargetDate(init);
-        await loadByDate(init);
-      } catch {
-        loadStockData();
-      }
-    })();
+    // 진입 시 최신 발주서 기준 현재고 LIVE로 즉시 로드 (날짜 선택 시 해당 일자 스냅샷 로드)
+    setTargetDate(kstToday());
+    loadStockData();
   }, []);
 
   // 단축키 Ctrl+S / Cmd+S 로 저장 지원
@@ -991,10 +996,13 @@ export const StockLookupView: React.FC = () => {
         }
         const safetyStock = Number(updated.safetyStock) || 0;
 
-        // 과부족, 재고유지일 및 재고금액 실시간 자동 계산
+        // 과부족, 재고유지일 및 재고금액 실시간 자동 계산 (총재고 = 현재고 + 입고량)
+        const curIn = Number(updated.inQty) || 0;
         updated.shortage = currentStock - safetyStock;
         updated.status = calcStockStatus(currentStock, safetyStock);
-        updated.stockDays = calcStockDays(currentStock, effectiveDaily, updated.stockDays);
+        updated.stockDays = effectiveDaily > 0
+          ? Math.round(((currentStock + curIn) / effectiveDaily) * 10) / 10
+          : (updated.stockDays ?? null);
         updated.gfsDays = updated.stockDays;
         updated.totalAmount = currentStock * unitPrice;
 
