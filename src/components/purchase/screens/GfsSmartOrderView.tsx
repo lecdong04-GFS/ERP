@@ -440,7 +440,8 @@ export const GfsSmartOrderView: React.FC = () => {
       alert(
         `✅ ERP 발주 확정 완료 (${me?.name || me?.loginId || '담당자'})\n` +
           `• 총 ${forOrder.length}개 품목 / ${createdOrders.length}개 거래처 발주서 생성\n` +
-          `• 전표번호: ${createdOrders.slice(0, 5).join(', ')}${createdOrders.length > 5 ? ` 외 ${createdOrders.length - 5}건` : ''}`
+          `• 전표번호: ${createdOrders.slice(0, 5).join(', ')}${createdOrders.length > 5 ? ` 외 ${createdOrders.length - 5}건` : ''}\n\n` +
+          `💡 발주 내역 확인 및 삭제: [매입관리 > 발주현황/수정] 메뉴에서 체크 후 [선택삭제(영구)] 버튼으로 완전히 삭제하실 수 있습니다.`
       );
     } catch (e: any) {
       alert('발주 확정 실패: ' + e.message);

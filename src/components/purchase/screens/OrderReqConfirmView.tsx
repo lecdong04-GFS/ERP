@@ -308,7 +308,8 @@ export const OrderReqConfirmView: React.FC = () => {
         alert(
           `✅ 발주서 일괄 확정 완료!\n\n` +
             `• 생성된 발주서: ${(json.data || []).map((o: any) => o.orderNo).join(', ')}\n` +
-            `• 발주현황 및 입고등록 화면에 파이프라인 동기화되었습니다.`
+            `• 발주현황 및 입고등록 화면에 파이프라인 동기화되었습니다.\n\n` +
+            `💡 발주 취소/삭제는 [발주현황/수정] 메뉴에서 [선택삭제(영구)]로 지우실 수 있습니다.`
         );
         fetchOrderReqs();
       } else {

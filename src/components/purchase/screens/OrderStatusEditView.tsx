@@ -361,36 +361,112 @@ export const OrderStatusEditView: React.FC = () => {
     }
   };
 
-  // 선택 발주서 취소/삭제
-  const handleDeleteChecked = async () => {
+  // 선택 발주서 영구 삭제 (DB 삭제)
+  const handleDeleteOrdersPermanently = async () => {
     const checkedItems = masterList.filter((m) => m.checked);
     if (checkedItems.length === 0) {
-      alert('취소할 발주서를 선택해주세요.');
+      alert('삭제할 발주서를 먼저 체크박스로 선택해주세요.');
+      return;
+    }
+
+    const hasReceived = checkedItems.some((m) => m.status === '입고완료' || m.receivedAmt > 0);
+    if (hasReceived) {
+      alert(
+        '선택한 발주서 중 이미 입고되었거나 부분 입고된 발주서가 포함되어 있습니다.\n입고 처리된 발주서는 삭제할 수 없으며, 입고등록 화면에서 먼저 입고를 취소해야 합니다.'
+      );
+      return;
+    }
+
+    const ok = await erpConfirm(
+      `선택한 ${checkedItems.length}건의 발주서를 데이터베이스에서 완전히 영구 삭제하시겠습니까?\n\n` +
+        `• 대상 발주번호: ${checkedItems.map((x) => x.orderNo).slice(0, 5).join(', ')}${
+          checkedItems.length > 5 ? ` 외 ${checkedItems.length - 5}건` : ''
+        }\n• 총 금액: ₩${Math.round(
+          checkedItems.reduce((acc, x) => acc + x.orderAmt, 0)
+        ).toLocaleString()}원\n\n⚠️ 삭제된 발주서는 복구할 수 없습니다.`,
+      '발주서 영구 삭제 확인',
+      'danger'
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch('/api/purchase/order', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: checkedItems.map((m) => m.id),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`✅ ${json.message || '선택한 발주서가 성공적으로 삭제되었습니다.'}`);
+        loadData(startDate, endDate);
+      } else {
+        alert('발주서 삭제 실패: ' + (json.error || '오류가 발생했습니다.'));
+      }
+    } catch (err: any) {
+      alert('발주서 삭제 통신 오류: ' + err.message);
+    }
+  };
+
+  // 선택 발주서 취소 (상태만 '발주취소'로 변경)
+  const handleCancelChecked = async () => {
+    const checkedItems = masterList.filter((m) => m.checked);
+    if (checkedItems.length === 0) {
+      alert('취소할 발주서를 체크박스로 선택해주세요.');
       return;
     }
     const ok = await erpConfirm(
-      `선택한 ${checkedItems.length}건의 발주서를 취소하시겠습니까?`,
+      `선택한 ${checkedItems.length}건의 발주서를 '발주취소' 상태로 변경하시겠습니까?`,
       '발주 취소 확인',
       'danger'
     );
     if (ok) {
       try {
-        for (const item of checkedItems) {
-          await fetch('/api/purchase/order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'cancel',
-              orderNo: item.orderNo,
-              cancelReason: '발주현황 화면에서 취소',
-            }),
-          });
+        const res = await fetch('/api/purchase/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'cancel',
+            ids: checkedItems.map((m) => m.id),
+            cancelReason: '발주현황 화면에서 취소',
+          }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          alert('선택한 발주서가 성공적으로 취소되었습니다.');
+          loadData(startDate, endDate);
+        } else {
+          alert('발주 취소 처리 실패: ' + (json.error || '오류'));
         }
-        alert('선택한 발주서가 성공적으로 취소되었습니다.');
-        loadData(startDate, endDate);
       } catch (err: any) {
         alert('발주 취소 처리 중 오류: ' + err.message);
       }
+    }
+  };
+
+  // 개별 품목 삭제 핸들러
+  const handleDeleteDetailRow = async (detailId: number, itemName: string) => {
+    const ok = await erpConfirm(
+      `해당 발주 품목 [${itemName}]을(를) 발주서에서 삭제하시겠습니까?\n(발주서 내 마지막 품목인 경우 발주서도 함께 삭제됩니다)`,
+      '발주 품목 삭제',
+      'danger'
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/purchase/order?detailId=${detailId}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(`✅ ${json.message || '품목이 삭제되었습니다.'}`);
+        loadData(startDate, endDate);
+      } else {
+        alert('품목 삭제 실패: ' + (json.error || '오류가 발생했습니다.'));
+      }
+    } catch (err: any) {
+      alert('품목 삭제 통신 오류: ' + err.message);
     }
   };
 
@@ -403,6 +479,34 @@ export const OrderStatusEditView: React.FC = () => {
       data: filteredMasterList,
     });
   };
+
+  // 상세 품목 컬럼 (개별 품목 삭제 버튼 포함)
+  const detailColumns = useMemo<PurchaseGridColumnDef[]>(() => {
+    return [
+      ...DETAIL_COLUMNS,
+      {
+        key: '_delete',
+        label: '품목삭제',
+        width: '75px',
+        align: 'center',
+        render: (_val, row) => (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (row?.id) {
+                handleDeleteDetailRow(row.id, row.name);
+              }
+            }}
+            className="px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:text-white hover:bg-rose-600 rounded border border-rose-300 transition-colors shadow-2xs"
+            title="이 품목만 발주서에서 삭제"
+          >
+            삭제
+          </button>
+        ),
+      },
+    ];
+  }, []);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px] font-sans">
@@ -426,10 +530,17 @@ export const OrderStatusEditView: React.FC = () => {
           },
           {
             key: 'delete',
-            label: '선택취소',
+            label: '선택삭제(영구)',
             icon: 'delete',
             variant: 'danger',
-            onClick: () => void handleDeleteChecked(),
+            onClick: () => void handleDeleteOrdersPermanently(),
+          },
+          {
+            key: 'cancel',
+            label: '발주취소(상태변경)',
+            icon: 'reset',
+            variant: 'secondary',
+            onClick: () => void handleCancelChecked(),
           },
           {
             key: 'reset',
@@ -454,7 +565,7 @@ export const OrderStatusEditView: React.FC = () => {
             onClick: handleExportExcel,
           },
         ]}
-        helpContent="스마트발주(GFS) 등에서 생성된 모든 발주서(PO) 전표를 조회하고, 세부 품목의 수량·단가를 실시간으로 수정·저장하거나 취소합니다."
+        helpContent="스마트발주(GFS) 등에서 생성된 모든 발주서(PO) 전표를 조회하고, 세부 품목의 수량·단가를 실시간으로 수정하거나 불필요한 발주서를 영구 삭제/취소합니다."
       />
 
       {/* 2. 파이프라인 바로가기 바 */}
@@ -661,7 +772,7 @@ export const OrderStatusEditView: React.FC = () => {
           <div className="flex-1 min-h-0">
             {currentDetails.length > 0 ? (
               <PurchaseDataGrid
-                columns={DETAIL_COLUMNS}
+                columns={detailColumns}
                 data={currentDetails}
                 onCellChange={handleDetailCellChange}
                 summaryRowTitle="합계 (발주 품목)"
