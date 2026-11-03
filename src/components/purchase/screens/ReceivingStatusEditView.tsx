@@ -1,11 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { SalesFilterBar } from '@/components/sales/common/SalesFilterBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '../common/PurchaseDataGrid';
 import { usePrintReport } from '@/context/PrintReportContext';
+import { useTabs } from '@/context/TabContext';
+import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { ExternalLink, Printer, Search, RotateCcw, FileSpreadsheet, ShieldCheck, Trash2, Save } from 'lucide-react';
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function kstDaysAgo(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
+}
 
 const INITIAL_STATUS_DATA = [
   { id: 1, checked: false, status: '입고완료', recvDate: '2026-10-30', orderNo: 'pc25315', orderDate: '2026-10-29', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]1/2절김', spec: '200매*30ea', unit: 'box', orderPrice: 48000, orderQty: 2, orderAmt: 96000, carNo: '경기88바1234', recvQty: 2, expiryDate: '2027-10-25', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', buyPrice: 48000, recvAmt: 96000, diffQty: 0, diffAmt: 0, lotNo: 'LOT-261029-D01', poNo: 'PO-D-01', remark: '', supplierProdId: 'DL-01' },
@@ -20,12 +31,12 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'checked', label: '선택', width: '45px', align: 'center', format: 'checkbox', sticky: true, leftOffset: '36px' },
   { key: 'status', label: '상태', width: '65px', align: 'center', sticky: true, leftOffset: '81px' },
   { key: 'recvDate', label: '입고일', width: '85px', align: 'center', format: 'date', sticky: true, leftOffset: '146px' },
-  { key: 'orderNo', label: '발주번호', width: '80px', align: 'center', sticky: true, leftOffset: '231px' },
+  { key: 'orderNo', label: '입고번호', width: '90px', align: 'center', sticky: true, leftOffset: '231px' },
   { key: 'orderDate', label: '발주일', width: '85px', align: 'center', format: 'date' },
-  { key: 'supplier', label: '거래처', width: '110px', align: 'left' },
+  { key: 'supplier', label: '거래처', width: '120px', align: 'left' },
   { key: 'type', label: '구분', width: '60px', align: 'center' },
   { key: 'name', label: '품명', width: '180px', align: 'left' },
-  { key: 'spec', label: '규격', width: '90px', align: 'center' },
+  { key: 'spec', label: '규격', width: '95px', align: 'center' },
   { key: 'unit', label: '단위', width: '45px', align: 'center' },
   { key: 'orderPrice', label: '발주단가', width: '80px', align: 'right', format: 'currency' },
   { key: 'orderQty', label: '발주수량', width: '65px', align: 'right', format: 'number' },
@@ -43,102 +54,93 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'diffQty', label: '차이수량', width: '70px', align: 'right', format: 'number', dangerIfNegative: true },
   { key: 'diffAmt', label: '금액차이(합계)', width: '100px', align: 'right', format: 'currency', dangerIfNegative: true },
   { key: 'lotNo', label: 'LOT no.', width: '110px', align: 'center', editable: true },
-  { key: 'poNo', label: 'po_no', width: '80px', align: 'center' },
+  { key: 'poNo', label: '참조번호', width: '85px', align: 'center' },
   { key: 'remark', label: '비고', width: '130px', align: 'left', editable: true },
-  { key: 'supplierProdId', label: '거래처제품id', width: '95px', align: 'center' },
 ];
 
 export const ReceivingStatusEditView: React.FC = () => {
   const { openPrintModal } = usePrintReport();
-  const [startDate, setStartDate] = useState('2026-10-30');
-  const [endDate, setEndDate] = useState('2026-10-30');
-  const [supplierFilter, setSupplierFilter] = useState('ALL');
-  const [selectAll, setSelectAll] = useState(false);
-  const [rows, setRows] = useState(INITIAL_STATUS_DATA);
+  const { openTab } = useTabs();
 
-  useEffect(() => {
-    fetch('/api/purchase/receiving')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const loaded: any[] = [];
-          json.data.forEach((rcv: any) => {
-            (rcv.details || []).forEach((dt: any, dtIdx: number) => {
-              loaded.push({
-                id: dt.id || dtIdx + 1,
-                checked: false,
-                status: rcv.status || '입고완료',
-                recvDate: rcv.receivingDate,
-                orderNo: rcv.receivingNo,
-                orderDate: rcv.receivingDate,
-                supplier: rcv.partner?.name || rcv.partnerName || '거래처',
-                type: dt.product?.category || '원재료',
-                name: dt.product?.name || dt.productName || '원료',
-                spec: dt.product?.spec || '',
-                unit: dt.unit || dt.product?.unit || 'kg',
-                orderPrice: dt.unitPrice || 5000,
-                orderQty: dt.receivedQty || 10,
-                orderAmt: dt.amount || 50000,
-                carNo: '경기88바1234',
-                recvQty: dt.receivedQty || 10,
-                expiryDate: dt.expiryDate || '2027-10-25',
-                carTemp: '18℃',
-                markStatus: 'O',
-                lookStatus: 'O',
-                carClean: 'O',
-                totalJudge: 'O',
-                buyPrice: dt.unitPrice || 5000,
-                recvAmt: dt.amount || 50000,
-                diffQty: 0,
-                diffAmt: 0,
-                lotNo: dt.lotNo || 'LOT-01',
-                poNo: rcv.receivingNo,
-                remark: dt.remark || '',
-                supplierProdId: dt.productCode || 'PRD-01',
-              });
+  const [startDate, setStartDate] = useState<string>(kstDaysAgo(7));
+  const [endDate, setEndDate] = useState<string>(kstToday());
+  const [supplierFilter, setSupplierFilter] = useState<string>('ALL');
+  const [selectAll, setSelectAll] = useState<boolean>(false);
+  const [rows, setRows] = useState<any[]>(INITIAL_STATUS_DATA);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const loadReceivingData = useCallback(async (s: string, e: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/purchase/receiving?startDate=${s}&endDate=${e}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        const loaded: any[] = [];
+        json.data.forEach((rcv: any) => {
+          (rcv.details || []).forEach((dt: any, dtIdx: number) => {
+            loaded.push({
+              id: dt.id || `${rcv.id}-${dtIdx}`,
+              checked: false,
+              status: rcv.status || '입고완료',
+              recvDate: rcv.receivingDate,
+              orderNo: rcv.receivingNo,
+              orderDate: rcv.receivingDate,
+              supplier: rcv.partner?.name || rcv.partnerName || '공급사',
+              type: dt.product?.category || '원재료',
+              name: dt.product?.name || dt.productName || '원료',
+              spec: dt.product?.spec || '-',
+              unit: dt.unit || dt.product?.unit || 'kg',
+              orderPrice: dt.unitPrice || 0,
+              orderQty: dt.receivedQty || 0,
+              orderAmt: dt.amount || 0,
+              carNo: dt.remark?.includes('차량:') ? dt.remark.replace('차량:', '') : '경기88바1234',
+              recvQty: dt.receivedQty || 0,
+              expiryDate: dt.expiryDate || '2027-10-25',
+              carTemp: '18℃',
+              markStatus: 'O',
+              lookStatus: 'O',
+              carClean: 'O',
+              totalJudge: dt.inspectResult === '불합격' ? 'X' : 'O',
+              buyPrice: dt.unitPrice || 0,
+              recvAmt: dt.amount || 0,
+              diffQty: 0,
+              diffAmt: 0,
+              lotNo: dt.lotNo || 'LOT-01',
+              poNo: rcv.receivingNo,
+              remark: dt.remark || '',
             });
           });
-          if (loaded.length > 0) {
-            setRows(loaded);
-          }
+        });
+        if (loaded.length > 0) {
+          setRows(loaded);
         }
-      })
-      .catch((err) => console.error('Failed to load receiving list', err));
+      } else {
+        setRows(INITIAL_STATUS_DATA);
+      }
+    } catch (err) {
+      console.error('Failed to load receiving list', err);
+      setRows(INITIAL_STATUS_DATA);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const handleSave = async () => {
-    try {
-      const res = await fetch('/api/purchase/receiving', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          receivingDate: startDate,
-          partnerId: 'V001',
-          items: rows.map((r) => ({
-            productId: 1,
-            productCode: r.supplierProdId,
-            productName: r.name,
-            lotNo: r.lotNo,
-            expiryDate: r.expiryDate,
-            receivedQty: r.recvQty,
-            unit: r.unit,
-            unitPrice: r.buyPrice,
-            amount: r.recvAmt,
-            warehouse: '상온보관고',
-          })),
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert('입고 수정사항이 데이터베이스에 안전하게 저장되었습니다.');
-      } else {
-        alert('저장 실패: ' + json.error);
-      }
-    } catch (err: any) {
-      alert('저장 중 오류: ' + err.message);
-    }
-  };
+  useEffect(() => {
+    loadReceivingData(startDate, endDate);
+  }, [loadReceivingData, startDate, endDate]);
+
+  const distinctSuppliers = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.supplier) set.add(r.supplier);
+    });
+    return Array.from(set);
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    if (supplierFilter === 'ALL') return rows;
+    return rows.filter((r) => r.supplier === supplierFilter);
+  }, [rows, supplierFilter]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
@@ -165,24 +167,93 @@ export const ReceivingStatusEditView: React.FC = () => {
   };
 
   const handleDeleteSelected = () => {
+    const checkedCount = rows.filter((r) => r.checked).length;
+    if (checkedCount === 0) {
+      alert('삭제할 행을 선택해주세요.');
+      return;
+    }
     setRows((prev) => prev.filter((r) => !r.checked));
-    alert('선택된 입고 내역이 삭제되었습니다.');
+    alert(`선택된 ${checkedCount}건의 입고 내역이 화면에서 제외되었습니다.`);
+  };
+
+  const handleExportExcel = () => {
+    if (filteredRows.length === 0) {
+      alert('내보낼 입고 데이터가 없습니다.');
+      return;
+    }
+    exportGridToExcel({
+      filename: `GFS_입고현황수정_${startDate}_${endDate}`,
+      sheetName: '입고현황',
+      columns: COLUMNS.filter((c) => c.key !== 'checked').map((c) => ({
+        key: c.key,
+        label: c.label,
+        format: c.format,
+      })),
+      data: filteredRows,
+    });
+  };
+
+  const openPipelineTab = (menuId: string) => {
+    const item = getMenuItemById(menuId);
+    if (item) {
+      openTab({
+        id: item.id,
+        title: item.name,
+        componentId: item.componentId,
+        closable: true,
+      });
+    }
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none">
+    <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
       <SalesActionBar
-        title="입고현황/수정"
+        title="입고현황/수정 (RECEIVING STATUS & EDIT)"
         buttons={[
-          { key: 'print', label: 'HACCP검수일지인쇄(A4)', icon: 'print', variant: 'secondary', onClick: () => openPrintModal('HACCP_INSPECTION') },
-          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => alert('조회 완료') },
-          { key: 'save', label: '저장', icon: 'save', variant: 'secondary', onClick: handleSave },
-          { key: 'delete', label: '삭제', icon: 'delete', variant: 'danger', onClick: handleDeleteSelected },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => setRows(INITIAL_STATUS_DATA) },
-          { key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '입고현황수정', sheetName: '입고현황', columns: COLUMNS, data: rows }) },
+          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => loadReceivingData(startDate, endDate) },
+          { key: 'haccp', label: 'HACCP검수일지인쇄(A4)', icon: 'print', variant: 'secondary', onClick: () => openPrintModal('HACCP_INSPECTION') },
+          { key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: handleExportExcel },
+          { key: 'delete', label: '선택삭제', icon: 'delete', variant: 'danger', onClick: handleDeleteSelected },
+          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => loadReceivingData(startDate, endDate) },
         ]}
-        helpContent="기 등록된 입고 내역을 29개 전체 컬럼으로 조회하고, 수량/단가/검수 결과 변경 시 실시간으로 차이 금액을 재계산합니다."
+        helpContent="기 등록된 입고 내역을 28개 통합 컬럼으로 조회하고 검수 결과, 차량 정보, 수량 및 단가 변경사항을 확인 및 관리합니다."
       />
+
+      {/* 파이프라인 네비게이션 */}
+      <div className="bg-slate-800 text-white px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 shadow-inner">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-teal-300 flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            파이프라인 바로가기:
+          </span>
+          <span className="text-[11px] text-slate-300">
+            [발주현황/수정] → [발주서출력] → [입고등록(GSR)] → <strong>[입고현황/수정]</strong> → [재고현황]
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => openPipelineTab('pur-receiving-reg')}
+            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
+          >
+            <span>입고등록(GSR)</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => openPipelineTab('pur-order-status-edit')}
+            className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
+          >
+            <span>발주현황/수정</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => openPipelineTab('inv-stock-status')}
+            className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
+          >
+            <span>현재고현황</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
 
       <SalesFilterBar
         label="입고일자"
@@ -192,8 +263,8 @@ export const ReceivingStatusEditView: React.FC = () => {
           setStartDate(s);
           setEndDate(e);
         }}
-        dataCount={rows.length}
-        onRefresh={() => alert('새로고침')}
+        dataCount={filteredRows.length}
+        onRefresh={() => loadReceivingData(startDate, endDate)}
       >
         <label className="flex items-center gap-1 font-semibold text-gray-800 cursor-pointer">
           <input
@@ -210,25 +281,31 @@ export const ReceivingStatusEditView: React.FC = () => {
           <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
-            className="border border-gray-300 px-1 py-0.5 bg-white text-gray-800 text-[11px] h-5"
+            className="border border-gray-300 px-1 py-0.5 bg-white text-gray-800 text-[11px] h-6 rounded"
           >
             <option value="ALL">ALL (전체 매입처)</option>
-            <option value="대림">[네트웍스]대림</option>
-            <option value="두레">[네트웍스]두레</option>
-            <option value="CJ">[네트웍스]CJ</option>
-            <option value="한성">[네트웍스]한성</option>
+            {distinctSuppliers.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
         </div>
       </SalesFilterBar>
 
-      <div className="flex-1 p-1.5 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 p-1.5 min-h-0 overflow-hidden flex flex-col bg-white">
         <PurchaseDataGrid
           columns={COLUMNS}
-          data={rows}
+          data={filteredRows}
           onRowChange={handleRowChange}
+          summaryData={{
+            orderQty: filteredRows.reduce((sum, r) => sum + (Number(r.orderQty) || 0), 0),
+            orderAmt: filteredRows.reduce((sum, r) => sum + (Number(r.orderAmt) || 0), 0),
+            recvQty: filteredRows.reduce((sum, r) => sum + (Number(r.recvQty) || 0), 0),
+            recvAmt: filteredRows.reduce((sum, r) => sum + (Number(r.recvAmt) || 0), 0),
+            diffQty: filteredRows.reduce((sum, r) => sum + (Number(r.diffQty) || 0), 0),
+            diffAmt: filteredRows.reduce((sum, r) => sum + (Number(r.diffAmt) || 0), 0),
+          }}
         />
       </div>
     </div>
   );
 };
-

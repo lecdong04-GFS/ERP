@@ -237,20 +237,16 @@ export const OrderPrintView: React.FC = () => {
       alert('내보낼 발주 데이터가 없습니다.');
       return;
     }
-    const exportData = summaryList.map((s, idx) => ({
-      순번: idx + 1,
-      발주일자: s.orderDate,
-      발주번호: s.orderNo,
-      상태: s.status,
-      공급처: s.supplier,
-      발주금액: s.orderAmt,
-      발주수단: s.method,
-      담당자: s.manager,
-      연락처: s.tel,
-      이메일: s.email,
-      비고: s.remark,
-    }));
-    exportGridToExcel(exportData, `GFS_원부자재발주목록_${startDate}_${endDate}.xlsx`);
+    exportGridToExcel({
+      filename: `GFS_원부자재발주목록_${startDate}_${endDate}`,
+      sheetName: '발주서목록',
+      columns: SUMMARY_COLUMNS.filter((c) => c.key !== 'checked' && c.key !== 'printBtn').map((c) => ({
+        key: c.key,
+        label: c.label,
+        format: c.format,
+      })),
+      data: summaryList,
+    });
   };
 
   const totalOrderAmt = useMemo(() => {
