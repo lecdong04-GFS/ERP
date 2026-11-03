@@ -49,10 +49,11 @@ interface StockItem {
   packUnit: number; // 입수량
   boxQty: number; // 박스
   pieceQty: number; // 낱개(봉)
-  prevStock: number;
   inQty: number;
   outQty: number;
-  currentStock: number;
+  prevStock: number; // 전일재고 (어제 마감 재고)
+  currentStock: number; // 현재고
+  diffStock?: number; // 전일대비증감 (현재고 - 전일재고)
   safetyStock: number;
   shortage: number; // currentStock - safetyStock (negative = danger)
   status: string; // 품절/부족/과잉/정상
@@ -659,6 +660,11 @@ export const StockLookupView: React.FC = () => {
 
   const loadStockData = (baseRows?: any[] | null, snapDate?: string) => {
     const isSnap = !!snapDate && !!baseRows;
+    const targetDay = snapDate || targetDate || kstToday();
+    const d = new Date(targetDay + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    const yesterdayStr = d.toISOString().slice(0, 10);
+
     setMergeInfo('불러오는 중...');
     Promise.all([
       baseRows
@@ -667,8 +673,9 @@ export const StockLookupView: React.FC = () => {
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch('/api/inventory/estimated-usage').then((res) => res.json()).catch(() => null),
+      fetch(`/api/inventory/snapshot?date=${yesterdayStr}`).then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, orderJson, snapJson, estJson]) => {
+      .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson]) => {
         if (estJson?.success && estJson.data) {
           estMapRef.current = {
             byWhAndKey: estJson.data.byWhAndKey || {},
@@ -679,6 +686,20 @@ export const StockLookupView: React.FC = () => {
           if (!normKey) return null;
           return estMapRef.current.byWhAndKey[`${wh}|${normKey}`] || estMapRef.current.byKeyOnly[normKey] || null;
         };
+
+        // 전일 재고 스냅샷 맵 구축 (품목명/창고 기준)
+        const yesterdayMap = new Map<string, number>();
+        if (yesterdaySnapJson?.success && Array.isArray(yesterdaySnapJson.data?.rows)) {
+          yesterdaySnapJson.data.rows.forEach((r: any) => {
+            const nm = normName(r.productName || r.product?.name || '');
+            const wh = r.warehouse || '상온';
+            const qty = Number(r.currentQty) || (Number(r.boxQty) * Number(r.packUnit || 1) + Number(r.pieceQty || 0));
+            if (nm) {
+              yesterdayMap.set(`${wh}|${nm}`, qty);
+              if (!yesterdayMap.has(nm)) yesterdayMap.set(nm, qty);
+            }
+          });
+        }
 
         if (json.success && json.data && json.data.length > 0) {
           // 발주서 정본 맵 (품명 정규화 기준) — 엑셀 우선
@@ -778,6 +799,15 @@ export const StockLookupView: React.FC = () => {
                 : 0;
             const nDays = calcStockDays(current, effectiveDaily, fallbackDays, inQty);
             if (o) merged += 1;
+
+            const yQty = yesterdayMap.get(`${wh}|${norm}`) ?? yesterdayMap.get(norm);
+            const prevStockVal = yQty != null
+              ? yQty
+              : (inv.prevStock != null && !isNaN(Number(inv.prevStock))
+                ? Number(inv.prevStock)
+                : current);
+            const diffStockVal = Math.round((current - prevStockVal) * 10) / 10;
+
             loaded.push({
               id: inv.id || idx + 1,
               snapId: isSnap ? inv.id : 0,
@@ -802,7 +832,8 @@ export const StockLookupView: React.FC = () => {
               packUnit: pack,
               boxQty: box,
               pieceQty: piece,
-              prevStock: current,
+              prevStock: prevStockVal,
+              diffStock: diffStockVal,
               inQty: inQty,
               outQty: 0,
               currentStock: current,
@@ -845,6 +876,15 @@ export const StockLookupView: React.FC = () => {
               const rowDays = (o.stockDays != null && !isNaN(Number(o.stockDays)))
                 ? Math.round(Number(o.stockDays) * 10) / 10
                 : calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays, inQty);
+
+              const yQty = yesterdayMap.get(`${wh}|${norm}`) ?? yesterdayMap.get(norm);
+              const prevStockVal = yQty != null
+                ? yQty
+                : (o.prevStock != null && !isNaN(Number(o.prevStock))
+                  ? Number(o.prevStock)
+                  : current);
+              const diffStockVal = Math.round((current - prevStockVal) * 10) / 10;
+
               const row: StockItem = {
                 id: tempId--,
                 whName: wh,
@@ -868,7 +908,8 @@ export const StockLookupView: React.FC = () => {
                 packUnit: pack,
                 boxQty: box,
                 pieceQty: piece,
-                prevStock: current,
+                prevStock: prevStockVal,
+                diffStock: diffStockVal,
                 inQty: inQty,
                 outQty: 0,
                 currentStock: current,
@@ -982,6 +1023,7 @@ export const StockLookupView: React.FC = () => {
         }
 
         const currentStock = Number(updated.currentStock) || 0;
+        updated.diffStock = Math.round((currentStock - (Number(updated.prevStock) || 0)) * 10) / 10;
         const unitPrice = Number(updated.unitPrice) || 0;
         const dailyUsage = Number(updated.dailyUsage) || 0;
         const estDaily = Number(updated.estDailyUsage) || 0;
@@ -1457,6 +1499,7 @@ export const StockLookupView: React.FC = () => {
     let inQty = 0;
     let outQty = 0;
     let currentStock = 0;
+    let diffStock = 0;
     let totalAmount = 0;
 
     filteredData.forEach((row) => {
@@ -1464,6 +1507,7 @@ export const StockLookupView: React.FC = () => {
       inQty += row.inQty;
       outQty += row.outQty;
       currentStock += row.currentStock;
+      diffStock += (row.diffStock ?? (row.currentStock - row.prevStock));
       totalAmount += row.totalAmount;
     });
 
@@ -1472,6 +1516,7 @@ export const StockLookupView: React.FC = () => {
       inQty,
       outQty,
       currentStock,
+      diffStock,
       totalAmount,
     };
   }, [filteredData]);
@@ -1629,15 +1674,6 @@ export const StockLookupView: React.FC = () => {
       editable: !locked,
     },
     {
-      key: 'prevStock',
-      label: '이월재고',
-      width: '56px',
-      align: 'right',
-      format: 'number',
-      sortable: true,
-      editable: true,
-    },
-    {
       key: 'inQty',
       label: '입고수량',
       width: '54px',
@@ -1645,6 +1681,15 @@ export const StockLookupView: React.FC = () => {
       format: 'number',
       sortable: true,
       editable: true,
+    },
+    {
+      key: 'prevStock',
+      label: locked ? '전일재고 🔒' : '전일재고',
+      width: '58px',
+      align: 'right',
+      format: 'number',
+      sortable: true,
+      editable: !locked,
     },
     {
       key: 'currentStock',
@@ -1664,6 +1709,23 @@ export const StockLookupView: React.FC = () => {
           {Number(v).toLocaleString()}
         </span>
       ),
+    },
+    {
+      key: 'diffStock',
+      label: '전일대비증감',
+      width: '68px',
+      align: 'right',
+      sortable: true,
+      editable: false,
+      render: (v, row) => {
+        const diff = row.diffStock != null ? Number(row.diffStock) : (Number(row.currentStock || 0) - Number(row.prevStock || 0));
+        if (diff > 0) {
+          return <span className="text-blue-600 font-bold font-mono">+{diff.toLocaleString()}</span>;
+        } else if (diff < 0) {
+          return <span className="text-rose-600 font-bold font-mono">{diff.toLocaleString()}</span>;
+        }
+        return <span className="text-gray-400 font-mono">0</span>;
+      },
     },
     {
       key: 'stockDays',
