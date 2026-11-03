@@ -265,7 +265,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
       : data.volume) || [];
 
   return (
-    <div className="erp-card flex flex-col bg-white border border-[var(--line)] rounded-xl shadow-xs overflow-hidden">
+    <div className="erp-card flex flex-col bg-white border border-[var(--line)] rounded-xl shadow-xs overflow-hidden shrink-0">
       {/* ── Top Header ────────────────────────────────────────── */}
       <div className="h-[42px] px-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
         <div className="flex items-center gap-2">
