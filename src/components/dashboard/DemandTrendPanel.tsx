@@ -424,20 +424,20 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
             <div className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between text-[11.5px]">
               <span className="font-bold text-slate-700">주/야간 수주편수 비율:</span>
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-indigo-700">1편 (밤) {data.shiftRatio.shift1Pct}%</span>
+                <span className="font-mono font-bold text-indigo-700">1편(밤) {data.shiftRatio.shift1Pct}%</span>
                 <div className="w-24 h-2.5 bg-slate-200 rounded-full overflow-hidden flex">
                   <div
                     className="bg-indigo-600 h-full"
                     style={{ width: `${data.shiftRatio.shift1Pct}%` }}
-                    title={`1편 (밤): ${data.shiftRatio.shift1Pct}%`}
+                    title={`1편(밤): ${data.shiftRatio.shift1Pct}%`}
                   />
                   <div
                     className="bg-purple-500 h-full"
                     style={{ width: `${data.shiftRatio.shift2Pct}%` }}
-                    title={`2편 (낮): ${data.shiftRatio.shift2Pct}%`}
+                    title={`2편(낮): ${data.shiftRatio.shift2Pct}%`}
                   />
                 </div>
-                <span className="font-mono font-bold text-purple-700">2편 (낮) {data.shiftRatio.shift2Pct}%</span>
+                <span className="font-mono font-bold text-purple-700">2편(낮) {data.shiftRatio.shift2Pct}%</span>
               </div>
             </div>
           )}
