@@ -71,20 +71,27 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'surge' | 'drop' | 'volume'>('surge');
 
-  if (!trendData || (!trendData.surge.length && !trendData.volume.length)) {
-    return null;
+  const hasData = Boolean(trendData && (trendData.surge?.length || trendData.volume?.length));
+
+  if (!hasData) {
+    return (
+      <div className="erp-card bg-white border border-[var(--line)] rounded-xl p-4 flex items-center justify-center min-h-[90px] text-slate-400 text-xs gap-2">
+        <Activity className="w-4 h-4 text-indigo-400 animate-spin" />
+        <span>수주 트렌드 & 품목 모멘텀 분석 데이터를 로드하고 있습니다...</span>
+      </div>
+    );
   }
 
-  const topSurge = trendData.surge[0];
-  const topVolume = trendData.volume[0];
-  const topDrop = trendData.drop[0];
+  const topSurge = trendData?.surge?.[0];
+  const topVolume = trendData?.volume?.[0];
+  const topDrop = trendData?.drop?.[0];
 
   const currentList: DemandTrendItem[] =
-    activeTab === 'surge'
-      ? trendData.surge
+    (activeTab === 'surge'
+      ? trendData?.surge
       : activeTab === 'drop'
-      ? trendData.drop
-      : trendData.volume;
+      ? trendData?.drop
+      : trendData?.volume) || [];
 
   return (
     <div className="erp-card flex flex-col bg-white border border-[var(--line)] rounded-xl shadow-xs overflow-hidden">
@@ -101,7 +108,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
             <Sparkles className="w-3 h-3 text-amber-300" />
             AI 모멘텀 분석
           </span>
-          {trendData.baseDate && (
+          {trendData?.baseDate && (
             <span className="hidden sm:inline-block text-[11px] text-slate-400 font-mono">
               (최근 14일 기준: ~{trendData.baseDate})
             </span>
@@ -277,7 +284,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
         </div>
 
         {/* 1편 / 2편 배분 비율 미니 인디케이터 */}
-        {trendData.shiftRatio && (
+        {trendData?.shiftRatio && (
           <div className="flex items-center gap-2 text-[11px] text-slate-600">
             <span className="font-semibold text-slate-500">주간 편수 배분:</span>
             <div className="flex items-center gap-1.5">
@@ -385,3 +392,4 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
     </div>
   );
 };
+

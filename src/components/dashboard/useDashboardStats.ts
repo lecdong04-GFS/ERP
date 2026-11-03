@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DashboardStats, EMPTY_STATS } from './dashboardData';
 
-const STORAGE_KEY = 'gfs.dashboard.v1';
+const STORAGE_KEY = 'gfs.dashboard.v2';
 const MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface CacheEntry {
@@ -16,7 +16,7 @@ function readCache(): CacheEntry | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CacheEntry;
-    if (!parsed?.data?.kpiSummary || !parsed?.data?.pipeline) return null;
+    if (!parsed?.data?.kpiSummary || !parsed?.data?.pipeline || !parsed?.data?.demandTrend?.surge) return null;
     if (!parsed.savedAt || Date.now() - parsed.savedAt > MAX_CACHE_AGE_MS) return null;
     return parsed;
   } catch {
