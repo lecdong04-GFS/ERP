@@ -10,6 +10,7 @@ interface OrderResultItem {
   orderQty: number;
   unit?: string;
   unitPrice?: number;
+  totalAmount?: number;
   partnerId?: string;
   partnerName?: string;
 }
@@ -155,15 +156,19 @@ export async function POST(req: NextRequest) {
         const qty = Number(it.orderQty) || 0;
         if (qty <= 0) continue;
         const price = Number(it.unitPrice) || 0;
+        const lineAmount = it.totalAmount != null && it.totalAmount > 0
+          ? Number(it.totalAmount)
+          : Math.round(qty * price);
+
         detailData.push({
           productId: product.id,
           productCode: product.productCode,
           productName: it.productName || product.name,
           category: product.category,
-          unit: it.unit || product.unit,
+          unit: it.unit || product.unit || 'box',
           orderQty: qty,
           unitPrice: price,
-          amount: qty * price,
+          amount: lineAmount,
           remainQty: qty,
         });
       }

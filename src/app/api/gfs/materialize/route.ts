@@ -10,6 +10,8 @@ interface InItem {
   boxes?: number;
   packUnit?: number;
   bagPrice?: number;
+  boxPrice?: number;
+  totalAmount?: number;
   supplierHeader?: string;
   safetyStock?: number;
   stockDays?: number | null; // GFS 버팀일 (calc.stockDays 그대로)
@@ -62,6 +64,8 @@ export async function POST(req: NextRequest) {
       ref: any;
       packUnit: number;
       bagPrice: number;
+      boxPrice: number;
+      totalAmount: number;
       safetyStock: number;
       stockDays: number | null;
       vendorName: string;
@@ -83,14 +87,21 @@ export async function POST(req: NextRequest) {
       const norm = normName(rawName);
       const ref: any = (auditMap as Map<string, any>).get(norm);
       const vendorName = (ref?.vendor || it.supplierHeader || '').trim();
+      const packUnit = Number(it.packUnit) || Number(ref?.packUnit) || 1;
+      const bagPrice = Number(it.bagPrice) || Number(ref?.bagPrice) || 0;
+      const boxPrice = Number(it.boxPrice) || bagPrice * packUnit;
+      const totalAmount = Number(it.totalAmount) || boxes * boxPrice;
+
       prepared.push({
         idx,
         rawName,
         norm,
         boxes,
         ref,
-        packUnit: Number(it.packUnit) || Number(ref?.packUnit) || 1,
-        bagPrice: Number(it.bagPrice) || Number(ref?.bagPrice) || 0,
+        packUnit,
+        bagPrice,
+        boxPrice,
+        totalAmount,
         safetyStock: Math.max(0, Math.round(Number(it.safetyStock) || 0)),
         stockDays: it.stockDays != null && !isNaN(Number(it.stockDays)) ? Number(it.stockDays) : null,
         vendorName,
@@ -263,7 +274,12 @@ export async function POST(req: NextRequest) {
         continue;
       }
       const wasCreated = createdByNorm.has(p.norm);
-      const packUnit = Number(product.boxQty) || p.packUnit || Number(p.ref?.packUnit) || 1;
+      // GFS 원본 입수를 최우선 (ERP 기본값 boxQty=1에 의한 단가 왜곡 방지)
+      const packUnit = (p.packUnit && p.packUnit > 0)
+        ? p.packUnit
+        : (Number(product.boxQty) > 0 ? Number(product.boxQty) : Number(p.ref?.packUnit) || 1);
+      const boxPrice = p.boxPrice > 0 ? p.boxPrice : p.bagPrice * packUnit;
+      const totalAmount = p.totalAmount > 0 ? p.totalAmount : p.boxes * boxPrice;
       const partner = (product as any).partner;
       matched.push({
         productCode: product.productCode,
@@ -272,7 +288,8 @@ export async function POST(req: NextRequest) {
         unit: 'box',
         packUnit,
         bagPrice: p.bagPrice,
-        boxPrice: p.bagPrice * packUnit,
+        boxPrice,
+        totalAmount,
         partnerId: (product as any).partnerId ?? null,
         partnerName: partner?.name || '',
         warehouse: product.warehouse,

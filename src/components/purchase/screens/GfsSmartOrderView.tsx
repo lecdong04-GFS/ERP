@@ -332,26 +332,54 @@ export const GfsSmartOrderView: React.FC = () => {
     }
 
     let raw: any[] = [];
+    let isOnlyFinishedRelated = true;
     try {
       raw = win.eval('Array.isArray(state?.rawItems) ? state.rawItems : []');
+      isOnlyFinishedRelated = !!win.eval('!!state?.onlyFinishedGoodsRelated');
     } catch {
       alert('GFS 산출 데이터를 읽지 못했습니다.');
       return;
     }
 
+    // GFS 원본과 100% 동일한 발주 대상 필터링 (휴면/과잉/단종 제외, 수동입력 우선)
     const orderables = (raw || [])
-      .filter((m: any) => !m?.is64Excluded && !m?.isBlacklisted)
-      .map((m: any) => ({
-        name: String(m?.name || '').trim(),
-        boxes: Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0),
-        packUnit: Number(m?.packUnit ?? 0),
-        bagPrice: Number(m?.unitPrice ?? 0),
-        supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
-        stockDays:
-          m?.calc?.stockDays != null && !isNaN(Number(m.calc.stockDays))
-            ? Number(m.calc.stockDays)
-            : null,
-      }))
+      .filter((m: any) => {
+        if (m?.is64Excluded || m?.isBlacklisted || m?.userExcluded) return false;
+        const hasManual = m?.manualBoxes !== null && Number(m?.manualBoxes) > 0;
+        const isNeeded = m?.calc ? m.calc.isOrderNeeded : false;
+        const isRelated = !isOnlyFinishedRelated || !!m?.isRelatedToOrders;
+        const boxes = Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0);
+        return (hasManual || (isNeeded && isRelated)) && boxes > 0;
+      })
+      .map((m: any) => {
+        const boxes = Number(m?.calc?.finalBoxes ?? m?.finalBoxes ?? 0);
+        const packUnit = Number(m?.packUnit || 1);
+        const bagPrice = Number(m?.unitPrice || 0);
+
+        // GFS에서 산출된 정확한 품목별 총 발주금액 (합계)
+        const totalAmount = Number(
+          m?.calc?.finalTotalAmount != null && !isNaN(Number(m.calc.finalTotalAmount))
+            ? m.calc.finalTotalAmount
+            : boxes * (packUnit > 0 ? packUnit : 1) * bagPrice
+        );
+
+        // 박스당 발주단가 (boxes * boxPrice = totalAmount 1원 단위까지 100% 일치)
+        const boxPrice = boxes > 0 ? Math.round(totalAmount / boxes) : (packUnit > 0 ? packUnit : 1) * bagPrice;
+
+        return {
+          name: String(m?.name || '').trim(),
+          boxes,
+          packUnit,
+          bagPrice,
+          boxPrice,
+          totalAmount,
+          supplierHeader: String(m?.supplier?.name || m?.supplier || ''),
+          stockDays:
+            m?.calc?.stockDays != null && !isNaN(Number(m.calc.stockDays))
+              ? Number(m.calc.stockDays)
+              : null,
+        };
+      })
       .filter((x) => x.name && x.boxes > 0);
 
     if (orderables.length === 0) {
@@ -359,25 +387,23 @@ export const GfsSmartOrderView: React.FC = () => {
       return;
     }
 
-    const estAmt = orderables.reduce(
-      (sum, x) => sum + x.boxes * (x.packUnit > 0 ? x.packUnit : 1) * x.bagPrice,
-      0
-    );
+    // GFS 화면에 표시된 발주금액 합계와 1원 단위까지 100% 일치
+    const estAmt = orderables.reduce((sum, x) => sum + x.totalAmount, 0);
     const targetOrderDate = selectedOrderDate || new Date().toISOString().slice(0, 10);
 
     const ok = window.confirm(
       `[스마트발주 원클릭 ERP 확정]\n` +
         `• 발주 기준일: ${targetOrderDate}\n` +
         `• 발주 대상: 총 ${orderables.length}개 품목\n` +
-        `• 예상 발주금액: 약 ₩${Math.round(estAmt).toLocaleString()}\n\n` +
-        `현재 산출된 수량으로 ERP 발주서를 즉시 생성·저장하시겠습니까?`
+        `• 확정 발주금액: 약 ₩${Math.round(estAmt).toLocaleString()}원\n\n` +
+        `GFS 화면에 계산된 금액 그대로 ERP 발주서를 즉시 생성·저장하시겠습니까?`
     );
     if (!ok) return;
 
     setIsOneClickSaving(true);
     setStatusMsg(`1/2단계: ${orderables.length}개 품목 ERP 코드 자동 매칭 중...`);
     try {
-      // Step A: /api/gfs/materialize 호출
+      // Step A: /api/gfs/materialize 호출 (GFS 단가·금액을 그대로 전달)
       const matRes = await fetch('/api/gfs/materialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -393,8 +419,11 @@ export const GfsSmartOrderView: React.FC = () => {
         .filter((m: any) => m.productCode)
         .map((m: any) => ({
           productCode: m.productCode,
+          productName: m.productName,
           orderQty: m.orderQty,
+          unit: 'box',
           unitPrice: m.boxPrice || 0,
+          totalAmount: m.totalAmount || Math.round(m.orderQty * (m.boxPrice || 0)),
           partnerId: m.partnerId || undefined,
         }));
 
@@ -730,6 +759,27 @@ export const GfsSmartOrderView: React.FC = () => {
 
         {/* 우측: 핵심 실행 액션 버튼들 (스크롤 없이 바로 보이고 클릭 가능) */}
         <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              const win = iframeRef.current?.contentWindow as any;
+              if (win?.document) {
+                const btn = win.document.getElementById('btnToggleSettingsDrawer');
+                if (btn) {
+                  btn.click();
+                  const drawer = win.document.getElementById('settingsDrawer');
+                  if (drawer && !drawer.classList.contains('hidden')) {
+                    drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }
+                }
+              }
+            }}
+            className="h-7 px-2.5 bg-amber-950/70 hover:bg-amber-900 border border-amber-500/60 text-amber-200 rounded-md text-[11px] font-extrabold shadow-sm flex items-center gap-1 transition cursor-pointer"
+            title="일일재고량(재고유지일 1.8일/2.3일/3.0일) 및 D-1, D-2 발주 기준 슬라이더 설정창을 열고 닫습니다"
+          >
+            ⚙️ 재고유지일(기준설정)
+          </button>
+
           <button
             type="button"
             onClick={handleOneClickConfirmOrder}
