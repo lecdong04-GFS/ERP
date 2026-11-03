@@ -205,6 +205,40 @@ export async function POST(req: NextRequest) {
       await prisma.systemLog.createMany({ data: logRows }).catch(() => {});
     }
 
+    // ── MaterialRequirement 테이블에 GFS 확정 내역 동기화 (파이프라인 연계) ──
+    try {
+      await prisma.materialRequirement.deleteMany({
+        where: { reqDate: today, remark: { contains: '스마트발주' } },
+      });
+      const matReqData = items
+        .filter((it) => Number(it.orderQty) > 0)
+        .map((it) => {
+          const product = productByCode.get(String(it.productCode || '').trim());
+          return {
+            reqDate: today,
+            shift: '1편',
+            productCode: '',
+            productName: '',
+            materialCode: String(it.productCode || '').trim(),
+            materialName: it.productName || product?.name || '',
+            category: product?.category || '원재료',
+            requiredQty: Number(it.orderQty) || 0,
+            unit: it.unit || product?.unit || 'ea',
+            partnerId: it.partnerId || product?.partnerId || null,
+            partnerName: it.partnerName || '',
+            currentStock: 0,
+            shortageQty: Number(it.orderQty) || 0,
+            status: '확정',
+            remark: '스마트발주(GFS) 확정',
+          };
+        });
+      if (matReqData.length > 0) {
+        await prisma.materialRequirement.createMany({ data: matReqData });
+      }
+    } catch (mrErr) {
+      console.warn('MaterialRequirement sync warning in order-result:', mrErr);
+    }
+
     if (createdOrders.length === 0) {
       return NextResponse.json(
         { success: false, error: 'ERP에 등록된 품목과 매칭되는 발주 항목이 없습니다.' },

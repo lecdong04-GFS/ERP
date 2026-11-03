@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { SalesFilterBar } from '@/components/sales/common/SalesFilterBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '../common/PurchaseDataGrid';
@@ -61,6 +61,65 @@ export const ReceivingRegGsrView: React.FC = () => {
   const [preview, setPreview] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [rows, setRows] = useState(INITIAL_RECEIVING_DATA);
+
+  // 스마트발주(GFS) 및 발주소요량확정에서 생성된 실제 발주서(PO) 실시간 연동
+  const loadPendingOrders = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/purchase/order?startDate=${startDate}&endDate=${endDate}&status=발주`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        let idx = 1;
+        const loaded: any[] = [];
+        json.data.forEach((po: any) => {
+          (po.details || []).forEach((dt: any) => {
+            if (dt.remainQty > 0) {
+              loaded.push({
+                id: idx++,
+                manualClose: false,
+                orderDate: po.orderDate,
+                dayOfWeek: '목',
+                orderNo: po.orderNo,
+                method: po.orderType || '스마트발주',
+                supplier: po.partnerName || po.partner?.name || '협력사',
+                type: dt.category || '원재료',
+                name: dt.productName,
+                spec: dt.product?.spec || '',
+                unit: dt.unit || 'box',
+                orderQty: dt.orderQty,
+                prevRecvQty: dt.orderQty - dt.remainQty,
+                clientOutQty: dt.remainQty,
+                carNo: '경기88바1234',
+                recvQty: dt.remainQty,
+                unitQty: dt.orderUnitQty || 1,
+                pieceQty: 0,
+                warehouse: dt.product?.warehouse || '상온보관고',
+                expiryDate: '2027-10-25',
+                carTemp: dt.category === '냉장' ? '3.0℃' : '18℃',
+                markStatus: 'O',
+                lookStatus: 'O',
+                carClean: 'O',
+                totalJudge: 'O',
+                unitPrice: dt.unitPrice,
+                recvAmt: dt.remainQty * dt.unitPrice,
+                diffQty: 0,
+                lotNo: `LOT-${po.orderDate.replace(/-/g, '')}-${dt.productCode.slice(-4)}`,
+                remark: po.remark || '스마트발주(GFS) 연계',
+              });
+            }
+          });
+        });
+        if (loaded.length > 0) {
+          setRows(loaded);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load pending purchase orders in receiving view', e);
+    }
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    loadPendingOrders();
+  }, [loadPendingOrders]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
@@ -140,7 +199,7 @@ export const ReceivingRegGsrView: React.FC = () => {
         title="입고등록(GSR)"
         buttons={[
           { key: 'new', label: '신규', icon: 'reset', variant: 'secondary', onClick: () => alert('신규 입고 전표 생성') },
-          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => alert('조회 완료') },
+          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => loadPendingOrders() },
           { key: 'save', label: '저장', icon: 'save', variant: 'secondary', onClick: handleSaveReceiving },
           { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => setRows(INITIAL_RECEIVING_DATA) },
           { key: 'print', label: '인쇄', icon: 'print', variant: 'secondary', onClick: () => window.print() },
