@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
             data: {
               id: 'V001',
               name: partnerName || '기본공급사',
-              type: '매입처',
+              partnerType: 'P',
             },
           });
           finalPartnerId = createdP.id;

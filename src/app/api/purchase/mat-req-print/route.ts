@@ -119,13 +119,13 @@ export async function GET(req: NextRequest) {
     const reprList = await prisma.reprProduct.findMany({
       where: { isUsed: true },
       include: {
-        product: true,
+        orderProduct: true,
         reprProduct: true,
       },
     });
     const reprCodeMap = new Map<string, string>();
     reprList.forEach((r) => {
-      reprCodeMap.set(r.product.productCode, r.reprProduct.productCode);
+      reprCodeMap.set(r.orderProduct.productCode, r.reprProduct.productCode);
     });
 
     // 5. DB 등록 BOM 헤더 및 상세 로드

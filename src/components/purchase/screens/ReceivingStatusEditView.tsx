@@ -196,12 +196,7 @@ export const ReceivingStatusEditView: React.FC = () => {
   const openPipelineTab = (menuId: string) => {
     const item = getMenuItemById(menuId);
     if (item) {
-      openTab({
-        id: item.id,
-        title: item.name,
-        componentId: item.componentId,
-        closable: true,
-      });
+      openTab(item);
     }
   };
 
