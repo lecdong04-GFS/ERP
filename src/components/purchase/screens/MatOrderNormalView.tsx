@@ -705,14 +705,15 @@ export const MatOrderNormalView: React.FC = () => {
                           <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">
                             {Number.isFinite(c.stockDays) ? Math.round(c.stockDays * 100) / 100 : '-'}
                           </td>
-                          <td className="border border-gray-300 p-0 text-right font-mono bg-amber-50/50">
+                          <td className="border border-gray-300 p-0 text-center font-mono bg-amber-50/50">
                             <input
                               type="number"
                               min="0"
                               step="1"
                               value={row.manual ? row.finalBoxes : c.suggest}
                               onChange={(e) => handleFinalChange(row.id, e.target.value)}
-                              className="w-full h-full text-right font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
+                              className="w-full h-full text-center font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
+                              style={{ textAlign: 'center' }}
                             />
                           </td>
                           <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">

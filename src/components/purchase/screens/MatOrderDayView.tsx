@@ -232,9 +232,9 @@ export const MatOrderDayView: React.FC = () => {
     return { boxes, amt };
   }, [dayRows]);
 
-  // 수량 인라인 수정
+  // 수량 인라인 수정 (정수 박스 단위)
   const handleDayQtyChange = (id: number, val: string) => {
-    const num = Math.max(0, Number(val) || 0);
+    const num = Math.max(0, Math.ceil(Number(val) || 0));
     setOverrides((prev) => ({
       ...prev,
       [dayIdx]: { ...(prev[dayIdx] || {}), [id]: num },
@@ -659,12 +659,15 @@ export const MatOrderDayView: React.FC = () => {
                         <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700 text-[11px]">
                           {r.warehouse || '-'}
                         </td>
-                        <td className="border border-gray-300 p-0 text-right font-mono bg-amber-50/50">
+                        <td className="border border-gray-300 p-0 text-center font-mono bg-amber-50/50">
                           <input
                             type="number"
+                            min="0"
+                            step="1"
                             value={dayQty}
                             onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
-                            className="w-full h-full text-right font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
+                            className="w-full h-full text-center font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
+                            style={{ textAlign: 'center' }}
                           />
                         </td>
                         <td className="border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-600">

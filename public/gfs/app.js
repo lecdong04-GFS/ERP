@@ -7060,7 +7060,7 @@ function renderTableView(items) {
           const isAllowed = calc.allowedDays.includes(wd.key);
           return `
             <td class="py-1.5 px-0.5 text-center ${isAllowed ? '' : 'bg-neutral-100/50 dark:bg-neutral-950/30'}">
-              <input type="number" min="0" value="${qty}" data-split-day="${wd.key}" title="${wd.label} 입고 (VAT포함 ￦${amt.toLocaleString()})${isAllowed ? '' : ' - 거래처 정규배송일 외'}" class="w-10 h-7 text-center font-mono font-bold text-xs rounded-lg border ${
+              <input type="number" min="0" step="1" value="${qty}" data-split-day="${wd.key}" style="text-align: center;" title="${wd.label} 입고 (VAT포함 ￦${amt.toLocaleString()})${isAllowed ? '' : ' - 거래처 정규배송일 외'}" class="w-10 h-7 text-center font-mono font-bold text-xs rounded-lg border ${
                 qty > 0 
                   ? 'border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900 shadow-2xs' 
                   : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300'
@@ -7198,7 +7198,7 @@ function renderTableView(items) {
         <td class="py-2.5 px-3 text-center">
           <div class="inline-flex items-center space-x-1">
             <button data-action="qty-minus" class="btn-tactile w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black border border-neutral-200 dark:border-neutral-700">-</button>
-            <input type="number" min="0" value="${calc.finalBoxes}" data-action="qty-input" class="w-14 h-7 text-center font-mono font-black text-sm rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-neutral-900 shadow-2xs">
+            <input type="number" min="0" step="1" value="${calc.finalBoxes}" data-action="qty-input" style="text-align: center;" class="w-14 h-7 text-center font-mono font-black text-sm rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-neutral-900 shadow-2xs">
             <button data-action="qty-plus" class="btn-tactile w-7 h-7 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black border border-neutral-200 dark:border-neutral-700">+</button>
           </div>
         </td>
@@ -7482,10 +7482,10 @@ function renderClassicExcelView(items) {
           </div>
         </td>
 
-        <!-- D. 발주량박스 (직접 수정 가능 인풋 - 정수 박스 단위) -->
+        <!-- D. 발주량박스 (직접 수정 가능 인풋 - 정수 박스 단위 가운데 정렬) -->
         <td class="py-1 px-1.5 border-r border-neutral-200 dark:border-neutral-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
-          <div class="inline-flex items-center gap-1">
-            <input type="number" min="0" step="1" value="${displayBoxes}" data-action="excel-box-input" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
+          <div class="inline-flex items-center justify-center gap-1">
+            <input type="number" min="0" step="1" value="${displayBoxes}" data-action="excel-box-input" style="text-align: center;" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
             ${isOriginalMode && calc.finalBoxes !== item.originalExcelBoxes ? `<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="오늘 10시 수주·실사재고 기준 AI추천: ${calc.finalBoxes}박스">(AI:${calc.finalBoxes})</span>` : ''}
             ${!isOriginalMode && calc.bufferBoxes > 0 ? `<span class="text-[9px] font-bold text-indigo-600 font-mono shrink-0" title="보수적 안전 버퍼 +${calc.bufferBoxes}박스 가산됨">(+${calc.bufferBoxes})</span>` : ''}
           </div>

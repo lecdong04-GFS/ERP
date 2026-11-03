@@ -86,6 +86,18 @@
       height: 7px;
     }
 
+    /* Clean centered number input for order boxes */
+    input[data-action="excel-box-input"],
+    input[data-action="qty-input"],
+    input[data-split-day] {
+      text-align: center !important;
+    }
+    input[data-action="excel-box-input"]::-webkit-outer-spin-button,
+    input[data-action="excel-box-input"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
     ::-webkit-scrollbar-track {
       background: rgba(241, 245, 249, 0.6);
     }
@@ -1355,7 +1367,8 @@
 
           <div class="flex items-center gap-2 flex-wrap">
             <!-- 엑셀 데이터 소스 모드 토글: 업로드 발주서 원본 (100% 동일) vs AI 실시간 재산출값 -->
-            <div class="inline-flex items-center bg-neutral-200 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
+            <div
+              class="inline-flex items-center bg-neutral-200 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
               <button type="button" id="btnExcelModeOriginal"
                 class="btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition"
                 title="업로드된 최신 발주서 엑셀 파일에 적힌 일사용량, 재고, 발주량을 100% 그대로 표시합니다">
@@ -1371,7 +1384,8 @@
             </div>
 
             <!-- 3단 지능형 필터: 🔥 실발주 대상만 (기본) | 📦 생산연동만 | 📋 전체 442개 -->
-            <div id="filterModeSegmentedGroup" class="inline-flex items-center bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
+            <div id="filterModeSegmentedGroup"
+              class="inline-flex items-center bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
               <button type="button" id="btnFilterModeOrderOnly"
                 class="btn-tactile px-2.5 py-1.5 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition"
                 title="오늘 실제 발주해야 하는 품목만 보기 (휴면 자재 및 0박스 제외)">
@@ -1496,7 +1510,8 @@
       title="마우스로 클릭한 채 드래그하여 화면 원하는 위치로 이동시킬 수 있습니다">
       <div class="flex items-center gap-2.5">
         <span class="w-8 h-1 rounded-full bg-neutral-600 group-hover:bg-cyan-400 transition-colors"></span>
-        <span class="text-[11px] text-neutral-400 group-hover:text-cyan-300 font-bold tracking-tight flex items-center gap-1.5 transition-colors font-mono">
+        <span
+          class="text-[11px] text-neutral-400 group-hover:text-cyan-300 font-bold tracking-tight flex items-center gap-1.5 transition-colors font-mono">
           <span>⋮⋮</span>
           <span>DOCK (마우스로 드래그하여 원하는 위치로 자유 이동)</span>
         </span>
