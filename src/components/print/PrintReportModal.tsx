@@ -32,6 +32,7 @@ export const PrintReportModal: React.FC = () => {
     printPayload,
     boxPayload,
     matReqPayload,
+    poPayload,
   } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
   const { data: session } = useSession();
@@ -193,15 +194,32 @@ export const PrintReportModal: React.FC = () => {
       const stamp = (printPayload?.deliveryDate || printDate).replace(/-/g, '');
       XLSX.writeFile(wb, `GFS_출하거래명세표_${printPayload?.deliveryNo || stamp}.xlsx`);
     } else if (activeDocType === 'PURCHASE_ORDER') {
-      const data = [
-        { 순번: 1, 발주번호: 'PC25345', 공급처: '평화영농조합', 품목명: '국내산 경기미 백미(햅쌀)', 규격: '20kg/포', 단위: '포', 발주수량: 500, 단가: 54000, 발주금액: 27000000, 납기일자: '2026-10-31' },
-        { 순번: 2, 발주번호: 'PC25344', 공급처: '사조오양', 품목명: '가공 참치플레이크(오일)', 규격: '1.8kg*6캔', 단위: 'box', 발주수량: 1, 단가: 84000, 발주금액: 84000, 납기일자: '2026-10-31' },
-        { 순번: 3, 발주번호: 'PC25343', 공급처: '이우유통', 품목명: '골드마요네즈 3.2kg', 규격: '3.2kg*4통', 단위: 'box', 발주수량: 60, 단가: 38000, 발주금액: 2280000, 납기일자: '2026-10-31' },
-        { 순번: 4, 발주번호: 'PC25341', 공급처: '한성기업', 품목명: '[냉장]다진맛살 10kg', 규격: '10kg*2ea', 단위: 'box', 발주수량: 40, 단가: 52000, 발주금액: 2080000, 납기일자: '2026-10-31' },
-      ];
+      const data = poPayload && poPayload.items.length > 0
+        ? poPayload.items.map((it, idx) => ({
+            순번: idx + 1,
+            발주번호: poPayload.orderNo,
+            공급처: poPayload.supplierName,
+            품목명: it.name,
+            규격: it.spec,
+            단위: it.unit,
+            발주수량: it.qty,
+            단가: it.price,
+            발주금액: it.amt,
+            입고일자: it.recvDate || poPayload.deliveryDate || '',
+            비고: it.remark || '',
+          }))
+        : [
+            { 순번: 1, 발주번호: 'PC25345', 공급처: '평화영농조합', 품목명: '국내산 경기미 백미(햅쌀)', 규격: '20kg/포', 단위: '포', 발주수량: 500, 단가: 54000, 발주금액: 27000000, 입고일자: '2026-10-31', 비고: '' },
+            { 순번: 2, 발주번호: 'PC25344', 공급처: '사조오양', 품목명: '가공 참치플레이크(오일)', 규격: '1.8kg*6캔', 단위: 'box', 발주수량: 1, 단가: 84000, 발주금액: 84000, 입고일자: '2026-10-31', 비고: '' },
+            { 순번: 3, 발주번호: 'PC25343', 공급처: '이우유통', 품목명: '골드마요네즈 3.2kg', 규격: '3.2kg*4통', 단위: 'box', 발주수량: 60, 단가: 38000, 발주금액: 2280000, 입고일자: '2026-10-31', 비고: '' },
+            { 순번: 4, 발주번호: 'PC25341', 공급처: '한성기업', 품목명: '[냉장]다진맛살 10kg', 규격: '10kg*2ea', 단위: 'box', 발주수량: 40, 단가: 52000, 발주금액: 2080000, 입고일자: '2026-10-31', 비고: '' },
+          ];
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, '원부자재발주서');
-      XLSX.writeFile(wb, `GFS_원부재료발주서_${printDate}.xlsx`);
+      const filename = poPayload?.orderNo
+        ? `GFS_원부자재발주서_${poPayload.orderNo}.xlsx`
+        : `GFS_원부재료발주서_${printDate}.xlsx`;
+      XLSX.writeFile(wb, filename);
     } else if (activeDocType === 'LOT_LABEL') {
       const data = [
         { LOT번호: 'LOT-261031-A01', 품번: '10002015', 품명: '참치마요삼각김밥', 규격: '110g', 생산일시: '2026-10-31 08:30', 유통기한: '2026-11-03 08:00', 라인: '1편 (삼각A)', 검수자: '김품질' },
@@ -959,72 +977,93 @@ export const PrintReportModal: React.FC = () => {
               })()}
 
               {/* 6. 원부자재 발주서 (PURCHASE_ORDER) */}
-              {activeDocType === 'PURCHASE_ORDER' && (
-                <div className="flex flex-col gap-3 font-serif">
-                  <div className="text-center pb-2 border-b-2 border-black">
-                    <h1 className="text-2xl font-black tracking-widest text-black underline underline-offset-4">
-                      자 재 발 주 서 (PURCHASE ORDER)
-                    </h1>
-                    <div className="flex justify-between items-center text-xs mt-2 font-sans">
-                      <span>발주번호: PO-20261030-0082</span>
-                      <span>발주일자: 2026년 10월 30일</span>
-                      <span>납기일자: 2026년 10월 31일 (06:00 이전 입고)</span>
-                    </div>
-                  </div>
+              {activeDocType === 'PURCHASE_ORDER' && (() => {
+                const poItems = poPayload && poPayload.items.length > 0
+                  ? poPayload.items
+                  : [
+                      { no: 1, name: '국내산 경기미 백미(햅쌀)', spec: '20kg/포', unit: '포', qty: 500, price: 54000, amt: 27000000, remark: '당일 도정미 직납, 수분 15% 이하' },
+                      { no: 2, name: '가공 참치플레이크(오일)', spec: '1.8kg*6캔', unit: 'box', qty: 10, price: 84000, amt: 840000, remark: '원터치캔 파손 및 찌그러짐 검수' },
+                      { no: 3, name: '골드마요네즈 3.2kg', spec: '3.2kg*4통', unit: 'box', qty: 60, price: 38000, amt: 2280000, remark: '유통기한 잔여 80% 이상' },
+                      { no: 4, name: '슬라이스치즈(고소한맛)', spec: '1kg*10팩', unit: 'box', qty: 30, price: 71153, amt: 2134590, remark: '냉장 0~5℃ 유지 운송' },
+                    ];
+                const poTotalQty = poItems.reduce((acc, it) => acc + (Number(it.qty) || 0), 0);
+                const poTotalAmt = poPayload?.totalAmount || poItems.reduce((acc, it) => acc + (Number(it.amt) || 0), 0);
+                const poOrderNo = poPayload?.orderNo || 'PO-20261030-0082';
+                const poOrderDate = poPayload?.orderDate || '2026-10-30';
+                const poDeliveryDate = poPayload?.deliveryDate || '2026-10-31';
+                const poSupplier = poPayload?.supplierName || '평화영농조합';
+                const poManager = poPayload?.manager || '이창승 상무';
+                const poTel = poPayload?.tel || '010-3565-92XX';
 
-                  <div className="border border-black p-2.5 text-xs font-sans bg-gray-50 flex justify-between">
-                    <div>
-                      <p><strong>수신(공급처):</strong> 평화영농조합 귀하</p>
-                      <p><strong>담당자:</strong> 이창승 상무 (010-3565-92XX)</p>
-                      <p><strong>납품장소:</strong> (주)GFS 곤지암 물류센터 1층 자재입고장</p>
+                return (
+                  <div className="flex flex-col gap-3 font-serif">
+                    <div className="text-center pb-2 border-b-2 border-black">
+                      <h1 className="text-2xl font-black tracking-widest text-black underline underline-offset-4">
+                        자 재 발 주 서 (PURCHASE ORDER)
+                      </h1>
+                      <div className="flex justify-between items-center text-xs mt-2 font-sans">
+                        <span>발주번호: <strong>{poOrderNo}</strong></span>
+                        <span>발주일자: {poOrderDate}</span>
+                        <span>납기일자: {poDeliveryDate} (06:00 이전 입고)</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p><strong>발신:</strong> (주)GFS 구매자재팀</p>
-                      <p><strong>발주담당:</strong> 정재근 대리 (031-760-8800)</p>
-                      <p><strong>검수조건:</strong> 콜드체인 온도준수 및 HACCP 검사성적서 동봉</p>
-                    </div>
-                  </div>
 
-                  <table className="w-full border-collapse border border-black text-[11px] font-sans mt-2">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-black py-1 px-1 w-10 text-center">순번</th>
-                        <th className="border border-black py-1 px-2 text-left">품명 / 규격</th>
-                        <th className="border border-black py-1 px-1 w-14 text-center">단위</th>
-                        <th className="border border-black py-1 px-2 w-20 text-right">발주수량</th>
-                        <th className="border border-black py-1 px-2 w-24 text-right">단가</th>
-                        <th className="border border-black py-1 px-2 w-28 text-right">발주금액</th>
-                        <th className="border border-black py-1 px-2 text-left">비고 및 검수기준</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { no: 1, name: '국내산 경기미 백미(햅쌀)', spec: '20kg/포', unit: '포', qty: 500, price: 54000, amt: 27000000, remark: '당일 도정미 직납, 수분 15% 이하' },
-                        { no: 2, name: '가공 참치플레이크(오일)', spec: '1.8kg*6캔', unit: 'box', qty: 10, price: 84000, amt: 840000, remark: '원터치캔 파손 및 찌그러짐 검수' },
-                        { no: 3, name: '골드마요네즈 3.2kg', spec: '3.2kg*4통', unit: 'box', qty: 60, price: 38000, amt: 2280000, remark: '유통기한 잔여 80% 이상' },
-                        { no: 4, name: '슬라이스치즈(고소한맛)', spec: '1kg*10팩', unit: 'box', qty: 30, price: 71153, amt: 2134590, remark: '냉장 0~5℃ 유지 운송' },
-                      ].map((row) => (
-                        <tr key={row.no} className="hover:bg-gray-50">
-                          <td className="border border-black py-1 px-1 text-center">{row.no}</td>
-                          <td className="border border-black py-1 px-2 font-bold">{row.name} <span className="font-normal text-gray-500">({row.spec})</span></td>
-                          <td className="border border-black py-1 px-1 text-center">{row.unit}</td>
-                          <td className="border border-black py-1 px-2 text-right font-bold">{row.qty.toLocaleString()}</td>
-                          <td className="border border-black py-1 px-2 text-right">{row.price.toLocaleString()}</td>
-                          <td className="border border-black py-1 px-2 text-right font-extrabold text-blue-900">{row.amt.toLocaleString()}</td>
-                          <td className="border border-black py-1 px-2 text-[10px] text-gray-600">{row.remark}</td>
+                    <div className="border border-black p-2.5 text-xs font-sans bg-gray-50 flex justify-between">
+                      <div>
+                        <p><strong>수신(공급처):</strong> {poSupplier} 귀하</p>
+                        <p><strong>담당자:</strong> {poManager} ({poTel})</p>
+                        <p><strong>납품장소:</strong> (주)GFS 곤지암 물류센터 1층 자재입고장</p>
+                      </div>
+                      <div className="text-right">
+                        <p><strong>발신:</strong> (주)GFS 구매자재팀</p>
+                        <p><strong>발주담당:</strong> {writerName || '정재근 대리'} (031-760-8800)</p>
+                        <p><strong>검수조건:</strong> 콜드체인 온도준수 및 HACCP 검사성적서 동봉</p>
+                      </div>
+                    </div>
+
+                    <table className="w-full border-collapse border border-black text-[11px] font-sans mt-2">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-black py-1 px-1 w-10 text-center">순번</th>
+                          <th className="border border-black py-1 px-2 text-left">품명 / 규격</th>
+                          <th className="border border-black py-1 px-1 w-14 text-center">단위</th>
+                          <th className="border border-black py-1 px-2 w-20 text-right">발주수량</th>
+                          <th className="border border-black py-1 px-2 w-24 text-right">단가</th>
+                          <th className="border border-black py-1 px-2 w-28 text-right">발주금액</th>
+                          <th className="border border-black py-1 px-2 text-left">비고 및 검수기준</th>
                         </tr>
-                      ))}
-                      <tr className="bg-gray-100 font-bold">
-                        <td colSpan={3} className="border border-black py-1 px-2 text-center">합 계</td>
-                        <td className="border border-black py-1 px-2 text-right">600</td>
-                        <td className="border border-black py-1 px-2 text-center">-</td>
-                        <td className="border border-black py-1 px-2 text-right text-blue-900">32,254,590</td>
-                        <td className="border border-black py-1 px-2 text-left text-[10px]">부가세 별도 (면세품 포함)</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {poItems.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="border border-black py-1 px-1 text-center">{row.no || idx + 1}</td>
+                            <td className="border border-black py-1 px-2 font-bold">
+                              {row.name} {row.spec ? <span className="font-normal text-gray-500">({row.spec})</span> : null}
+                            </td>
+                            <td className="border border-black py-1 px-1 text-center">{row.unit}</td>
+                            <td className="border border-black py-1 px-2 text-right font-bold">{Number(row.qty || 0).toLocaleString()}</td>
+                            <td className="border border-black py-1 px-2 text-right">{Number(row.price || 0).toLocaleString()}</td>
+                            <td className="border border-black py-1 px-2 text-right font-extrabold text-blue-900">{Number(row.amt || 0).toLocaleString()}</td>
+                            <td className="border border-black py-1 px-2 text-[10px] text-gray-600">{row.remark || '-'}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-gray-100 font-bold">
+                          <td colSpan={3} className="border border-black py-1 px-2 text-center">합 계</td>
+                          <td className="border border-black py-1 px-2 text-right">{poTotalQty.toLocaleString()}</td>
+                          <td className="border border-black py-1 px-2 text-center">-</td>
+                          <td className="border border-black py-1 px-2 text-right text-blue-900">{poTotalAmt.toLocaleString()}</td>
+                          <td className="border border-black py-1 px-2 text-left text-[10px]">부가세 별도 (면세품 포함)</td>
+                        </tr>
+                      </tbody>
+                    </table>
 
-                  <div className="text-[10px] text-gray-600 border-t border-gray-300 pt-2 flex justify-between items-center">
+                    <div className="text-[10px] text-gray-600 border-t border-gray-300 pt-2 flex justify-between items-center">
+                      <span>* 본 발주서는 전자문서로 발행되어 직인 날인과 동일한 효력을 가집니다.</span>
+                      <span>(주)GFS 대표이사 박지훈 (인)</span>
+                    </div>
+                  </div>
+                );
+              })()}
                     <span>* 본 발주서는 전자문서로 발행되어 직인 날인과 동일한 효력을 가집니다.</span>
                     <span>(주)GFS 대표이사 박지훈 (인)</span>
                   </div>

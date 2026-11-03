@@ -14,6 +14,29 @@ export type PrintDocumentType =
   | 'DELIVERY_BOX_LABEL'
   | 'MATERIAL_REQUIREMENT';
 
+export interface PurchaseOrderPrintPayload {
+  orderNo: string;
+  orderDate: string;
+  deliveryDate?: string;
+  supplierName: string;
+  manager?: string;
+  tel?: string;
+  email?: string;
+  remark?: string;
+  totalAmount: number;
+  items: {
+    no: number;
+    name: string;
+    spec: string;
+    unit: string;
+    qty: number;
+    price: number;
+    amt: number;
+    recvDate?: string;
+    remark?: string;
+  }[];
+}
+
 export interface MatReqPrintPayload {
   date: string;
   shift: string;
@@ -64,6 +87,8 @@ interface PrintReportContextType {
   setBoxPayload: (payload: DeliveryBoxLabelData[] | null) => void;
   matReqPayload: MatReqPrintPayload | null;
   setMatReqPayload: (payload: MatReqPrintPayload | null) => void;
+  poPayload: PurchaseOrderPrintPayload | null;
+  setPoPayload: (payload: PurchaseOrderPrintPayload | null) => void;
 }
 
 const PrintReportContext = createContext<PrintReportContextType | null>(null);
@@ -74,6 +99,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [printPayload, setPrintPayload] = useState<DeliveryStatementPayload | null>(null);
   const [boxPayload, setBoxPayload] = useState<DeliveryBoxLabelData[] | null>(null);
   const [matReqPayload, setMatReqPayload] = useState<MatReqPrintPayload | null>(null);
+  const [poPayload, setPoPayload] = useState<PurchaseOrderPrintPayload | null>(null);
 
   const openPrintModal = (docType?: PrintDocumentType) => {
     if (docType) {
@@ -87,6 +113,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
     setPrintPayload(null);
     setBoxPayload(null);
     setMatReqPayload(null);
+    setPoPayload(null);
   };
 
   return (
@@ -103,6 +130,8 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
         setBoxPayload,
         matReqPayload,
         setMatReqPayload,
+        poPayload,
+        setPoPayload,
       }}
     >
       {children}
