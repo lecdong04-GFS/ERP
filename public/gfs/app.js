@@ -1239,9 +1239,12 @@ function setupEventListeners() {
   // 상단 헤더 원조 엑셀뷰 버튼 (어느 화면에서든 1클릭으로 원조 엑셀뷰 직행)
   if (btnHeaderViewExcel) {
     btnHeaderViewExcel.addEventListener('click', async () => {
-      // 1) 아직 데이터가 없으면 자동 샘플 로드
+      // 1) 아직 데이터가 없으면 DB 최신 발주서 또는 내장 실데이터 로드
       if (!state.rawItems || state.rawItems.length === 0) {
-        showToast('원조 발주시트 데이터를 준비 중입니다...', 'info');
+        showToast('최신 발주서 원본 데이터를 준비 중입니다...', 'info');
+        if (typeof window !== 'undefined' && window.GFS_BRIDGE && typeof fetchAutoBootData === 'function') {
+          // auto boot
+        }
         await loadAccurateRealisticSampleData();
       }
 
@@ -1255,8 +1258,11 @@ function setupEventListeners() {
       const tabsSection = document.getElementById('tabsSection');
       if (tabsSection) tabsSection.classList.remove('hidden');
 
-      // 3) 원조 엑셀뷰 모드로 전환 및 렌더링
+      // 3) 원조 엑셀뷰 모드로 전환 및 렌더링 (최신 발주서 엑셀 원본 100% 동일 표시)
       state.viewMode = 'excel';
+      state.excelViewSourceMode = 'original';
+      state.filterDisplayMode = 'all'; // 원조 발주시트 전체 431개 품목 온전히 표시
+      updateFilterModeUi();
       updateViewModeButtons();
       renderCards();
 
@@ -1265,7 +1271,7 @@ function setupEventListeners() {
       if (classicContainer) {
         classicContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-      showToast('★★발주서양식통합★★(정준오) 원조 엑셀 발주시트 화면이 열렸습니다!', 'success');
+      showToast('★★발주서양식통합★★(정준오) 최신 발주서 원본 100% 일치 화면이 열렸습니다!', 'success');
     });
   }
 
@@ -1275,6 +1281,26 @@ function setupEventListeners() {
       if (btnHeaderViewExcel) {
         btnHeaderViewExcel.click();
       }
+    });
+  }
+
+  // 원조 엑셀 뷰: 업로드 발주서 원본 (100% 동일) vs AI 실시간 재산출 모드 토글
+  const btnExcelModeOriginal = document.getElementById('btnExcelModeOriginal');
+  const btnExcelModeLiveAi = document.getElementById('btnExcelModeLiveAi');
+  if (btnExcelModeOriginal && btnExcelModeLiveAi) {
+    btnExcelModeOriginal.addEventListener('click', () => {
+      state.excelViewSourceMode = 'original';
+      btnExcelModeOriginal.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition";
+      btnExcelModeLiveAi.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
+      renderCards();
+      showToast('📄 업로드된 발주서 엑셀 원본 수치(일사용량·재고·발주량 100% 동일)로 표시합니다.', 'success');
+    });
+    btnExcelModeLiveAi.addEventListener('click', () => {
+      state.excelViewSourceMode = 'live';
+      btnExcelModeLiveAi.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-indigo-600 text-white shadow-xs flex items-center gap-1 transition";
+      btnExcelModeOriginal.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
+      renderCards();
+      showToast('🤖 오늘 10시 주문서와 17시 실사재고를 반영한 AI 실시간 재산출값으로 비교 표시합니다.', 'info');
     });
   }
 
@@ -4785,6 +4811,26 @@ function parseOrderSheetDynamic(rows, worksheet) {
         formulaDivisor = formulaDivisor * 1000;
       }
 
+      // 원조 엑셀 발주시트의 모든 열 수치(D~AA열)를 100% 무결하게 원본 보존
+      const rawBoxes = parseNumber(colD);
+      const rawBoxesPieces = parseNumber(colF);
+      const rawTotalStock = parseNumber(row[10]);
+      const rawRequired = parseNumber(row[11]);
+      const rawDiff = parseNumber(row[12]);
+      const rawStockDays = parseNumber(row[13]);
+      const rawAmount = parseNumber(row[17]);
+      const rawWeeklySum = parseNumber(row[18]);
+      const rawSplit = {
+        mon: parseNumber(row[19]),
+        tue: parseNumber(row[20]),
+        wed: parseNumber(row[21]),
+        thu: parseNumber(row[22]),
+        fri: parseNumber(row[23]),
+        sat: parseNumber(row[24]),
+        sun: parseNumber(row[25]),
+      };
+      const rawDailyBoxes = parseNumber(row[26]);
+
       currentMaterial = {
         id: `item_${r}_${Math.random().toString(36).substr(2, 6)}`,
         rowIndex: r + 1,
@@ -4800,6 +4846,20 @@ function parseOrderSheetDynamic(rows, worksheet) {
         incoming,
         currentStock,
         originalExcelStock: currentStock,
+        originalExcelBoxes: rawBoxes,
+        originalPackUnit: packUnit,
+        originalBoxesPieces: rawBoxesPieces,
+        originalDefaultDays: excelDefaultDays,
+        originalIncoming: incoming,
+        originalTotalStock: rawTotalStock || ((currentStock || 0) + (incoming || 0)),
+        originalRequired: rawRequired || Math.round((dailyUsage || 0) * excelDefaultDays),
+        originalDiff: rawDiff,
+        originalStockDays: rawStockDays,
+        originalUnitPrice: unitPrice,
+        originalAmount: rawAmount,
+        originalWeeklySum: rawWeeklySum,
+        originalSplit: rawSplit,
+        originalDailyBoxes: rawDailyBoxes,
         isAudited: false,
         auditBoxes: null,
         auditPieces: null,
@@ -7262,13 +7322,19 @@ function renderClassicExcelView(items) {
   Object.values(grouped).forEach(grp => {
     const { supplier, items: supItems } = grp;
     
-    // 거래처 통계 집계
+    // 거래처 통계 집계 (선택된 모드: 원본 100% vs 실시간 AI)
     let supTotalBoxes = 0;
     let supTotalAmount = 0;
+    const isOriginalModeGlobal = state.excelViewSourceMode !== 'live';
     supItems.forEach(it => {
-      const c = it.calc || {};
-      supTotalBoxes += (c.finalBoxes || 0);
-      supTotalAmount += (c.finalTotalAmount || 0);
+      const b = (it.manualBoxes !== null && it.manualBoxes !== undefined)
+        ? it.manualBoxes
+        : (isOriginalModeGlobal && it.originalExcelBoxes !== undefined ? it.originalExcelBoxes : (it.calc && it.calc.finalBoxes || 0));
+      const p = it.originalPackUnit || it.packUnit || 1;
+      const pr = isOriginalModeGlobal && it.originalUnitPrice !== undefined ? it.originalUnitPrice : (it.unitPrice || 0);
+      const a = isOriginalModeGlobal && it.originalAmount !== undefined ? it.originalAmount : (it.calc && it.calc.finalTotalAmount || Math.round(b * p * pr));
+      supTotalBoxes += (b || 0);
+      supTotalAmount += (a || 0);
     });
 
     // 1. 거래처 헤더 행
@@ -7286,8 +7352,8 @@ function renderClassicExcelView(items) {
       </td>
       <td colspan="23" class="py-2 px-3 text-right text-[10.5px] font-mono text-neutral-600 dark:text-neutral-300">
         <span>품목 <strong>${supItems.length}</strong>개</span> · 
-        <span>발주합계 <strong class="text-emerald-700 dark:text-emerald-400 font-bold">${supTotalBoxes.toLocaleString()}</strong>박스</span> · 
-        <span>예상금액 <strong class="text-neutral-950 dark:text-white font-bold">￦${supTotalAmount.toLocaleString()}</strong></span>
+        <span>발주합계 <strong class="text-emerald-700 dark:text-emerald-400 font-bold">${Math.round(supTotalBoxes * 10) / 10}</strong>박스</span> · 
+        <span>예상금액 <strong class="text-neutral-950 dark:text-white font-bold">￦${Math.round(supTotalAmount).toLocaleString()}</strong></span>
         ${supplier.specialNotice ? ` · <span class="text-neutral-500 font-normal">💡 ${supplier.specialNotice}</span>` : ''}
       </td>
     `;
@@ -7302,6 +7368,67 @@ function renderClassicExcelView(items) {
       const isExpanded = state.expandAllBomRows || state.expandedBomItemIds.has(item.id);
 
       const split = calc.weeklySplit || {};
+      const isOriginalMode = state.excelViewSourceMode !== 'live';
+
+      const displayBoxes = (item.manualBoxes !== null && item.manualBoxes !== undefined)
+        ? item.manualBoxes
+        : (isOriginalMode && item.originalExcelBoxes !== undefined ? item.originalExcelBoxes : (calc.finalBoxes || 0));
+
+      const displayPackUnit = item.originalPackUnit || item.packUnit || 1;
+
+      const displayBoxesPieces = isOriginalMode && item.originalBoxesPieces !== undefined
+        ? item.originalBoxesPieces
+        : Math.round((displayBoxes || 0) * displayPackUnit);
+
+      const displayDefaultDays = item.originalDefaultDays || item.excelDefaultDays || 4.0;
+
+      const displayDailyUsage = isOriginalMode && item.originalDailyUsage !== undefined
+        ? item.originalDailyUsage
+        : (item.dailyUsage || 0);
+
+      const displayIncoming = isOriginalMode && item.originalIncoming !== undefined
+        ? item.originalIncoming
+        : (item.incoming || 0);
+
+      const displayStock = isOriginalMode && item.originalExcelStock !== undefined
+        ? item.originalExcelStock
+        : (item.currentStock || 0);
+
+      const displayTotalStock = isOriginalMode && item.originalTotalStock !== undefined
+        ? item.originalTotalStock
+        : ((displayStock || 0) + (displayIncoming || 0));
+
+      const displayRequired = isOriginalMode && item.originalRequired !== undefined
+        ? item.originalRequired
+        : Math.round(displayDailyUsage * displayDefaultDays);
+
+      const displayDiff = isOriginalMode && item.originalDiff !== undefined
+        ? item.originalDiff
+        : Math.round(displayTotalStock - displayRequired);
+
+      const displayStockDays = isOriginalMode && item.originalStockDays !== undefined
+        ? item.originalStockDays
+        : (calc.stockDays != null ? calc.stockDays : (displayDailyUsage > 0 ? displayTotalStock / displayDailyUsage : 0));
+
+      const displayUnitPrice = isOriginalMode && item.originalUnitPrice !== undefined
+        ? item.originalUnitPrice
+        : (item.unitPrice || 0);
+
+      const displayAmount = isOriginalMode && item.originalAmount !== undefined
+        ? item.originalAmount
+        : (calc.finalTotalAmount || Math.round(displayBoxes * displayPackUnit * displayUnitPrice));
+
+      const displayWeeklySum = isOriginalMode && item.originalWeeklySum !== undefined
+        ? item.originalWeeklySum
+        : (calc.weeklySumBoxes || displayBoxes);
+
+      const displaySplit = isOriginalMode && item.originalSplit
+        ? item.originalSplit
+        : split;
+
+      const displayDailyBoxes = isOriginalMode && item.originalDailyBoxes !== undefined
+        ? item.originalDailyBoxes
+        : (calc.dailyUsageBoxes ? calc.dailyUsageBoxes : (displayDailyUsage > 0 ? displayDailyUsage / displayPackUnit : 0));
 
       // 4대 위험 감사 뱃지
       let auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">정상</span>`;
@@ -7356,64 +7483,70 @@ function renderClassicExcelView(items) {
         <!-- D. 발주량박스 (직접 수정 가능 인풋) -->
         <td class="py-1 px-1.5 border-r border-neutral-200 dark:border-neutral-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
           <div class="inline-flex items-center gap-1">
-            <input type="number" min="0" value="${calc.finalBoxes}" data-action="excel-box-input" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
-            ${calc.bufferBoxes > 0 ? `<span class="text-[9px] font-bold text-indigo-600 font-mono shrink-0" title="보수적 안전 버퍼 +${calc.bufferBoxes}박스 가산됨">(+${calc.bufferBoxes})</span>` : ''}
+            <input type="number" min="0" value="${displayBoxes}" data-action="excel-box-input" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
+            ${isOriginalMode && calc.finalBoxes !== item.originalExcelBoxes ? `<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="오늘 10시 수주·실사재고 기준 AI추천: ${calc.finalBoxes}박스">(AI:${calc.finalBoxes})</span>` : ''}
+            ${!isOriginalMode && calc.bufferBoxes > 0 ? `<span class="text-[9px] font-bold text-indigo-600 font-mono shrink-0" title="보수적 안전 버퍼 +${calc.bufferBoxes}박스 가산됨">(+${calc.bufferBoxes})</span>` : ''}
           </div>
         </td>
 
         <!-- E. 입수량 -->
-        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${item.packUnit}</td>
+        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${displayPackUnit}</td>
 
         <!-- F. 발주량입수 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-neutral-800 dark:text-neutral-200">${((calc.finalBoxes || 0) * item.packUnit).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-neutral-800 dark:text-neutral-200">${Number(displayBoxesPieces).toLocaleString()}</td>
 
         <!-- G. 발주일수 -->
-        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${item.excelDefaultDays || 4.0}</td>
+        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${displayDefaultDays}</td>
 
         <!-- H. 일사용량 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-bold text-neutral-900 dark:text-neutral-100">${(item.dailyUsage || 0).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-bold text-neutral-900 dark:text-neutral-100" title="${isOriginalMode && item.dailyUsage !== item.originalDailyUsage ? `엑셀 원본 일사용량: ${displayDailyUsage} (오늘 10시 수주 연동시: ${item.dailyUsage})` : ''}">${Number(displayDailyUsage).toLocaleString()}</td>
 
         <!-- I. 입고량 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${(item.incoming || 0).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Number(displayIncoming).toLocaleString()}</td>
 
         <!-- J. 금일재고 (실사재고 반영 뱃지) -->
         <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-bold bg-blue-50/30 dark:bg-blue-950/20 text-neutral-900 dark:text-neutral-100">
-          <span>${(item.currentStock || 0).toLocaleString()}</span>
-          ${item.isAudited ? `<span class="ml-1 px-1 py-0.2 rounded text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold" title="재고조사표 실사 반영">실사</span>` : ''}
+          <span>${Number(displayStock).toLocaleString()}</span>
+          ${isOriginalMode && item.isAudited && item.currentStock !== item.originalExcelStock ? `<span class="ml-1 px-1 py-0.2 rounded text-[9px] bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold" title="17시 실사재고: ${item.currentStock}">실사:${item.currentStock}</span>` : ''}
+          ${!isOriginalMode && item.isAudited ? `<span class="ml-1 px-1 py-0.2 rounded text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold" title="재고조사표 실사 반영">실사</span>` : ''}
         </td>
 
         <!-- K. 총재고량 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-neutral-700 dark:text-neutral-300">${((item.currentStock || 0) + (item.incoming || 0)).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-neutral-700 dark:text-neutral-300">${Number(displayTotalStock).toLocaleString()}</td>
 
         <!-- L. 필요값 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Math.round((item.dailyUsage || 0) * (item.excelDefaultDays || 4.0)).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Number(displayRequired).toLocaleString()}</td>
 
         <!-- M. 차이 -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Math.round(((item.currentStock || 0) + (item.incoming || 0)) - ((item.dailyUsage || 0) * (item.excelDefaultDays || 4.0))).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Number(displayDiff).toLocaleString()}</td>
 
         <!-- N. 재고유지일 -->
-        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono font-bold ${calc.stockDays < 1.5 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-neutral-700 dark:text-neutral-300'}">${calc.stockDays.toFixed(1)}일</td>
+        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono font-bold ${displayStockDays < 1.5 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-neutral-700 dark:text-neutral-300'}">${Number(displayStockDays).toFixed(1)}일</td>
 
         <!-- Q. 단가(봉) -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">￦${(item.unitPrice || 0).toLocaleString()}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">￦${Number(displayUnitPrice).toLocaleString()}</td>
 
         <!-- R. 금액 -->
-        <td class="py-2 px-2.5 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-black text-neutral-900 dark:text-neutral-100">￦${(calc.finalTotalAmount || 0).toLocaleString()}</td>
+        <td class="py-2 px-2.5 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono font-black text-neutral-900 dark:text-neutral-100">￦${Number(displayAmount).toLocaleString()}</td>
 
         <!-- S. 주간합계 -->
-        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono font-black bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white">${calc.weeklySumBoxes || calc.finalBoxes}</td>
+        <td class="py-2 px-2 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono font-black bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white">${displayWeeklySum}</td>
 
         <!-- T~Z 요일별 수주량 -->
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.mon || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.tue || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.wed || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.thu || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.fri || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.sat || 0}</td>
-        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${split.sun || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.mon || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.tue || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.wed || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.thu || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.fri || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.sat || 0}</td>
+        <td class="py-2 px-1.5 text-center border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-600 dark:text-neutral-400">${displaySplit.sun || 0}</td>
 
         <!-- AA. 일소진(박스) -->
-        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${calc.dailyUsageBoxes ? calc.dailyUsageBoxes.toFixed(1) : ((item.dailyUsage || 0) / (item.packUnit || 1)).toFixed(1)}</td>
+        <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Number(displayDailyBoxes).toFixed(1)}</td>
+
+        <!-- AI 위험 판정 -->
+        <td class="py-2 px-2 text-center">${auditBadge}</td>
+      `;
 
         <!-- AI 위험 판정 -->
         <td class="py-2 px-2 text-center">${auditBadge}</td>

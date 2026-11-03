@@ -1353,7 +1353,23 @@
               대상 품목 표시 중</span>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- 엑셀 데이터 소스 모드 토글: 업로드 발주서 원본 (100% 동일) vs AI 실시간 재산출값 -->
+            <div class="inline-flex items-center bg-neutral-200 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
+              <button type="button" id="btnExcelModeOriginal"
+                class="btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition"
+                title="업로드된 최신 발주서 엑셀 파일에 적힌 일사용량, 재고, 발주량을 100% 그대로 표시합니다">
+                <i data-lucide="file-check-2" class="w-3.5 h-3.5"></i>
+                <span>📄 업로드 발주서 원본 (100% 동일)</span>
+              </button>
+              <button type="button" id="btnExcelModeLiveAi"
+                class="btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition"
+                title="오늘 10시 주문서와 17시 실사재고를 반영하여 AI가 재산출한 최신 값을 비교 표시합니다">
+                <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+                <span>🤖 AI 실시간 재산출값</span>
+              </button>
+            </div>
+
             <!-- 3단 지능형 필터: 🔥 실발주 대상만 (기본) | 📦 생산연동만 | 📋 전체 442개 -->
             <div id="filterModeSegmentedGroup" class="inline-flex items-center bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
               <button type="button" id="btnFilterModeOrderOnly"
