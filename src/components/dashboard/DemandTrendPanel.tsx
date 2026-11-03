@@ -309,10 +309,10 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
       </div>
 
       {/* ── Dual Cockpit Body Grid (좌우 2분할 집약형 레이아웃) ──── */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-slate-200 bg-white">
+      <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 bg-white">
         
         {/* [좌측 Zone: 5 / 12 열] 3대 핵심 모멘텀 브리핑 스택 + 주야간 편수 배분 */}
-        <div className="xl:col-span-5 p-3 flex flex-col justify-between gap-2.5 bg-slate-50/60">
+        <div className="lg:col-span-5 p-3 flex flex-col justify-between gap-2.5 bg-slate-50/60">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-[11.5px] font-bold text-slate-700 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo-600" />
@@ -444,7 +444,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
         </div>
 
         {/* [우측 Zone: 7 / 12 열] 스마트 랭킹 5행 집약 보드 */}
-        <div className="xl:col-span-7 p-3 flex flex-col justify-between">
+        <div className="lg:col-span-7 p-3 flex flex-col justify-between">
           {/* Sub Header & Segmented Tabs */}
           <div className="flex items-center justify-between pb-2 mb-1.5 border-b border-slate-100">
             <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
