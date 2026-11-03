@@ -1354,12 +1354,27 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <!-- ⚡ 발주 필요만 보기 vs 📋 0박스 포함 전체 보기 스위치 -->
-            <button type="button" id="btnExcelToggleOnlyNeeded"
-              class="btn-tactile text-xs font-bold px-2.5 py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-850 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5 transition shadow-2xs">
-              <i data-lucide="filter" class="w-3.5 h-3.5 text-emerald-600"></i>
-              <span id="labelExcelToggleOnlyNeeded">📋 0박스 포함 전체 보기</span>
-            </button>
+            <!-- 3단 지능형 필터: 🔥 실발주 대상만 (기본) | 📦 생산연동만 | 📋 전체 442개 -->
+            <div id="filterModeSegmentedGroup" class="inline-flex items-center bg-neutral-100 dark:bg-neutral-800 p-0.5 rounded-lg border border-neutral-300 dark:border-neutral-700 shadow-2xs">
+              <button type="button" id="btnFilterModeOrderOnly"
+                class="btn-tactile px-2.5 py-1.5 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition"
+                title="오늘 실제 발주해야 하는 품목만 보기 (휴면 자재 및 0박스 제외)">
+                <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-300"></i>
+                <span id="labelFilterModeOrderOnly">🔥 실발주만</span>
+              </button>
+              <button type="button" id="btnFilterModeActiveOnly"
+                class="btn-tactile px-2.5 py-1.5 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition"
+                title="오늘 완제품 생산 레시피에 투입되는 모든 원부자재 보기">
+                <i data-lucide="utensils" class="w-3.5 h-3.5"></i>
+                <span id="labelFilterModeActiveOnly">📦 생산연동</span>
+              </button>
+              <button type="button" id="btnFilterModeAll"
+                class="btn-tactile px-2.5 py-1.5 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition"
+                title="휴면 자재 포함 원조 엑셀 442개 전체 품목 보기">
+                <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                <span id="labelFilterModeAll">📋 전체</span>
+              </button>
+            </div>
             <button type="button" id="btnToggleAllBomRows"
               class="btn-tactile text-xs font-bold px-2.5 py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-850 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center gap-1 transition shadow-2xs">
               <i data-lucide="list-tree" class="w-3.5 h-3.5 text-emerald-600"></i>

@@ -87,6 +87,30 @@ export async function GET(req: NextRequest) {
       qty,
     }));
 
+    // (B-2) 최근 14일간 수주가 있었던 완제품 목록 (휴면/미사용 원부자재 정밀 필터링용)
+    const recent14Dates = availableOrderDates.slice(0, 14);
+    const recent14Orders = recent14Dates.length > 0
+      ? await prisma.salesOrderDetail.findMany({
+          where: {
+            order: {
+              orderDate: { in: recent14Dates },
+            },
+          },
+          select: {
+            product: { select: { name: true } },
+            totalQty: true,
+          },
+        })
+      : [];
+
+    const recent14MenuMap: Record<string, number> = {};
+    for (const d of recent14Orders) {
+      const nm = String(d.product?.name || '').trim();
+      if (!nm) continue;
+      const q = Number(d.totalQty) || 0;
+      recent14MenuMap[nm] = (recent14MenuMap[nm] || 0) + q;
+    }
+
     // (C) 재고조사표(전일 17시 마감 실사) 대상 일자 결정 및 조회
     const availableStockDates = stockDateRows.map((r) => r.snapshotDate).filter(Boolean);
     const usedStockDate =
@@ -162,11 +186,24 @@ export async function GET(req: NextRequest) {
         });
     }
 
+    const estUsageMap: Record<string, { estDailyUsage: number; sampleCount: number; observedDays: number }> = {};
+    for (const [k, v] of Object.entries(byKeyOnly)) {
+      estUsageMap[k] = {
+        estDailyUsage: v.estDailyUsage,
+        sampleCount: v.sampleCount,
+        observedDays: v.observedDays,
+      };
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         today,
         master: masterInfo,
+        dormantMeta: {
+          recent14MenuMap,
+          estUsageMap,
+        },
         orders: {
           usedDate: usedOrderDate,
           isToday: usedOrderDate === today && orderItems.length > 0,

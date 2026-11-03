@@ -68,6 +68,10 @@ export const GfsSmartOrderView: React.FC = () => {
   const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
   const [auditMatchedCount, setAuditMatchedCount] = useState(0);
   const [orderableCount, setOrderableCount] = useState(0);
+  const [activeMaterialCount, setActiveMaterialCount] = useState(0);
+  const [dormantCount, setDormantCount] = useState(0);
+  const [totalMaterialCount, setTotalMaterialCount] = useState(442);
+  const [filterMode, setFilterMode] = useState<'order_only' | 'active_only' | 'all'>('order_only');
   const [totalAmount, setTotalAmount] = useState(0);
 
   // 작업 상태
@@ -165,13 +169,23 @@ export const GfsSmartOrderView: React.FC = () => {
           setUnmatchedMenus(Array.isArray(d.unmatchedMenus) ? d.unmatchedMenus : []);
           setAuditMatchedCount(Number(d.auditMatchedCount) || 0);
           setOrderableCount(Number(d.orderableCount) || 0);
+          setActiveMaterialCount(Number(d.activeCount) || 0);
+          setDormantCount(Number(d.dormantCount) || 0);
+          setTotalMaterialCount(Number(d.totalCount) || 442);
+          if (d.filterDisplayMode) setFilterMode(d.filterDisplayMode);
           setTotalAmount(Number(d.totalAmount) || 0);
           setStatusMsg(
-            `자동 산출 완료 · 발주대상 ${d.orderableCount || 0}건 (${d.totalBoxes || 0}박스)`
+            `산출 완료 · 실발주 ${d.orderableCount || 0}건 (${d.totalBoxes || 0}박스) · 휴면 ${d.dormantCount || 0}건 제외`
           );
         } else {
           setStatusMsg(`산출 오류: ${d.error || '알 수 없는 오류'}`);
         }
+      } else if (d.type === 'GFS_FILTER_MODE_CHANGED') {
+        if (d.mode) setFilterMode(d.mode);
+        if (d.orderableCount != null) setOrderableCount(Number(d.orderableCount) || 0);
+        if (d.activeCount != null) setActiveMaterialCount(Number(d.activeCount) || 0);
+        if (d.dormantCount != null) setDormantCount(Number(d.dormantCount) || 0);
+        if (d.totalCount != null) setTotalMaterialCount(Number(d.totalCount) || 442);
       } else if (d.type === 'GFS_ORDERS_APPLIED' && d.success) {
         if (Array.isArray(d.unmatchedMenus)) {
           setUnmatchedMenus(d.unmatchedMenus);
@@ -436,6 +450,14 @@ export const GfsSmartOrderView: React.FC = () => {
     );
   };
 
+  // 3단 지능형 필터 모드 (실발주만 | 생산연동 | 전체) 변경
+  const handleSetFilterMode = (mode: 'order_only' | 'active_only' | 'all') => {
+    setFilterMode(mode);
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage({ type: 'GFS_SET_FILTER_MODE', mode }, window.location.origin);
+  };
+
   // 수동 파일 업로드 화면 토글
   const handleToggleManualUpload = () => {
     const win = iframeRef.current?.contentWindow;
@@ -564,6 +586,65 @@ export const GfsSmartOrderView: React.FC = () => {
             {auditMatchedCount || bootPayload?.stock.itemCount || 0}품목
           </span>
         </div>
+
+        {/* 3단 지능형 필터 세그먼트 (실발주만 | 생산연동 | 전체) */}
+        <div className="flex items-center bg-slate-900/90 p-0.5 rounded-md border border-slate-700 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleSetFilterMode('order_only')}
+            className={`px-2 py-0.5 text-[11px] font-extrabold rounded flex items-center gap-1 transition cursor-pointer ${
+              filterMode === 'order_only'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="오늘 실제 발주해야 하는 품목만 표시 (휴면자재 및 0박스 자동 숨김)"
+          >
+            <span>🔥 실발주만</span>
+            {orderableCount > 0 && (
+              <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-amber-200">
+                {orderableCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetFilterMode('active_only')}
+            className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
+              filterMode === 'active_only'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="오늘 완제품 생산 레시피에 들어가는 모든 자재 표시 (0박스 포함)"
+          >
+            <span>📦 생산연동</span>
+            {activeMaterialCount > 0 && (
+              <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-indigo-200">
+                {activeMaterialCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetFilterMode('all')}
+            className={`px-2 py-0.5 text-[11px] font-bold rounded flex items-center gap-1 transition cursor-pointer ${
+              filterMode === 'all'
+                ? 'bg-slate-700 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+            title="휴면 자재 포함 442개 전체 품목 표시"
+          >
+            <span>📋 전체</span>
+            <span className="font-mono text-[10px] px-1 rounded bg-black/40 text-slate-300">
+              {totalMaterialCount}
+            </span>
+          </button>
+        </div>
+
+        {dormantCount > 0 && filterMode === 'order_only' && (
+          <span className="text-[10px] font-medium text-slate-400 shrink-0 hidden 2xl:inline bg-slate-900/60 px-1.5 py-0.5 rounded border border-slate-800">
+            💤 휴면 {dormantCount}개 자동제외
+          </span>
+        )}
 
         {/* 현재 시각 기준 마감 임박 채널 원클릭 포커스 */}
         <button

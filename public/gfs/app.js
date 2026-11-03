@@ -54,6 +54,8 @@ const state = {
   vegCategoryFilter: 'all',  // ★ 완제품 생산 관제 카테고리 탭 필터 ('all' | 'samgak' | 'dosirak' | 'gimbap' | 'musubi' | 'rice')
   onlyNeeded: true,
   onlyFinishedGoodsRelated: true, // ★ 오늘 완제품 주문 현황과 관계있는 것만 발주서 반영 (기본값: TRUE)
+  filterDisplayMode: 'order_only', // ★ 3단 지능형 필터: 'order_only' (실제 발주 대상만 보기, 기본값) | 'active_only' (금일 생산연동) | 'all' (전체)
+  dormantMeta: null,               // ★ 과거 14일 수주 및 30일 재고소진 기반 휴면 자재 메타
   filterUrgent: false,       // 12시 이전 긴급 마감 거래처 필터
   filterKakao: false,        // 카톡/이메일 직접 발주 거래처 필터
   conservativeMode: false,   // ★ 보수적 안전 검토 모드 (납기 1일 지연 가산 + 공정 로스율 5% 버퍼)
@@ -1299,14 +1301,57 @@ function setupEventListeners() {
     btnForecastRefresh.addEventListener('click', () => loadForecastData(true));
   }
 
+  // 3단 지능형 필터 모드 버튼 리스너
+  const btnFilterModeOrderOnly = document.getElementById('btnFilterModeOrderOnly');
+  if (btnFilterModeOrderOnly) {
+    btnFilterModeOrderOnly.addEventListener('click', () => {
+      state.filterDisplayMode = 'order_only';
+      state.onlyNeeded = true;
+      state.onlyFinishedGoodsRelated = true;
+      updateFilterButtonsVisual();
+      renderTabs();
+      renderCards();
+      showToast('🔥 실제 발주 대상 품목만 표시합니다 (휴면/0박스 제외).', 'success');
+    });
+  }
+
+  const btnFilterModeActiveOnly = document.getElementById('btnFilterModeActiveOnly');
+  if (btnFilterModeActiveOnly) {
+    btnFilterModeActiveOnly.addEventListener('click', () => {
+      state.filterDisplayMode = 'active_only';
+      state.onlyNeeded = false;
+      state.onlyFinishedGoodsRelated = true;
+      updateFilterButtonsVisual();
+      renderTabs();
+      renderCards();
+      showToast('📦 금일 완제품 생산 레시피 연동 품목을 표시합니다.', 'info');
+    });
+  }
+
+  const btnFilterModeAll = document.getElementById('btnFilterModeAll');
+  if (btnFilterModeAll) {
+    btnFilterModeAll.addEventListener('click', () => {
+      state.filterDisplayMode = 'all';
+      state.onlyNeeded = false;
+      state.onlyFinishedGoodsRelated = false;
+      updateFilterButtonsVisual();
+      renderTabs();
+      renderCards();
+      showToast('📋 휴면 자재를 포함한 전체 442개 품목을 표시합니다.', 'info');
+    });
+  }
+
   // 엑셀 뷰 상단: ⚡ 발주 필요만 보기 vs 📋 0박스 포함 전체 보기 토글 버튼
   const btnExcelToggleOnlyNeeded = document.getElementById('btnExcelToggleOnlyNeeded');
   if (btnExcelToggleOnlyNeeded) {
     btnExcelToggleOnlyNeeded.addEventListener('click', () => {
-      state.onlyNeeded = !state.onlyNeeded;
+      state.filterDisplayMode = state.filterDisplayMode === 'order_only' ? 'all' : 'order_only';
+      state.onlyNeeded = state.filterDisplayMode === 'order_only';
+      state.onlyFinishedGoodsRelated = state.filterDisplayMode !== 'all';
       updateFilterButtonsVisual();
+      renderTabs();
       renderCards();
-      showToast(state.onlyNeeded ? '⚡ 오늘 발주 대상 품목만 모아봅니다.' : '📋 0박스 품목을 포함한 원조 엑셀 431개 전체 품목을 표시합니다.', 'info');
+      showToast(state.filterDisplayMode === 'order_only' ? '🔥 실제 발주 대상 품목만 표시합니다.' : '📋 전체 품목을 표시합니다.', 'info');
     });
   }
 
@@ -1600,6 +1645,53 @@ function updateFilterButtonsVisual() {
           : 'btn-tactile px-2 py-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white rounded-lg transition';
       });
     }
+  }
+
+  updateFilterModeUi();
+}
+
+function updateFilterModeUi() {
+  const btnOrder = document.getElementById('btnFilterModeOrderOnly');
+  const btnActive = document.getElementById('btnFilterModeActiveOnly');
+  const btnAll = document.getElementById('btnFilterModeAll');
+
+  const activeCls = 'btn-tactile px-2.5 py-1.5 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition';
+  const inactiveCls = 'btn-tactile px-2.5 py-1.5 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition';
+
+  if (btnOrder) btnOrder.className = state.filterDisplayMode === 'order_only' ? activeCls : inactiveCls;
+  if (btnActive) btnActive.className = state.filterDisplayMode === 'active_only' ? activeCls : inactiveCls;
+  if (btnAll) btnAll.className = state.filterDisplayMode === 'all' ? activeCls : inactiveCls;
+
+  const orderCount = (state.rawItems || []).filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant).length;
+  const activeCount = (state.rawItems || []).filter(i => i.isRelatedToOrders && !i.isDormant).length;
+  const dormantCount = (state.rawItems || []).filter(i => i.isDormant).length;
+  const totalCount = (state.rawItems || []).length;
+
+  const lblOrder = document.getElementById('labelFilterModeOrderOnly');
+  const lblActive = document.getElementById('labelFilterModeActiveOnly');
+  const lblAll = document.getElementById('labelFilterModeAll');
+
+  if (lblOrder) lblOrder.textContent = `🔥 실발주만 (${orderCount})`;
+  if (lblActive) lblActive.textContent = `📦 생산연동 (${activeCount})`;
+  if (lblAll) lblAll.textContent = `📋 전체 (${totalCount})`;
+
+  const excelViewCountBadge = document.getElementById('excelViewCountBadge');
+  if (excelViewCountBadge) {
+    if (state.filterDisplayMode === 'order_only') {
+      excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-mono";
+      excelViewCountBadge.textContent = `🔥 실발주 대상 ${orderCount}개 품목 표시 (휴면 ${dormantCount}개 제외)`;
+    } else if (state.filterDisplayMode === 'active_only') {
+      excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-mono";
+      excelViewCountBadge.textContent = `📦 금일 생산 연동 ${activeCount}개 품목 표시 (0박스 포함)`;
+    } else {
+      excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono";
+      excelViewCountBadge.textContent = `📋 전체 ${totalCount}개 품목 표시 (휴면 ${dormantCount}개 포함)`;
+    }
+  }
+
+  const labelExcelToggleOnlyNeeded = document.getElementById('labelExcelToggleOnlyNeeded');
+  if (labelExcelToggleOnlyNeeded) {
+    labelExcelToggleOnlyNeeded.textContent = state.filterDisplayMode === 'order_only' ? '📋 전체 품목 보기' : '🔥 실발주만 보기';
   }
 }
 
@@ -2022,7 +2114,11 @@ function applyFinishedGoodsOrdersToMaterials() {
       // 일사용량(dailyUsage) 동적 재산출
       // 벌크 kg 제수는 getRawItemDivisor()를 통해 g 단위로 정규화되어 sumProduct(g)와 단위 일치
       const effectiveDivisor = getRawItemDivisor(item, 'g');
-      if (effectiveDivisor && effectiveDivisor > 0) {
+      if (sumProduct === 0) {
+        item.dailyUsage = 0;
+        item.isDailyUsageDynamic = true;
+        totalUpdated++;
+      } else if (effectiveDivisor && effectiveDivisor > 0) {
         item.dailyUsage = Math.round((sumProduct / effectiveDivisor) * 10) / 10;
         item.isDailyUsageDynamic = true;
         totalUpdated++;
@@ -2032,11 +2128,67 @@ function applyFinishedGoodsOrdersToMaterials() {
         totalUpdated++;
       }
 
-      // 일사용량이 0이 된 품목은 자동 차단, 0 초과 시 자동 해제
-      if (item.dailyUsage <= 0) {
+      // 최근 14일 수주 이력 대조 (휴면/미사용 판정)
+      const recentMap = (state.dormantMeta && state.dormantMeta.recent14MenuMap) || {};
+      const hasRecent14Order = item.bomChildren.some(child => {
+        const norm = String(child.menuName || '').replace(/\s+/g, '');
+        if (recentMap[norm] > 0 || recentMap[child.menuName] > 0) return true;
+        const cleanChild = norm.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+        if (!cleanChild || cleanChild.length < 2) return false;
+        for (const [k, v] of Object.entries(recentMap)) {
+          const cleanK = k.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+          if (cleanK && (cleanK.includes(cleanChild) || cleanChild.includes(cleanK)) && v > 0) return true;
+        }
+        return false;
+      });
+
+      if (sumProduct === 0) {
+        if (!hasRecent14Order) {
+          item.isDormant = true;
+          item.dormantReason = '최근 14일간 수주 메뉴 없음 (휴면 자재)';
+        } else {
+          item.isDormant = false;
+          item.dormantReason = '금일 미생산 (최근 14일 내 가동 이력 있음)';
+        }
+      } else {
+        item.isDormant = false;
+        item.dormantReason = '';
+      }
+
+      // 일사용량이 0이 된 품목이나 휴면 자재는 자동 배제, 0 초과 시 자동 해제
+      if (item.dailyUsage <= 0 || item.isDormant) {
         item.isBlacklisted = true;
       } else if (!item.is64Excluded && !item.userExcluded) {
         item.isBlacklisted = false;
+      }
+    } else {
+      // BOM 하위 행이 없는 자재 (야채 계산기 연동 품목 또는 공통 벌크 식자재/소모품)
+      const isCommonCore = /백미|쌀|식초|정제염|식용유|대두유|참기름|맛소금|세척제|소독제|위생장갑|랩|롤백|박스테이프/.test(item.name);
+      const estMap = (state.dormantMeta && state.dormantMeta.estUsageMap) || {};
+      const cleanName = item.name.replace(/\s+/g, '');
+      const estInfo = estMap[item.name] || estMap[cleanName];
+      const estUsage = estInfo ? Number(estInfo.estDailyUsage) || 0 : (item.estDailyUsage || 0);
+
+      // 보조 계산 시트(야채 계산기 등)에 연동되어 있는 품목인지 확인
+      const isSuppLinked = state.supplementaryMaterialsMap && Object.values(state.supplementaryMaterialsMap).some(list => 
+        (list || []).some(s => {
+          const sNorm = String(s.name || '').replace(/\s+/g, '');
+          return sNorm && (cleanName.includes(sNorm) || sNorm.includes(cleanName));
+        })
+      );
+
+      if (!isCommonCore && !isSuppLinked && estUsage <= 0) {
+        // BOM 없고, 공통자재 아니고, 보조시트 연동도 없으며, 30일간 실사용량 0인 자재 -> 100% 휴면/미사용 자재!
+        item.dailyUsage = 0;
+        item.isDormant = true;
+        item.dormantReason = '30일간 실소진 0건 (장기 미사용 휴면 자재)';
+        item.isBlacklisted = true;
+      } else {
+        item.isDormant = false;
+        item.dormantReason = '';
+        if (isCommonCore && estUsage > 0 && (!item.dailyUsage || item.dailyUsage <= 0)) {
+          item.dailyUsage = estUsage;
+        }
       }
     }
   });
@@ -4560,6 +4712,13 @@ function parseOrderSheetDynamic(rows, worksheet) {
  */
 function assessFinishedGoodsLinkage(items) {
   items.forEach(item => {
+    if (item.isDormant) {
+      item.activeBomChildren = [];
+      item.activeBomCount = 0;
+      item.isRelatedToOrders = false;
+      return;
+    }
+
     if (item.bomChildren && item.bomChildren.length > 0) {
       const activeBom = [];
       item.bomChildren.forEach(child => {
@@ -4582,8 +4741,8 @@ function assessFinishedGoodsLinkage(items) {
       // BOM 하위 행이 없는 자재 (야채 계산기 연동 14종 야채, 쌀, 식초 등)
       item.activeBomChildren = [];
       item.activeBomCount = 0;
-      // 오늘 일사용량이 0보다 크면 연동 인정 (오늘 주문에 소모되는 야채/쌀 등)
-      item.isRelatedToOrders = (item.dailyUsage > 0);
+      // 오늘 일사용량이 0보다 크고 휴면이 아닐 때 연동 인정 (오늘 주문에 소모되는 야채/쌀 등)
+      item.isRelatedToOrders = (item.dailyUsage > 0) && !item.isDormant;
     }
   });
 }
@@ -4917,27 +5076,27 @@ function calculateItemMetrics(item) {
   const totalStock = item.incoming + item.currentStock;
   const stockDays = item.dailyUsage > 0 ? (totalStock / item.dailyUsage) : (totalStock > 0 ? 99 : 0);
 
-  // ★ 완제품 주문 연동 여부 검사: 오늘 완제품 주문이 없는 품목은 발주량 0으로 강제 배제!
-  const isOrderBlockedByNoFinishedOrders = state.onlyFinishedGoodsRelated && !item.isRelatedToOrders;
+  // ★ 완제품 주문 연동 및 휴면 여부 검사: 오늘 완제품 주문이 없거나 휴면인 품목은 발주량 0으로 강제 배제!
+  const isOrderBlockedByNoFinishedOrders = item.isDormant || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
 
   // 1) 표준 AI 권장 발주량 계산 (Standard Recommendation)
   const standardRequiredQty = item.dailyUsage * standardTargetDays;
   const standardShortage = standardRequiredQty - totalStock;
   let standardBoxes = 0;
-  if (!isOrderBlockedByNoFinishedOrders && standardShortage > 0) {
+  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && standardShortage > 0) {
     standardBoxes = Math.ceil(standardShortage / item.packUnit);
   }
 
   // 2) 보수적 안전 권장 발주량 계산 (Conservative Safety Mode)
   // - 거래처 납기 지연 스트레스 테스트 (+1.0일 가산)
   // - 공정 불량/감모 로스율 버퍼 (+5% 가산)
-  const conservativeTargetDays = (!isOrderBlockedByNoFinishedOrders && item.dailyUsage > 0)
+  const conservativeTargetDays = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && item.dailyUsage > 0)
     ? (standardTargetDays + state.conservativeLeadTimeDelay)
     : standardTargetDays;
   const conservativeRequiredQty = (item.dailyUsage * conservativeTargetDays) * (1 + state.conservativeLossRate);
   const conservativeShortage = conservativeRequiredQty - totalStock;
   let conservativeBoxes = 0;
-  if (!isOrderBlockedByNoFinishedOrders && conservativeShortage > 0) {
+  if (!isOrderBlockedByNoFinishedOrders && !item.isDormant && conservativeShortage > 0) {
     conservativeBoxes = Math.ceil(conservativeShortage / item.packUnit);
   }
   const bufferBoxes = Math.max(0, conservativeBoxes - standardBoxes);
@@ -4946,19 +5105,19 @@ function calculateItemMetrics(item) {
   const targetDays = state.conservativeMode ? conservativeTargetDays : standardTargetDays;
   const requiredQty = state.conservativeMode ? conservativeRequiredQty : standardRequiredQty;
   const shortage = state.conservativeMode ? conservativeShortage : standardShortage;
-  const calculatedBoxes = (!isOrderBlockedByNoFinishedOrders && shortage > 0) ? (shortage / item.packUnit) : 0;
+  const calculatedBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && shortage > 0) ? (shortage / item.packUnit) : 0;
   const recommendedBoxes = state.conservativeMode ? conservativeBoxes : standardBoxes;
 
   const origRequired = item.dailyUsage * item.excelDefaultDays;
   const origShortage = origRequired - totalStock;
-  const origBoxes = (!isOrderBlockedByNoFinishedOrders && origShortage > 0) ? Math.ceil(origShortage / item.packUnit) : 0;
+  const origBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && origShortage > 0) ? Math.ceil(origShortage / item.packUnit) : 0;
   const savedBoxes = Math.max(0, origBoxes - recommendedBoxes);
 
-  const finalBoxes = item.manualBoxes !== null ? item.manualBoxes : recommendedBoxes;
+  const finalBoxes = (item.isDormant ? 0 : (item.manualBoxes !== null ? item.manualBoxes : recommendedBoxes));
   const finalTotalAmount = finalBoxes * item.packUnit * item.unitPrice;
 
-  const isExcluded = item.isBlacklisted || item.userExcluded || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
-  const isOrderNeeded = finalBoxes > 0 && !isExcluded;
+  const isExcluded = item.isBlacklisted || item.userExcluded || item.isDormant || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
+  const isOrderNeeded = finalBoxes > 0 && !isExcluded && !item.isDormant;
 
   // 4) 4대 고위험 발주 '레드플래그(Red-Flag)' 자동 감사 판정
   const redFlags = [];
@@ -5508,12 +5667,19 @@ function getItemsForTab(tabId) {
   const list = [...state.rawItems];
 
   if (tabId === 'excluded_tab') {
-    return list.filter(i => (i.calc && i.calc.isExcluded) || (state.onlyFinishedGoodsRelated && !i.isRelatedToOrders));
+    return list.filter(i => (i.calc && i.calc.isExcluded) || i.isDormant || (state.filterDisplayMode === 'active_only' && !i.isRelatedToOrders));
   }
 
-  let activeList = list.filter(i => i.calc && !i.calc.isExcluded);
-  if (state.onlyFinishedGoodsRelated) {
-    activeList = activeList.filter(i => i.isRelatedToOrders);
+  let activeList;
+  if (state.filterDisplayMode === 'order_only') {
+    // 실발주 대상만 보기: 발주량(박스) > 0 이고 휴면/제외가 아닌 품목만!
+    activeList = list.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isBlacklisted && !i.userExcluded);
+  } else if (state.filterDisplayMode === 'active_only') {
+    // 금일 완제품 생산 연동 품목: 0박스 포함, 오늘 생산에 투입되는 모든 자재 (휴면 제외)
+    activeList = list.filter(i => i.isRelatedToOrders && !i.isDormant && !i.userExcluded);
+  } else {
+    // 전체 보기: 휴면 자재 포함 442개 전체
+    activeList = list.filter(i => !i.userExcluded);
   }
 
   if (tabId === 'auditor_tab') {
@@ -5582,9 +5748,11 @@ function renderCards() {
     items = items.filter(i => i.calc && i.calc.auditor && i.calc.auditor.hasTackles);
   }
 
-  // 발주 필요 품목만 필터링 (단, 완제품 집중 관제 중에는 해당 메뉴에 투입되는 모든 원부자재를 빠짐없이 전수 조망)
-  if (state.onlyNeeded && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
-    items = items.filter(i => i.calc && i.calc.isOrderNeeded);
+  // 지능형 필터링: 실발주 대상만 (기본) vs 생산 연동만 vs 전체
+  if (state.filterDisplayMode === 'order_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
+    items = items.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant);
+  } else if (state.filterDisplayMode === 'active_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
+    items = items.filter(i => i.isRelatedToOrders && !i.isDormant);
   }
 
   // 12시 이전 긴급 마감 필터링
@@ -6958,8 +7126,9 @@ function renderClassicExcelView(items) {
                 ${isExpanded ? '−' : '+'}
               </button>
             ` : `<span class="w-4 h-4 inline-block shrink-0"></span>`}
-            <span class="font-bold text-neutral-900 dark:text-neutral-100 text-xs truncate max-w-[190px]" title="${item.name}">${item.name}</span>
+            <span class="font-bold text-xs truncate max-w-[190px] ${item.isDormant ? 'text-neutral-400 dark:text-neutral-500 line-through' : 'text-neutral-900 dark:text-neutral-100'}" title="${item.name}">${item.name}</span>
             ${hasBom ? `<span class="text-[9.5px] text-neutral-400 font-mono">(${bomChildren.length})</span>` : ''}
+            ${item.isDormant ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason || '휴면 자재'}">💤휴면</span>` : ''}
           </div>
         </td>
 

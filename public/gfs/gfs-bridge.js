@@ -276,6 +276,11 @@
       var masterInfo = (data && data.master) || {};
       var ordersInfo = (data && data.orders) || {};
       var stockInfo = (data && data.stock) || {};
+      var dormantMeta = (data && data.dormantMeta) || null;
+
+      if (dormantMeta && typeof state !== 'undefined' && state) {
+        state.dormantMeta = dormantMeta;
+      }
 
       // Step 1: 발주서 마스터 로드 (DB에 저장된 최신 신메뉴 발주서 우선, 없으면 내장 GFS.xlsx)
       var masterB64 = masterInfo.base64 || (typeof window !== 'undefined' ? window.EMBEDDED_GFS_BASE64 : null);
@@ -311,14 +316,18 @@
 
       if (typeof recalculateAll === 'function') recalculateAll();
 
-      // 발주 대상 건수 및 총액 요약 계산
+      // 발주 대상 건수 및 총액 요약 계산 (휴면 자재 정밀 분리)
       var orderableCount = 0;
+      var activeCount = 0;
+      var dormantCount = 0;
       var totalBoxes = 0;
       var totalAmount = 0;
       if (Array.isArray(state.rawItems)) {
         state.rawItems.forEach(function (m) {
+          if (m.isDormant) dormantCount++;
+          if (m.isRelatedToOrders && !m.isDormant) activeCount++;
           var boxes = Number((m.calc && m.calc.finalBoxes) != null ? m.calc.finalBoxes : m.finalBoxes) || 0;
-          if (boxes > 0 && !m.is64Excluded && !m.isBlacklisted) {
+          if (boxes > 0 && !m.is64Excluded && !m.isBlacklisted && !m.isDormant) {
             orderableCount++;
             totalBoxes += boxes;
             var pack = Number(m.packUnit) || 1;
@@ -329,7 +338,7 @@
       }
 
       toast(
-        '⚡ 자동 부팅 완료: 수주 ' + (orderRes.count || 0) + '종(' + (ordersInfo.usedDate || '') + ') · 실사재고 ' + (auditRes.matched || 0) + '건(' + (stockInfo.usedDate || '') + ') 즉시 반영!',
+        '⚡ 자동 부팅 완료: 실발주 ' + orderableCount + '건 (휴면 ' + dormantCount + '건 제외) · 수주 ' + (orderRes.count || 0) + '종 즉시 반영!',
         'success'
       );
 
@@ -344,6 +353,10 @@
         auditMatchedCount: auditRes.matched || 0,
         auditDiscrepancyCount: auditRes.discrepancy || 0,
         orderableCount: orderableCount,
+        activeCount: activeCount,
+        dormantCount: dormantCount,
+        totalCount: Array.isArray(state.rawItems) ? state.rawItems.length : 0,
+        filterDisplayMode: (typeof state !== 'undefined' && state && state.filterDisplayMode) || 'order_only',
         totalBoxes: Math.round(totalBoxes * 10) / 10,
         totalAmount: Math.round(totalAmount),
       });
@@ -448,6 +461,21 @@
           state.activeTab = msg.channelId;
           if (typeof renderTabs === 'function') renderTabs();
           if (typeof renderCards === 'function') renderCards();
+        }
+      } else if (msg.type === 'GFS_SET_FILTER_MODE') {
+        if (typeof state !== 'undefined' && state && msg.mode) {
+          state.filterDisplayMode = msg.mode;
+          if (typeof updateFilterModeUi === 'function') updateFilterModeUi();
+          if (typeof renderTabs === 'function') renderTabs();
+          if (typeof renderCards === 'function') renderCards();
+          sendBack(e.source, e.origin, {
+            type: 'GFS_FILTER_MODE_CHANGED',
+            mode: msg.mode,
+            orderableCount: (state.rawItems || []).filter(function (i) { return i.calc && i.calc.finalBoxes > 0 && !i.isDormant; }).length,
+            activeCount: (state.rawItems || []).filter(function (i) { return i.isRelatedToOrders && !i.isDormant; }).length,
+            dormantCount: (state.rawItems || []).filter(function (i) { return i.isDormant; }).length,
+            totalCount: (state.rawItems || []).length,
+          });
         }
       } else if (msg.type === 'GFS_PING') sendBack(e.source, e.origin, { type: 'GFS_PONG', bridge: 2 });
     } catch (err) { /* ignore */ }
