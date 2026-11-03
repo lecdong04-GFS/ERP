@@ -7015,24 +7015,8 @@ function renderClassicExcelView(items) {
 
   classicExcelBody.innerHTML = '';
 
-  // 상단 엑셀 뷰 상태 배지 및 토글 라벨 동기화
-  const excelViewCountBadge = document.getElementById('excelViewCountBadge');
-  const labelExcelToggleOnlyNeeded = document.getElementById('labelExcelToggleOnlyNeeded');
-  const totalItemCount = state.rawItems ? state.rawItems.length : 431;
-
-  if (excelViewCountBadge) {
-    if (state.onlyNeeded) {
-      excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-mono";
-      excelViewCountBadge.textContent = `⚡ 발주 대상 ${items.length}개 품목 표시 (전체 ${totalItemCount}개 중)`;
-    } else {
-      excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono";
-      excelViewCountBadge.textContent = `📋 전체 ${items.length}개 품목 표시 (0박스 포함)`;
-    }
-  }
-
-  if (labelExcelToggleOnlyNeeded) {
-    labelExcelToggleOnlyNeeded.textContent = state.onlyNeeded ? '📋 0박스 포함 전체 보기' : '⚡ 발주 대상만 보기';
-  }
+  // 상단 엑셀 뷰 상태 배지 및 3단 필터 UI 동기화
+  updateFilterModeUi();
 
   // 1) 거래처별 그룹화
   const grouped = {};

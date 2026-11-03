@@ -18,6 +18,10 @@ interface AutoBootPayload {
     itemCount: number;
     base64?: string;
   };
+  dormantMeta?: {
+    recent14MenuMap: Record<string, number>;
+    estUsageMap: Record<string, { estDailyUsage: number; sampleCount: number; observedDays: number }>;
+  };
   orders: {
     usedDate: string;
     isToday: boolean;
@@ -764,7 +768,7 @@ export const GfsSmartOrderView: React.FC = () => {
         )}
         <iframe
           ref={iframeRef}
-          src="/gfs/index.html?v=20261103_2"
+          src="/gfs/index.html?v=20261103_filter_v3"
           title="GFS 스마트발주"
           className="w-full h-full border-0 block"
           allow="clipboard-read; clipboard-write"
