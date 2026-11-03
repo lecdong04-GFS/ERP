@@ -5705,7 +5705,7 @@ function renderCards() {
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-2.5">
               <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
-                <i data-lucide="Flame" class="w-5 h-5"></i>
+                <i data-lucide="flame" class="w-5 h-5"></i>
               </div>
               <div>
                 <div class="flex items-center gap-2 flex-wrap">
@@ -6112,74 +6112,69 @@ function createCardElement(item) {
       </div>
     </div>
 
-    <!-- ★ [카드 구조 혁명] 좌(품목·재고·수량조절) · 우(AI 3줄 핵심 근거 & 감사관 판정 상시 노출) 1:1 가로 대조 레이아웃 -->
-    <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch">
+    <!-- ★ [중단] 품목명 · 재고/목표유지일 · 발주수량 스텝퍼 (카드 전체 가로폭 활용으로 겹침 원천 차단) -->
+    <div class="space-y-2.5">
       
-      <!-- [좌측 5칸] 품목명 · 현재고/버팀일수 · 박스 수량 스텝퍼 -->
-      <div class="md:col-span-5 flex flex-col justify-between gap-2.5">
-        <div>
-          <div class="flex items-baseline justify-between gap-2">
-            <h4 class="text-base sm:text-[17px] font-black text-neutral-900 dark:text-white tracking-tight leading-snug truncate" title="${item.name}">
-              ${item.name}
-            </h4>
-            <span class="text-[11px] font-mono font-bold text-neutral-400 shrink-0">
-              ${item.packUnit}입 · ￦${item.unitPrice.toLocaleString()}
+      <!-- 1) 품목명 & 입수/단가 -->
+      <div class="flex items-baseline justify-between gap-3">
+        <h4 class="text-base sm:text-[17px] font-black text-neutral-900 dark:text-white tracking-tight leading-snug min-w-0 truncate" title="${item.name}">
+          ${item.name}
+        </h4>
+        <span class="text-xs font-mono font-bold text-neutral-400 shrink-0 whitespace-nowrap">
+          ${item.packUnit}입/박스 · ￦${item.unitPrice.toLocaleString()}/봉
+        </span>
+      </div>
+
+      <!-- 2) 직관적 재고 & 버팀일수 신호등 + 일소진/목표유지일 조절 바 -->
+      <div class="bg-neutral-50 dark:bg-neutral-800/50 rounded-xl px-3 py-2 border border-neutral-200/70 dark:border-neutral-800 text-xs space-y-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 text-[11.5px] text-neutral-700 dark:text-neutral-300 font-medium">
+            <span>
+              ${item.isAudited ? '실사재고' : '현장재고'} <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.currentStock.toLocaleString()}</strong>봉
             </span>
+            ${item.isAudited ? `
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-200/80 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold">${item.auditBoxes}박스+${item.auditPieces}개</span>
+            ` : ''}
+            <span>+ 입고예정 <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.incoming.toLocaleString()}</strong>봉</span>
           </div>
-
-          <!-- 직관적 재고 & 버팀일수 신호등 박스 -->
-          <div class="mt-2 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl p-2.5 border border-neutral-200/70 dark:border-neutral-800 text-xs space-y-1.5">
-            <div class="flex items-center justify-between gap-1 flex-wrap">
-              <span class="text-[11.5px] text-neutral-700 dark:text-neutral-300 font-medium">
-                ${item.isAudited ? '실사' : '현재고'} <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.currentStock.toLocaleString()}</strong>봉
-                ${item.incoming > 0 ? `+ 입고 <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.incoming.toLocaleString()}</strong>봉` : ''}
-              </span>
-              <span class="font-black px-2 py-0.5 rounded-md text-[11px] border ${stockDaysStatusClass}">
-                ${calc.stockDays.toFixed(1)}일치 (${stockDaysText})
-              </span>
-            </div>
-
-            <div class="flex items-center justify-between text-[11px] text-neutral-500 pt-1 border-t border-neutral-200/60 dark:border-neutral-700/60">
-              <span>일소진 <strong class="text-neutral-900 dark:text-white font-mono font-bold">${item.dailyUsage.toLocaleString()}</strong>봉</span>
-              <div class="flex items-center gap-1">
-                <span>목표유지</span>
-                <button data-action="days-minus" class="btn-tactile w-4 h-4 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-[10px]">-</button>
-                <input type="number" step="0.5" min="0.5" max="15" value="${calc.targetDays.toFixed(1)}" data-action="days-input" class="w-9 h-4 text-center font-mono font-black rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-[10.5px]">
-                <span>일</span>
-                <button data-action="days-plus" class="btn-tactile w-4 h-4 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-[10px]">+</button>
-                ${calc.isCustomDays ? '<button data-action="days-reset" title="기본값 복원" class="text-neutral-400 hover:text-neutral-900 p-0.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i></button>' : ''}
-              </div>
-            </div>
-          </div>
+          <span class="font-black px-2 py-0.5 rounded-md text-[11px] border shrink-0 whitespace-nowrap ${stockDaysStatusClass}">
+            ${calc.stockDays.toFixed(1)}일치 (${stockDaysText})
+          </span>
         </div>
 
-        <!-- 박스 수량 스텝퍼 & 발주 금액 -->
-        <div class="space-y-2 pt-1">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-1">
-              <button data-action="qty-minus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">-</button>
-              <input type="number" min="0" value="${calc.finalBoxes}" data-action="qty-input" class="w-15 h-9 text-center font-mono font-black text-base rounded-xl border-2 border-neutral-900 dark:border-white bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none shadow-2xs">
-              <button data-action="qty-plus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">+</button>
-              <span class="text-xs font-extrabold text-neutral-800 dark:text-neutral-200 ml-0.5">박스</span>
-              ${item.manualBoxes !== null ? '<span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 ml-0.5">수동</span>' : ''}
-            </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-500 pt-1.5 border-t border-neutral-200/60 dark:border-neutral-700/60">
+          <span>일일소진: <strong class="text-neutral-900 dark:text-white font-mono font-bold">${item.dailyUsage.toLocaleString()}</strong>봉/일</span>
+          <div class="flex items-center gap-1 shrink-0">
+            <span>목표유지:</span>
+            <button type="button" data-action="days-minus" class="btn-tactile w-5 h-5 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-xs">-</button>
+            <input type="number" step="0.5" min="0.5" max="15" value="${calc.targetDays.toFixed(1)}" data-action="days-input" style="width: 46px;" class="h-5 text-center font-mono font-black rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-[11px]">
+            <span>일</span>
+            <button type="button" data-action="days-plus" class="btn-tactile w-5 h-5 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-xs">+</button>
+            ${calc.isCustomDays ? '<button type="button" data-action="days-reset" title="기본값 복원" class="text-neutral-400 hover:text-neutral-900 p-0.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i></button>' : ''}
+          </div>
+        </div>
+      </div>
 
-            <div class="text-right">
-              <span class="text-[10px] text-neutral-400 block font-medium leading-none">예상 발주금액</span>
-              <span class="font-mono font-black text-base sm:text-lg text-neutral-900 dark:text-white tracking-tight">￦${calc.finalTotalAmount.toLocaleString()}</span>
-            </div>
+      <!-- 3) 발주 박스 수량 스텝퍼 + 빠른 선택 칩 + 예상 발주금액 (넓은 1줄 배치로 겹침 제로) -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-0.5">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 shrink-0">
+            <button type="button" data-action="qty-minus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">-</button>
+            <input type="number" min="0" value="${calc.finalBoxes}" data-action="qty-input" style="width: 60px;" class="w-16 h-9 text-center font-mono font-black text-base rounded-xl border-2 border-neutral-900 dark:border-white bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none shadow-2xs">
+            <button type="button" data-action="qty-plus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">+</button>
+            <span class="text-sm font-extrabold text-neutral-800 dark:text-neutral-200 ml-0.5 whitespace-nowrap">박스</span>
+            ${item.manualBoxes !== null ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 ml-0.5 whitespace-nowrap">수동</span>' : ''}
           </div>
 
-          <!-- 표준 / 보수안전 빠른 선택 칩 -->
-          <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
-            <button type="button" data-action="pick-standard" class="btn-tactile px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition border ${
+          <div class="flex items-center gap-1 flex-wrap">
+            <button type="button" data-action="pick-standard" class="btn-tactile px-2.5 py-1 rounded-lg text-[11px] font-bold transition border whitespace-nowrap ${
               item.manualBoxes === calc.standardBoxes || (item.manualBoxes === null && !state.conservativeMode)
                 ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black'
                 : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
             }">
               표준 ${calc.standardBoxes}박스
             </button>
-            <button type="button" data-action="pick-conservative" class="btn-tactile px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition border ${
+            <button type="button" data-action="pick-conservative" class="btn-tactile px-2.5 py-1 rounded-lg text-[11px] font-bold transition border whitespace-nowrap ${
               item.manualBoxes === calc.conservativeBoxes || (item.manualBoxes === null && state.conservativeMode)
                 ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black'
                 : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
@@ -6188,102 +6183,104 @@ function createCardElement(item) {
             </button>
           </div>
         </div>
+
+        <div class="text-right ml-auto shrink-0">
+          <span class="text-[10px] text-neutral-400 block font-medium leading-none">예상 발주금액</span>
+          <span class="font-mono font-black text-lg sm:text-xl text-neutral-900 dark:text-white tracking-tight whitespace-nowrap">￦${calc.finalTotalAmount.toLocaleString()}</span>
+        </div>
       </div>
 
-      <!-- [우측 7칸] AI 3줄 핵심 공식 & 감사관 판정 (클릭 없이 100% 상시 노출!) -->
-      <div class="md:col-span-7 rounded-xl p-3 border flex flex-col justify-between gap-2 ${
-        isCriticalShortage
-          ? 'bg-rose-50/50 dark:bg-rose-950/25 border-rose-300 dark:border-rose-800/80'
-          : isPriority
-            ? 'bg-amber-50/50 dark:bg-amber-950/25 border-amber-300 dark:border-amber-800/80'
-            : 'bg-neutral-50/80 dark:bg-neutral-800/40 border-neutral-200/80 dark:border-neutral-700/70'
-      }">
-        
-        <!-- 1줄: 📌 오늘 소진 원인 메뉴 뱃지 -->
-        <div class="space-y-1">
-          <div class="flex items-center justify-between gap-1">
-            <span class="text-[11px] font-black text-neutral-800 dark:text-neutral-200 flex items-center gap-1">
-              <span>📌 왜 오늘 <strong class="font-mono text-neutral-900 dark:text-white underline decoration-amber-400 decoration-2">${item.dailyUsage.toLocaleString()}봉</strong>이 소진되나?</span>
-            </span>
-            ${item.activeBomChildren && item.activeBomChildren.length > 0 ? `
-              <span class="text-[10px] font-bold text-neutral-500">투입 메뉴 ${item.activeBomChildren.length}종</span>
-            ` : ''}
-          </div>
+    </div>
+
+    <!-- ★ [하단 상시 노출 AI 3줄 핵심 브리핑 보드] 아코디언 없이 카드 전체 가로폭으로 시원하게 표시 -->
+    <div class="rounded-xl p-3 border space-y-2 ${
+      isCriticalShortage
+        ? 'bg-rose-50/50 dark:bg-rose-950/25 border-rose-300 dark:border-rose-800/80'
+        : isPriority
+          ? 'bg-amber-50/50 dark:bg-amber-950/25 border-amber-300 dark:border-amber-800/80'
+          : 'bg-neutral-50/80 dark:bg-neutral-800/40 border-neutral-200/80 dark:border-neutral-700/70'
+    }">
+      
+      <!-- 1줄: 📌 오늘 소진 원인 메뉴 뱃지 -->
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span class="text-[11px] font-black text-neutral-800 dark:text-neutral-200 shrink-0">
+            📌 오늘 소진 원인 (<strong class="font-mono text-neutral-900 dark:text-white">${item.dailyUsage.toLocaleString()}봉</strong>):
+          </span>
           <div class="flex flex-wrap items-center gap-1">
             ${activeDishesHtml}
           </div>
         </div>
-
-        <!-- 2줄: 🧮 AI 산출 공식 1줄 요약 -->
-        <div class="bg-white/90 dark:bg-neutral-900/80 rounded-lg px-2.5 py-1.5 border border-neutral-200/70 dark:border-neutral-700/70 text-[11px] flex flex-wrap items-center justify-between gap-1.5">
-          <div class="font-mono text-neutral-700 dark:text-neutral-300 leading-snug">
-            <span class="text-neutral-500">산출식:</span>
-            필요 <strong class="text-neutral-900 dark:text-white font-bold">${Math.round(calc.requiredQty).toLocaleString()}봉</strong>(${calc.targetDays.toFixed(1)}일)
-            － 총재고 <strong class="text-neutral-900 dark:text-white font-bold">${calc.totalStock.toLocaleString()}봉</strong>
-            ＝ 부족 <strong class="text-rose-600 dark:text-rose-400 font-black">${Math.max(0, Math.round(calc.shortage)).toLocaleString()}봉</strong>
-            ➔ <strong class="text-neutral-900 dark:text-white font-black">[권장 ${calc.recommendedBoxes}박스]</strong>
-          </div>
-          <div class="flex items-center gap-1 flex-wrap">
-            ${calc.savedBoxes > 0 ? `
-              <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">
-                🛡️ 구기준 대비 -${calc.savedBoxes}박스 절감
-              </span>
-            ` : ''}
-            ${(supplier.specialNotice || supplier.specialMemo) ? `
-              <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]" title="${supplier.specialNotice || supplier.specialMemo}">
-                💡 ${supplier.specialNotice || supplier.specialMemo}
-              </span>
-            ` : ''}
-          </div>
-        </div>
-
-        <!-- 3줄: ⚔️ AI 감사관 판정 & 원클릭 즉시 반영 -->
-        ${isPriority ? `
-          <div class="rounded-lg p-2.5 border ${
-            isCriticalShortage
-              ? 'bg-rose-100/80 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700'
-              : 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700'
-          } flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div class="space-y-1 min-w-0 flex-1">
-              ${(calc.redFlags || []).map(rf => `
-                <div class="text-[11.5px] leading-snug flex items-start gap-1">
-                  <span class="font-black text-rose-700 dark:text-rose-300 shrink-0">${rf.badgeText}:</span>
-                  <span class="font-bold text-neutral-900 dark:text-neutral-100">${rf.desc}</span>
-                </div>
-              `).join('')}
-              ${(calc.auditor && calc.auditor.tackles || []).map(t => `
-                <div class="text-[11.5px] leading-snug flex items-start gap-1">
-                  <span class="font-black text-amber-900 dark:text-amber-300 shrink-0">⚔️ ${t.title}:</span>
-                  <span class="font-semibold text-neutral-800 dark:text-neutral-200">${t.comment}</span>
-                </div>
-              `).join('')}
-            </div>
-
-            ${canReduceByAuditor ? `
-              <button type="button" data-action="pick-auditor" class="btn-tactile shrink-0 px-3 py-2 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition">
-                <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-600"></i>
-                <div class="text-left leading-tight">
-                  <div>⚡ ${calc.auditor.bestAuditorSuggestion}박스로 변경</div>
-                  <div class="text-[10px] font-mono text-emerald-300 dark:text-emerald-700">-${reduceDiffBoxes}박스 (￦${reduceDiffAmount.toLocaleString()} 절감)</div>
-                </div>
-              </button>
-            ` : isAlreadyAuditorApplied ? `
-              <span class="shrink-0 px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-black flex items-center gap-1 shadow-2xs">
-                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
-                감사관 권장(${calc.finalBoxes}박스) 반영됨
-              </span>
-            ` : ''}
-          </div>
-        ` : `
-          <div class="rounded-lg px-2.5 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between text-[11px]">
-            <span class="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
-              ✅ AI 견제 감사관 통과 — 일소요량·입고예정·유통기한 기준 적정 발주량입니다.
-            </span>
-          </div>
-        `}
-
       </div>
+
+      <!-- 2줄: 🧮 AI 산출 공식 1줄 요약 -->
+      <div class="bg-white/90 dark:bg-neutral-900/80 rounded-lg px-2.5 py-1.5 border border-neutral-200/70 dark:border-neutral-700/70 text-[11.5px] flex flex-wrap items-center justify-between gap-2">
+        <div class="font-mono text-neutral-700 dark:text-neutral-300 leading-snug">
+          <span class="text-neutral-500 font-sans font-bold mr-1">🧮 산출식:</span>
+          필요 <strong class="text-neutral-900 dark:text-white font-bold">${Math.round(calc.requiredQty).toLocaleString()}봉</strong>(${calc.targetDays.toFixed(1)}일)
+          － 총재고 <strong class="text-neutral-900 dark:text-white font-bold">${calc.totalStock.toLocaleString()}봉</strong>
+          ＝ 부족 <strong class="text-rose-600 dark:text-rose-400 font-black">${Math.max(0, Math.round(calc.shortage)).toLocaleString()}봉</strong>
+          ➔ <strong class="text-neutral-900 dark:text-white font-black">[권장 ${calc.recommendedBoxes}박스]</strong>
+        </div>
+        <div class="flex items-center gap-1 flex-wrap">
+          ${calc.savedBoxes > 0 ? `
+            <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px] whitespace-nowrap">
+              🛡️ 구기준 대비 -${calc.savedBoxes}박스 절감
+            </span>
+          ` : ''}
+          ${(supplier.specialNotice || supplier.specialMemo) ? `
+            <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]" title="${supplier.specialNotice || supplier.specialMemo}">
+              💡 ${supplier.specialNotice || supplier.specialMemo}
+            </span>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- 3줄: ⚔️ AI 감사관 판정 & 원클릭 즉시 반영 -->
+      ${isPriority ? `
+        <div class="rounded-lg p-2.5 border ${
+          isCriticalShortage
+            ? 'bg-rose-100/80 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700'
+            : 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700'
+        } flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="space-y-1 min-w-0 flex-1">
+            ${(calc.redFlags || []).map(rf => `
+              <div class="text-[11.5px] leading-snug">
+                <span class="font-black text-rose-700 dark:text-rose-300 mr-1">${rf.badgeText}:</span>
+                <span class="font-bold text-neutral-900 dark:text-neutral-100">${rf.desc}</span>
+              </div>
+            `).join('')}
+            ${(calc.auditor && calc.auditor.tackles || []).map(t => `
+              <div class="text-[11.5px] leading-snug">
+                <span class="font-black text-amber-900 dark:text-amber-300 mr-1">⚔️ ${t.title}:</span>
+                <span class="font-semibold text-neutral-800 dark:text-neutral-200">${t.comment}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          ${canReduceByAuditor ? `
+            <button type="button" data-action="pick-auditor" class="btn-tactile shrink-0 px-3 py-2 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition whitespace-nowrap">
+              <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-600 shrink-0"></i>
+              <div class="text-left leading-tight">
+                <div>⚡ ${calc.auditor.bestAuditorSuggestion}박스로 변경</div>
+                <div class="text-[10px] font-mono text-emerald-300 dark:text-emerald-700">-${reduceDiffBoxes}박스 (￦${reduceDiffAmount.toLocaleString()} 절감)</div>
+              </div>
+            </button>
+          ` : isAlreadyAuditorApplied ? `
+            <span class="shrink-0 px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+              감사관 권장(${calc.finalBoxes}박스) 반영됨
+            </span>
+          ` : ''}
+        </div>
+      ` : `
+        <div class="rounded-lg px-2.5 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between text-[11px]">
+          <span class="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 shrink-0"></i>
+            <span>AI 견제 감사관 검증 통과 — 일소요량·입고예정·유통기한 기준 적정 발주량입니다.</span>
+          </span>
+        </div>
+      `}
 
     </div>
 
