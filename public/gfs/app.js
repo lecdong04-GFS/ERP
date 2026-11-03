@@ -1211,6 +1211,7 @@ function setupEventListeners() {
       state.viewMode = 'cards';
       updateViewModeButtons();
       renderCards();
+      renderAnomalyDetectionUi();
     });
   }
 
@@ -1219,6 +1220,7 @@ function setupEventListeners() {
       state.viewMode = 'table';
       updateViewModeButtons();
       renderCards();
+      renderAnomalyDetectionUi();
     });
   }
 
@@ -1227,6 +1229,7 @@ function setupEventListeners() {
       state.viewMode = 'excel';
       updateViewModeButtons();
       renderCards();
+      renderAnomalyDetectionUi();
       showToast('★★발주서양식통합★★(정준오) 원조 엑셀 발주시트 뷰로 전환되었습니다!', 'success');
     });
   }
@@ -5645,10 +5648,186 @@ function renderCards() {
     container.classList.remove('hidden');
     if (tableViewContainer) tableViewContainer.classList.add('hidden');
     if (classicExcelViewContainer) classicExcelViewContainer.classList.add('hidden');
-    items.forEach(item => {
-      const card = createCardElement(item);
-      container.appendChild(card);
-    });
+
+    // ★ [배치 혁명] 제외 품목 탭이 아닐 때 카드뷰 자동 2단 분리:
+    //   1순위 상단: 🚨 AI 견제 & 확인 필수 품목 (태클 또는 레드플래그 감지 품목)
+    //   2순위 하단: ✅ AI 검증 통과 안심 발주 품목
+    if (state.activeTab === 'excluded_tab') {
+      items.forEach(item => {
+        container.appendChild(createCardElement(item));
+      });
+    } else {
+      const isPriorityItem = (i) => {
+        const hasTackle = i.calc && i.calc.auditor && i.calc.auditor.hasTackles && (i.calc.finalBoxes > 0 || i.calc.recommendedBoxes > 0);
+        const hasRedFlag = i.calc && i.calc.redFlags && i.calc.redFlags.length > 0;
+        return Boolean(hasTackle || hasRedFlag);
+      };
+
+      const priorityItems = items.filter(isPriorityItem).sort((a, b) => {
+        // 1) 결품 초임박 최우선
+        const aShortage = (a.calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE') ? 1 : 0;
+        const bShortage = (b.calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE') ? 1 : 0;
+        if (aShortage !== bShortage) return bShortage - aShortage;
+        // 2) AI 감사관 삭감 가능 금액 큰 순
+        const aSave = (a.calc.auditor && a.calc.auditor.bestAuditorSuggestion !== null && a.calc.finalBoxes > a.calc.auditor.bestAuditorSuggestion)
+          ? (a.calc.finalBoxes - a.calc.auditor.bestAuditorSuggestion) * a.packUnit * a.unitPrice : 0;
+        const bSave = (b.calc.auditor && b.calc.auditor.bestAuditorSuggestion !== null && b.calc.finalBoxes > b.calc.auditor.bestAuditorSuggestion)
+          ? (b.calc.finalBoxes - b.calc.auditor.bestAuditorSuggestion) * b.packUnit * b.unitPrice : 0;
+        if (aSave !== bSave) return bSave - aSave;
+        // 3) 발주 금액 큰 순
+        return (b.calc.finalTotalAmount || 0) - (a.calc.finalTotalAmount || 0);
+      });
+
+      const safeItems = items.filter(i => !isPriorityItem(i));
+
+      // 상단 1순위 구역 렌더링
+      if (priorityItems.length > 0) {
+        const subFilter = state.priorityZoneSubFilter || 'all';
+        const tackleItems = priorityItems.filter(i => i.calc.auditor && i.calc.auditor.hasTackles);
+        const shortageItems = priorityItems.filter(i => (i.calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE'));
+        const highOrDupItems = priorityItems.filter(i => (i.calc.redFlags || []).some(r => r.id !== 'CRITICAL_SHORTAGE'));
+
+        const reducibleItems = priorityItems.filter(i =>
+          i.calc && i.calc.auditor && i.calc.auditor.bestAuditorSuggestion !== null && i.calc.finalBoxes > i.calc.auditor.bestAuditorSuggestion
+        );
+        const reducibleBoxes = reducibleItems.reduce((acc, i) => acc + (i.calc.finalBoxes - i.calc.auditor.bestAuditorSuggestion), 0);
+        const reducibleAmount = reducibleItems.reduce((acc, i) => acc + (i.calc.finalBoxes - i.calc.auditor.bestAuditorSuggestion) * i.packUnit * i.unitPrice, 0);
+
+        let displayedPriority = priorityItems;
+        if (subFilter === 'tackle') displayedPriority = tackleItems;
+        else if (subFilter === 'shortage') displayedPriority = shortageItems;
+        else if (subFilter === 'high_dup') displayedPriority = highOrDupItems;
+
+        const priorityBanner = document.createElement('div');
+        priorityBanner.id = 'priorityZoneBanner';
+        priorityBanner.className = 'col-span-full rounded-2xl border-2 border-amber-400/90 dark:border-amber-600 bg-gradient-to-r from-amber-50/90 via-white to-rose-50/60 dark:from-amber-950/40 dark:via-neutral-900 dark:to-rose-950/30 p-3.5 sm:p-4 shadow-sm flex flex-col gap-3';
+        priorityBanner.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                <i data-lucide="Flame" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm sm:text-base font-black text-neutral-900 dark:text-white tracking-tight">
+                    🚨 1순위 집중 브리핑: AI 견제 & 확인 필수 품목
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-black bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
+                    ${priorityItems.length}건
+                  </span>
+                  ${reducibleItems.length > 0 ? `
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      💡 감사관 권고 반영 시 -${reducibleBoxes}박스 (￦${reducibleAmount.toLocaleString()} 절감)
+                    </span>
+                  ` : ''}
+                </div>
+                <p class="text-[11.5px] text-neutral-600 dark:text-neutral-300 font-medium mt-0.5">
+                  스크롤하며 찾을 필요 없이 AI 감사관이 태클을 걸었거나 결품 위험이 있는 품목만 최상단에 모았습니다. 카드 우측의 <strong class="text-neutral-900 dark:text-white">3줄 핵심 근거</strong>를 바로 확인하세요.
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap ml-auto">
+              ${reducibleItems.length > 0 ? `
+                <button type="button" id="btnBatchApplyAuditor" class="btn-tactile px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition">
+                  <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-600"></i>
+                  <span>AI 감사관 권장수량 일괄 적용 (${reducibleItems.length}건 · -${reducibleBoxes}박스)</span>
+                </button>
+              ` : ''}
+              ${safeItems.length > 0 ? `
+                <button type="button" id="btnJumpToSafeZone" class="btn-tactile px-3 py-2 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-100 text-neutral-700 dark:text-neutral-200 text-xs font-bold flex items-center gap-1 transition">
+                  <span>✅ 안심 통과 품목(${safeItems.length}건) 바로가기 ↓</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-amber-200/70 dark:border-amber-800/50 text-xs">
+            <span class="text-[11px] font-bold text-neutral-500 mr-1">유형별 빠른 보기:</span>
+            <button type="button" data-prio-filter="all" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${subFilter === 'all' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-black shadow-2xs' : 'bg-white/80 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100'}">
+              전체 주의 (${priorityItems.length})
+            </button>
+            <button type="button" data-prio-filter="tackle" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${subFilter === 'tackle' ? 'bg-amber-600 text-white font-black shadow-2xs' : 'bg-white/80 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100'}">
+              ⚔️ 과발주 견제 (${tackleItems.length})
+            </button>
+            <button type="button" data-prio-filter="shortage" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${subFilter === 'shortage' ? 'bg-rose-600 text-white font-black shadow-2xs' : 'bg-white/80 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100'}">
+              🚨 결품 초임박 (${shortageItems.length})
+            </button>
+            <button type="button" data-prio-filter="high_dup" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${subFilter === 'high_dup' ? 'bg-neutral-900 text-white font-black shadow-2xs' : 'bg-white/80 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100'}">
+              💰 고액·중복·폐기주의 (${highOrDupItems.length})
+            </button>
+          </div>
+        `;
+
+        priorityBanner.querySelectorAll('[data-prio-filter]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.priorityZoneSubFilter = btn.getAttribute('data-prio-filter');
+            renderCards();
+          });
+        });
+
+        const btnBatch = priorityBanner.querySelector('#btnBatchApplyAuditor');
+        if (btnBatch) {
+          btnBatch.addEventListener('click', () => {
+            reducibleItems.forEach(it => {
+              it.manualBoxes = it.calc.auditor.bestAuditorSuggestion;
+              it.manualWeeklySplit = null;
+            });
+            recalculateAll();
+            showToast(`⚡ AI 감사관 권고대로 ${reducibleItems.length}개 품목(-${reducibleBoxes}박스, ￦${reducibleAmount.toLocaleString()} 절감)이 일괄 조정되었습니다!`, 'success');
+          });
+        }
+
+        const btnJump = priorityBanner.querySelector('#btnJumpToSafeZone');
+        if (btnJump) {
+          btnJump.addEventListener('click', () => {
+            const safeEl = document.getElementById('safeZoneBanner');
+            if (safeEl) safeEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        }
+
+        container.appendChild(priorityBanner);
+
+        displayedPriority.forEach(item => {
+          container.appendChild(createCardElement(item));
+        });
+      }
+
+      // 하단 2순위 안심 통과 구역 렌더링
+      if (safeItems.length > 0) {
+        const safeBanner = document.createElement('div');
+        safeBanner.id = 'safeZoneBanner';
+        safeBanner.className = 'col-span-full rounded-2xl border border-emerald-300/80 dark:border-emerald-800/70 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 flex flex-wrap items-center justify-between gap-2 mt-2';
+        safeBanner.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm font-black text-neutral-900 dark:text-white">
+                ✅ 2순위 안심 발주: AI 감사관 검증 통과 품목
+              </span>
+              <span class="px-2 py-0.5 rounded-full text-xs font-mono font-black bg-emerald-600 text-white">
+                ${safeItems.length}건
+              </span>
+              <span class="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+                — 일소요량·입고예정·유통기한·안전재고 기준 이상 없음이 확인된 품목입니다.
+              </span>
+            </div>
+          </div>
+          ${priorityItems.length > 0 ? `
+            <button type="button" onclick="const el=document.getElementById('priorityZoneBanner'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});" class="btn-tactile px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-bold text-neutral-600 dark:text-neutral-300 hover:text-neutral-900">
+              ⬆️ 상단 AI 주의 구역(${priorityItems.length}건)으로
+            </button>
+          ` : ''}
+        `;
+        container.appendChild(safeBanner);
+
+        safeItems.forEach(item => {
+          container.appendChild(createCardElement(item));
+        });
+      }
+    }
   }
 
   initLucide();
@@ -5815,22 +5994,29 @@ function renderForecastPanel() {
 }
 
 function createCardElement(item) {
-  const { calc, briefing, supplier } = item;
+  const { calc, supplier } = item;
   const isUrgent = supplier.deadlineHour <= 12;
+  const hasTackle = Boolean(calc.auditor && calc.auditor.hasTackles && (calc.finalBoxes > 0 || calc.recommendedBoxes > 0));
+  const hasRedFlag = Boolean(calc.redFlags && calc.redFlags.length > 0);
+  const isCriticalShortage = (calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE');
+  const isPriority = hasTackle || hasRedFlag;
+
   const card = document.createElement('div');
   card.id = 'card_' + item.id;
   card.setAttribute('data-item-id', item.id);
 
-  card.className = `rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 flex flex-col justify-between gap-3 shadow-2xs hover:border-neutral-400 dark:hover:border-neutral-600 ${
+  card.className = `rounded-2xl border transition-all duration-150 p-3.5 sm:p-4 flex flex-col justify-between gap-3 shadow-2xs ${
     calc.isExcluded
       ? 'bg-neutral-50/70 dark:bg-neutral-950/40 border-neutral-200 dark:border-neutral-800 opacity-60'
-      : calc.isOrderNeeded
-        ? 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800'
-        : 'bg-white dark:bg-neutral-900 border-neutral-200/80 dark:border-neutral-800'
+      : isCriticalShortage
+        ? 'bg-white dark:bg-neutral-900 border-2 border-rose-400/90 dark:border-rose-700 hover:border-rose-500'
+        : isPriority
+          ? 'bg-white dark:bg-neutral-900 border-2 border-amber-400/80 dark:border-amber-700 hover:border-amber-500'
+          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-neutral-400 dark:hover:border-neutral-600'
   }`;
 
-  // 재고 버팀일수 위험도에 따른 시각 색상 클래스 (BIFF 에디토리얼 기준: 결품위험 시그니처 레드)
-  let stockDaysStatusClass = "bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700";
+  // 재고 버팀일수 위험도에 따른 시각 색상 클래스
+  let stockDaysStatusClass = "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
   let stockDaysText = "적정";
   if (calc.stockDays < 1.0) {
     stockDaysStatusClass = "bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 border-rose-300 dark:border-rose-800";
@@ -5840,7 +6026,7 @@ function createCardElement(item) {
     stockDaysText = "여유부족";
   }
 
-  // 투입 완제품 리스트 버튼 렌더링 (모노 에디토리얼 스타일)
+  // 투입 완제품 리스트 버튼 렌더링 (우측 AI 근거 상단에 직관적 메뉴 뱃지로 상시 노출)
   let activeDishesHtml = '';
   if (item.activeBomChildren && item.activeBomChildren.length > 0) {
     activeDishesHtml = item.activeBomChildren.slice(0, 4).map(b => {
@@ -5848,22 +6034,32 @@ function createCardElement(item) {
       const isSelected = state.activeDishFilter === b.menuName;
       const qty = (b.prodQty ?? b.qty ?? 0);
       return `
-        <button type="button" data-dish-pill="${b.menuName}" class="btn-tactile inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10.5px] transition ${
+        <button type="button" data-dish-pill="${b.menuName}" class="btn-tactile inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] transition ${
           isSelected 
             ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white shadow-xs font-bold' 
-            : 'bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 border-neutral-200/90 dark:border-neutral-700 font-medium'
-        }" title="클릭 시 '${b.menuName}' 생산 투입 품목만 필터링">
+            : 'bg-white hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700 font-semibold'
+        }" title="클릭 시 '${b.menuName}' 생산 투입 품목 상세 보기">
           <span>${cat.icon}</span>
-          <span class="truncate max-w-[120px]">${b.menuName}</span>
-          <span class="font-mono ${isSelected ? 'text-white dark:text-neutral-900 font-bold' : 'text-neutral-900 dark:text-white font-semibold'} ml-0.5">${qty.toLocaleString()}개</span>
+          <span class="truncate max-w-[125px]">${b.menuName}</span>
+          <span class="font-mono ${isSelected ? 'text-white dark:text-neutral-900 font-black' : 'text-neutral-900 dark:text-white font-black'} ml-0.5">${qty.toLocaleString()}개</span>
         </button>
       `;
-    }).join('') + (item.activeBomChildren.length > 4 ? `<span class="text-[10px] font-medium text-neutral-400 self-center">외 ${item.activeBomChildren.length - 4}건</span>` : '');
+    }).join('') + (item.activeBomChildren.length > 4 ? `<span class="text-[10.5px] font-bold text-neutral-500 self-center">+${item.activeBomChildren.length - 4}종</span>` : '');
+  } else if (item.dailyUsage > 0) {
+    activeDishesHtml = `<span class="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">공통/야채 일평균 소진 기준 (일 ${item.dailyUsage.toLocaleString()}봉)</span>`;
+  } else {
+    activeDishesHtml = `<span class="text-[11px] font-medium text-neutral-400">금일 생산 투입 메뉴 없음 (소진 0봉)</span>`;
   }
 
+  // 감사관 삭감 권고 금액 계산
+  const canReduceByAuditor = calc.auditor && calc.auditor.bestAuditorSuggestion !== null && calc.finalBoxes > calc.auditor.bestAuditorSuggestion;
+  const reduceDiffBoxes = canReduceByAuditor ? (calc.finalBoxes - calc.auditor.bestAuditorSuggestion) : 0;
+  const reduceDiffAmount = reduceDiffBoxes * item.packUnit * item.unitPrice;
+  const isAlreadyAuditorApplied = calc.auditor && calc.auditor.bestAuditorSuggestion !== null && item.manualBoxes === calc.auditor.bestAuditorSuggestion;
+
   card.innerHTML = `
-    <!-- Top Row: Supplier, Lead Time, Deadline & Risk Badges -->
-    <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2.5 border-b border-neutral-100 dark:border-neutral-800/80">
+    <!-- Top Row: Supplier, Lead Time, Deadline & Quick Actions -->
+    <div class="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-neutral-100 dark:border-neutral-800/80">
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 flex items-center gap-1 border border-neutral-200/60 dark:border-neutral-700/60">
           <i data-lucide="store" class="w-3.5 h-3.5 text-neutral-500"></i>
@@ -5889,27 +6085,6 @@ function createCardElement(item) {
         }">
           ${supplier.deadlineText}
         </span>
-
-        ${supplier.specialNotice ? `
-          <span class="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 flex items-center gap-1" title="${supplier.specialNotice}">
-            <i data-lucide="info" class="w-3 h-3 text-neutral-500"></i>
-            <span>${supplier.specialNotice}</span>
-          </span>
-        ` : ''}
-
-        ${(calc.redFlags && calc.redFlags.length > 0) ? `
-          <span class="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 ring-1 ring-rose-400/40" title="${calc.redFlags[0].desc}">
-            <i data-lucide="alert-triangle" class="w-3 h-3 text-rose-600"></i>
-            ${calc.redFlags[0].badgeText}
-          </span>
-        ` : ''}
-
-        ${(calc.auditor && calc.auditor.hasTackles && calc.finalBoxes > 0) ? `
-          <span class="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 ring-1 ring-amber-400/40" title="${calc.auditor.tackles.map(t => t.title).join(', ')}">
-            <i data-lucide="shield-question" class="w-3 h-3 text-amber-600"></i>
-            태클 ${calc.auditor.tackles.length}건
-          </span>
-        ` : ''}
 
         ${item.isAudited ? `
           <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border border-neutral-900 dark:border-white shadow-xs" title="일일 재고조사표 실사 재고 연동 (${item.auditBoxes}박스+${item.auditPieces}개)">
@@ -5937,118 +6112,179 @@ function createCardElement(item) {
       </div>
     </div>
 
-    <!-- Center: Item Name, Price & Horizontal Stock Runway -->
-    <div class="space-y-2">
-      <div class="flex items-baseline justify-between gap-2">
-        <div class="min-w-0">
-          <h4 class="text-base font-black text-neutral-900 dark:text-white tracking-tight leading-tight truncate" title="${item.name}">
-            ${item.name}
-          </h4>
-          ${item.isRelatedToOrders ? `
-            <div class="mt-1 flex items-center gap-1 flex-wrap">
-              <span class="inline-flex items-center gap-1 font-bold text-neutral-800 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md border border-neutral-200/90 dark:border-neutral-700 text-[10px] shadow-2xs">
-                <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white animate-pulse"></span>
-                <span>수주연동:</span>
-                <span class="text-neutral-900 dark:text-white font-extrabold">${item.activeBomChildren && item.activeBomChildren[0] ? `${getDishCategory(item.activeBomChildren[0].menuName).icon} ${item.activeBomChildren[0].menuName}${item.activeBomChildren.length > 1 ? ` 외 ${item.activeBomChildren.length - 1}종` : ''}` : '연동 메뉴 투입'}</span>
+    <!-- ★ [카드 구조 혁명] 좌(품목·재고·수량조절) · 우(AI 3줄 핵심 근거 & 감사관 판정 상시 노출) 1:1 가로 대조 레이아웃 -->
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-stretch">
+      
+      <!-- [좌측 5칸] 품목명 · 현재고/버팀일수 · 박스 수량 스텝퍼 -->
+      <div class="md:col-span-5 flex flex-col justify-between gap-2.5">
+        <div>
+          <div class="flex items-baseline justify-between gap-2">
+            <h4 class="text-base sm:text-[17px] font-black text-neutral-900 dark:text-white tracking-tight leading-snug truncate" title="${item.name}">
+              ${item.name}
+            </h4>
+            <span class="text-[11px] font-mono font-bold text-neutral-400 shrink-0">
+              ${item.packUnit}입 · ￦${item.unitPrice.toLocaleString()}
+            </span>
+          </div>
+
+          <!-- 직관적 재고 & 버팀일수 신호등 박스 -->
+          <div class="mt-2 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl p-2.5 border border-neutral-200/70 dark:border-neutral-800 text-xs space-y-1.5">
+            <div class="flex items-center justify-between gap-1 flex-wrap">
+              <span class="text-[11.5px] text-neutral-700 dark:text-neutral-300 font-medium">
+                ${item.isAudited ? '실사' : '현재고'} <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.currentStock.toLocaleString()}</strong>봉
+                ${item.incoming > 0 ? `+ 입고 <strong class="text-neutral-900 dark:text-white font-mono font-black">${item.incoming.toLocaleString()}</strong>봉` : ''}
+              </span>
+              <span class="font-black px-2 py-0.5 rounded-md text-[11px] border ${stockDaysStatusClass}">
+                ${calc.stockDays.toFixed(1)}일치 (${stockDaysText})
               </span>
             </div>
-          ` : `
-            <div class="mt-1">
-              <span class="inline-flex items-center gap-1 font-medium text-neutral-400 dark:text-neutral-500 bg-neutral-100/80 dark:bg-neutral-800/60 px-1.5 py-0.5 rounded text-[10px]">
-                완제품 미생산
-              </span>
+
+            <div class="flex items-center justify-between text-[11px] text-neutral-500 pt-1 border-t border-neutral-200/60 dark:border-neutral-700/60">
+              <span>일소진 <strong class="text-neutral-900 dark:text-white font-mono font-bold">${item.dailyUsage.toLocaleString()}</strong>봉</span>
+              <div class="flex items-center gap-1">
+                <span>목표유지</span>
+                <button data-action="days-minus" class="btn-tactile w-4 h-4 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-[10px]">-</button>
+                <input type="number" step="0.5" min="0.5" max="15" value="${calc.targetDays.toFixed(1)}" data-action="days-input" class="w-9 h-4 text-center font-mono font-black rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white text-[10.5px]">
+                <span>일</span>
+                <button data-action="days-plus" class="btn-tactile w-4 h-4 rounded bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center font-bold border border-neutral-300 dark:border-neutral-600 text-[10px]">+</button>
+                ${calc.isCustomDays ? '<button data-action="days-reset" title="기본값 복원" class="text-neutral-400 hover:text-neutral-900 p-0.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i></button>' : ''}
+              </div>
             </div>
-          `}
-        </div>
-        <span class="text-xs font-mono font-bold text-neutral-400 shrink-0">
-          ${item.packUnit}입/박스 · ￦${item.unitPrice.toLocaleString()}/봉
-        </span>
-      </div>
-
-      <!-- Horizontal Stock Runway Bar -->
-      <div class="bg-neutral-50 dark:bg-neutral-800/40 rounded-xl p-2.5 border border-neutral-100 dark:border-neutral-800 text-xs space-y-1.5">
-        <div class="flex items-center justify-between text-[11px]">
-          <span class="text-neutral-600 dark:text-neutral-300 font-medium flex items-center gap-1.5 flex-wrap">
-            ${item.isAudited ? `
-              <span>실사재고 <strong class="text-neutral-900 dark:text-white font-mono font-bold">${item.currentStock.toLocaleString()}</strong>봉</span>
-              <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-neutral-200/80 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 font-bold" title="실사: ${item.auditBoxes}박스 + 낱개 ${item.auditPieces}개 (${item.auditSheet || ''})">${item.auditBoxes}박스+${item.auditPieces}개</span>
-              ${Math.abs(item.auditDiscrepancy || 0) > 0.01 ? `
-                <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${item.auditDiscrepancy > 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'}" title="장부 재고 ${item.originalExcelStock.toLocaleString()}봉 대비 실사 오차">
-                  오차 ${item.auditDiscrepancy > 0 ? '+' : ''}${item.auditDiscrepancy.toLocaleString()}봉
-                </span>
-              ` : ''}
-            ` : `
-              <span>현장재고 <strong class="text-neutral-900 dark:text-white font-mono font-bold">${item.currentStock.toLocaleString()}</strong>봉</span>
-            `}
-            <span>+ 입고예정 <strong class="text-neutral-700 dark:text-neutral-200 font-mono font-bold">${item.incoming.toLocaleString()}</strong>봉</span>
-          </span>
-          <span class="font-black px-2 py-0.5 rounded-md text-[10.5px] border ${stockDaysStatusClass}">
-            ${calc.stockDays.toFixed(1)}일치 (${stockDaysText})
-          </span>
-        </div>
-        <div class="flex items-center justify-between text-[10.5px] text-neutral-400">
-          <span>일일소진: <strong class="text-neutral-700 dark:text-neutral-200 font-mono">${item.dailyUsage.toLocaleString()}</strong>봉/일</span>
-          <span>목표유지: <strong class="text-neutral-700 dark:text-neutral-200 font-mono">${calc.targetDays.toFixed(1)}</strong>일치 ${calc.isCustomDays ? '<span class="text-neutral-900 dark:text-white font-bold">(수동)</span>' : ''}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interactive Stepper & Total Price & Quick Action Pills -->
-    <div class="space-y-2 pt-0.5">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <!-- Order Box Stepper -->
-        <div class="flex items-center gap-1.5">
-          <button data-action="qty-minus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">-</button>
-          <input type="number" min="0" value="${calc.finalBoxes}" data-action="qty-input" class="w-16 h-9 text-center font-mono font-black text-base rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 shadow-2xs">
-          <button data-action="qty-plus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">+</button>
-          <span class="text-sm font-extrabold text-neutral-800 dark:text-neutral-200 ml-1">박스</span>
-          ${item.manualBoxes !== null ? '<span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-200 border border-neutral-300 ml-1">수동수정</span>' : ''}
+          </div>
         </div>
 
-        <!-- Total Price: BIFF Bold Black Hero -->
-        <div class="text-right">
-          <span class="text-[10px] text-neutral-400 block font-medium">예상 발주금액</span>
-          <span class="font-mono font-black text-lg sm:text-xl text-neutral-900 dark:text-white tracking-tight">￦${calc.finalTotalAmount.toLocaleString()}</span>
-        </div>
-      </div>
+        <!-- 박스 수량 스텝퍼 & 발주 금액 -->
+        <div class="space-y-2 pt-1">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1">
+              <button data-action="qty-minus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">-</button>
+              <input type="number" min="0" value="${calc.finalBoxes}" data-action="qty-input" class="w-15 h-9 text-center font-mono font-black text-base rounded-xl border-2 border-neutral-900 dark:border-white bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white focus:outline-none shadow-2xs">
+              <button data-action="qty-plus" class="btn-tactile w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-900 dark:text-white flex items-center justify-center font-black text-base border border-neutral-200 dark:border-neutral-700">+</button>
+              <span class="text-xs font-extrabold text-neutral-800 dark:text-neutral-200 ml-0.5">박스</span>
+              ${item.manualBoxes !== null ? '<span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 ml-0.5">수동</span>' : ''}
+            </div>
 
-      <!-- Quick Choice Pills & Target Days Micro-Tuner -->
-      <div class="flex flex-wrap items-center justify-between gap-1.5 text-xs pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <button type="button" data-action="pick-standard" class="btn-tactile px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
-            item.manualBoxes === calc.standardBoxes || (item.manualBoxes === null && !state.conservativeMode)
-              ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
-          }">
-            표준 ${calc.standardBoxes}박스
-          </button>
+            <div class="text-right">
+              <span class="text-[10px] text-neutral-400 block font-medium leading-none">예상 발주금액</span>
+              <span class="font-mono font-black text-base sm:text-lg text-neutral-900 dark:text-white tracking-tight">￦${calc.finalTotalAmount.toLocaleString()}</span>
+            </div>
+          </div>
 
-          <button type="button" data-action="pick-conservative" class="btn-tactile px-2.5 py-1 rounded-lg text-[11px] font-bold transition border ${
-            item.manualBoxes === calc.conservativeBoxes || (item.manualBoxes === null && state.conservativeMode)
-              ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black shadow-xs'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
-          }">
-            보수안전 ${calc.conservativeBoxes}박스 ${calc.bufferBoxes > 0 ? `<span class="text-[10px] text-neutral-400 font-bold">(+${calc.bufferBoxes})</span>` : ''}
-          </button>
-
-          ${(calc.auditor && calc.auditor.bestAuditorSuggestion !== null && calc.auditor.bestAuditorSuggestion < calc.finalBoxes) ? `
-            <button type="button" data-action="pick-auditor" class="btn-tactile px-2.5 py-1 rounded-lg text-[11px] font-black transition bg-neutral-900 text-white hover:bg-black dark:bg-white dark:text-neutral-900 shadow-xs flex items-center gap-1">
-              <i data-lucide="check" class="w-3 h-3"></i>
-              감사관 ${calc.auditor.bestAuditorSuggestion}박스 삭감
+          <!-- 표준 / 보수안전 빠른 선택 칩 -->
+          <div class="flex items-center gap-1.5 flex-wrap pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
+            <button type="button" data-action="pick-standard" class="btn-tactile px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition border ${
+              item.manualBoxes === calc.standardBoxes || (item.manualBoxes === null && !state.conservativeMode)
+                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
+            }">
+              표준 ${calc.standardBoxes}박스
             </button>
-          ` : ''}
-        </div>
-
-        <!-- Micro Target Days Tuner -->
-        <div class="flex items-center gap-1 text-[11px] text-neutral-400">
-          <span>유지일:</span>
-          <button data-action="days-minus" class="btn-tactile w-5 h-5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 flex items-center justify-center font-bold border border-neutral-200 dark:border-neutral-700">-</button>
-          <input type="number" step="0.5" min="0.5" max="15" value="${calc.targetDays.toFixed(1)}" data-action="days-input" class="w-10 h-5 text-center font-mono font-bold rounded border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 text-[11px]">
-          <span class="text-[10px]">일</span>
-          <button data-action="days-plus" class="btn-tactile w-5 h-5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 flex items-center justify-center font-bold border border-neutral-200 dark:border-neutral-700">+</button>
-          ${calc.isCustomDays ? '<button data-action="days-reset" title="기본값 복원" class="text-neutral-400 hover:text-neutral-900 p-0.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i></button>' : ''}
+            <button type="button" data-action="pick-conservative" class="btn-tactile px-2 py-0.5 rounded-lg text-[10.5px] font-bold transition border ${
+              item.manualBoxes === calc.conservativeBoxes || (item.manualBoxes === null && state.conservativeMode)
+                ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900 dark:border-white font-black'
+                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-200'
+            }">
+              보수안전 ${calc.conservativeBoxes}박스
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- [우측 7칸] AI 3줄 핵심 공식 & 감사관 판정 (클릭 없이 100% 상시 노출!) -->
+      <div class="md:col-span-7 rounded-xl p-3 border flex flex-col justify-between gap-2 ${
+        isCriticalShortage
+          ? 'bg-rose-50/50 dark:bg-rose-950/25 border-rose-300 dark:border-rose-800/80'
+          : isPriority
+            ? 'bg-amber-50/50 dark:bg-amber-950/25 border-amber-300 dark:border-amber-800/80'
+            : 'bg-neutral-50/80 dark:bg-neutral-800/40 border-neutral-200/80 dark:border-neutral-700/70'
+      }">
+        
+        <!-- 1줄: 📌 오늘 소진 원인 메뉴 뱃지 -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between gap-1">
+            <span class="text-[11px] font-black text-neutral-800 dark:text-neutral-200 flex items-center gap-1">
+              <span>📌 왜 오늘 <strong class="font-mono text-neutral-900 dark:text-white underline decoration-amber-400 decoration-2">${item.dailyUsage.toLocaleString()}봉</strong>이 소진되나?</span>
+            </span>
+            ${item.activeBomChildren && item.activeBomChildren.length > 0 ? `
+              <span class="text-[10px] font-bold text-neutral-500">투입 메뉴 ${item.activeBomChildren.length}종</span>
+            ` : ''}
+          </div>
+          <div class="flex flex-wrap items-center gap-1">
+            ${activeDishesHtml}
+          </div>
+        </div>
+
+        <!-- 2줄: 🧮 AI 산출 공식 1줄 요약 -->
+        <div class="bg-white/90 dark:bg-neutral-900/80 rounded-lg px-2.5 py-1.5 border border-neutral-200/70 dark:border-neutral-700/70 text-[11px] flex flex-wrap items-center justify-between gap-1.5">
+          <div class="font-mono text-neutral-700 dark:text-neutral-300 leading-snug">
+            <span class="text-neutral-500">산출식:</span>
+            필요 <strong class="text-neutral-900 dark:text-white font-bold">${Math.round(calc.requiredQty).toLocaleString()}봉</strong>(${calc.targetDays.toFixed(1)}일)
+            － 총재고 <strong class="text-neutral-900 dark:text-white font-bold">${calc.totalStock.toLocaleString()}봉</strong>
+            ＝ 부족 <strong class="text-rose-600 dark:text-rose-400 font-black">${Math.max(0, Math.round(calc.shortage)).toLocaleString()}봉</strong>
+            ➔ <strong class="text-neutral-900 dark:text-white font-black">[권장 ${calc.recommendedBoxes}박스]</strong>
+          </div>
+          <div class="flex items-center gap-1 flex-wrap">
+            ${calc.savedBoxes > 0 ? `
+              <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">
+                🛡️ 구기준 대비 -${calc.savedBoxes}박스 절감
+              </span>
+            ` : ''}
+            ${(supplier.specialNotice || supplier.specialMemo) ? `
+              <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 font-bold text-[10px]" title="${supplier.specialNotice || supplier.specialMemo}">
+                💡 ${supplier.specialNotice || supplier.specialMemo}
+              </span>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- 3줄: ⚔️ AI 감사관 판정 & 원클릭 즉시 반영 -->
+        ${isPriority ? `
+          <div class="rounded-lg p-2.5 border ${
+            isCriticalShortage
+              ? 'bg-rose-100/80 dark:bg-rose-950/60 border-rose-300 dark:border-rose-700'
+              : 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700'
+          } flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="space-y-1 min-w-0 flex-1">
+              ${(calc.redFlags || []).map(rf => `
+                <div class="text-[11.5px] leading-snug flex items-start gap-1">
+                  <span class="font-black text-rose-700 dark:text-rose-300 shrink-0">${rf.badgeText}:</span>
+                  <span class="font-bold text-neutral-900 dark:text-neutral-100">${rf.desc}</span>
+                </div>
+              `).join('')}
+              ${(calc.auditor && calc.auditor.tackles || []).map(t => `
+                <div class="text-[11.5px] leading-snug flex items-start gap-1">
+                  <span class="font-black text-amber-900 dark:text-amber-300 shrink-0">⚔️ ${t.title}:</span>
+                  <span class="font-semibold text-neutral-800 dark:text-neutral-200">${t.comment}</span>
+                </div>
+              `).join('')}
+            </div>
+
+            ${canReduceByAuditor ? `
+              <button type="button" data-action="pick-auditor" class="btn-tactile shrink-0 px-3 py-2 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition">
+                <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-600"></i>
+                <div class="text-left leading-tight">
+                  <div>⚡ ${calc.auditor.bestAuditorSuggestion}박스로 변경</div>
+                  <div class="text-[10px] font-mono text-emerald-300 dark:text-emerald-700">-${reduceDiffBoxes}박스 (￦${reduceDiffAmount.toLocaleString()} 절감)</div>
+                </div>
+              </button>
+            ` : isAlreadyAuditorApplied ? `
+              <span class="shrink-0 px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-black flex items-center gap-1 shadow-2xs">
+                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+                감사관 권장(${calc.finalBoxes}박스) 반영됨
+              </span>
+            ` : ''}
+          </div>
+        ` : `
+          <div class="rounded-lg px-2.5 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between text-[11px]">
+            <span class="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+              ✅ AI 견제 감사관 통과 — 일소요량·입고예정·유통기한 기준 적정 발주량입니다.
+            </span>
+          </div>
+        `}
+
+      </div>
+
     </div>
 
     <!-- 7-Day Weekly Split Runway Matrix (GFS.xlsx T~AA열 1:1 연동) -->
@@ -6107,81 +6343,6 @@ function createCardElement(item) {
             </div>
           `;
         }).join('')}
-      </div>
-    </div>
-
-    <!-- Progressive Disclosure Accordion: AI Briefing & Auditor Breakdown -->
-    <div class="pt-1 border-t border-neutral-100 dark:border-neutral-800/80">
-      <button type="button" data-action="toggle-details" class="btn-tactile w-full py-1.5 flex items-center justify-between text-[11px] font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200 transition">
-        <span class="flex items-center gap-1.5">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300"></i>
-          AI 분석 근거 & 견제 감사 내역 보기
-        </span>
-        <i data-lucide="chevron-down" class="w-3.5 h-3.5 details-chevron transition-transform duration-200"></i>
-      </button>
-
-      <div class="details-content hidden mt-2 space-y-2.5 pt-2 border-t border-dashed border-neutral-200 dark:border-neutral-800 text-xs animate-in fade-in duration-150">
-        <!-- 4-Line AI Briefing Box -->
-        <div class="bg-neutral-50 dark:bg-neutral-800/60 rounded-xl p-3 border border-neutral-200/60 dark:border-neutral-700/60 space-y-1.5 text-[11.5px]">
-          <p class="flex items-start gap-1.5">
-            <span class="font-bold text-neutral-900 dark:text-white shrink-0">소진원인:</span>
-            <span class="text-neutral-700 dark:text-neutral-300">${briefing.line1}</span>
-          </p>
-          <p class="flex items-start gap-1.5">
-            <span class="font-bold text-neutral-700 dark:text-neutral-300 shrink-0">재고진단:</span>
-            <span class="text-neutral-700 dark:text-neutral-300">${briefing.line2}</span>
-          </p>
-          <p class="flex items-start gap-1.5">
-            <span class="font-bold text-neutral-700 dark:text-neutral-300 shrink-0">기준적용:</span>
-            <span class="text-neutral-700 dark:text-neutral-300">${briefing.line3}</span>
-          </p>
-          <p class="flex items-start gap-1.5 pt-1 border-t border-neutral-200/50 dark:border-neutral-700/50">
-            <span class="font-black text-neutral-900 dark:text-white shrink-0">최종결론:</span>
-            <span class="font-black text-neutral-900 dark:text-white">${briefing.line4}</span>
-          </p>
-        </div>
-
-        <!-- AI Auditor Devil's Advocate Section (if tackles exist) -->
-        ${(calc.auditor && calc.auditor.hasTackles && calc.finalBoxes > 0) ? `
-          <div class="bg-amber-50/80 dark:bg-amber-950/40 rounded-xl p-3 border border-amber-300/80 dark:border-amber-800/60 space-y-2 text-[11.5px]">
-            <div class="flex items-center justify-between pb-1 border-b border-amber-200 dark:border-amber-800/50">
-              <span class="font-black text-amber-950 dark:text-amber-200 flex items-center gap-1">
-                <i data-lucide="shield-question" class="w-3.5 h-3.5 text-amber-600"></i>
-                ⚔️ AI 견제 감사관 태클 (${calc.auditor.tackles.length}건 제기)
-              </span>
-              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-200">독립 산출식</span>
-            </div>
-            <div class="space-y-1">
-              ${calc.auditor.tackles.map(t => `
-                <div class="flex items-start gap-1 text-[11px] leading-snug">
-                  <span class="text-amber-700 dark:text-amber-400 font-bold shrink-0">⚠️ ${t.title}:</span>
-                  <span class="text-neutral-800 dark:text-neutral-200">${t.comment}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        ` : (calc.finalBoxes > 0 ? `
-          <div class="bg-neutral-50 dark:bg-neutral-800/60 rounded-xl px-3 py-2 border border-neutral-200/60 dark:border-neutral-700/50 flex items-center justify-between text-[11px]">
-            <span class="text-neutral-800 dark:text-neutral-200 font-bold flex items-center gap-1.5">
-              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-neutral-900 dark:text-white"></i>
-              AI 견제 감사관 통과 (일소요량·입고예정·보관일수 기준 적정)
-            </span>
-          </div>
-        ` : '')}
-
-        <!-- Linked Finished Goods Dishes -->
-        ${activeDishesHtml ? `
-          <div class="flex flex-wrap items-center gap-1.5 pt-1">
-            <span class="text-[10px] font-black uppercase text-neutral-900 dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-neutral-200 dark:border-neutral-700">투입 완제품</span>
-            ${activeDishesHtml}
-          </div>
-        ` : ''}
-
-        ${supplier.specialMemo ? `
-          <div class="p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg text-[11px] text-amber-900 dark:text-amber-200 font-bold">
-            거래처 특이사항: ${supplier.specialMemo}
-          </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -7060,7 +7221,8 @@ function renderAnomalyDetectionUi() {
   const container = document.getElementById('anomalyGuardSection');
   if (!container) return;
 
-  if (!state.rawItems || state.rawItems.length === 0) {
+  // 카드형 뷰에서는 카드 목록 최상단 '🚨 1순위 집중 브리핑 구역'으로 일원화하여 상단 중복 제거
+  if (!state.rawItems || state.rawItems.length === 0 || state.viewMode === 'cards') {
     container.classList.add('hidden');
     container.innerHTML = '';
     return;

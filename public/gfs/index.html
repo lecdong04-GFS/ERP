@@ -557,81 +557,73 @@
     <!-- ========================================================================= -->
     <!-- Production Command HUD: Finished Goods Orchestration (완제품 생산 관제 HUD) -->
     <!-- ========================================================================= -->
-    <section id="vegOrdersSection" class="hidden bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5 relative transition-all">
+    <section id="vegOrdersSection" class="hidden bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2 relative transition-all">
       
       <!-- Top Header Strip: Icon, Title, Production Metric, Category Tabs, Active Pill -->
-      <div class="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-neutral-100 dark:border-neutral-800">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-neutral-100 dark:border-neutral-800">
         
         <!-- Left: Production Sync Status -->
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center text-neutral-800 dark:text-neutral-200 shadow-2xs shrink-0">
-            <i data-lucide="chef-hat" class="w-4 h-4"></i>
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center text-neutral-800 dark:text-neutral-200 shadow-2xs shrink-0">
+            <i data-lucide="chef-hat" class="w-3.5 h-3.5"></i>
           </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white"></span>
-              <h3 class="font-extrabold text-neutral-900 dark:text-white text-sm sm:text-base tracking-tight flex items-center gap-1.5">
-                오늘의 완제품 생산 관제 HUD
-              </h3>
-              <span class="text-xs font-mono font-black px-2.5 py-0.5 rounded-lg bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 shadow-2xs" id="vegTotalCountBadge">
-                총 0개 생산
-              </span>
-            </div>
-            <p class="text-[11px] text-neutral-400 font-medium mt-0.5">
-              야채 계산기 수주 기반 실시간 BOM 연동 · 메뉴 클릭 시 해당 투입 원자재 집중 조망
-            </p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <h3 class="font-extrabold text-neutral-900 dark:text-white text-xs sm:text-sm tracking-tight">
+              오늘의 완제품 생산 메뉴
+            </h3>
+            <span class="text-xs font-mono font-black px-2 py-0.5 rounded-lg bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 shadow-2xs" id="vegTotalCountBadge">
+              총 0개 생산
+            </span>
+            <span class="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400 hidden lg:inline" id="vegProductionKpiSummary">
+              TOP 수주 집계 연산 중
+            </span>
           </div>
         </div>
 
         <!-- Center: Category Segmented Filter Tabs (발주현황.xlsx 공식 분류) -->
         <div class="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 p-0.5 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-x-auto max-w-full" id="vegCategoryTabs">
-          <button type="button" data-veg-cat="all" class="px-2.5 py-1 text-xs font-bold rounded-lg bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs transition">전체</button>
-          <button type="button" data-veg-cat="samgak" class="px-2.5 py-1 text-xs font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍙 삼각</button>
-          <button type="button" data-veg-cat="big_samgak" class="px-2.5 py-1 text-xs font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍙 더큰 삼각</button>
-          <button type="button" data-veg-cat="gimbap" class="px-2.5 py-1 text-xs font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🌯 김밥</button>
-          <button type="button" data-veg-cat="dosirak" class="px-2.5 py-1 text-xs font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍱 도시락</button>
-          <button type="button" data-veg-cat="burger" class="px-2.5 py-1 text-xs font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍔 버거/간편식</button>
+          <button type="button" data-veg-cat="all" class="px-2 py-0.5 text-[11px] font-bold rounded-lg bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs transition">전체</button>
+          <button type="button" data-veg-cat="samgak" class="px-2 py-0.5 text-[11px] font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍙 삼각</button>
+          <button type="button" data-veg-cat="big_samgak" class="px-2 py-0.5 text-[11px] font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍙 더큰 삼각</button>
+          <button type="button" data-veg-cat="gimbap" class="px-2 py-0.5 text-[11px] font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🌯 김밥</button>
+          <button type="button" data-veg-cat="dosirak" class="px-2 py-0.5 text-[11px] font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍱 도시락</button>
+          <button type="button" data-veg-cat="burger" class="px-2 py-0.5 text-[11px] font-medium rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition">🍔 버거/간편식</button>
         </div>
 
         <!-- Right: Active Selection Pill & Reset Button -->
-        <div class="flex items-center gap-2 ml-auto">
-          <div id="activeDishIndicator" class="hidden items-center gap-1.5 px-3 py-1 rounded-xl bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 text-xs font-bold shadow-xs">
+        <div class="flex items-center gap-1.5 ml-auto">
+          <div id="activeDishIndicator" class="hidden items-center gap-1.5 px-2.5 py-0.5 rounded-xl bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 text-xs font-bold shadow-xs">
             <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
             <span id="activeDishNameLabel">삼각)전주비빔</span>
             <span class="font-mono font-black text-neutral-300 dark:text-neutral-600 ml-0.5" id="activeDishQtyLabel">(3,150개)</span>
           </div>
-          <button id="btnResetDishFilter" class="hidden btn-tactile text-xs font-medium px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 items-center gap-1 transition border border-neutral-200 dark:border-neutral-700">
-            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          <button id="btnResetDishFilter" class="hidden btn-tactile text-xs font-medium px-2 py-0.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 items-center gap-1 transition border border-neutral-200 dark:border-neutral-700">
+            <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
             <span>전체 보기</span>
           </button>
-          <label class="btn-tactile text-xs font-bold px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 items-center gap-1.5 transition border border-neutral-200 dark:border-neutral-700 flex cursor-pointer shadow-2xs" title="오전 10시 완제품 주문서 엑셀 파일 새로 올리기">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400"></i>
-            <span class="hidden sm:inline">10시 수주서 반영</span>
+          <label class="btn-tactile text-[11px] font-bold px-2 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 items-center gap-1 transition border border-neutral-200 dark:border-neutral-700 flex cursor-pointer shadow-2xs" title="오전 10시 완제품 주문서 엑셀 파일 새로 올리기">
+            <i data-lucide="refresh-cw" class="w-3 h-3 text-neutral-600 dark:text-neutral-400"></i>
+            <span class="hidden sm:inline">10시 수주서</span>
             <input type="file" id="inputHudOrders" accept=".xlsx,.xls,.numbers,.csv" class="hidden">
           </label>
-          <label class="btn-tactile text-xs font-bold px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 items-center gap-1.5 transition border border-neutral-200 dark:border-neutral-700 flex cursor-pointer shadow-2xs" title="최신 원재료 단가표 엑셀 파일 올리기">
-            <i data-lucide="tag" class="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400"></i>
-            <span class="hidden sm:inline">단가표 반영</span>
+          <label class="btn-tactile text-[11px] font-bold px-2 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 items-center gap-1 transition border border-neutral-200 dark:border-neutral-700 flex cursor-pointer shadow-2xs" title="최신 원재료 단가표 엑셀 파일 올리기">
+            <i data-lucide="tag" class="w-3 h-3 text-neutral-600 dark:text-neutral-400"></i>
+            <span class="hidden sm:inline">단가표</span>
             <input type="file" id="inputHudPrice" accept=".xlsx,.xls,.numbers,.csv" class="hidden">
           </label>
+          <button type="button" onclick="const el=document.getElementById('vegDishesWrapper'); el.classList.toggle('hidden'); this.querySelector('span').textContent=el.classList.contains('hidden')?'메뉴 펼치기':'메뉴 접기';" class="btn-tactile text-[11px] font-bold px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-700 flex items-center gap-1">
+            <span>메뉴 접기</span>
+          </button>
         </div>
 
       </div>
 
-      <!-- Finished Goods Production Cards Grid (Responsive, Modern Cards - 2+ Rows Visible) -->
-      <div id="vegDishesContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 max-h-72 overflow-y-auto pr-1">
-        <!-- Dynamically Injected Visual Production Cards -->
-      </div>
-
-      <!-- Bottom Status & Production Top 1 Summary -->
-      <div class="flex flex-wrap items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-slate-800/80 text-slate-400">
-        <span class="flex items-center gap-1.5">
-          <i data-lucide="info" class="w-3.5 h-3.5 text-emerald-500"></i>
-          원하는 완제품 카드를 클릭하면 해당 메뉴에 투입되는 원부자재만 아래 발주서에서 집중 조망됩니다.
-        </span>
-        <span class="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400 hidden sm:inline" id="vegProductionKpiSummary">
-          TOP 수주 집계 연산 중
-        </span>
+      <div id="vegDishesWrapper" class="space-y-1.5">
+        <!-- Finished Goods Production Cards Grid (Compact 1-2 Rows) -->
+        <div id="vegDishesContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-1.5 max-h-36 overflow-y-auto pr-1">
+          <!-- Dynamically Injected Visual Production Cards -->
+        </div>
       </div>
 
     </section>
@@ -639,189 +631,92 @@
     <!-- ========================================================================= -->
     <!-- Executive Command Dashboard (Ultra-Sleek Executive Bar & Segmented Control) -->
     <!-- ========================================================================= -->
-    <section id="controlPanel" class="hidden space-y-3">
+    <section id="controlPanel" class="hidden space-y-2.5">
       
-      <!-- 🛡️ 발주 3대 안전 검증기 & 이상치 실시간 감지 경보 센터 -->
+      <!-- 🛡️ 발주 3대 안전 검증기 & 이상치 실시간 감지 경보 센터 (표형/엑셀뷰 보조용, 카드뷰에서는 카드 상단 집중구역으로 통합) -->
       <div id="anomalyGuardSection" class="hidden rounded-2xl border transition-all duration-300 overflow-hidden shadow-sm"></div>
 
-      <!-- Grand Executive Procurement Command Deck (발주 핵심 지표 Grand Deck) -->
-      <div class="space-y-3">
+      <!-- Compact Executive Procurement Metrics & Settings Bar -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
         
-        <!-- 4-Card Hero Procurement Metrics Grid (BIFF Editorial Pure White Deck) -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          
-          <!-- Card 1: 발주 대상 (Order Items) -->
-          <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-neutral-400 transition-all flex flex-col justify-between group">
-            <div class="flex items-center justify-between">
-              <span class="text-xs sm:text-[13px] font-black text-neutral-500 dark:text-neutral-400 tracking-tight">발주 대상</span>
-              <div class="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <i data-lucide="package" class="w-4 h-4"></i>
-              </div>
-            </div>
-            <div class="mt-2.5">
-              <div class="text-3xl sm:text-4xl lg:text-[40px] font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-none" id="statOrderItems">
-                0<span class="text-sm sm:text-base font-bold text-neutral-400 dark:text-neutral-500 ml-1">개</span>
-              </div>
-              <div class="text-[11px] font-semibold text-neutral-400 mt-2 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-neutral-400"></span>
-                <span>전체 원자재 중 발주 필요</span>
-              </div>
+        <!-- Card 1: 발주 대상 -->
+        <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl px-3.5 py-2.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-neutral-400 block">발주 대상 품목</span>
+            <div class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-tight mt-0.5" id="statOrderItems">
+              0<span class="text-xs font-bold text-neutral-400 ml-1">개</span>
             </div>
           </div>
-
-          <!-- Card 2: 총 발주 수량 (Total Order Volume) -->
-          <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-neutral-400 transition-all flex flex-col justify-between group">
-            <div class="flex items-center justify-between">
-              <span class="text-xs sm:text-[13px] font-black text-neutral-500 dark:text-neutral-400 tracking-tight">총 발주 수량</span>
-              <div class="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <i data-lucide="truck" class="w-4 h-4"></i>
-              </div>
-            </div>
-            <div class="mt-2.5">
-              <div class="text-3xl sm:text-4xl lg:text-[40px] font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-none" id="statTotalBoxes">
-                0<span class="text-sm sm:text-base font-bold text-neutral-400 dark:text-neutral-500 ml-1">박스</span>
-              </div>
-              <div class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 mt-2 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-                <span>규격 포장단위 올림 계산</span>
-              </div>
-            </div>
+          <div class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center shrink-0">
+            <i data-lucide="package" class="w-4 h-4"></i>
           </div>
-
-          <!-- Card 3: 발주 예상총액 (Estimated Total Amount) - Quiet Luxury Monochrome -->
-          <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-neutral-400 transition-all flex flex-col justify-between group">
-            <div class="flex items-center justify-between">
-              <span class="text-xs sm:text-[13px] font-black text-neutral-500 dark:text-neutral-400 tracking-tight">발주 예상총액</span>
-              <div class="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <i data-lucide="wallet" class="w-4 h-4"></i>
-              </div>
-            </div>
-            <div class="mt-2.5">
-              <div class="text-3xl sm:text-4xl lg:text-[40px] font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-none" id="statTotalAmount">
-                ￦0
-              </div>
-              <div class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 mt-2 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-                <span>매입단가 합산 기준 (702종 DB 연동)</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card 4: 완제품 수주 연동 (Finished Goods Linkage) -->
-          <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-neutral-400 transition-all flex flex-col justify-between group">
-            <div class="flex items-center justify-between">
-              <span class="text-xs sm:text-[13px] font-black text-neutral-500 dark:text-neutral-400 tracking-tight">완제품 수주 연동</span>
-              <div class="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <i data-lucide="check-check" class="w-4 h-4"></i>
-              </div>
-            </div>
-            <div class="mt-2.5">
-              <div class="text-3xl sm:text-4xl lg:text-[40px] font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-none" id="statTotalFinishedQty">
-                0<span class="text-sm sm:text-base font-bold text-neutral-400 dark:text-neutral-500 ml-1">개</span>
-              </div>
-              <div class="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 mt-2 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-                <span>야채 계산기 실시간 동기화</span>
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        <!-- Secondary Control & Utility Strip (과잉방지 절감 + 빠른 액션 버튼) -->
-        <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl p-2.5 sm:p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3 transition">
-          
-          <!-- Left: 과잉방지 절감 배지 -->
-          <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs">
-            <i data-lucide="shield-check" class="w-4 h-4 text-neutral-700 dark:text-neutral-300 shrink-0"></i>
-            <span class="font-bold">과잉발주 방지 절감:</span>
-            <span class="font-mono font-black" id="statSavedBoxes">0박스</span>
-            <span class="text-neutral-600 dark:text-neutral-400 font-mono font-semibold">(<span id="statSavedAmount">약 ￦0</span>)</span>
+        <!-- Card 2: 총 발주 수량 -->
+        <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl px-3.5 py-2.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-neutral-400 block">총 발주 수량</span>
+            <div class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-tight mt-0.5" id="statTotalBoxes">
+              0<span class="text-xs font-bold text-neutral-400 ml-1">박스</span>
+            </div>
           </div>
-
-          <!-- Right: 발주 제어 설정 패널 토글 버튼 -->
-          <div class="flex items-center gap-2 ml-auto shrink-0">
-            <button id="btnToggleSettingsDrawer" class="btn-tactile text-xs font-bold py-2 px-3.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5 transition">
-              <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400"></i>
-              <span id="labelSettingsToggle" class="hidden sm:inline">제어 설정 접기</span>
-              <i data-lucide="chevron-down" id="iconSettingsChevron" class="w-3.5 h-3.5 transition-transform duration-200 rotate-180"></i>
-            </button>
+          <div class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center shrink-0">
+            <i data-lucide="truck" class="w-4 h-4"></i>
           </div>
+        </div>
 
+        <!-- Card 3: 발주 예상총액 -->
+        <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl px-3.5 py-2.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-neutral-400 block">발주 예상총액</span>
+            <div class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-tight mt-0.5" id="statTotalAmount">
+              ￦0
+            </div>
+          </div>
+          <div class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center shrink-0">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+          </div>
+        </div>
+
+        <!-- Card 4: 완제품 수주 연동 -->
+        <div class="bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl px-3.5 py-2.5 shadow-2xs flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-neutral-400 block">완제품 수주 연동</span>
+            <div class="text-xl sm:text-2xl font-black text-neutral-900 dark:text-white font-mono tracking-tight leading-tight mt-0.5" id="statTotalFinishedQty">
+              0<span class="text-xs font-bold text-neutral-400 ml-1">개</span>
+            </div>
+          </div>
+          <div class="w-8 h-8 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center shrink-0">
+            <i data-lucide="check-check" class="w-4 h-4"></i>
+          </div>
+        </div>
+
+        <!-- Card 5: 과잉발주 절감 & 제어 설정 토글 -->
+        <div class="col-span-2 lg:col-span-1 bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-2xl px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 block">🛡️ 과잉발주 차단 절감</span>
+            <div class="text-xs font-mono font-black text-neutral-900 dark:text-white truncate mt-0.5">
+              <span id="statSavedBoxes">0박스</span> · <span id="statSavedAmount" class="text-emerald-600 dark:text-emerald-400">￦0</span>
+            </div>
+          </div>
+          <button id="btnToggleSettingsDrawer" class="btn-tactile shrink-0 text-[11px] font-bold py-1.5 px-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 text-neutral-800 dark:text-neutral-200 flex items-center gap-1 transition" title="재고유지일 슬라이더 및 현장 운영 수칙 열기/닫기">
+            <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400"></i>
+            <span id="labelSettingsToggle">기준설정</span>
+            <i data-lucide="chevron-down" id="iconSettingsChevron" class="w-3 h-3 transition-transform duration-200"></i>
+          </button>
         </div>
 
       </div>
 
-      <!-- 4대 현장 운영 특이사항 & 비상 발주 수칙 (BIFF Editorial Strip) -->
-      <div class="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-3 sm:p-3.5 shadow-xs transition">
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2">
-            <span class="w-6 h-6 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center">
-              <i data-lucide="clipboard-check" class="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300"></i>
-            </span>
-            <span class="text-xs font-black text-neutral-900 dark:text-white tracking-tight">공장 구매팀 현장 운영 특이사항 & 비상 수칙</span>
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono">실시간 적용 중</span>
-          </div>
-          <span class="text-[10.5px] font-semibold text-neutral-400 font-mono hidden sm:inline">GFS-PROC-SOP-V2</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
-          <!-- 1. 엠디에스 -->
-          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
-            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
-              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-              엠디에스(MDS) 유연 입고
-            </div>
-            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
-              기본 <strong class="text-neutral-900 dark:text-white">월/수/금</strong> 입고이나, D-2 발주 시 <strong class="text-neutral-900 dark:text-white">화/목/토도 입고 가능</strong>.
-            </p>
-          </div>
-
-          <!-- 2. 이우유통 ↔ 금행물류 -->
-          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
-            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
-              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-              이우유통 ↔ 금행물류 교차
-            </div>
-            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
-              근거리 업체로 발주 누락 시 상호 대체 가능. <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">오전 12시 전 요청 필수!</strong>
-            </p>
-          </div>
-
-          <!-- 3. 전산 발주 마감 시간 -->
-          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
-            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
-              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-              전산 발주 마감 시간
-            </div>
-            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
-              전산 발주 기본 13시 전 완료. <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">CJ 저온 11시 / CJ 상온 12시 전</strong> 안전 마감.
-            </p>
-          </div>
-
-          <!-- 4. 누락 추가 발주 비상 프로토콜 -->
-          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
-            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
-              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
-              누락 추가 발주 비상 수칙
-            </div>
-            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
-              메일/발주고 수정 후 <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">필히 유선·카톡 통보</strong> (12시 이후 요청 시 용차 섭외 필요).
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Procurement Engine Control Center (Default Visible, essential operations) -->
-      <div id="settingsDrawer" class="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-3.5 transition-all">
+      <!-- Procurement Engine Control Center & SOP Rules (Collapsed by default to maximize Card View visibility) -->
+      <div id="settingsDrawer" class="hidden bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-3.5 transition-all">
         <!-- Settings Header Strip -->
         <div class="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
           <div class="flex items-center gap-2">
             <span class="w-6 h-6 rounded-lg bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center">
               <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
             </span>
-            <span class="text-xs font-black text-neutral-900 dark:text-white">공장 발주 엔진 제어 센터</span>
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border border-neutral-200">기본 활성화</span>
+            <span class="text-xs font-black text-neutral-900 dark:text-white">공장 발주 엔진 제어 센터 & 현장 비상 수칙</span>
           </div>
           <span class="text-[11px] font-medium text-neutral-400 hidden sm:inline">재고유지일 및 과잉방지 설정 실시간 자동 반영</span>
         </div>
@@ -906,6 +801,46 @@
             <span class="hidden" id="statSummaryText">최적 수량 추천 반영됨</span>
           </div>
 
+        </div>
+
+        <!-- 4대 현장 운영 특이사항 & 비상 발주 수칙 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs pt-2 border-t border-neutral-100 dark:border-neutral-800">
+          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
+              엠디에스(MDS) 유연 입고
+            </div>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
+              기본 <strong class="text-neutral-900 dark:text-white">월/수/금</strong> 입고이나, D-2 발주 시 <strong class="text-neutral-900 dark:text-white">화/목/토도 입고 가능</strong>.
+            </p>
+          </div>
+          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
+              이우유통 ↔ 금행물류 교차
+            </div>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
+              근거리 업체로 발주 누락 시 상호 대체 가능. <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">오전 12시 전 요청 필수!</strong>
+            </p>
+          </div>
+          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
+              전산 발주 마감 시간
+            </div>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
+              전산 발주 기본 13시 전 완료. <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">CJ 저온 11시 / CJ 상온 12시 전</strong> 안전 마감.
+            </p>
+          </div>
+          <div class="bg-neutral-50 dark:bg-neutral-800/40 p-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700/60 space-y-1">
+            <div class="font-extrabold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-white"></span>
+              누락 추가 발주 비상 수칙
+            </div>
+            <p class="text-[11px] text-neutral-600 dark:text-neutral-300 leading-snug">
+              메일/발주고 수정 후 <strong class="text-neutral-900 dark:text-white font-black underline underline-offset-2">필히 유선·카톡 통보</strong> (12시 이후 요청 시 용차 섭외 필요).
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1509,8 +1444,8 @@
   <!-- ========================================================================= -->
   <div id="toastContainer" class="fixed top-20 right-6 z-50 flex flex-col space-y-2.5 pointer-events-none"></div>
 
-  <script src="gfs_embedded.js"></script>
-  <script src="app.js"></script>
-  <script src="gfs-bridge.js"></script>
+  <script src="gfs_embedded.js?v=20261103"></script>
+  <script src="app.js?v=20261103"></script>
+  <script src="gfs-bridge.js?v=20261103"></script>
 </body>
 </html>
