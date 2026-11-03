@@ -129,26 +129,26 @@ export const KpiCard: React.FC<KpiCardProps> = ({
         : 'text-[var(--ink-400)]';
 
   return (
-    <div className="erp-card erp-card-hover relative overflow-hidden pl-3.5 pr-3 py-3">
-      <span className={`absolute left-0 top-0 bottom-0 w-[3px] ${t.edge}`} />
+    <div className="erp-card erp-card-hover relative overflow-hidden pl-4 pr-3.5 py-3.5">
+      <span className={`absolute left-0 top-0 bottom-0 w-[3.5px] ${t.edge}`} />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[11px] font-bold text-[var(--ink-600)] tracking-tight truncate">
+          <div className="text-[13px] font-bold text-[var(--ink-700)] tracking-tight truncate">
             {label}
           </div>
-          <div className="num text-[26px] font-black leading-tight mt-1 tracking-tight ${t.value}">
+          <div className={`num text-[28px] font-black leading-tight mt-1 tracking-tight ${t.value}`}>
             {format(animated)}
           </div>
         </div>
-        <div className={`w-9 h-9 shrink-0 rounded-md border flex items-center justify-center ${t.iconBg}`}>
-          <Icon className={`w-[18px] h-[18px] ${t.iconText}`} />
+        <div className={`w-9.5 h-9.5 shrink-0 rounded-lg border flex items-center justify-center ${t.iconBg}`}>
+          <Icon className={`w-5 h-5 ${t.iconText}`} />
         </div>
       </div>
-      <div className="mt-1.5 flex items-end justify-between gap-2">
+      <div className="mt-2 flex items-end justify-between gap-2">
         <div className="min-w-0">
           {hasDelta && (
             <span
-              className={`chip num mr-1.5 ${
+              className={`chip num mr-1.5 text-[11.5px] font-bold ${
                 delta! > 0
                   ? 'bg-[#ecfdf5] text-[#047857] border border-[#a7f3d0]'
                   : 'bg-[#fff1f2] text-[#be123c] border border-[#fecdd3]'
@@ -157,7 +157,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
               {delta! > 0 ? '▲' : '▼'} {Math.abs(delta!).toFixed(1)}%
             </span>
           )}
-          <span className={`text-[10.5px] ${subClass}`}>{deltaLabel || sub}</span>
+          <span className={`text-[12px] ${subClass}`}>{deltaLabel || sub}</span>
         </div>
         {spark && spark.some((v) => v !== 0) && (
           <Sparkline data={spark} tone={sparkTone || (tone === 'money' ? 'info' : (tone as keyof typeof SPARK))} />
