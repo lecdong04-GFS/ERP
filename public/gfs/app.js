@@ -7548,10 +7548,6 @@ function renderClassicExcelView(items) {
         <td class="py-2 px-2 text-center">${auditBadge}</td>
       `;
 
-        <!-- AI 위험 판정 -->
-        <td class="py-2 px-2 text-center">${auditBadge}</td>
-      `;
-
       // 인풋 변경 시 수량 재계산
       const boxInput = tr.querySelector('[data-action="excel-box-input"]');
       if (boxInput) {
