@@ -28,23 +28,53 @@ import { PrintReportModal } from '@/components/print/PrintReportModal';
 import { FileSpreadsheet, Printer } from 'lucide-react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
-const TICKER_MESSAGES = [
-  { type: 'danger', text: '[안전재고 경고] 경기미 백미(햅쌀) 현재고 38포 (안전재고 50포 미달 - 추가 발주 권장)' },
-  { type: 'warning', text: '[유통기한 주의] [냉장]다진맛살 10kg 유통기한 D-3 임박 (FEFO 자동 차감 적용 중)' },
-  { type: 'info', text: '[출하 현황] 1편 GS25 김해·양산·광주 저온센터 32,067개 출하지시 완료' },
-  { type: 'success', text: '[HACCP 모니터] 성형실 온습도 적합 (18℃ 이하) 및 콜드체인(2.8℃) 정상 유지' },
+interface TickerItem {
+  type: 'danger' | 'warning' | 'info' | 'success' | 'primary';
+  text: string;
+}
+
+const DEFAULT_TICKER_MESSAGES: TickerItem[] = [
+  { type: 'primary', text: '[시스템 관제] (주)GFS 엔터프라이즈 ERP — 실시간 데이터 연동 준비 중' },
 ];
 
 function ErpApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [tickerMessages, setTickerMessages] = useState<TickerItem[]>(DEFAULT_TICKER_MESSAGES);
   const [tickerIndex, setTickerIndex] = useState(0);
 
+  // 100% 실제 DB 실시간 팩트(결품위험·FEFO·수주·발주마감·BOM) 로드 및 60초 주기 갱신
   React.useEffect(() => {
+    let mounted = true;
+    const fetchLiveTicker = async () => {
+      try {
+        const res = await fetch('/api/system/live-ticker');
+        const json = await res.json();
+        if (mounted && json?.success && Array.isArray(json.data) && json.data.length > 0) {
+          setTickerMessages(json.data);
+        }
+      } catch (err) {
+        console.warn('live ticker fetch error:', err);
+      }
+    };
+
+    fetchLiveTicker();
+    const interval = setInterval(fetchLiveTicker, 60000); // 1분 주기 자동 동기화
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // 4.5초 주기 롤링 순환
+  React.useEffect(() => {
+    if (tickerMessages.length <= 1) return;
     const timer = setInterval(() => {
-      setTickerIndex((prev) => (prev + 1) % TICKER_MESSAGES.length);
+      setTickerIndex((prev) => (prev + 1) % tickerMessages.length);
     }, 4500);
     return () => clearInterval(timer);
-  }, []);
+  }, [tickerMessages.length]);
+
+  const currentTicker = tickerMessages[tickerIndex % tickerMessages.length] || tickerMessages[0];
 
   const { activeTab, activeTabId } = useTabs();
   const {
@@ -74,27 +104,31 @@ function ErpApp() {
         <div className="flex items-center gap-2.5 overflow-hidden max-w-2xl">
           <span
             className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
-              TICKER_MESSAGES[tickerIndex].type === 'danger'
+              currentTicker.type === 'danger'
                 ? 'bg-rose-500 animate-ping'
-                : TICKER_MESSAGES[tickerIndex].type === 'warning'
+                : currentTicker.type === 'warning'
                 ? 'bg-amber-500 animate-pulse'
-                : TICKER_MESSAGES[tickerIndex].type === 'success'
+                : currentTicker.type === 'success'
                 ? 'bg-emerald-500'
+                : currentTicker.type === 'primary'
+                ? 'bg-indigo-500'
                 : 'bg-blue-500'
             }`}
           />
           <span
             className={`font-semibold truncate transition-all duration-300 text-[12.5px] ${
-              TICKER_MESSAGES[tickerIndex].type === 'danger'
+              currentTicker.type === 'danger'
                 ? 'text-rose-600'
-                : TICKER_MESSAGES[tickerIndex].type === 'warning'
+                : currentTicker.type === 'warning'
                 ? 'text-amber-700'
-                : TICKER_MESSAGES[tickerIndex].type === 'success'
+                : currentTicker.type === 'success'
                 ? 'text-emerald-700'
+                : currentTicker.type === 'primary'
+                ? 'text-indigo-600'
                 : 'text-blue-700'
             }`}
           >
-            {TICKER_MESSAGES[tickerIndex].text}
+            {currentTicker.text}
           </span>
         </div>
         <div className="hidden md:flex items-center gap-2">
