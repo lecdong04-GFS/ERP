@@ -30,10 +30,10 @@ const EXCLUDED_UNREGISTERED_ITEMS = [
   "정우)근본김밥뚜껑", "하절기면(대)뚜껑(100EA*4봉)", "하절기면(대)용기(100EA*4봉)"
 ].map(s => s.replace(/\s+/g, '').toUpperCase());
 
-// 5대 채널별 탭 구성, 보수적 감사 탭 및 AI 견제 감사관 탭
+// 5대 채널별 탭 구성, 보수적 감사 탭 및 정밀 검증 탭
 const CHANNELS = [
   { id: 'all_time', label: '전체 시간순 (11시➔16시)', icon: 'clock' },
-  { id: 'auditor_tab', label: '⚔️ AI 견제 태클', icon: 'shield-question' },
+  { id: 'auditor_tab', label: '⚔️ 정밀 검증 태클', icon: 'shield-question' },
   { id: 'conservative_tab', label: '🛡️ 보수적 위험 감사', icon: 'shield-alert' },
   { id: 'baljugo', label: '발주고 (13시)', icon: 'shopping-cart', filter: s => s.includes('발주고') },
   { id: 'gs_procure', label: 'GS통합구매 (11/13/14시)', icon: 'boxes', filter: s => s.includes('통합구매') || s.includes('GS') },
@@ -1300,7 +1300,7 @@ function setupEventListeners() {
       btnExcelModeLiveAi.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-indigo-600 text-white shadow-xs flex items-center gap-1 transition";
       btnExcelModeOriginal.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
       renderCards();
-      showToast('🤖 오늘 10시 주문서와 17시 실사재고를 반영한 AI 실시간 재산출값으로 비교 표시합니다.', 'info');
+      showToast('⚡ 오늘 10시 주문서와 17시 실사재고를 반영한 실시간 자동 재산출값으로 비교 표시합니다.', 'info');
     });
   }
 
@@ -1480,7 +1480,7 @@ function setupEventListeners() {
       state.filterAuditorTackleOnly = !state.filterAuditorTackleOnly;
       updateFilterButtonsVisual();
       if (state.filterAuditorTackleOnly) {
-        showToast('AI 견제 감사관이 딴지/반론을 제기한 품목만 필터링합니다.', 'warning');
+        showToast('정밀 검증 시스템이 딴지/반론을 제기한 품목만 필터링합니다.', 'warning');
       }
       renderCards();
     });
@@ -5594,7 +5594,7 @@ function recalculateAll() {
   const totalAuditorTackleCount = state.rawItems.filter(i => i.calc && i.calc.auditor && i.calc.auditor.hasTackles && (!state.onlyFinishedGoodsRelated || i.isRelatedToOrders)).length;
   const labelAuditorFlags = document.getElementById('labelAuditorFlags');
   if (labelAuditorFlags) {
-    labelAuditorFlags.textContent = `⚔️ AI 견제 태클 (${totalAuditorTackleCount})`;
+    labelAuditorFlags.textContent = `⚔️ 정밀 검증 태클 (${totalAuditorTackleCount})`;
   }
 
   updateFilterButtonsVisual();
@@ -6142,19 +6142,19 @@ function renderCards() {
               <div>
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-sm sm:text-base font-black text-neutral-900 dark:text-white tracking-tight">
-                    🚨 1순위 집중 브리핑: AI 견제 & 확인 필수 품목
+                    🚨 1순위 집중 브리핑: 집중 확인 필수 품목
                   </span>
                   <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-black bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
                     ${priorityItems.length}건
                   </span>
                   ${reducibleItems.length > 0 ? `
                     <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                      💡 감사관 권고 반영 시 -${reducibleBoxes}박스 (￦${reducibleAmount.toLocaleString()} 절감)
+                      💡 검증 권고 반영 시 -${reducibleBoxes}박스 (￦${reducibleAmount.toLocaleString()} 절감)
                     </span>
                   ` : ''}
                 </div>
                 <p class="text-[11.5px] text-neutral-600 dark:text-neutral-300 font-medium mt-0.5">
-                  스크롤하며 찾을 필요 없이 AI 감사관이 태클을 걸었거나 결품 위험이 있는 품목만 최상단에 모았습니다. 카드 우측의 <strong class="text-neutral-900 dark:text-white">3줄 핵심 근거</strong>를 바로 확인하세요.
+                  스크롤하며 찾을 필요 없이 검증 시스템이 지적했거나 결품 위험이 있는 품목만 최상단에 모았습니다. 카드 우측의 <strong class="text-neutral-900 dark:text-white">3줄 핵심 근거</strong>를 바로 확인하세요.
                 </p>
               </div>
             </div>
@@ -6163,7 +6163,7 @@ function renderCards() {
               ${reducibleItems.length > 0 ? `
                 <button type="button" id="btnBatchApplyAuditor" class="btn-tactile px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-black flex items-center gap-1.5 shadow-sm transition">
                   <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-600"></i>
-                  <span>AI 감사관 권장수량 일괄 적용 (${reducibleItems.length}건 · -${reducibleBoxes}박스)</span>
+                  <span>검증 권장수량 일괄 적용 (${reducibleItems.length}건 · -${reducibleBoxes}박스)</span>
                 </button>
               ` : ''}
               ${safeItems.length > 0 ? `
@@ -6206,7 +6206,7 @@ function renderCards() {
               it.manualWeeklySplit = null;
             });
             recalculateAll();
-            showToast(`⚡ AI 감사관 권고대로 ${reducibleItems.length}개 품목(-${reducibleBoxes}박스, ￦${reducibleAmount.toLocaleString()} 절감)이 일괄 조정되었습니다!`, 'success');
+            showToast(`⚡ 시스템 권고대로 ${reducibleItems.length}개 품목(-${reducibleBoxes}박스, ￦${reducibleAmount.toLocaleString()} 절감)이 일괄 조정되었습니다!`, 'success');
           });
         }
 
@@ -6237,7 +6237,7 @@ function renderCards() {
             </div>
             <div class="flex items-center gap-2 flex-wrap">
               <span class="text-sm font-black text-neutral-900 dark:text-white">
-                ✅ 2순위 안심 발주: AI 감사관 검증 통과 품목
+                ✅ 2순위 안심 발주: 정밀 검증 통과 품목
               </span>
               <span class="px-2 py-0.5 rounded-full text-xs font-mono font-black bg-emerald-600 text-white">
                 ${safeItems.length}건
@@ -6249,7 +6249,7 @@ function renderCards() {
           </div>
           ${priorityItems.length > 0 ? `
             <button type="button" onclick="const el=document.getElementById('priorityZoneBanner'); if(el) el.scrollIntoView({behavior:'smooth', block:'start'});" class="btn-tactile px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-[11px] font-bold text-neutral-600 dark:text-neutral-300 hover:text-neutral-900">
-              ⬆️ 상단 AI 주의 구역(${priorityItems.length}건)으로
+              ⬆️ 상단 주의 구역(${priorityItems.length}건)으로
             </button>
           ` : ''}
         `;
@@ -6718,7 +6718,7 @@ function createCardElement(item) {
         <div class="rounded-lg px-2.5 py-1.5 bg-emerald-50/90 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between text-[11px]">
           <span class="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
             <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600 shrink-0"></i>
-            <span>AI 견제 감사관 검증 통과 — 일소요량·입고예정·유통기한 기준 적정 발주량입니다.</span>
+            <span>정밀 검증 통과 — 일소요량·입고예정·유통기한 기준 적정 발주량입니다.</span>
           </span>
         </div>
       `}
@@ -6934,7 +6934,7 @@ function createCardElement(item) {
       item.manualBoxes = calc.auditor.bestAuditorSuggestion;
       item.manualWeeklySplit = null;
       recalculateAll();
-      showToast(`'${item.name}' AI 견제 감사관 권고대로 ${calc.auditor.bestAuditorSuggestion}박스로 삭감 확정되었습니다!`, 'success');
+      showToast(`'${item.name}' 시스템 권고대로 ${calc.auditor.bestAuditorSuggestion}박스로 삭감 확정되었습니다!`, 'success');
     });
   }
 
@@ -7019,10 +7019,10 @@ function renderTableView(items) {
           <th class="py-3 px-3 text-right min-w-[90px]">현장재고</th>
           <th class="py-3 px-3 text-right min-w-[90px]">입고예정</th>
           <th class="py-3 px-3 text-right min-w-[110px]">일소진 (재고유지일)</th>
-          <th class="py-3 px-3 text-center min-w-[130px]">AI 추천</th>
+          <th class="py-3 px-3 text-center min-w-[130px]">시스템 추천</th>
           <th class="py-3 px-3 text-center min-w-[150px]">최종 발주(박스)</th>
           <th class="py-3 px-3 text-right min-w-[110px]">예상 금액</th>
-          <th class="py-3 px-3 text-center min-w-[110px]">AI 검증 / 감사</th>
+          <th class="py-3 px-3 text-center min-w-[110px]">검증 / 감사</th>
           <th class="py-3 px-3 text-center min-w-[70px]">관리</th>
         </tr>
       `;
@@ -7486,7 +7486,7 @@ function renderClassicExcelView(items) {
         <td class="py-1 px-1.5 border-r border-neutral-200 dark:border-neutral-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
           <div class="inline-flex items-center justify-center gap-1">
             <input type="number" min="0" step="1" value="${displayBoxes}" data-action="excel-box-input" style="text-align: center;" class="w-14 h-6 text-center font-mono font-black text-xs rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-neutral-900 text-emerald-950 dark:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-600 shadow-2xs">
-            ${isOriginalMode && calc.finalBoxes !== item.originalExcelBoxes ? `<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="오늘 10시 수주·실사재고 기준 AI추천: ${calc.finalBoxes}박스">(AI:${calc.finalBoxes})</span>` : ''}
+            ${isOriginalMode && calc.finalBoxes !== item.originalExcelBoxes ? `<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono" title="오늘 10시 수주·실사재고 기준 자동추천: ${calc.finalBoxes}박스">(추천:${calc.finalBoxes})</span>` : ''}
             ${!isOriginalMode && calc.bufferBoxes > 0 ? `<span class="text-[9px] font-bold text-indigo-600 font-mono shrink-0" title="보수적 안전 버퍼 +${calc.bufferBoxes}박스 가산됨">(+${calc.bufferBoxes})</span>` : ''}
           </div>
         </td>
@@ -9215,7 +9215,7 @@ function exportTeamReviewPdf() {
         </div>
         <div class="checklist-item">
           <span class="check-square"></span>
-          <span><strong>AI 견제 감사관 태클 검증:</strong> 급증 오더 및 중복 의심(${auditorTackleItems.length}건 지적) 품목에 대한 수주 변동/창고 실재고 현장 크로스체크 완료</span>
+          <span><strong>정밀 검증 태클 확인:</strong> 급증 오더 및 중복 의심(${auditorTackleItems.length}건 지적) 품목에 대한 수주 변동/창고 실재고 현장 크로스체크 완료</span>
         </div>
         <div class="checklist-item">
           <span class="check-square"></span>

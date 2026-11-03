@@ -277,7 +277,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
           </span>
           <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-300" />
-            AI 모멘텀 분석
+            수주 모멘텀 분석
           </span>
           {data.baseDate && (
             <span className="hidden sm:inline-block text-[11.5px] text-slate-300 font-mono">
@@ -501,7 +501,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                   <th className="py-2 px-2.5 w-32 text-right">7일 수주량 (일평균)</th>
                   <th className="py-2 px-2.5 w-24 text-right">전주대비</th>
                   <th className="py-2 px-2.5 w-28 text-center">14일 곡선</th>
-                  <th className="py-2 px-2.5 w-28 text-center">AI 권고</th>
+                  <th className="py-2 px-2.5 w-28 text-center">추천 권고</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
