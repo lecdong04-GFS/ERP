@@ -719,9 +719,10 @@ export const StockLookupView: React.FC = () => {
               : hasDbQty
               ? Number(inv.currentQty)
               : (o && Number(o.currentStock) > 0 ? Number(o.currentStock) : 0);
+            // 스마트발주 최신 발주서 마스터(o) 우선: 입수량 및 일사용량 일원화
             const pack =
-              (isSnap && Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
               (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
+              (isSnap && Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
               inv.product?.boxQty ||
               1;
             const box = isSnap && inv.boxQty !== undefined && Number(inv.boxQty) > 0
@@ -733,7 +734,9 @@ export const StockLookupView: React.FC = () => {
             const uprice = Number(inv.unitPrice) > 0
               ? Number(inv.unitPrice)
               : (o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : price);
-            const rawDailyU = Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : (o ? Number(o.dailyUsage) || 0 : 0);
+            const rawDailyU = (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage)))
+              ? Number(o.dailyUsage)
+              : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0);
             const dailyU = Math.round(rawDailyU * 100) / 100;
             const estEntry = lookupEst(wh, norm);
             const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
@@ -1128,7 +1131,10 @@ export const StockLookupView: React.FC = () => {
             // 유지일: 현재고 ÷ 일사용량 실시간 계산 (폴백: 발주서 정본 N열)
             const oRef = orderByNorm.get(norm);
             const fallbackDays = oRef && oRef.stockDays != null ? Number(oRef.stockDays) : exist.stockDays;
-            const effDaily = daily || exist.dailyUsage || estDaily;
+            const masterDaily = oRef && oRef.dailyUsage != null && !isNaN(Number(oRef.dailyUsage))
+              ? Math.round(Number(oRef.dailyUsage) * 100) / 100
+              : null;
+            const effDaily = masterDaily ?? (daily || exist.dailyUsage || estDaily);
             const nDays = calcStockDays(current, effDaily, fallbackDays);
             const changed =
               exist.whName !== sheet ||
@@ -1143,7 +1149,11 @@ export const StockLookupView: React.FC = () => {
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
             if (inbound) exist.inboundDate = inbound;
-            if (daily) exist.dailyUsage = daily;
+            if (masterDaily != null) {
+              exist.dailyUsage = masterDaily;
+            } else if (daily) {
+              exist.dailyUsage = daily;
+            }
             exist.estDailyUsage = estDaily;
             exist.estSampleCount = estSamples;
             if (expiry) exist.expiryDate = expiry;
@@ -1172,7 +1182,11 @@ export const StockLookupView: React.FC = () => {
             const newSafety = autoSafety > 0 ? autoSafety : 0;
             if (autoSafety > 0) autoFilled += 1;
             const oo = orderByNorm.get(norm);
-            const nDays = calcStockDays(current, daily > 0 ? daily : estDaily, oo && oo.stockDays != null ? Number(oo.stockDays) : null);
+            const orderDaily = oo && oo.dailyUsage != null && !isNaN(Number(oo.dailyUsage))
+              ? Math.round(Number(oo.dailyUsage) * 100) / 100
+              : (daily > 0 ? daily : 0);
+            const nEffDaily = orderDaily > 0 ? orderDaily : estDaily;
+            const nDays = calcStockDays(current, nEffDaily, oo && oo.stockDays != null ? Number(oo.stockDays) : null);
             const row: StockItem = {
               id: tempId--,
               whName: sheet,
@@ -1192,7 +1206,7 @@ export const StockLookupView: React.FC = () => {
               inboundDate: inbound,
               expiryDate: expiry,
               orderDay: '',
-              dailyUsage: daily,
+              dailyUsage: orderDaily,
               estDailyUsage: estDaily,
               estSampleCount: estSamples,
               packUnit: pack,

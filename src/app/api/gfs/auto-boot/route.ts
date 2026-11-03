@@ -215,12 +215,23 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    const estUsageMap: Record<string, { estDailyUsage: number; sampleCount: number; observedDays: number }> = {};
+    const estUsageMap: Record<
+      string,
+      {
+        estDailyUsage: number;
+        sampleCount: number;
+        observedDays: number;
+        noDecreaseObserved?: boolean;
+        isFrozenStock?: boolean;
+      }
+    > = {};
     for (const [k, v] of Object.entries(byKeyOnly)) {
       estUsageMap[k] = {
         estDailyUsage: v.estDailyUsage,
         sampleCount: v.sampleCount,
         observedDays: v.observedDays,
+        noDecreaseObserved: v.noDecreaseObserved,
+        isFrozenStock: v.isFrozenStock,
       };
     }
 
