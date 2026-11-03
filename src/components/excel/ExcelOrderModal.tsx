@@ -85,6 +85,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
               orderQty2: it.qty2,
               totalOrderQty: it.total,
               deliveryPrice: it.unitPrice,
+              amount: it.amount,
             })),
             totalLines: bon.items.length,
             totalQty: bon.totalQty,
@@ -159,13 +160,14 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
               uploadMethod: '엑셀(본발주)',
               source: '본발주',
               replaceByDate: replace,
-              items: parsedData.orders.map((o) => ({
+              items: parsedData.orders.map((o: any) => ({
                 menuName: o.orderItemName,
                 productCode: o.orderItemCode,
                 qty1: o.orderQty1,
                 qty2: o.orderQty2,
                 total: o.totalOrderQty,
                 unitPrice: o.deliveryPrice,
+                amount: o.amount,
               })),
             }),
           });

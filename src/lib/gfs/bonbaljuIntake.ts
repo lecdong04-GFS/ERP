@@ -9,6 +9,7 @@ export interface BonbaljuItem {
   qty2: number;
   total: number;
   unitPrice: number;
+  amount: number;
 }
 
 export type BonbaljuKind = '정규' | '추가' | '슈퍼';
@@ -84,6 +85,7 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
   const iCode = col(['상품코드']);
   const iEa = col(['낱개수량']);
   const iPrice = col(['발주단가']);
+  const iAmt = col(['발주금액']);
   const iSup = col(['공급자']);
   // 수주일자 = 발주일자(수주받은 날짜). 납품일자 아님에 유의
   const iOrdDt = col(['발주일자']);
@@ -125,6 +127,8 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
     const ea = parseNumber(row[iEa]);
     if (ea <= 0) continue;
     const price = iPrice !== -1 ? parseNumber(row[iPrice]) : 0;
+    const rowAmt = iAmt !== -1 ? parseNumber(row[iAmt]) : 0;
+    const effAmt = rowAmt > 0 ? rowAmt : (price > 0 ? ea * price : 0);
     const sup = iSup !== -1 ? String(row[iSup] ?? '') : '';
     const isShift2 = sup.includes('2편');
     const category = sup ? sup.replace(/\s+/g, ' ').trim().slice(0, 40) : '본발주';
@@ -139,6 +143,7 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
       if (isShift2) prev.qty2 += ea;
       else prev.qty1 += ea;
       prev.total += ea;
+      prev.amount += effAmt;
       // 단가: 첫 유효값 유지, 다르면 가중평균 없이 최대값 유지하지 않고 첫 값 유지
       if (!prev.unitPrice && price) prev.unitPrice = price;
     } else {
@@ -150,6 +155,7 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
         qty2: isShift2 ? ea : 0,
         total: ea,
         unitPrice: price,
+        amount: effAmt,
       });
     }
     rowCount += 1;
@@ -163,9 +169,10 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
     it.qty1 = Math.round(it.qty1);
     it.qty2 = Math.round(it.qty2);
     it.total = Math.round(it.total);
+    it.amount = Math.round(it.amount);
   }
   const totalQty = items.reduce((s, it) => s + it.total, 0);
-  const totalAmount = items.reduce((s, it) => s + it.total * (it.unitPrice || 0), 0);
+  const totalAmount = items.reduce((s, it) => s + (it.amount || it.total * (it.unitPrice || 0)), 0);
   // 종류 판별: 슈퍼 우선 → 추가 → 정규
   const kind: BonbaljuKind = hasSuper ? '슈퍼' : hasAdd ? '추가' : '정규';
 

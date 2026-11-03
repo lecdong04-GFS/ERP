@@ -15,6 +15,7 @@ interface IntakeItem {
   total?: number;
   productCode?: string;
   unitPrice?: number;
+  amount?: number;
 }
 
 // POST /api/sales/intake — 발주현황/본발주 수주 일괄등록
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     let matched = 0;
     let createdProducts = 0;
     let skipped = 0;
-    const detailInputs: { productId: number; qty1: number; qty2: number; total: number; unitPrice?: number }[] = [];
+    const detailInputs: { productId: number; qty1: number; qty2: number; total: number; unitPrice?: number; amount?: number }[] = [];
 
     for (const it of items) {
       const name = String(it.menuName || '').trim();
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
       const total = it.total != null && Number(it.total) > 0 ? Math.round(Number(it.total)) : qty1 + qty2;
       const givenCode = String(it.productCode || '').trim();
       const givenPrice = Number(it.unitPrice) > 0 ? Math.round(Number(it.unitPrice)) : 0;
+      const givenAmount = Number(it.amount) > 0 ? Math.round(Number(it.amount)) : 0;
       if (!name || total <= 0) {
         skipped += 1;
         continue;
@@ -149,7 +151,7 @@ export async function POST(req: NextRequest) {
       } else {
         matched += 1;
       }
-      detailInputs.push({ productId: product.id, qty1, qty2, total, unitPrice: givenPrice || undefined });
+      detailInputs.push({ productId: product.id, qty1, qty2, total, unitPrice: givenPrice || undefined, amount: givenAmount || undefined });
     }
 
     if (detailInputs.length === 0) {
@@ -174,7 +176,7 @@ export async function POST(req: NextRequest) {
       totalQty += d.total;
       // 본발주 단가(발주단가)는 상세에만 저장, 마스터 미갱신. 없으면 마스터 최신가 fallback
       const unitPrice = d.unitPrice && d.unitPrice > 0 ? d.unitPrice : (priceMap.get(d.productId) ?? 0);
-      const amount = Math.round(d.total * unitPrice);
+      const amount = d.amount && d.amount > 0 ? Math.round(d.amount) : Math.round(d.total * unitPrice);
       totalAmount += amount;
       return {
         productId: d.productId,

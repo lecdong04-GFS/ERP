@@ -57,6 +57,7 @@ interface IntakePayloadItem {
   total?: number;
   productCode?: string;
   unitPrice?: number;
+  amount?: number;
 }
 
 interface ParsedIntakeFile {
@@ -261,7 +262,7 @@ export const OrderUploadGsrView: React.FC = () => {
           totalAmount: bon.totalAmount,
           items: bon.items.map((p) => ({
             menuName: p.menuName, productCode: p.productCode, category: p.category,
-            qty1: p.qty1, qty2: p.qty2, total: p.total, unitPrice: p.unitPrice,
+            qty1: p.qty1, qty2: p.qty2, total: p.total, unitPrice: p.unitPrice, amount: p.amount,
           })),
         };
       }
