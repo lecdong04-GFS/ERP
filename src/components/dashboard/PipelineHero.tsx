@@ -104,7 +104,7 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
             <div>
               <span className="text-[11.5px] text-slate-300 block leading-tight font-medium">10시 완제품 수주</span>
               <span className="text-[14.5px] font-black text-white font-mono">
-                {(pipeline.orderQty || 32067).toLocaleString()}개
+                {pipeline.orderQty > 0 ? `${pipeline.orderQty.toLocaleString()}개` : '수주 대기'}
               </span>
             </div>
           </div>
@@ -117,9 +117,9 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
               2
             </div>
             <div>
-              <span className="text-[11.5px] text-slate-300 block leading-tight font-medium">스마트발주(BOM)</span>
+              <span className="text-[11.5px] text-slate-300 block leading-tight font-medium">스마트발주(GFS)</span>
               <span className="text-[14.5px] font-black text-emerald-300 font-mono">
-                43품목 · 468박스
+                BOM 자동소요
               </span>
             </div>
           </div>
