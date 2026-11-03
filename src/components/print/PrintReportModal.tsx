@@ -1064,11 +1064,6 @@ export const PrintReportModal: React.FC = () => {
                   </div>
                 );
               })()}
-                    <span>* 본 발주서는 전자문서로 발행되어 직인 날인과 동일한 효력을 가집니다.</span>
-                    <span>(주)GFS 대표이사 박지훈 (인)</span>
-                  </div>
-                </div>
-              )}
 
               {/* 7. LOT 품질관리 바코드 라벨 (LOT_LABEL) */}
               {activeDocType === 'LOT_LABEL' && (
