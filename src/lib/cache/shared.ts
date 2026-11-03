@@ -1,6 +1,6 @@
 import { Redis } from '@upstash/redis';
 
-const DASHBOARD_KEY = 'gfs:dashboard:v1';
+const DASHBOARD_KEY = 'gfs:dashboard:v2';
 const globalForRedis = globalThis as unknown as { gfsUpstash?: Redis };
 
 export function getSharedRedis(): Redis | null {
@@ -23,7 +23,9 @@ export async function readSharedDashboard(): Promise<SharedDashboardEntry | null
   const redis = getSharedRedis();
   if (!redis) return null;
   try {
-    return await redis.get<SharedDashboardEntry>(DASHBOARD_KEY);
+    const entry = await redis.get<SharedDashboardEntry>(DASHBOARD_KEY);
+    if (!entry?.data || !(entry.data as any)?.demandTrend?.surge) return null;
+    return entry;
   } catch (error: any) {
     console.error('[cache] read failed:', error?.message || error);
     return null;

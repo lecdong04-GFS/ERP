@@ -24,7 +24,12 @@ async function readSnapshot(): Promise<SnapshotRow | null> {
   );
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
-  if (!row.payload || typeof row.payload !== 'object' || !(row.payload as any).kpiSummary) {
+  if (
+    !row.payload ||
+    typeof row.payload !== 'object' ||
+    !(row.payload as any).kpiSummary ||
+    !(row.payload as any).demandTrend?.surge
+  ) {
     return null;
   }
   return row;
