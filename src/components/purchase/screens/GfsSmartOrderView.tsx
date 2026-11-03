@@ -769,7 +769,7 @@ export const GfsSmartOrderView: React.FC = () => {
         )}
         <iframe
           ref={iframeRef}
-          src="/gfs/index.html?v=20261103_trend_v4"
+          src="/gfs/index.html?v=20261103_frozen_v5"
           title="GFS 스마트발주"
           className="w-full h-full border-0 block"
           allow="clipboard-read; clipboard-write"

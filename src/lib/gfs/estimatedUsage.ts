@@ -26,6 +26,8 @@ export interface EstimatedUsageEntry {
   estDailyBox: number; // 박스 기준 일추정소모량 (estDailyUsage / packUnit)
   sampleCount: number; // 소진(감소) 관측 구간 수
   observedDays: number; // 재고 관측일 수
+  noDecreaseObserved?: boolean; // 재고 감소(소진) 흔적 0회
+  isFrozenStock?: boolean; // 재고 수량이 변동 없이 동일하게 멈춰있는 동결 재고
 }
 
 export interface EstimatedUsageResult {
@@ -172,6 +174,12 @@ export function getEstimatedDailyUsage(forceRefresh = false): EstimatedUsageResu
     if (!m) return;
     const { rate, count } = computeTrimmedRate(pts);
     const pack = m.packUnit > 0 ? m.packUnit : 1;
+    const qtys = pts.map((p) => p.qty);
+    const minQ = Math.min(...qtys);
+    const maxQ = Math.max(...qtys);
+    const noDecrease = pts.length >= 3 && count === 0;
+    const isFrozen = pts.length >= 3 && minQ === maxQ && maxQ > 0;
+
     const entry: EstimatedUsageEntry = {
       warehouse: m.warehouse,
       canonKey: m.canonKey,
@@ -181,6 +189,8 @@ export function getEstimatedDailyUsage(forceRefresh = false): EstimatedUsageResu
       estDailyBox: rate > 0 ? Math.round((rate / pack) * 100) / 100 : 0,
       sampleCount: count,
       observedDays: pts.length,
+      noDecreaseObserved: noDecrease,
+      isFrozenStock: isFrozen,
     };
     byWhAndKey[mk] = entry;
     if (!byKeyCounts.has(m.canonKey)) byKeyCounts.set(m.canonKey, []);
@@ -198,6 +208,8 @@ export function getEstimatedDailyUsage(forceRefresh = false): EstimatedUsageResu
     const activeEntries = mks.map((k) => byWhAndKey[k]).filter((e) => e && e.estDailyUsage > 0);
     if (activeEntries.length === 1) {
       byKeyOnly[ck] = activeEntries[0];
+    } else if (activeEntries.length === 0 && mks.length > 0) {
+      byKeyOnly[ck] = byWhAndKey[mks[0]];
     }
   });
 
@@ -305,6 +317,12 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
       if (!m) return;
       const { rate, count } = computeTrimmedRate(pts);
       const pack = m.packUnit > 0 ? m.packUnit : 1;
+      const qtys = pts.map((p) => p.qty);
+      const minQ = Math.min(...qtys);
+      const maxQ = Math.max(...qtys);
+      const noDecrease = pts.length >= 3 && count === 0;
+      const isFrozen = pts.length >= 3 && minQ === maxQ && maxQ > 0;
+
       const entry: EstimatedUsageEntry = {
         warehouse: m.warehouse,
         canonKey: m.canonKey,
@@ -314,6 +332,8 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
         estDailyBox: rate > 0 ? Math.round((rate / pack) * 100) / 100 : 0,
         sampleCount: count,
         observedDays: pts.length,
+        noDecreaseObserved: noDecrease,
+        isFrozenStock: isFrozen,
       };
       byWhAndKey[mk] = entry;
       if (!byKeyCounts.has(m.canonKey)) byKeyCounts.set(m.canonKey, []);
@@ -329,6 +349,8 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
       const activeEntries = mks.map((k) => byWhAndKey[k]).filter((e) => e && e.estDailyUsage > 0);
       if (activeEntries.length === 1) {
         byKeyOnly[ck] = activeEntries[0];
+      } else if (activeEntries.length === 0 && mks.length > 0) {
+        byKeyOnly[ck] = byWhAndKey[mks[0]];
       }
     });
 

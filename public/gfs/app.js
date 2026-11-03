@@ -1662,9 +1662,10 @@ function updateFilterModeUi() {
   if (btnActive) btnActive.className = state.filterDisplayMode === 'active_only' ? activeCls : inactiveCls;
   if (btnAll) btnAll.className = state.filterDisplayMode === 'all' ? activeCls : inactiveCls;
 
-  const orderCount = (state.rawItems || []).filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT').length;
-  const activeCount = (state.rawItems || []).filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT').length;
-  const dormantCount = (state.rawItems || []).filter(i => i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked).length;
+  const isOrderTarget = i => (i.manualBoxes !== null && i.manualBoxes > 0) || (i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease);
+  const orderCount = (state.rawItems || []).filter(isOrderTarget).length;
+  const activeCount = (state.rawItems || []).filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease).length;
+  const dormantCount = (state.rawItems || []).filter(i => i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked || i.isAuditNoDecrease).length;
   const totalCount = (state.rawItems || []).length;
 
   const lblOrder = document.getElementById('labelFilterModeOrderOnly');
@@ -1679,13 +1680,13 @@ function updateFilterModeUi() {
   if (excelViewCountBadge) {
     if (state.filterDisplayMode === 'order_only') {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-mono";
-      excelViewCountBadge.textContent = `🔥 실발주 대상 ${orderCount}개 품목 표시 (과잉/단종/휴면 ${dormantCount}개 제외)`;
+      excelViewCountBadge.textContent = `🔥 실발주 대상 ${orderCount}개 품목 표시 (미소진/과잉/단종 ${dormantCount}개 제외)`;
     } else if (state.filterDisplayMode === 'active_only') {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-mono";
       excelViewCountBadge.textContent = `📦 금일 생산 연동 ${activeCount}개 품목 표시 (0박스 포함)`;
     } else {
       excelViewCountBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono";
-      excelViewCountBadge.textContent = `📋 전체 ${totalCount}개 품목 표시 (과잉/휴면 ${dormantCount}개 포함)`;
+      excelViewCountBadge.textContent = `📋 전체 ${totalCount}개 품목 표시 (미소진/과잉 ${dormantCount}개 포함)`;
     }
   }
 
@@ -2070,6 +2071,23 @@ function getMenuTrendInfo(menuName) {
   return null;
 }
 
+function getStocktakeUsageInfo(itemName) {
+  if (!state.dormantMeta || !state.dormantMeta.estUsageMap) return null;
+  const map = state.dormantMeta.estUsageMap;
+  if (map[itemName]) return map[itemName];
+  const clean = String(itemName || '').replace(/\s+/g, '');
+  if (map[clean]) return map[clean];
+  const norm = clean.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+  if (!norm || norm.length < 2) return null;
+  for (const [k, v] of Object.entries(map)) {
+    const cleanK = k.replace(/[\[\]\(\)]/g, '').replace(/더큰|NEW|직화|혜자|슈퍼|필름|용기|종가|커플/g, '');
+    if (cleanK && (cleanK.includes(norm) || norm.includes(cleanK))) {
+      return v;
+    }
+  }
+  return null;
+}
+
 function applyFinishedGoodsOrdersToMaterials() {
   if (!state.rawItems || state.rawItems.length === 0) return 0;
   if (!state.vegetableOrdersMap || Object.keys(state.vegetableOrdersMap).length === 0) return 0;
@@ -2287,6 +2305,31 @@ function applyFinishedGoodsOrdersToMaterials() {
         item.dormantReason = '';
         if (isCommonCore && estUsage > 0 && (!item.dailyUsage || item.dailyUsage <= 0)) {
           item.dailyUsage = estUsage;
+        }
+      }
+    }
+
+    // ★ [현장 재고조사표 21일간 소진 흔적 역추적]
+    const auditInfo = getStocktakeUsageInfo(item.name);
+    if (auditInfo) {
+      item.auditObservedDays = auditInfo.observedDays || 0;
+      item.auditSampleCount = auditInfo.sampleCount || 0;
+      item.auditEstDailyUsage = auditInfo.estDailyUsage || 0;
+      item.isFrozenStock = Boolean(auditInfo.isFrozenStock);
+      item.noDecreaseObserved = Boolean(auditInfo.noDecreaseObserved);
+
+      // 만약 재고조사표 3일 이상 관측에서 소진(감소)이 0건이고, 오늘 일소진량도 0이라면 (100% 미사용 자재)
+      if (auditInfo.observedDays >= 3 && auditInfo.noDecreaseObserved && auditInfo.estDailyUsage === 0) {
+        if (!item.dailyUsage || item.dailyUsage <= 0) {
+          item.isDormant = true;
+          item.isAuditNoDecrease = true;
+          if (auditInfo.isFrozenStock) {
+            item.dormantReason = `재고조사표 ${auditInfo.observedDays}일간 실소진 0회 (수량 동결 방치 자재)`;
+          } else {
+            item.dormantReason = `재고조사표 ${auditInfo.observedDays}일간 소모 흔적 0건 (장기 미사용)`;
+          }
+          item.dailyUsage = 0;
+          item.isBlacklisted = true;
         }
       }
     }
@@ -5224,11 +5267,16 @@ function calculateItemMetrics(item) {
   const origBoxes = (!isOrderBlockedByNoFinishedOrders && !item.isDormant && !isOverstocked && !isExtinct && origShortage > 0) ? Math.ceil(origShortage / item.packUnit) : 0;
   const savedBoxes = Math.max(0, origBoxes - recommendedBoxes);
 
-  const finalBoxes = ((item.isDormant || isOverstocked || isExtinct) ? 0 : (item.manualBoxes !== null ? item.manualBoxes : recommendedBoxes));
+  const finalBoxes = (item.manualBoxes !== null
+    ? item.manualBoxes
+    : ((item.isDormant || isOverstocked || isExtinct || item.isAuditNoDecrease) ? 0 : recommendedBoxes));
   const finalTotalAmount = finalBoxes * item.packUnit * item.unitPrice;
 
-  const isExcluded = item.isBlacklisted || item.userExcluded || item.isDormant || isOverstocked || isExtinct || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
-  const isOrderNeeded = finalBoxes > 0 && !isExcluded && !item.isDormant && !isOverstocked && !isExtinct;
+  // ★ 수동으로 발주량을 입력한 경우(manualBoxes > 0)에는 휴면/동결 여부와 상관없이 무조건 발주 가능하도록 보장!
+  const isExcluded = (item.manualBoxes !== null && item.manualBoxes > 0)
+    ? false
+    : (item.isBlacklisted || item.userExcluded || item.isDormant || isOverstocked || isExtinct || item.isAuditNoDecrease || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders));
+  const isOrderNeeded = finalBoxes > 0 && !isExcluded;
 
   // 4) 4대 고위험 발주 '레드플래그(Red-Flag)' 자동 감사 판정
   const redFlags = [];
@@ -5294,6 +5342,23 @@ function calculateItemMetrics(item) {
     });
   }
 
+  // ⑦ 재고조사표 21일간 소진 흔적 0건 레드플래그
+  if (item.isFrozenStock) {
+    redFlags.push({
+      id: 'FROZEN_STOCK',
+      severity: 'warning',
+      badgeText: '❄️재고동결',
+      desc: `최근 ${item.auditObservedDays || 21}일간 재고조사표에서 단 1개도 소진되지 않고 멈춰있는 동결 재고입니다. (신규 발주 0박스 자동 차단 / 필요 시 수량 직접 입력 가능)`
+    });
+  } else if (item.isAuditNoDecrease) {
+    redFlags.push({
+      id: 'NO_DECREASE_AUDIT',
+      severity: 'info',
+      badgeText: '🚫소진흔적0',
+      desc: `최근 ${item.auditObservedDays || 21}일간 재고조사표에서 소모된 흔적이 전혀 없는 미사용 자재입니다. (신규 발주 0박스 자동 차단 / 필요 시 수량 직접 입력 가능)`
+    });
+  }
+
   // ★ GFS.xlsx AA열 수식: =IFERROR(H4*7.5/E4/7, "") (일사용량(봉)*7.5 / 박스입수 / 7일 = 일사용량 박스)
   const dailyUsageBoxes = (item.packUnit > 0) ? ((item.dailyUsage * 7.5) / item.packUnit / 7) : 0;
   const allowedDays = getSupplierAllowedDays(item.supplier);
@@ -5344,7 +5409,11 @@ function calculateItemMetrics(item) {
 
 function generate4LineBriefing(item, calc) {
   let line1 = '';
-  if (item.isOverstocked) {
+  if (item.isFrozenStock) {
+    line1 = `❄️ 최근 ${item.auditObservedDays || 21}일간 재고조사표에서 단 1개도 소진되지 않고 수량이 완전히 동결된 정체 재고입니다. (신규 발주 0박스 자동 차단 / 언제든 수량 직접 입력 가능)`;
+  } else if (item.isAuditNoDecrease) {
+    line1 = `🚫 최근 ${item.auditObservedDays || 21}일간 재고조사표에서 소모 흔적이 전혀 없는 미사용 자재입니다. (신규 발주 0박스 자동 차단 / 언제든 수량 직접 입력 가능)`;
+  } else if (item.isOverstocked) {
     line1 = `⚠️ 현재고 ${item.currentStock.toLocaleString()}봉 + 입고예정 ${item.incoming.toLocaleString()}봉으로 향후 ${Math.round(item.runwayDays)}일간 소진 가능한 과잉 재고입니다. (신규 발주 0박스 자동 차단)`;
   } else if (item.trendStatus === 'EXTINCT') {
     line1 = `📉 본 원자재와 연결된 완제품(${item.isDedicated ? '전용' : '공용'})의 최근 수주가 전무하여 단종 소멸 추세입니다. (발주 0박스 자동 차단)`;
@@ -5802,18 +5871,18 @@ function getItemsForTab(tabId) {
   const list = [...state.rawItems];
 
   if (tabId === 'excluded_tab') {
-    return list.filter(i => (i.calc && i.calc.isExcluded) || i.isDormant || i.isOverstocked || i.trendStatus === 'EXTINCT' || (state.filterDisplayMode === 'active_only' && !i.isRelatedToOrders));
+    return list.filter(i => (i.calc && i.calc.isExcluded) || i.isDormant || i.isOverstocked || i.trendStatus === 'EXTINCT' || i.isAuditNoDecrease || (state.filterDisplayMode === 'active_only' && !i.isRelatedToOrders));
   }
 
   let activeList;
   if (state.filterDisplayMode === 'order_only') {
-    // 실발주 대상만 보기: 발주량(박스) > 0 이고 휴면/제외/과잉/단종이 아닌 품목만!
-    activeList = list.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isBlacklisted && !i.userExcluded);
+    // 실발주 대상만 보기: 수동입력 수량이 있거나(manualBoxes > 0), 시스템 발주량 > 0 이고 미소진/동결/과잉/단종이 아닌 품목!
+    activeList = list.filter(i => (i.manualBoxes !== null && i.manualBoxes > 0) || (i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease && !i.isBlacklisted && !i.userExcluded));
   } else if (state.filterDisplayMode === 'active_only') {
-    // 금일 완제품 생산 연동 품목: 0박스 포함, 오늘 생산에 투입되는 모든 자재 (휴면/단종 제외)
-    activeList = list.filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.userExcluded);
+    // 금일 완제품 생산 연동 품목: 0박스 포함, 오늘 생산에 투입되는 모든 자재 (미소진/단종 제외, 단 수동입력 시 포함)
+    activeList = list.filter(i => (i.manualBoxes !== null && i.manualBoxes > 0) || (i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease && !i.userExcluded));
   } else {
-    // 전체 보기: 휴면 자재 포함 442개 전체
+    // 전체 보기: 휴면/동결 자재 포함 442개 전체 (언제든 열람 및 수량 수정 가능!)
     activeList = list.filter(i => !i.userExcluded);
   }
 
@@ -5885,9 +5954,9 @@ function renderCards() {
 
   // 지능형 필터링: 실발주 대상만 (기본) vs 생산 연동만 vs 전체
   if (state.filterDisplayMode === 'order_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
-    items = items.filter(i => i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT');
+    items = items.filter(i => (i.manualBoxes !== null && i.manualBoxes > 0) || (i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease));
   } else if (state.filterDisplayMode === 'active_only' && !state.activeDishFilter && state.activeTab !== 'excluded_tab' && state.activeTab !== 'conservative_tab' && state.activeTab !== 'auditor_tab') {
-    items = items.filter(i => i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT');
+    items = items.filter(i => (i.manualBoxes !== null && i.manualBoxes > 0) || (i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease));
   }
 
   // 12시 이전 긴급 마감 필터링
@@ -6429,6 +6498,8 @@ function createCardElement(item) {
           ${item.trendStatus === 'DECLINING' ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0">▼하향(${item.trendChangePct}%)</span>` : ''}
           ${item.trendStatus === 'SURGING' ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">▲급증(+${item.trendChangePct}%)</span>` : ''}
           ${item.isOverstocked ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
+          ${item.isFrozenStock ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono shrink-0" title="${item.dormantReason}">❄️동결(${item.auditObservedDays || 21}일)</span>` : ''}
+          ${item.isAuditNoDecrease && !item.isFrozenStock ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason}">🚫미소진(${item.auditObservedDays || 21}일)</span>` : ''}
         </div>
         <span class="text-xs font-mono font-bold text-neutral-400 shrink-0 whitespace-nowrap">
           ${item.packUnit}입/박스 · ￦${item.unitPrice.toLocaleString()}/봉
@@ -7018,6 +7089,8 @@ function renderTableView(items) {
             ${item.trendStatus === 'DECLINING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0">▼하향</span>` : ''}
             ${item.trendStatus === 'SURGING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0">▲급증</span>` : ''}
             ${item.isOverstocked ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
+            ${item.isFrozenStock ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono shrink-0" title="${item.dormantReason}">❄️동결</span>` : ''}
+            ${item.isAuditNoDecrease && !item.isFrozenStock ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason}">🚫미소진</span>` : ''}
           </div>
           <div class="text-[10px] text-neutral-400 font-mono flex items-center gap-1.5 flex-wrap mt-0.5">
             <span>${item.packUnit}입/박스</span> · 
@@ -7232,7 +7305,11 @@ function renderClassicExcelView(items) {
 
       // 4대 위험 감사 뱃지
       let auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">정상</span>`;
-      if (item.isOverstocked) {
+      if (item.isFrozenStock) {
+        auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-cyan-100 text-cyan-900 dark:bg-cyan-950 dark:text-cyan-300 ring-1 ring-cyan-400/40">❄️재고동결</span>`;
+      } else if (item.isAuditNoDecrease) {
+        auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">🚫미소진차단</span>`;
+      } else if (item.isOverstocked) {
         auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 ring-1 ring-amber-400/40">⚠️과잉차단</span>`;
       } else if (item.trendStatus === 'EXTINCT') {
         auditBadge = `<span class="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">📉단종소멸</span>`;
@@ -7270,7 +7347,9 @@ function renderClassicExcelView(items) {
             ${item.trendStatus === 'DECLINING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 shrink-0" title="수주 급감 (${item.trendChangePct}%)">▼하향</span>` : ''}
             ${item.trendStatus === 'SURGING' ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 shrink-0" title="수주 급증 (+${item.trendChangePct}%)">▲급증</span>` : ''}
             ${item.isOverstocked ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 shrink-0 animate-pulse" title="${item.overstockReason}">⚠️과잉(${Math.round(item.runwayDays)}일치)</span>` : ''}
-            ${item.isDormant && item.trendStatus !== 'EXTINCT' ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason || '휴면 자재'}">💤휴면</span>` : ''}
+            ${item.isFrozenStock ? `<span class="px-1 py-0.2 rounded text-[9px] font-black bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 font-mono shrink-0" title="${item.dormantReason}">❄️동결(${item.auditObservedDays || 21}일)</span>` : ''}
+            ${item.isAuditNoDecrease && !item.isFrozenStock ? `<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason}">🚫미소진(${item.auditObservedDays || 21}일)</span>` : ''}
+            ${item.isDormant && item.trendStatus !== 'EXTINCT' && !item.isAuditNoDecrease ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 font-mono shrink-0" title="${item.dormantReason || '휴면 자재'}">💤휴면</span>` : ''}
           </div>
         </td>
 

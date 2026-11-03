@@ -471,9 +471,9 @@
           sendBack(e.source, e.origin, {
             type: 'GFS_FILTER_MODE_CHANGED',
             mode: msg.mode,
-            orderableCount: (state.rawItems || []).filter(function (i) { return i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT'; }).length,
-            activeCount: (state.rawItems || []).filter(function (i) { return i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT'; }).length,
-            dormantCount: (state.rawItems || []).filter(function (i) { return i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked; }).length,
+            orderableCount: (state.rawItems || []).filter(function (i) { return (i.manualBoxes !== null && i.manualBoxes > 0) || (i.calc && i.calc.finalBoxes > 0 && !i.isDormant && !i.isOverstocked && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease); }).length,
+            activeCount: (state.rawItems || []).filter(function (i) { return (i.manualBoxes !== null && i.manualBoxes > 0) || (i.isRelatedToOrders && !i.isDormant && i.trendStatus !== 'EXTINCT' && !i.isAuditNoDecrease); }).length,
+            dormantCount: (state.rawItems || []).filter(function (i) { return i.isDormant || i.trendStatus === 'EXTINCT' || i.isOverstocked || i.isAuditNoDecrease; }).length,
             totalCount: (state.rawItems || []).length,
           });
         }

@@ -62,13 +62,13 @@ export async function GET(req: NextRequest) {
 
     const salesOrders = usedOrderDate
       ? await prisma.salesOrder.findMany({
-          where: { orderDate: usedOrderDate },
-          include: {
-            details: {
-              include: { product: { select: { name: true } } },
-            },
+        where: { orderDate: usedOrderDate },
+        include: {
+          details: {
+            include: { product: { select: { name: true } } },
           },
-        })
+        },
+      })
       : [];
 
     const menuMap = new Map<string, number>();
@@ -93,17 +93,17 @@ export async function GET(req: NextRequest) {
 
     const recent14Orders = (recent7Dates.length > 0 || prev7Dates.length > 0)
       ? await prisma.salesOrderDetail.findMany({
-          where: {
-            salesOrder: {
-              orderDate: { in: [...recent7Dates, ...prev7Dates] },
-            },
+        where: {
+          salesOrder: {
+            orderDate: { in: [...recent7Dates, ...prev7Dates] },
           },
-          select: {
-            salesOrder: { select: { orderDate: true } },
-            product: { select: { name: true } },
-            totalQty: true,
-          },
-        })
+        },
+        select: {
+          salesOrder: { select: { orderDate: true } },
+          product: { select: { name: true } },
+          totalQty: true,
+        },
+      })
       : [];
 
     const recent7MenuMap: Record<string, number> = {};
