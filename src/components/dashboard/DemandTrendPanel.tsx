@@ -266,17 +266,17 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
 
   return (
     <div className="erp-card flex flex-col bg-white border border-[var(--line)] rounded-xl shadow-xs overflow-hidden shrink-0">
-      {/* ── Top Header ────────────────────────────────────────── */}
-      <div className="h-[42px] px-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
+      {/* ── Top Header (컴팩트 콕핏 헤더) ────────────────────────── */}
+      <div className="h-[38px] px-3.5 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
         <div className="flex items-center gap-2">
           <div className="p-1 bg-indigo-500/20 rounded-md border border-indigo-400/30 text-indigo-300">
-            <Activity className="w-4 h-4" />
+            <Activity className="w-3.5 h-3.5" />
           </div>
-          <span className="font-bold text-[13px] tracking-tight">
-            수주 트렌드 & 품목 모멘텀 레이더
+          <span className="font-bold text-[12.5px] tracking-tight">
+            수주 트렌드 & 품목 모멘텀 콕핏
           </span>
-          <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-300" />
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/25 text-indigo-200 border border-indigo-400/40 flex items-center gap-1">
+            <Sparkles className="w-2.5 h-2.5 text-amber-300" />
             AI 모멘텀 분석
           </span>
           {data.baseDate && (
@@ -290,7 +290,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
           <button
             type="button"
             onClick={() => onNavigate?.('sales-order-upload')}
-            className="px-2 py-1 bg-white/10 hover:bg-white/20 text-slate-200 rounded border border-white/15 transition flex items-center gap-1 cursor-pointer font-medium"
+            className="px-2 py-0.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded border border-white/15 transition flex items-center gap-1 cursor-pointer font-medium text-[11px]"
             title="주문등록GSR 전체 화면으로 이동"
           >
             <span>주문등록(GSR)</span>
@@ -299,7 +299,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
           <button
             type="button"
             onClick={() => onNavigate?.('pur-gfs-smart-order')}
-            className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded border border-emerald-400/30 transition flex items-center gap-1 cursor-pointer font-medium"
+            className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded border border-emerald-400/30 transition flex items-center gap-1 cursor-pointer font-medium text-[11px]"
             title="스마트 발주 화면으로 이동"
           >
             <span>스마트 발주 연계</span>
@@ -308,257 +308,277 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
         </div>
       </div>
 
-      {/* ── 3 Hero Intelligence Cards ─────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-3 bg-slate-50 border-b border-slate-200 shrink-0">
-        {/* Card 1: 급상승 1위 */}
-        <div className="bg-white p-3 rounded-lg border border-emerald-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[12px]">
-              <Flame className="w-4 h-4 text-emerald-500 fill-emerald-500" />
-              <span>주간 급상승 1위 (모멘텀)</span>
-            </div>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-              자재 안전확보
+      {/* ── Dual Cockpit Body Grid (좌우 2분할 집약형 레이아웃) ──── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-slate-200 bg-white">
+        
+        {/* [좌측 Zone: 5 / 12 열] 3대 핵심 모멘텀 브리핑 스택 + 주야간 편수 배분 */}
+        <div className="xl:col-span-5 p-3 flex flex-col justify-between gap-2.5 bg-slate-50/60">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[11.5px] font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-indigo-600" />
+              핵심 모멘텀 3대 진단
             </span>
+            <span className="text-[10.5px] text-slate-400 font-medium">실시간 급변동 요약</span>
           </div>
-          {topSurge ? (
-            <div className="mt-2">
-              <div className="font-bold text-[13px] text-slate-900 truncate" title={topSurge.name}>
-                {topSurge.name}
-              </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-[11.5px] text-slate-500">
-                  일평균 <b className="text-slate-800 font-mono">{topSurge.avgDailyQty.toLocaleString()}</b>ea
+
+          <div className="flex flex-col gap-2">
+            {/* 1. 급상승 1위 */}
+            <div className="bg-white p-2.5 rounded-lg border border-emerald-200 shadow-2xs hover:border-emerald-300 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                  <Flame className="w-3.5 h-3.5 text-emerald-500 fill-emerald-500" />
+                  주간 급상승 1위
                 </span>
-                <span className="font-black text-emerald-600 font-mono text-[13px] flex items-center">
-                  <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />
-                  +{topSurge.pct}%
+                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-emerald-100 text-emerald-800">
+                  자재 안전확보
                 </span>
               </div>
-              <div className="mt-1.5 flex justify-end">
-                <MiniSparkline data={topSurge.spark14} color="#059669" />
+              {topSurge ? (
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[12px] text-slate-900 truncate" title={topSurge.name}>
+                      {topSurge.name}
+                    </div>
+                    <div className="text-[10.5px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span>일평균 <b className="font-mono text-slate-800">{topSurge.avgDailyQty.toLocaleString()}</b>ea</span>
+                      <span className="text-slate-300">|</span>
+                      <span className="font-bold text-emerald-600 font-mono flex items-center">
+                        <ArrowUpRight className="w-3 h-3 mr-0.5" />+{topSurge.pct}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <MiniSparkline data={topSurge.spark14} color="#059669" />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* 2. 캐시카우 1위 */}
+            <div className="bg-white p-2.5 rounded-lg border border-blue-200 shadow-2xs hover:border-blue-300 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-blue-700 flex items-center gap-1">
+                  <Award className="w-3.5 h-3.5 text-blue-500 fill-blue-500" />
+                  최다 판매 캐시카우
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-blue-100 text-blue-800">
+                  안정 연속생산
+                </span>
+              </div>
+              {topVolume ? (
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[12px] text-slate-900 truncate" title={topVolume.name}>
+                      {topVolume.name}
+                    </div>
+                    <div className="text-[10.5px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span>일평균 <b className="font-mono text-slate-800">{topVolume.avgDailyQty.toLocaleString()}</b>ea</span>
+                      <span className="text-slate-300">|</span>
+                      <span className="font-bold text-blue-600 font-mono">
+                        주간 {topVolume.sumLast7.toLocaleString()}ea
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <MiniSparkline data={topVolume.spark14} color="#2563eb" />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* 3. 급감 주의 1위 */}
+            <div className="bg-white p-2.5 rounded-lg border border-rose-200 shadow-2xs hover:border-rose-300 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-rose-700 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                  급감 주의 (불용 위험)
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-rose-100 text-rose-800">
+                  포장재 발주동결
+                </span>
+              </div>
+              {topDrop ? (
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-[12px] text-slate-900 truncate" title={topDrop.name}>
+                      {topDrop.name}
+                    </div>
+                    <div className="text-[10.5px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                      <span>일평균 <b className="font-mono text-slate-800">{topDrop.avgDailyQty.toLocaleString()}</b>ea</span>
+                      <span className="text-slate-300">|</span>
+                      <span className="font-bold text-rose-600 font-mono flex items-center">
+                        <ArrowDownRight className="w-3 h-3 mr-0.5" />{topDrop.pct}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <MiniSparkline data={topDrop.spark14} color="#e11d48" />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* 주간 1편/2편 배분 인디케이터 바 */}
+          {data.shiftRatio && (
+            <div className="bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-slate-600">주/야간 수주편수 비율:</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-bold text-indigo-700">1편(낮) {data.shiftRatio.shift1Pct}%</span>
+                <div className="w-24 h-2.5 bg-slate-200 rounded-full overflow-hidden flex">
+                  <div
+                    className="bg-indigo-600 h-full"
+                    style={{ width: `${data.shiftRatio.shift1Pct}%` }}
+                    title={`1편(낮): ${data.shiftRatio.shift1Pct}%`}
+                  />
+                  <div
+                    className="bg-purple-500 h-full"
+                    style={{ width: `${data.shiftRatio.shift2Pct}%` }}
+                    title={`2편(밤): ${data.shiftRatio.shift2Pct}%`}
+                  />
+                </div>
+                <span className="font-mono font-bold text-purple-700">2편(밤) {data.shiftRatio.shift2Pct}%</span>
               </div>
             </div>
-          ) : (
-            <div className="text-slate-400 text-[11px] mt-2">데이터 없음</div>
           )}
         </div>
 
-        {/* Card 2: 캐시카우 1위 */}
-        <div className="bg-white p-3 rounded-lg border border-blue-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[12px]">
-              <Award className="w-4 h-4 text-blue-500 fill-blue-500" />
-              <span>부동의 1위 캐시카우 (최다수주)</span>
+        {/* [우측 Zone: 7 / 12 열] 스마트 랭킹 5행 집약 보드 */}
+        <div className="xl:col-span-7 p-3 flex flex-col justify-between">
+          {/* Sub Header & Segmented Tabs */}
+          <div className="flex items-center justify-between pb-2 mb-1.5 border-b border-slate-100">
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setActiveTab('surge')}
+                className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'surge'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Flame className="w-3 h-3" />
+                <span>급상승 TOP 5</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('drop')}
+                className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'drop'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <TrendingDown className="w-3 h-3" />
+                <span>급감 주의 TOP 5</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('volume')}
+                className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'volume'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Award className="w-3 h-3" />
+                <span>최다 판매 TOP 5</span>
+              </button>
             </div>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-              안정 연속생산
+
+            <span className="text-[10.5px] text-slate-400 hidden sm:inline">
+              14일 롤링 모멘텀 집계
             </span>
           </div>
-          {topVolume ? (
-            <div className="mt-2">
-              <div className="font-bold text-[13px] text-slate-900 truncate" title={topVolume.name}>
-                {topVolume.name}
-              </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-[11.5px] text-slate-500">
-                  일평균 <b className="text-slate-800 font-mono">{topVolume.avgDailyQty.toLocaleString()}</b>ea
-                </span>
-                <span className="font-black text-blue-600 font-mono text-[13px]">
-                  주간 {topVolume.sumLast7.toLocaleString()}ea
-                </span>
-              </div>
-              <div className="mt-1.5 flex justify-end">
-                <MiniSparkline data={topVolume.spark14} color="#2563eb" />
-              </div>
-            </div>
-          ) : (
-            <div className="text-slate-400 text-[11px] mt-2">데이터 없음</div>
-          )}
-        </div>
 
-        {/* Card 3: 급감 주의 1위 */}
-        <div className="bg-white p-3 rounded-lg border border-amber-200 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-rose-700 font-bold text-[12px]">
-              <AlertTriangle className="w-4 h-4 text-rose-500 fill-rose-500" />
-              <span>급감 주의 (불용 재고 위험)</span>
-            </div>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-              포장재 발주동결
-            </span>
-          </div>
-          {topDrop ? (
-            <div className="mt-2">
-              <div className="font-bold text-[13px] text-slate-900 truncate" title={topDrop.name}>
-                {topDrop.name}
-              </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-[11.5px] text-slate-500">
-                  일평균 <b className="text-slate-800 font-mono">{topDrop.avgDailyQty.toLocaleString()}</b>ea
-                </span>
-                <span className="font-black text-rose-600 font-mono text-[13px] flex items-center">
-                  <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />
-                  {topDrop.pct}%
-                </span>
-              </div>
-              <div className="mt-1.5 flex justify-end">
-                <MiniSparkline data={topDrop.spark14} color="#e11d48" />
-              </div>
-            </div>
-          ) : (
-            <div className="text-slate-400 text-[11px] mt-2">데이터 없음</div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Sub Navigation & 1편/2편 Ratio Bar ─────────────────── */}
-      <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[12px]">
-        {/* Tabs */}
-        <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setActiveTab('surge')}
-            className={`px-3 py-1 rounded-md font-bold text-[11.5px] transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'surge'
-                ? 'bg-emerald-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5" />
-            <span>급상승 TOP 5</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('drop')}
-            className={`px-3 py-1 rounded-md font-bold text-[11.5px] transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'drop'
-                ? 'bg-rose-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <TrendingDown className="w-3.5 h-3.5" />
-            <span>급감 주의 TOP 5</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('volume')}
-            className={`px-3 py-1 rounded-md font-bold text-[11.5px] transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'volume'
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>최다 판매 TOP 5</span>
-          </button>
-        </div>
-
-        {/* 1편 / 2편 배분 비율 미니 인디케이터 */}
-        {data.shiftRatio && (
-          <div className="flex items-center gap-2 text-[11px] text-slate-600">
-            <span className="font-semibold text-slate-500">주간 편수 배분:</span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono font-bold text-indigo-700">1편(낮) {data.shiftRatio.shift1Pct}%</span>
-              <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden flex">
-                <div
-                  className="bg-indigo-600 h-full"
-                  style={{ width: `${data.shiftRatio.shift1Pct}%` }}
-                />
-                <div
-                  className="bg-purple-500 h-full"
-                  style={{ width: `${data.shiftRatio.shift2Pct}%` }}
-                />
-              </div>
-              <span className="font-mono font-bold text-purple-700">2편(밤) {data.shiftRatio.shift2Pct}%</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── High-Density Data Table ───────────────────────────── */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-[11.5px] border-collapse">
-          <thead>
-            <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-              <th className="py-2 px-3 w-12 text-center">순위</th>
-              <th className="py-2 px-3 w-32 font-mono">품목코드</th>
-              <th className="py-2 px-3">품목명</th>
-              <th className="py-2 px-3 w-28 text-right">최근 7일 합계</th>
-              <th className="py-2 px-3 w-24 text-right">일평균 수주</th>
-              <th className="py-2 px-3 w-24 text-right">전주대비 증감</th>
-              <th className="py-2 px-3 w-28 text-center">14일 트렌드 곡선</th>
-              <th className="py-2 px-3 w-28 text-center">AI 권고 진단</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {currentList.map((item, idx) => {
-              const isPositive = item.pct > 0;
-              const isNegative = item.pct < 0;
-              const lineColor =
-                activeTab === 'surge'
-                  ? '#059669'
-                  : activeTab === 'drop'
-                  ? '#e11d48'
-                  : '#2563eb';
-
-              return (
-                <tr
-                  key={item.code}
-                  className="hover:bg-slate-50/80 transition-colors"
-                >
-                  <td className="py-2 px-3 text-center font-bold text-slate-500">
-                    {idx + 1}
-                  </td>
-                  <td className="py-2 px-3 font-mono text-[11px] text-slate-600">
-                    {item.code}
-                  </td>
-                  <td className="py-2 px-3 font-medium text-slate-900 max-w-[240px] truncate" title={item.name}>
-                    {item.name}
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-slate-700 font-semibold">
-                    {item.sumLast7.toLocaleString()}ea
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono text-slate-600">
-                    {item.avgDailyQty.toLocaleString()}ea
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono font-bold">
-                    <span
-                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] ${
-                        isPositive
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : isNegative
-                          ? 'bg-rose-50 text-rose-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {isPositive ? '+' : ''}
-                      {item.pct}%
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    <MiniSparkline data={item.spark14} color={lineColor} />
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                        item.recommendation === '자재 안전확보'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : item.recommendation === '포장재 발주동결'
-                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                          : item.recommendation === '안정 연속생산'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {item.recommendation}
-                    </span>
-                  </td>
+          {/* Compact High-Density Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11.5px] border-collapse">
+              <thead>
+                <tr className="text-slate-400 font-semibold text-[10.5px] border-b border-slate-200 pb-1">
+                  <th className="py-1.5 px-2 w-8 text-center">No</th>
+                  <th className="py-1.5 px-2">품목명 / 코드</th>
+                  <th className="py-1.5 px-2 w-28 text-right">7일 수주량 (일평균)</th>
+                  <th className="py-1.5 px-2 w-20 text-right">전주대비</th>
+                  <th className="py-1.5 px-2 w-24 text-center">14일 곡선</th>
+                  <th className="py-1.5 px-2 w-24 text-center">AI 진단</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {currentList.map((item, idx) => {
+                  const isPositive = item.pct > 0;
+                  const isNegative = item.pct < 0;
+                  const lineColor =
+                    activeTab === 'surge'
+                      ? '#059669'
+                      : activeTab === 'drop'
+                      ? '#e11d48'
+                      : '#2563eb';
+
+                  return (
+                    <tr
+                      key={item.code}
+                      className="hover:bg-indigo-50/40 transition-colors group"
+                    >
+                      <td className="py-1.5 px-2 text-center font-bold text-slate-400 group-hover:text-slate-700">
+                        {idx + 1}
+                      </td>
+                      <td className="py-1.5 px-2 min-w-[150px]">
+                        <div className="font-semibold text-slate-900 truncate max-w-[200px]" title={item.name}>
+                          {item.name}
+                        </div>
+                        <div className="font-mono text-[9.5px] text-slate-400">
+                          {item.code}
+                        </div>
+                      </td>
+                      <td className="py-1.5 px-2 text-right">
+                        <div className="font-mono font-bold text-slate-800 text-[11px]">
+                          {item.sumLast7.toLocaleString()}ea
+                        </div>
+                        <div className="font-mono text-[9.5px] text-slate-400">
+                          일 {item.avgDailyQty.toLocaleString()}ea
+                        </div>
+                      </td>
+                      <td className="py-1.5 px-2 text-right">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                            isPositive
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : isNegative
+                              ? 'bg-rose-50 text-rose-700'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {isPositive ? '+' : ''}
+                          {item.pct}%
+                        </span>
+                      </td>
+                      <td className="py-1.5 px-2 text-center">
+                        <MiniSparkline data={item.spark14} color={lineColor} />
+                      </td>
+                      <td className="py-1.5 px-2 text-center">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
+                            item.recommendation === '자재 안전확보'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : item.recommendation === '포장재 발주동결'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : item.recommendation === '안정 연속생산'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {item.recommendation}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   );
