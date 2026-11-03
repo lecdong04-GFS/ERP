@@ -92,13 +92,12 @@ export async function GET(req: NextRequest) {
     const recent14Orders = recent14Dates.length > 0
       ? await prisma.salesOrderDetail.findMany({
           where: {
-            order: {
+            salesOrder: {
               orderDate: { in: recent14Dates },
             },
           },
-          select: {
+          include: {
             product: { select: { name: true } },
-            totalQty: true,
           },
         })
       : [];
