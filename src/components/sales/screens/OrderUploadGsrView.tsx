@@ -325,10 +325,15 @@ export const OrderUploadGsrView: React.FC = () => {
         alert('수주 시트를 찾지 못했습니다. (본발주: 상품코드/낱개수량/발주단가 또는 발주현황: 분류/품명/1편/2편 헤더 확인)');
         return;
       }
-      // 본발주는 파일 내부 발주일자(수주받은 날짜)를 우선 사용
-      const targetDate = parsed.source === '본발주' && parsed.orderDate ? parsed.orderDate : intakeDate;
-      if (parsed.source === '본발주' && parsed.orderDate && parsed.orderDate !== intakeDate) {
-        setIntakeDate(parsed.orderDate);
+      // 정규 본발주는 파일 내부 발주일자를 따르고, D+2 슈퍼/추가 주문은 현재 선택된 수주일자(intakeDate)에 누적
+      let targetDate = intakeDate;
+      if (parsed.source === '본발주' && parsed.orderDate) {
+        if (parsed.kind === '슈퍼' || parsed.kind === '추가') {
+          targetDate = intakeDate || parsed.orderDate;
+        } else {
+          targetDate = parsed.orderDate;
+          setIntakeDate(parsed.orderDate);
+        }
       }
       const kindLabel = parsed.source === '본발주' ? `본발주[${parsed.kind}]` : '발주현황';
       // 같은 파일이면 서버가 스킵, 추가/슈퍼는 누적, 정규 중복만 확인

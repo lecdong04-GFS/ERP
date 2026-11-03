@@ -399,9 +399,22 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                     발주 분석 결과 요약
                   </span>
                   {parsedSource === '본발주' && parsedOrderDate && (
-                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded border border-blue-300">
-                      본발주[{parsedKind}] · 발주일자 {parsedOrderDate} (같은 파일은 스킵·추가/슈퍼는 누적)
-                    </span>
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-300 px-2.5 py-1 rounded-md text-[11px] text-blue-900 font-semibold">
+                      <span className="px-1.5 py-0.5 bg-blue-600 text-white rounded text-[10px] font-bold">
+                        {parsedKind}
+                      </span>
+                      <span>수주일자:</span>
+                      <input
+                        type="date"
+                        value={parsedOrderDate}
+                        onChange={(e) => setParsedOrderDate(e.target.value)}
+                        className="bg-white border border-blue-400 rounded px-2 py-0.5 text-[11.5px] font-mono font-bold text-blue-900 focus:outline-blue-600 shadow-2xs"
+                        title="수주일자를 변경할 수 있습니다"
+                      />
+                      <span className="text-[10px] text-blue-600 font-normal">
+                        (D+2 슈퍼 발주 등 일자 조정 가능)
+                      </span>
+                    </div>
                   )}
                 </div>
                 <button
