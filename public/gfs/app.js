@@ -62,7 +62,7 @@ const state = {
   conservativeLeadTimeDelay: 1.0, // 납기 지연 가산일수 (+1.0일)
   conservativeLossRate: 0.05,     // 공정 불량/감모 로스율 (+5%)
   filterRedFlagOnly: false,  // ★ 4대 레드플래그 위험 품목만 필터
-  filterAuditorTackleOnly: false, // ★ AI 견제 감사관 태클 품목만 필터
+  filterAuditorTackleOnly: false, // ★ 정밀 검증 태클 품목만 필터
   tightMode: true,
   sliderD1: 2.3,
   sliderD2: 3.5,
@@ -1284,20 +1284,20 @@ function setupEventListeners() {
     });
   }
 
-  // 원조 엑셀 뷰: 업로드 발주서 원본 (100% 동일) vs AI 실시간 재산출 모드 토글
+  // 원조 엑셀 뷰: 업로드 발주서 원본 (100% 동일) vs 실시간 자동 재산출 모드 토글
   const btnExcelModeOriginal = document.getElementById('btnExcelModeOriginal');
-  const btnExcelModeLiveAi = document.getElementById('btnExcelModeLiveAi');
-  if (btnExcelModeOriginal && btnExcelModeLiveAi) {
+  const btnExcelModeLiveAuto = document.getElementById('btnExcelModeLiveAuto');
+  if (btnExcelModeOriginal && btnExcelModeLiveAuto) {
     btnExcelModeOriginal.addEventListener('click', () => {
       state.excelViewSourceMode = 'original';
       btnExcelModeOriginal.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-emerald-600 text-white shadow-xs flex items-center gap-1 transition";
-      btnExcelModeLiveAi.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
+      btnExcelModeLiveAuto.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
       renderCards();
       showToast('📄 업로드된 발주서 엑셀 원본 수치(일사용량·재고·발주량 100% 동일)로 표시합니다.', 'success');
     });
-    btnExcelModeLiveAi.addEventListener('click', () => {
+    btnExcelModeLiveAuto.addEventListener('click', () => {
       state.excelViewSourceMode = 'live';
-      btnExcelModeLiveAi.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-indigo-600 text-white shadow-xs flex items-center gap-1 transition";
+      btnExcelModeLiveAuto.className = "btn-tactile px-2.5 py-1 text-xs font-black rounded-md bg-indigo-600 text-white shadow-xs flex items-center gap-1 transition";
       btnExcelModeOriginal.className = "btn-tactile px-2.5 py-1 text-xs font-bold rounded-md text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition";
       renderCards();
       showToast('⚡ 오늘 10시 주문서와 17시 실사재고를 반영한 실시간 자동 재산출값으로 비교 표시합니다.', 'info');
@@ -1473,7 +1473,7 @@ function setupEventListeners() {
     });
   }
 
-  // ★ AI 견제 감사관 태클 필터 버튼
+  // ★ 정밀 검증 태클 필터 버튼
   const btnFilterAuditorFlags = document.getElementById('btnFilterAuditorFlags');
   if (btnFilterAuditorFlags) {
     btnFilterAuditorFlags.addEventListener('click', () => {
@@ -1503,7 +1503,7 @@ function setupEventListeners() {
     });
   }
 
-  // ★ 3대 AI 분할 전략 프리셋 버튼 (JIT / 신선도 / 물류비)
+  // ★ 3대 분할 전략 프리셋 버튼 (JIT / 신선도 / 물류비)
   if (weeklyStrategyGroup) {
     weeklyStrategyGroup.querySelectorAll('button[data-strategy]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -4984,8 +4984,8 @@ function parseNumber(val) {
 }
 
 // =========================================================================
-// AI 견제 감사관 (Adversarial Devil's Advocate Audit Engine)
-// - AI의 발주 권장량을 의도적으로 비판적/공격적으로 검증하여 태클을 검
+// 정밀 검증 시스템 (Adversarial Devil's Advocate Audit Engine)
+// - 시스템 발주 권장량을 의도적으로 비판적/공격적으로 검증하여 태클을 검
 // - 과거 실적 대비 급증, 입고예정 중복, 유통기한 폐기위험, 고액 예산 집중, 물리적 상한선 검증
 // =========================================================================
 function auditItemWithDevilsAdvocate(item, calc) {
@@ -5127,7 +5127,7 @@ function getSupplierAllowedDays(supplier) {
 }
 
 /**
- * 3대 AI 전략(JIT / 신선도 / 물류비)에 따른 주간 요일별 박스 분할 산출 (T~Z열)
+ * 3대 분할 전략(JIT / 신선도 / 물류비)에 따른 주간 요일별 박스 분할 산출 (T~Z열)
  */
 function computeItemWeeklySplit(item, totalBoxes, strategy = 'jit') {
   if (item.manualWeeklySplit) {
@@ -5253,7 +5253,7 @@ function computeWeeklyRunwayCurve(item, split, dailyUsageBoxes) {
 }
 
 // =========================================================================
-// 2. 섹션 3: 타이트 발주 & 보수적 안전 계산 및 4줄 AI 판단 근거 브리핑
+// 2. 섹션 3: 타이트 발주 & 보수적 안전 계산 및 4줄 판단 근거 브리핑
 // =========================================================================
 function calculateItemMetrics(item) {
   const { leadTime, isDaily } = item.supplier;
@@ -5293,7 +5293,7 @@ function calculateItemMetrics(item) {
   // ★ 완제품 주문 연동 및 휴면/단종/과잉 여부 검사: 오늘 완제품 주문이 없거나 휴면/단종/과잉인 품목은 발주량 0으로 강제 배제!
   const isOrderBlockedByNoFinishedOrders = item.isDormant || isExtinct || isOverstocked || (state.onlyFinishedGoodsRelated && !item.isRelatedToOrders);
 
-  // 1) 표준 AI 권장 발주량 계산 (Standard Recommendation)
+  // 1) 표준 권장 발주량 계산 (Standard Recommendation)
   const standardRequiredQty = item.dailyUsage * standardTargetDays;
   const standardShortage = standardRequiredQty - totalStock;
   let standardBoxes = 0;
@@ -5461,7 +5461,7 @@ function calculateItemMetrics(item) {
     weeklyRunway
   };
 
-  // ★ AI 견제 감사관(Devil's Advocate Sanity-Checker) 심의 가동
+  // ★ 정밀 검증 시스템(Devil's Advocate Sanity-Checker) 심의 가동
   result.auditor = auditItemWithDevilsAdvocate(item, result);
 
   return result;
@@ -5590,7 +5590,7 @@ function recalculateAll() {
     labelRedFlags.textContent = `🚨 위험 감사 (${totalRedFlagCount})`;
   }
 
-  // AI 견제 감사관 태클 통계 집계 및 필터 뱃지 갱신
+  // 정밀 검증 태클 통계 집계 및 필터 뱃지 갱신
   const totalAuditorTackleCount = state.rawItems.filter(i => i.calc && i.calc.auditor && i.calc.auditor.hasTackles && (!state.onlyFinishedGoodsRelated || i.isRelatedToOrders)).length;
   const labelAuditorFlags = document.getElementById('labelAuditorFlags');
   if (labelAuditorFlags) {
@@ -6007,7 +6007,7 @@ function renderCards() {
     items = items.filter(i => i.calc && i.calc.redFlags && i.calc.redFlags.length > 0);
   }
 
-  // AI 견제 감사관 태클 품목만 필터링
+  // 정밀 검증 태클 품목만 필터링
   if (state.filterAuditorTackleOnly && state.activeTab !== 'excluded_tab') {
     items = items.filter(i => i.calc && i.calc.auditor && i.calc.auditor.hasTackles);
   }
@@ -6082,8 +6082,8 @@ function renderCards() {
     if (classicExcelViewContainer) classicExcelViewContainer.classList.add('hidden');
 
     // ★ [배치 혁명] 제외 품목 탭이 아닐 때 카드뷰 자동 2단 분리:
-    //   1순위 상단: 🚨 AI 견제 & 확인 필수 품목 (태클 또는 레드플래그 감지 품목)
-    //   2순위 하단: ✅ AI 검증 통과 안심 발주 품목
+    //   1순위 상단: 🚨 집중 확인 필수 품목 (태클 또는 레드플래그 감지 품목)
+    //   2순위 하단: ✅ 정밀 검증 통과 안심 발주 품목
     if (state.activeTab === 'excluded_tab') {
       items.forEach(item => {
         container.appendChild(createCardElement(item));
@@ -6100,7 +6100,7 @@ function renderCards() {
         const aShortage = (a.calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE') ? 1 : 0;
         const bShortage = (b.calc.redFlags || []).some(r => r.id === 'CRITICAL_SHORTAGE') ? 1 : 0;
         if (aShortage !== bShortage) return bShortage - aShortage;
-        // 2) AI 감사관 삭감 가능 금액 큰 순
+        // 2) 검증 시스템 삭감 가능 금액 큰 순
         const aSave = (a.calc.auditor && a.calc.auditor.bestAuditorSuggestion !== null && a.calc.finalBoxes > a.calc.auditor.bestAuditorSuggestion)
           ? (a.calc.finalBoxes - a.calc.auditor.bestAuditorSuggestion) * a.packUnit * a.unitPrice : 0;
         const bSave = (b.calc.auditor && b.calc.auditor.bestAuditorSuggestion !== null && b.calc.finalBoxes > b.calc.auditor.bestAuditorSuggestion)
@@ -6458,7 +6458,7 @@ function createCardElement(item) {
     stockDaysText = "여유부족";
   }
 
-  // 투입 완제품 리스트 버튼 렌더링 (우측 AI 근거 상단에 직관적 메뉴 뱃지로 상시 노출)
+  // 투입 완제품 리스트 버튼 렌더링 (우측 산출 근거 상단에 직관적 메뉴 뱃지로 상시 노출)
   let activeDishesHtml = '';
   if (item.activeBomChildren && item.activeBomChildren.length > 0) {
     activeDishesHtml = item.activeBomChildren.slice(0, 4).map(b => {
@@ -6633,7 +6633,7 @@ function createCardElement(item) {
 
     </div>
 
-    <!-- ★ [하단 상시 노출 AI 3줄 핵심 브리핑 보드] 아코디언 없이 카드 전체 가로폭으로 시원하게 표시 -->
+    <!-- ★ [하단 상시 노출 3줄 핵심 브리핑 보드] 아코디언 없이 카드 전체 가로폭으로 시원하게 표시 -->
     <div class="rounded-xl p-3 border space-y-2 ${
       isCriticalShortage
         ? 'bg-rose-50/50 dark:bg-rose-950/25 border-rose-300 dark:border-rose-800/80'
@@ -6654,7 +6654,7 @@ function createCardElement(item) {
         </div>
       </div>
 
-      <!-- 2줄: 🧮 AI 산출 공식 1줄 요약 -->
+      <!-- 2줄: 🧮 산출 공식 1줄 요약 -->
       <div class="bg-white/90 dark:bg-neutral-900/80 rounded-lg px-2.5 py-1.5 border border-neutral-200/70 dark:border-neutral-700/70 text-[11.5px] flex flex-wrap items-center justify-between gap-2">
         <div class="font-mono text-neutral-700 dark:text-neutral-300 leading-snug">
           <span class="text-neutral-500 font-sans font-bold mr-1">🧮 산출식:</span>
@@ -6677,7 +6677,7 @@ function createCardElement(item) {
         </div>
       </div>
 
-      <!-- 3줄: ⚔️ AI 감사관 판정 & 원클릭 즉시 반영 -->
+      <!-- 3줄: ⚔️ 정밀 검증 판정 & 원클릭 즉시 반영 -->
       ${isPriority ? `
         <div class="rounded-lg p-2.5 border ${
           isCriticalShortage
@@ -6927,7 +6927,7 @@ function createCardElement(item) {
     });
   }
 
-  // AI 견제 감사관 권고 삭감 리스너
+  // 정밀 검증 시스템 권고 삭감 리스너
   const btnPickAuditor = card.querySelector('[data-action="pick-auditor"]');
   if (btnPickAuditor && calc.auditor && calc.auditor.bestAuditorSuggestion !== null) {
     btnPickAuditor.addEventListener('click', () => {
@@ -7120,7 +7120,7 @@ function renderTableView(items) {
         stockDaysBadge = `<span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200/80">${calc.stockDays.toFixed(1)}일 (주의)</span>`;
       }
 
-      // AI 감사 상태 뱃지
+      // 정밀 검증 상태 뱃지
       let auditBadge = `<span class="text-[10.5px] font-bold text-neutral-800 dark:text-neutral-200 inline-flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5 text-neutral-900 dark:text-white"></i>통과</span>`;
       if (calc.auditor && calc.auditor.hasTackles && calc.finalBoxes > 0) {
         auditBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300 ring-1 ring-amber-400/40 inline-flex items-center gap-0.5" title="${calc.auditor.tackles.map(t => t.title).join(', ')}"><i data-lucide="shield-question" class="w-3 h-3 text-amber-600"></i>태클${calc.auditor.tackles.length}</span>`;
@@ -7322,7 +7322,7 @@ function renderClassicExcelView(items) {
   Object.values(grouped).forEach(grp => {
     const { supplier, items: supItems } = grp;
     
-    // 거래처 통계 집계 (선택된 모드: 원본 100% vs 실시간 AI)
+    // 거래처 통계 집계 (선택된 모드: 원본 100% vs 실시간 자동)
     let supTotalBoxes = 0;
     let supTotalAmount = 0;
     const isOriginalModeGlobal = state.excelViewSourceMode !== 'live';
@@ -7546,7 +7546,7 @@ function renderClassicExcelView(items) {
         <!-- AA. 일소진(박스) -->
         <td class="py-2 px-2 text-right border-r border-neutral-200 dark:border-neutral-800 font-mono text-neutral-500">${Number(displayDailyBoxes).toFixed(1)}</td>
 
-        <!-- AI 위험 판정 -->
+        <!-- 정밀 위험 판정 -->
         <td class="py-2 px-2 text-center">${auditBadge}</td>
       `;
 

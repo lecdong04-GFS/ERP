@@ -506,7 +506,7 @@ export const GfsSmartOrderView: React.FC = () => {
       'menubar=no',
       'location=no',
     ].join(',');
-    const pop = window.open('/gfs/index.html?v=20261103_frozen_v5', 'GFS_SmartOrder_Window', features);
+    const pop = window.open('/gfs/index.html?v=20261103_no_ai_v2', 'GFS_SmartOrder_Window', features);
     if (pop) {
       pop.focus();
     }
@@ -846,7 +846,7 @@ export const GfsSmartOrderView: React.FC = () => {
         )}
         <iframe
           ref={iframeRef}
-          src="/gfs/index.html?v=20261103_frozen_v5"
+          src="/gfs/index.html?v=20261103_no_ai_v2"
           title="GFS 스마트발주"
           className="w-full h-full border-0 block"
           allow="fullscreen; clipboard-read; clipboard-write"
