@@ -152,7 +152,7 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
           {onNavigate && (
             <button
               type="button"
-              onClick={() => onNavigate('gfs-smart-order')}
+              onClick={() => onNavigate('pur-gfs-smart-order')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-[11.5px] transition shadow-sm cursor-pointer border border-emerald-400/40"
               title="원조 엑셀뷰 및 스마트발주 관제 화면으로 즉시 이동합니다."
             >

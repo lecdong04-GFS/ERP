@@ -71,8 +71,24 @@ export const Dashboard: React.FC = () => {
 
   const navigate = useCallback(
     (menuId: string) => {
-      const menu = getMenuItemById(menuId);
-      if (menu) openTab(menu);
+      // 별칭/단축 ID 자동 변환 매핑
+      const aliasMap: Record<string, string> = {
+        'ord-summary': 'sales-order-summary-gsr',
+        'sales-summary': 'sales-order-summary-gsr',
+        'order-summary': 'sales-order-summary-gsr',
+        'gfs-smart-order': 'pur-gfs-smart-order',
+        'smart-order': 'pur-gfs-smart-order',
+        'fefo': 'pur-expiry-status',
+        'expiry': 'pur-expiry-status',
+        'stock': 'inv-lookup',
+      };
+      const targetId = aliasMap[menuId] || menuId;
+      const menu = getMenuItemById(targetId);
+      if (menu) {
+        openTab(menu);
+      } else {
+        console.warn(`Menu item not found for id: ${menuId} (target: ${targetId})`);
+      }
     },
     [openTab]
   );
@@ -147,7 +163,7 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
         {/* 카드 1: 금일 GS25 완제품 수주량 */}
         <div
-          onClick={() => navigate('ord-summary')}
+          onClick={() => navigate('sales-order-summary-gsr')}
           className="bg-white hover:bg-slate-50/90 border border-slate-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
@@ -164,7 +180,7 @@ export const Dashboard: React.FC = () => {
             <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
               <span>수주총액: ₩{Math.round(actualSalesAmount).toLocaleString()}</span>
               <span className="text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
-                상세 <ArrowRight className="w-3 h-3 ml-0.5" />
+                수주집계 보기 <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
           </div>
@@ -172,7 +188,7 @@ export const Dashboard: React.FC = () => {
 
         {/* 카드 2: 금일 스마트발주(GFS) 필요량 */}
         <div
-          onClick={() => navigate('gfs-smart-order')}
+          onClick={() => navigate('pur-gfs-smart-order')}
           className="bg-white hover:bg-slate-50/90 border border-emerald-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
@@ -196,7 +212,7 @@ export const Dashboard: React.FC = () => {
             <div className="text-[11px] font-medium text-slate-500 mt-2 flex items-center justify-between">
               <span>발주서 BOM 자동 연산</span>
               <span className="text-emerald-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center">
-                발주 열기 <ArrowRight className="w-3 h-3 ml-0.5" />
+                스마트발주 열기 <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
           </div>
@@ -228,7 +244,7 @@ export const Dashboard: React.FC = () => {
                 {stats.stockDaysTop[0]?.name || '[냉장]프릴아이스 등'}
               </span>
               <span className="text-rose-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center shrink-0">
-                재고 확인 <ArrowRight className="w-3 h-3 ml-0.5" />
+                실사재고 조회 <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
           </div>
@@ -236,7 +252,7 @@ export const Dashboard: React.FC = () => {
 
         {/* 카드 4: 유통기한 FEFO 선출고 대상 */}
         <div
-          onClick={() => navigate('inv-lookup')}
+          onClick={() => navigate('pur-expiry-status')}
           className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-xl p-3.5 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-2">
@@ -260,7 +276,7 @@ export const Dashboard: React.FC = () => {
                 {stats.fefoTop[0]?.name || '[냉장]치즈콕콕소시지 등'}
               </span>
               <span className="text-amber-700 font-bold group-hover:translate-x-0.5 transition-transform flex items-center shrink-0">
-                선출고 관리 <ArrowRight className="w-3 h-3 ml-0.5" />
+                유통기한 현황 <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
           </div>
