@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   RotateCcw,
   Calendar,
@@ -19,6 +19,9 @@ import {
   Sparkles,
   DollarSign,
   TrendingUp,
+  FileText,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -76,6 +79,41 @@ export const MatOrderDayView: React.FC = () => {
   // 해당 요일의 실제 생성된 ERP 발주서(PO) 전표 목록
   const [confirmedPoList, setConfirmedPoList] = useState<any[]>([]);
   const [isLoadingPo, setIsLoadingPo] = useState<boolean>(false);
+  const [showPoDrawer, setShowPoDrawer] = useState<boolean>(false);
+  const poDrawerRef = useRef<HTMLDivElement>(null);
+
+  // 전표 드롭다운 바깥 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (poDrawerRef.current && !poDrawerRef.current.contains(event.target as Node)) {
+        setShowPoDrawer(false);
+      }
+    };
+    if (showPoDrawer) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPoDrawer]);
+
+  // 전표 번호 요약 텍스트 (예: #001 ~ #024)
+  const poRangeSummary = useMemo(() => {
+    if (confirmedPoList.length === 0) return '';
+    const nums = confirmedPoList
+      .map((p) => {
+        const parts = p.orderNo ? p.orderNo.split('-') : [];
+        return parts.length >= 3 ? parts[2] : p.orderNo;
+      })
+      .filter(Boolean);
+    if (nums.length <= 1) return `#${nums[0] || '001'}`;
+    return `#${nums[0]} ~ #${nums[nums.length - 1]}`;
+  }, [confirmedPoList]);
+
+  // 확정 전표 총액 합계
+  const totalConfirmedPoAmount = useMemo(() => {
+    return confirmedPoList.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+  }, [confirmedPoList]);
 
   // 탭 이동 헬퍼
   const handleNavigate = (menuId: string) => {
@@ -346,11 +384,11 @@ export const MatOrderDayView: React.FC = () => {
       const json = await res.json();
 
       if (json.success) {
-        const orders = (json.data || []).map((o: any) => o.orderNo).join(', ');
+        const orderCount = (json.data || []).length;
         alert(
           `✅ [${DAY_CHARS[dayIdx]}요일 (${currentDayDate})] 발주 확정 완료!\n\n` +
-            `• 생성된 발주서: ${orders}\n` +
-            `• 발주현황 및 입고등록 파이프라인에 실시간 연계되었습니다.`
+            `• 생성된 발주서: 총 ${orderCount}건 발행 완료\n` +
+            `• 상단의 [발주서 ${orderCount}건 발행] 버튼을 누르면 거래처별 전표 내역을 바로 확인하실 수 있습니다.`
         );
         loadConfirmedPo();
       } else {
@@ -416,7 +454,7 @@ export const MatOrderDayView: React.FC = () => {
               {confirmedPoList.length > 0 ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {DAY_CHARS[dayIdx]}요일 발주확정 ({confirmedPoList.length}건 전표)
+                  {DAY_CHARS[dayIdx]}요일 발주확정 · {confirmedPoList.length}건 ({poRangeSummary})
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-300 shadow-2xs">
@@ -689,12 +727,110 @@ export const MatOrderDayView: React.FC = () => {
           </div>
         </div>
 
-        {/* 우측 전표 내역 안내 */}
+        {/* 우측 스마트 발주 전표 드롭다운 및 통계 */}
         <div className="flex items-center gap-2 text-xs">
           {confirmedPoList.length > 0 ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-mono font-bold">
-              <span>발주번호:</span>
-              <span>{confirmedPoList.map((p) => p.orderNo).join(', ')}</span>
+            <div className="relative" ref={poDrawerRef}>
+              <button
+                type="button"
+                onClick={() => setShowPoDrawer((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition shadow-2xs cursor-pointer border ${
+                  showPoDrawer
+                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}
+                title="클릭하여 거래처별 발행된 발주서 전표 목록을 확인합니다."
+              >
+                <FileText className={`w-3.5 h-3.5 ${showPoDrawer ? 'text-white' : 'text-emerald-600'}`} />
+                <span className="font-extrabold">발주서 {confirmedPoList.length}건 발행</span>
+                <span
+                  className={`font-mono text-[11px] px-1.5 py-0.2 rounded-md font-bold border ${
+                    showPoDrawer
+                      ? 'bg-white/20 text-white border-white/30'
+                      : 'bg-white text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  {poRangeSummary}
+                </span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform ${
+                    showPoDrawer ? 'rotate-180 text-white' : 'text-emerald-600'
+                  }`}
+                />
+              </button>
+
+              {/* 거래처별 발주서 상세 팝오버 카드 */}
+              {showPoDrawer && (
+                <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in slide-in-from-top-1">
+                  <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
+                    <div>
+                      <div className="text-[13px] font-black text-slate-800 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                        {currentDayDate} ({DAY_CHARS[dayIdx]}) 발행 발주서
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                        총 <strong className="text-emerald-700">{confirmedPoList.length}건</strong> 전표 ·
+                        합계 <strong className="text-slate-900 font-mono">₩{Math.round(totalConfirmedPoAmount).toLocaleString()}</strong>원
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPoDrawer(false)}
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 전표 목록 리스트 */}
+                  <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
+                    {confirmedPoList.map((p) => {
+                      const seq = p.orderNo ? p.orderNo.split('-')[2] || '' : '';
+                      const supplierName = p.partnerName || p.partner?.name || '일반거래처';
+                      const itemCount = p.details?.length || 0;
+                      return (
+                        <div
+                          key={p.id}
+                          className="py-2 px-1.5 flex items-center justify-between hover:bg-slate-50 rounded-lg transition"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              #{seq}
+                            </span>
+                            <div>
+                              <div className="text-xs font-black text-slate-800">{supplierName}</div>
+                              <div className="text-[10.5px] font-mono text-slate-400">{p.orderNo}</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs font-black font-mono text-slate-900">
+                              ₩{Math.round(p.totalAmount || 0).toLocaleString()}
+                            </div>
+                            <div className="text-[10.5px] text-slate-400 font-medium">
+                              {itemCount}개 품목
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* 하단 발주현황 바로가기 버튼 */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPoDrawer(false);
+                        handleNavigate('pur-order-status-edit');
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-blue-200"
+                    >
+                      <span>발주현황/수정 메뉴에서 전체 전표 열기</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <span className="text-slate-400 font-medium">

@@ -1077,8 +1077,13 @@ export const OrderStatusEditView: React.FC = () => {
                           </td>
 
                           {/* 발주번호 */}
-                          <td className="py-2.5 px-3 text-center font-mono text-[12.5px] font-bold text-slate-700">
-                            {item.orderNo}
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[12px] font-bold border border-slate-200 shadow-2xs"
+                              title={item.orderNo}
+                            >
+                              {item.orderNo}
+                            </span>
                           </td>
 
                           {/* 거래처명 */}
