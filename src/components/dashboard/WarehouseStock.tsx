@@ -22,8 +22,8 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
   const max = useMemo(() => Math.max(1, ...rows.map((r) => r.amount)), [rows]);
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden min-w-0">
-      <header className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+    <section className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col overflow-hidden min-w-0">
+      <header className="px-4 py-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
           <Boxes className="w-4.5 h-4.5 text-slate-700" />
           <h3 className="text-[15px] font-black text-slate-900 tracking-tight">창고별 재고금액</h3>
@@ -41,7 +41,7 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
         </button>
       </header>
 
-      <div className="px-5 py-3.5 flex-1 flex flex-col justify-between min-h-[260px]">
+      <div className="px-4.5 py-3.5 flex-1 flex flex-col justify-between min-h-[280px] max-h-[320px] overflow-y-auto hover-scrollbar">
         {rows.length === 0 ? (
           <div className="h-44 flex flex-col items-center justify-center text-slate-400 gap-2 text-sm">
             <Boxes className="w-8 h-8 text-slate-400" />
