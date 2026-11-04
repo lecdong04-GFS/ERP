@@ -456,15 +456,23 @@ export const MatReqPrintView: React.FC = () => {
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              선택하신 일자(<strong>{reqDate}</strong>)에 등록된 GS25 완제품 수주 데이터가 없습니다.
-              {latestDateWithOrders && (
-                <span className="ml-1 text-slate-700">
-                  (가장 최근 등록된 수주일자: <strong>{latestDateWithOrders}</strong>)
-                </span>
+              {summary.orderCount > 0 ? (
+                <>
+                  선택하신 일자(<strong>{reqDate}</strong>)에 수주 <strong>{summary.orderCount.toLocaleString()}</strong>건 (완제품 {summary.totalFinishedOrderQty.toLocaleString()}개)이 등록되어 있으나 현재 선택된 필터 조건(공정: {selectedGye}, 구분: {selectedCategory})에 해당하는 자재가 없습니다.
+                </>
+              ) : (
+                <>
+                  선택하신 일자(<strong>{reqDate}</strong>)에 등록된 GS25 완제품 수주 데이터가 없습니다.
+                  {latestDateWithOrders && (
+                    <span className="ml-1 text-slate-700">
+                      (가장 최근 등록된 수주일자: <strong>{latestDateWithOrders}</strong>)
+                    </span>
+                  )}
+                </>
               )}
             </span>
           </div>
-          {latestDateWithOrders && latestDateWithOrders !== reqDate && (
+          {summary.orderCount === 0 && latestDateWithOrders && latestDateWithOrders !== reqDate && (
             <button
               type="button"
               onClick={() => {

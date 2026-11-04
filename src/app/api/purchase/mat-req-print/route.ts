@@ -6,6 +6,39 @@ import {
   REPR_MAPPINGS,
 } from '@/services/pipeline/ProductionCostPipeline';
 
+// 품명 정규화 (BOM 매칭용)
+function normalizeForBom(s: string): string {
+  return String(s || '')
+    .normalize('NFC')
+    .replace(/^\[.*?\]\s*/, '')
+    .replace(/^\(주문\)\s*/, '')
+    .replace(/\s+/g, '')
+    .replace(/[12]편$/, '')
+    .replace(/[12]$/, '')
+    .replace(/도시락$/, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[()[\]{}*_\-.,/&]/g, '')
+    .toLowerCase();
+}
+
+// 10~11월 실무 품명과 BOM 마스터 간 관용적 별칭 매핑
+const CUSTOM_BOM_ALIAS: Record<string, string> = {
+  'new혜자백설갈비양념제육': 'new혜자백설갈비양념제육',
+  '더큰맥적구이한상': '더큰추석맥적구이한상',
+  '더큰들기름묵은지참치': '종가들기름묵은지참치',
+  '커플곱창김참치비빔밥': '커플곱창김참치마요전주비빔',
+  '디핑시장꼬마김밥': '용기광장시장꼬마김밥',
+  '디핑에그햄꼬마김밥': '용기에그햄꼬마김밥',
+  '넷플더담은k떡갈비김밥': '넷플k스타일떡갈비김밥',
+  'new뭘좋아할지몰라다넣어': '뭘좋아할지몰라다넣어봤어',
+  '더큰오징어제육깻잎쌈밥': '더큰오징어제육깻잎쌈밥',
+  '직화한돈제육쌈김밥': '직화한돈제육쌈김밥',
+  '더큰통스팸참치김치': '더큰스팸김치볶음밥',
+  '더큰통스팸계란김치': '더큰스팸계란볶음밥',
+  '더큰삼각전주비빔': '삼각전주비빔',
+  '스팸무스비': 'new스팸무스비',
+};
+
 // GET /api/purchase/mat-req-print?date=2026-10-30&shift=ALL&gye=ALL&category=ALL&search=
 export async function GET(req: NextRequest) {
   try {
@@ -17,19 +50,14 @@ export async function GET(req: NextRequest) {
     const searchParam = (searchParams.get('search') || '').trim().toLowerCase();
 
     // 1. 기준일자 결정 (지정일자 없으면 KST 오늘)
-    const targetDate = dateParam || kstToday();
+    let targetDate = dateParam || kstToday();
 
     // 2. 해당 일자의 GS25 완제품 수주 조회 (취소 제외)
-    const salesOrderWhere: any = {
-      orderDate: targetDate,
-      status: { not: '취소' },
-    };
-    if (shiftParam !== 'ALL') {
-      salesOrderWhere.shift = shiftParam;
-    }
-
-    const salesOrders = await prisma.salesOrder.findMany({
-      where: salesOrderWhere,
+    let salesOrders = await prisma.salesOrder.findMany({
+      where: {
+        orderDate: targetDate,
+        status: { not: '취소' },
+      },
       include: {
         details: {
           include: {
@@ -53,6 +81,31 @@ export async function GET(req: NextRequest) {
       select: { orderDate: true },
     });
     const latestDateWithOrders = latestOrder?.orderDate || null;
+
+    // 만약 지정된 날짜에 수주가 없는데 파라미터가 없었다면 최근 일자로 자동 폴백
+    if (salesOrders.length === 0 && latestDateWithOrders && !dateParam) {
+      targetDate = latestDateWithOrders;
+      salesOrders = await prisma.salesOrder.findMany({
+        where: {
+          orderDate: targetDate,
+          status: { not: '취소' },
+        },
+        include: {
+          details: {
+            include: {
+              product: {
+                include: {
+                  prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                  inventories: true,
+                  partner: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { orderNo: 'asc' },
+      });
+    }
 
     // 수주가 전혀 없으면 빈 결과 반환
     if (salesOrders.length === 0) {
@@ -150,11 +203,45 @@ export async function GET(req: NextRequest) {
     });
 
     const dbBomByParentCode = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByName = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByNorm = new Map<string, (typeof bomHeaders)[0]>();
+
     bomHeaders.forEach((bh) => {
       if (bh.parentProduct?.productCode) {
         dbBomByParentCode.set(bh.parentProduct.productCode, bh);
       }
+      if (bh.parentProduct?.name) {
+        dbBomByName.set(bh.parentProduct.name, bh);
+        dbBomByNorm.set(normalizeForBom(bh.parentProduct.name), bh);
+      }
     });
+
+    const findBomForProduct = (prod: any) => {
+      if (!prod) return null;
+      if (prod.productCode && dbBomByParentCode.has(prod.productCode)) {
+        return dbBomByParentCode.get(prod.productCode);
+      }
+      if (prod.name && dbBomByName.has(prod.name)) {
+        return dbBomByName.get(prod.name);
+      }
+      const norm = normalizeForBom(prod.name || '');
+      if (dbBomByNorm.has(norm)) {
+        return dbBomByNorm.get(norm);
+      }
+      const aliasTarget = CUSTOM_BOM_ALIAS[norm];
+      if (aliasTarget) {
+        if (dbBomByName.has(aliasTarget)) return dbBomByName.get(aliasTarget);
+        const normAlias = normalizeForBom(aliasTarget);
+        if (dbBomByNorm.has(normAlias)) return dbBomByNorm.get(normAlias);
+      }
+      // 부분일치 (길이 4글자 이상)
+      for (const [bhNorm, bh] of dbBomByNorm.entries()) {
+        if (norm.length >= 4 && (bhNorm.includes(norm) || norm.includes(bhNorm))) {
+          return bh;
+        }
+      }
+      return null;
+    };
 
     // 전체 자재의 실재고 사전 조회 (FEFO / 총합)
     const allInventories = await prisma.inventory.findMany({
@@ -204,8 +291,11 @@ export async function GET(req: NextRequest) {
         REPR_MAPPINGS.find((m) => m.orderItemCode === orderCode)?.reprItemCode ||
         orderCode;
 
-      // 6-1. DB BOM 확인
-      const dbBom = dbBomByParentCode.get(orderCode) || dbBomByParentCode.get(reprCode);
+      // 6-1. DB BOM 확인 (품목객체 기반 다각적 매칭: 코드, 명칭, 정규화, 관용별칭, 대표품목)
+      const dbBom =
+        findBomForProduct(product) ||
+        dbBomByParentCode.get(orderCode) ||
+        dbBomByParentCode.get(reprCode);
 
       if (dbBom && dbBom.details.length > 0) {
         dbBom.details.forEach((bd) => {
@@ -219,13 +309,15 @@ export async function GET(req: NextRequest) {
 
             const gyeName = bd.gye?.name || bd.nextProcess || '성형장';
             const cat =
-              child.category === '부자재'
+              child?.category === '부자재'
                 ? '부재료'
-                : child.category === '포장재'
+                : child?.category === '포장재'
                 ? '포장재'
                 : '원재료';
 
-            const aggKey = `${child.productCode}::${gyeName}`;
+            const partCode = child?.productCode || `MAT-${bd.childProductId}`;
+            const partName = child?.name || `자재-${bd.childProductId}`;
+            const aggKey = `${partCode}::${gyeName}`;
             const existing = matReqAgg.get(aggKey);
 
             if (existing) {
@@ -235,21 +327,21 @@ export async function GET(req: NextRequest) {
             } else {
               matReqAgg.set(aggKey, {
                 partCategory: cat,
-                partCode: child.productCode,
-                partName: child.name,
-                partSpec: child.spec || `${bd.unitQty}${bd.unit}`,
-                partUnit: bd.unit || child.unit || 'kg',
+                partCode,
+                partName,
+                partSpec: child?.spec || `${bd.unitQty}${bd.unit}`,
+                partUnit: bd.unit || child?.unit || 'kg',
                 gyeName,
                 recipeYield: bd.yieldRate || 100,
                 reqQty1: req1,
                 reqQty2: req2,
                 reqTotal: reqTot,
-                unitPrice: child.prices[0]?.purchasePrice || 0,
-                safetyStock: child.safetyStockQty || 50,
-                orderUnit: child.boxQty > 1 ? 'box' : child.unit || 'ea',
-                orderUnitQty: child.orderUnitQty || 1,
-                minOrderQty: child.minOrderQty || 1,
-                supplier: child.partner?.name || '미지정거래처',
+                unitPrice: child?.prices[0]?.purchasePrice || 0,
+                safetyStock: child?.safetyStockQty || 50,
+                orderUnit: child && child.boxQty > 1 ? 'box' : child?.unit || 'ea',
+                orderUnitQty: child?.orderUnitQty || 1,
+                minOrderQty: child?.minOrderQty || 1,
+                supplier: child?.partner?.name || '미지정거래처',
               });
             }
           }
