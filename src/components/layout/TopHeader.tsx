@@ -70,14 +70,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 sm:gap-2.5">
-        {/* GS Retail Excel Import Button */}
+        {/* GS Retail Excel Import Button (Premium Redesigned) */}
         <button
           onClick={openExcelOrderModal}
-          className="hidden md:flex items-center gap-2 h-8.5 px-3.5 whitespace-nowrap shrink-0 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold rounded-lg text-[13px] shadow-sm transition-all cursor-pointer"
+          className="hidden md:flex items-center gap-2 h-9 px-3.5 whitespace-nowrap shrink-0 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black rounded-xl text-[13px] border border-blue-300/30 shadow-md shadow-blue-950/40 hover:shadow-blue-500/25 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer group"
           title="GS리테일 점포 발주 엑셀 업로드 및 자동 파싱"
         >
-          <FileSpreadsheet className="w-4.5 h-4.5 text-white" />
-          <span>엑셀 수주</span>
+          <div className="w-5 h-5 rounded-md bg-white/20 border border-white/25 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span className="tracking-tight">엑셀 수주</span>
+          <span className="text-[10.5px] px-1.5 py-0.2 rounded-md bg-white/20 text-blue-100 font-extrabold border border-white/20">
+            GS25
+          </span>
         </button>
 
         {/* Pipeline Trigger Button */}

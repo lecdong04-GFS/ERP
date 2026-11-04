@@ -134,9 +134,9 @@ function ErpApp() {
         <div className="hidden md:flex items-center gap-2">
           <button
             onClick={openExcelOrderModal}
-            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            className="h-7.5 flex items-center gap-1.5 px-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 text-blue-900 rounded-lg text-[12.5px] font-black cursor-pointer transition-all shadow-2xs"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
             <span>엑셀 수주 업로드</span>
           </button>
           <button
