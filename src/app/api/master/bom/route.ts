@@ -75,15 +75,29 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
+      let childId = Number(d.childProductId);
+      if (!childId || isNaN(childId)) {
+        const code = d.childProductCode || d.partCode || d.itemCode;
+        const name = d.childProductName || d.partName || d.itemName;
+        if (code || name) {
+          const found = await prisma.product.findFirst({
+            where: code ? { productCode: code } : { name },
+            select: { id: true },
+          });
+          if (found) childId = found.id;
+        }
+      }
+      if (!childId) continue;
+
       await prisma.bomDetail.create({
         data: {
           bomHeaderId: header.id,
-          childProductId: Number(d.childProductId),
+          childProductId: childId,
           level: d.level ? Number(d.level) : 3,
           unitQty: Number(d.unitQty || 0),
           unit: d.unit || '',
           yieldRate: Number(d.yieldRate || 100),
-          gyeId: d.gyeId || null,
+          gyeId: d.gyeId ? String(d.gyeId) : null,
           nextProcess: d.nextProcess || '',
           sortOrder: i + 1,
           remark: d.remark || '',
