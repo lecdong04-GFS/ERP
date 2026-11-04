@@ -501,6 +501,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       volume,
       shiftRatio,
       baseDate,
+      dates14: last14Dates,
     };
 
     // ── 8. 알림 문구 (실데이터) ────────────────────────────

@@ -104,6 +104,7 @@ export interface DemandTrendStats {
   volume: DemandTrendItem[];
   shiftRatio: { shift1Pct: number; shift2Pct: number };
   baseDate: string;
+  dates14?: string[];
 }
 
 export interface DashboardStats {
