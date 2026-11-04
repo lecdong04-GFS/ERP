@@ -100,7 +100,7 @@ function ErpApp() {
       />
 
       {/* 2-1. 알림바 (GNB 바로 아래 실시간 롤링 알림 & 3대 핵심 퀵 액션) */}
-      <div className="h-[34px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[12.5px] select-none shadow-2xs shrink-0">
+      <div className="h-[38px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[13px] select-none shadow-2xs shrink-0">
         <div className="flex items-center gap-2.5 overflow-hidden max-w-2xl">
           <span
             className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
@@ -116,7 +116,7 @@ function ErpApp() {
             }`}
           />
           <span
-            className={`font-semibold truncate transition-all duration-300 text-[12.5px] ${
+            className={`font-bold truncate transition-all duration-300 text-[13px] ${
               currentTicker.type === 'danger'
                 ? 'text-rose-600'
                 : currentTicker.type === 'warning'
@@ -134,23 +134,23 @@ function ErpApp() {
         <div className="hidden md:flex items-center gap-2">
           <button
             onClick={openExcelOrderModal}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
+            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>엑셀 수주 업로드</span>
           </button>
           <button
             onClick={openPipelineModal}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
+            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
           >
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
             <span>자동 파이프라인</span>
           </button>
           <button
             onClick={() => openPrintModal()}
-            className="h-6.5 flex items-center gap-1.5 px-2.5 bg-white hover:bg-[#f8fafc] border border-[var(--line)] text-[var(--ink-700)] rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
+            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
           >
-            <Printer className="w-3.5 h-3.5 text-blue-600" />
+            <Printer className="w-4 h-4 text-blue-600" />
             <span>표준 양식 인쇄</span>
           </button>
         </div>
