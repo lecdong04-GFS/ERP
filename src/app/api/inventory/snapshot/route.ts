@@ -7,9 +7,24 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // GET /api/inventory/snapshot?date=YYYY-MM-DD → 해당 일자 스냅샷 (없으면 exists:false)
 // GET /api/inventory/snapshot?latest=1 → 최신 스냅샷 일자
+// GET /api/inventory/snapshot?dates=1 → 저장된 전체 스냅샷 일자 목록
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    if (searchParams.get('dates') === '1') {
+      const dates = await prisma.inventorySnapshot.groupBy({
+        by: ['snapshotDate'],
+        _count: { _all: true },
+        orderBy: { snapshotDate: 'desc' },
+      });
+      return NextResponse.json({
+        success: true,
+        data: dates.map((d) => ({
+          date: d.snapshotDate,
+          count: d._count._all,
+        })),
+      });
+    }
     if (searchParams.get('latest') === '1') {
       const latest = await prisma.inventorySnapshot.findFirst({
         orderBy: { snapshotDate: 'desc' },

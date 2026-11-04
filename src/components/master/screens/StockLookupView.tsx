@@ -653,6 +653,8 @@ export const StockLookupView: React.FC = () => {
   const [mergeInfo, setMergeInfo] = useState('');
   // 날짜별 스냅샷 모드: true면 화면 데이터가 해당 날짜 확정분, false면 현재고 LIVE
   const [snapshotMode, setSnapshotMode] = useState(false);
+  // DB에 저장되어 있는 전체 실사 일자 목록
+  const [availableSnapDates, setAvailableSnapDates] = useState<{ date: string; count: number }[]>([]);
   const estMapRef = useRef<{
     byWhAndKey: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
     byKeyOnly: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
@@ -963,10 +965,24 @@ export const StockLookupView: React.FC = () => {
     loadStockData();
   };
 
+  // DB에 보관된 전체 실사 일자 목록 로드
+  const loadAvailableSnapDates = async () => {
+    try {
+      const res = await fetch('/api/inventory/snapshot?dates=1', { cache: 'no-store' });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setAvailableSnapDates(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to load snapshot dates', err);
+    }
+  };
+
   useEffect(() => {
     // 진입 시 최신 발주서 기준 현재고 LIVE로 즉시 로드 (날짜 선택 시 해당 일자 스냅샷 로드)
     setTargetDate(kstToday());
     loadStockData();
+    void loadAvailableSnapDates();
   }, []);
 
   // 단축키 Ctrl+S / Cmd+S 로 저장 지원
@@ -1106,6 +1122,27 @@ export const StockLookupView: React.FC = () => {
   const handleUploadFile = async (file: File) => {
     setIsUploading(true);
     try {
+      // 파일명에서 일자 자동 감지 (예: 2026-11-03, 20261103, 11월 3일, 261103 등)
+      let uploadTargetDate = targetDate;
+      const matchYMD = file.name.match(/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/);
+      if (matchYMD) {
+        uploadTargetDate = `${matchYMD[1]}-${matchYMD[2].padStart(2, '0')}-${matchYMD[3].padStart(2, '0')}`;
+      } else {
+        const matchCompact = file.name.match(/(20\d{2})(\d{2})(\d{2})/);
+        if (matchCompact) {
+          uploadTargetDate = `${matchCompact[1]}-${matchCompact[2]}-${matchCompact[3]}`;
+        } else {
+          const matchMD = file.name.match(/(\d{1,2})월\s*(\d{1,2})일/);
+          if (matchMD) {
+            const nowY = new Date().getFullYear();
+            uploadTargetDate = `${nowY}-${matchMD[1].padStart(2, '0')}-${matchMD[2].padStart(2, '0')}`;
+          }
+        }
+      }
+      if (uploadTargetDate !== targetDate) {
+        setTargetDate(uploadTargetDate);
+      }
+
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       // 발주서 정본 맵 (유지일 계산용 J/I/H) — 엑셀 우선
@@ -1296,7 +1333,12 @@ export const StockLookupView: React.FC = () => {
       setNewRowIds(freshIds);
       setReviewList(review);
       setReviewOpen(review.length > 0);
-      alert(`업로드 반영 완료: 신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건 · 확인필요 ${review.length}건\n확인 후 저장(Ctrl+S)하세요. ${targetDate} 날짜 확정분으로 저장됩니다. 신규는 저장 시 품목 자동생성됩니다.`);
+      alert(
+        `업로드 반영 완료 (${uploadTargetDate} 기준):\n` +
+        `신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건 · 확인필요 ${review.length}건\n\n` +
+        `⚠️ 알림: 현재 화면 표에만 임시 반영된 상태입니다.\n` +
+        `반드시 상단의 [저장 (Ctrl+S)] 버튼을 누르셔야 데이터베이스에 [${uploadTargetDate} 확정 실사]로 영구 저장됩니다.`
+      );
     } catch (e: any) {
       alert('엑셀 파싱 실패: ' + (e.message || '알 수 없는 오류'));
     } finally {
@@ -1443,6 +1485,7 @@ export const StockLookupView: React.FC = () => {
       setNewRowIds(new Set());
       alert(`저장 완료 (${targetDate} 확정분 ${snapJson.count}건${shouldSyncLive ? ' · 현재고 반영' : ''})`);
       void loadByDate(targetDate);
+      void loadAvailableSnapDates();
     } catch (err: any) {
       console.error(err);
       alert(`저장 중 오류 발생: ${err.message}`);
@@ -1924,6 +1967,29 @@ export const StockLookupView: React.FC = () => {
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
+
+            {/* 저장된 실사일자 퀵선택 드롭다운 */}
+            {availableSnapDates.length > 0 && (
+              <select
+                value={availableSnapDates.some((d) => d.date === targetDate) ? targetDate : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    setTargetDate(val);
+                    void loadByDate(val);
+                  }
+                }}
+                className="bg-emerald-50 text-emerald-800 border border-emerald-400 font-semibold rounded px-1.5 py-0.5 text-[12px] hover:bg-emerald-100 cursor-pointer shadow-sm"
+                title="데이터베이스에 저장된 실사 일자 목록"
+              >
+                <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
+                {availableSnapDates.map((d) => (
+                  <option key={d.date} value={d.date}>
+                    {d.date} ({d.count}건 확정)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Warehouse */}
