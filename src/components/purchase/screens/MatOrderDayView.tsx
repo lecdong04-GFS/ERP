@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-  HelpCircle,
   RotateCcw,
   Calendar,
   Save,
@@ -11,15 +10,18 @@ import {
   Download,
   Search,
   CheckCircle2,
-  AlertTriangle,
   ExternalLink,
   Boxes,
+  Package,
+  RefreshCw,
+  Clock,
+  Layers,
+  Sparkles,
+  DollarSign,
   TrendingUp,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
-import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
 import {
   DAY_CHARS,
@@ -57,11 +59,11 @@ export const MatOrderDayView: React.FC = () => {
   const [orderDate, setOrderDate] = useState<string>(kstToday());
   const [dayIdx, setDayIdx] = useState<number>(() => {
     const t = new Date();
-    t.setDate(t.getDate() + 1); // 기본 익일 요일
-    return (t.getDay() + 6) % 7;
+    return (t.getDay() + 6) % 7; // 오늘 요일 기본값
   });
 
   const [supplierFilter, setSupplierFilter] = useState<string>('전체');
+  const [patternFilter, setPatternFilter] = useState<string>('전체');
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -97,6 +99,13 @@ export const MatOrderDayView: React.FC = () => {
 
   // 현재 선택된 요일의 실제 날짜 (YYYY-MM-DD)
   const currentDayDate = weekDates[dayIdx];
+
+  // 주간 범위 텍스트 (예: 2026.11.02 ~ 2026.11.08)
+  const weekRangeText = useMemo(() => {
+    const start = weekDates[0];
+    const end = weekDates[6];
+    return `${start} ~ ${end}`;
+  }, [weekDates]);
 
   // 1. 발주시트 정본 로드 (스마트발주 GFS 마스터와 실시간 동기화)
   const loadOrderSheet = useCallback(async () => {
@@ -181,6 +190,12 @@ export const MatOrderDayView: React.FC = () => {
     setOrderDate(toLocalISODate(d));
   };
 
+  const handleJumpToCurrentWeek = () => {
+    setOrderDate(kstToday());
+    const t = new Date();
+    setDayIdx((t.getDay() + 6) % 7);
+  };
+
   // 요일 탭별 통계 (해당 요일 자동 분할량 기준)
   const dayStats = useMemo(() => {
     return DAY_CHARS.map((_, d) => {
@@ -189,6 +204,7 @@ export const MatOrderDayView: React.FC = () => {
       let amt = 0;
       rows.forEach((r) => {
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
+        if (patternFilter !== '전체' && classifyPattern(r.supplier) !== patternFilter) return;
         if (keyword.trim() && !r.name.toLowerCase().includes(keyword.trim().toLowerCase())) return;
         const c = calcRow(r);
         if (c.finalBoxes <= 0) return;
@@ -201,25 +217,32 @@ export const MatOrderDayView: React.FC = () => {
       });
       return { items, boxes, amt };
     });
-  }, [rows, supplierFilter, keyword]);
+  }, [rows, supplierFilter, patternFilter, keyword]);
 
   // 현재 요일에 해당하는 발주 행 목록
   const dayRows = useMemo(() => {
     return rows
       .map((r) => {
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
-        if (keyword.trim() && !r.name.toLowerCase().includes(keyword.trim().toLowerCase()))
+        const pattern = classifyPattern(r.supplier);
+        if (patternFilter !== '전체' && pattern !== patternFilter) return null;
+        if (
+          keyword.trim() &&
+          !r.name.toLowerCase().includes(keyword.trim().toLowerCase()) &&
+          !r.supplier.toLowerCase().includes(keyword.trim().toLowerCase())
+        ) {
           return null;
+        }
         const c = calcRow(r);
         if (c.finalBoxes <= 0) return null;
         const week = splitWeek(r, c.finalBoxes);
         const override = overrides[dayIdx]?.[r.id];
         const dayQty = override !== undefined ? override : week[dayIdx];
         if (dayQty <= 0) return null;
-        return { r, c, week, dayQty };
+        return { r, c, week, dayQty, pattern };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [rows, supplierFilter, keyword, dayIdx, overrides]);
+  }, [rows, supplierFilter, patternFilter, keyword, dayIdx, overrides]);
 
   // 합계 계산
   const dayTotals = useMemo(() => {
@@ -243,11 +266,13 @@ export const MatOrderDayView: React.FC = () => {
 
   // 수량 초기화
   const handleResetDay = () => {
-    setOverrides((prev) => {
-      const next = { ...prev };
-      delete next[dayIdx];
-      return next;
-    });
+    if (confirm(`[${DAY_CHARS[dayIdx]}요일]의 수동 수정 수량을 원래 자동 분할값으로 복원하시겠습니까?`)) {
+      setOverrides((prev) => {
+        const next = { ...prev };
+        delete next[dayIdx];
+        return next;
+      });
+    }
   };
 
   // 해당 요일 발주 확정 및 ERP 발주서(PO) 전표 생성
@@ -340,11 +365,11 @@ export const MatOrderDayView: React.FC = () => {
 
   // 엑셀 내보내기
   const handleExportExcel = () => {
-    const exportData = dayRows.map(({ r, c, dayQty }, idx) => ({
+    const exportData = dayRows.map(({ r, c, dayQty, pattern }, idx) => ({
       No: idx + 1,
       거래처명: r.supplier,
       품목명: r.name,
-      납품요일패턴: classifyPattern(r.supplier),
+      납품요일패턴: pattern,
       보관창고: r.warehouse || '-',
       발주수량_박스: dayQty,
       입수량: c.pack || 0,
@@ -375,190 +400,254 @@ export const MatOrderDayView: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f0f2f5] select-none text-[12.5px] font-sans">
-      {/* 1. 상단 다크 헤더 바 */}
-      <div className="h-[34px] bg-[#2d3748] border-b border-[#1a202c] px-3 flex items-center justify-between text-white shrink-0 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="w-1.5 h-4 bg-[#48bb78] rounded-2xs inline-block" />
-          <h1 className="text-[13px] font-extrabold tracking-tight text-white flex items-center gap-2">
-            자재발주 (요일별)
-            <span className="text-[11px] font-medium text-slate-300">
-              납품요일 기준 자동 분할
-            </span>
-            {confirmedPoList.length > 0 ? (
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-                <CheckCircle2 size={11} />
-                {DAY_CHARS[dayIdx]}요일 확정완료 ({confirmedPoList.length}건 전표)
+    <div className="flex flex-col h-full w-full bg-slate-50 text-slate-800 p-4 sm:p-5 overflow-hidden gap-3.5 select-none font-sans">
+      {/* ── 1. 상단 마스터 컨트롤 & KPI 헤더 카드 ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs shrink-0 flex flex-col gap-4">
+        {/* 헤더 타이틀 및 주요 액션 버튼 */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black tracking-wide">
+                매입 파이프라인
               </span>
-            ) : (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                {DAY_CHARS[dayIdx]}요일 미확정
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                자재발주 <span className="text-blue-600 font-extrabold">(요일별)</span>
+              </h1>
+              {confirmedPoList.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {DAY_CHARS[dayIdx]}요일 발주확정 ({confirmedPoList.length}건 전표)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-300 shadow-2xs">
+                  <Clock className="w-3.5 h-3.5" />
+                  {DAY_CHARS[dayIdx]}요일 발주 미확정
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-500 font-medium">
+              스마트발주(GFS) 확정량을 거래처별 납품 요일 패턴(월수금/화목토/매일)에 따라 최적 분할하여 ERP 정식 발주서로 확정합니다.
+            </p>
+          </div>
+
+          {/* 주요 작업 버튼 모음 */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSaveDay}
+              disabled={isSaving || dayRows.length === 0}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13.5px] font-black text-white shadow-sm transition-all cursor-pointer ${
+                dayRows.length > 0
+                  ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 hover:shadow-md'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+              }`}
+              title="선택한 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
+            >
+              <Save className="w-4 h-4 stroke-[2.5]" />
+              <span>
+                {isSaving
+                  ? '발주서 생성 중...'
+                  : `${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 (PO생성)`}
               </span>
-            )}
-          </h1>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetDay}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer"
+              title="수동 수정한 수량을 자동 계산 수량으로 복원합니다."
+            >
+              <RotateCcw className="w-4 h-4 text-slate-500" />
+              <span className="hidden md:inline">수량 초기화</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer"
+              title="엑셀 다운로드"
+            >
+              <Download className="w-4 h-4 text-emerald-600" />
+              <span className="hidden md:inline">엑셀</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={loadOrderSheet}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer disabled:opacity-50"
+              title="새로고침"
+            >
+              <RefreshCw className={`w-4 h-4 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigate('pur-gfs-smart-order')}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[13px] font-extrabold transition cursor-pointer"
+              title="스마트발주(GFS) 화면으로 바로 이동"
+            >
+              <span>스마트발주</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={handleSaveDay}
-            disabled={isSaving || dayRows.length === 0}
-            className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xs text-[11px] font-black transition-colors shadow-2xs cursor-pointer border border-emerald-700"
-            title="현재 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
-          >
-            <Save size={12} className="stroke-[2.5]" />
-            {isSaving ? '확정 저장 중...' : `${DAY_CHARS[dayIdx]}요일 발주확정(PO생성)`}
-          </button>
-          <button
-            type="button"
-            onClick={handleResetDay}
-            className="flex items-center gap-1 px-2 py-1 bg-gray-600 hover:bg-gray-500 text-gray-200 rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-gray-700"
-            title="수동 수정한 수량을 자동 계산치로 초기화합니다."
-          >
-            <RotateCcw size={11} />
-            수량 초기화
-          </button>
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="flex items-center gap-1 px-2 py-1 bg-blue-700 hover:bg-blue-600 text-white rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-blue-800"
-            title="엑셀 다운로드"
-          >
-            <Download size={11} />
-            엑셀
-          </button>
-          <button
-            type="button"
-            onClick={loadOrderSheet}
-            className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xs text-[11px] font-medium transition-colors shadow-2xs cursor-pointer border border-gray-600"
-            title="새로고침"
-          >
-            <RotateCcw size={11} className={isLoading ? 'animate-spin' : ''} />
-            새로고침
-          </button>
+        {/* 핵심 KPI 지표 4종 카드 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-[11.5px] font-bold text-slate-500">
+                {DAY_CHARS[dayIdx]}요일 발주 예정총액
+              </span>
+              <div className="text-lg sm:text-xl font-black font-mono text-indigo-700 tracking-tight mt-0.5">
+                ₩{Math.round(dayTotals.amt).toLocaleString()}
+              </div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-indigo-100/70 text-indigo-700 flex items-center justify-center font-bold">
+              ₩
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-[11.5px] font-bold text-slate-500">
+                {DAY_CHARS[dayIdx]}요일 발주 총 박스수
+              </span>
+              <div className="text-lg sm:text-xl font-black font-mono text-blue-700 tracking-tight mt-0.5">
+                {dayTotals.boxes.toLocaleString()} <span className="text-xs font-sans font-bold">box</span>
+              </div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-blue-100/70 text-blue-700 flex items-center justify-center">
+              <Boxes className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-[11.5px] font-bold text-slate-500">
+                발주 대상 품목수
+              </span>
+              <div className="text-lg sm:text-xl font-black font-mono text-emerald-700 tracking-tight mt-0.5">
+                {dayRows.length} <span className="text-xs font-sans font-bold">품목</span>
+              </div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-emerald-100/70 text-emerald-700 flex items-center justify-center">
+              <Package className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-[11.5px] font-bold text-slate-500">
+                납품(입고) 기준일자
+              </span>
+              <div className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-0.5">
+                {currentDayDate}{' '}
+                <span className="text-xs font-extrabold text-blue-600 font-sans">
+                  ({DAY_CHARS[dayIdx]})
+                </span>
+              </div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-slate-200/70 text-slate-700 flex items-center justify-center">
+              <Calendar className="w-5 h-5" />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 2. 파이프라인 바로가기 바 */}
-      <div className="bg-[#edf2f7] border-b border-[#cbd5e1] px-3 py-1 flex items-center justify-between shrink-0 text-[11.5px]">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-slate-600">🔗 발주 파이프라인 연계:</span>
+      {/* ── 2. 세련된 주간 & 요일 세그먼트 컨트롤 ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs shrink-0 flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* 주차 네비게이터 */}
+        <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-xl border border-slate-200">
           <button
             type="button"
-            onClick={() => handleNavigate('pur-gfs-smart-order')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 shadow-2xs transition-colors cursor-pointer"
+            onClick={handlePrevWeek}
+            className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
+            title="이전 주차"
           >
-            🍱 스마트발주(GFS) 열기 <ExternalLink size={10} />
+            <ChevronLeft className="w-4 h-4" />
           </button>
+
+          <div className="flex items-center gap-1.5 px-2 text-xs font-extrabold text-slate-800">
+            <Calendar className="w-3.5 h-3.5 text-blue-600" />
+            <span>주간: {weekRangeText}</span>
+          </div>
+
           <button
             type="button"
-            onClick={() => handleNavigate('pur-order-req-confirm')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+            onClick={handleNextWeek}
+            className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
+            title="다음 주차"
           >
-            📑 발주소요량확정 <ExternalLink size={10} />
+            <ChevronRight className="w-4 h-4" />
           </button>
+
           <button
             type="button"
-            onClick={() => handleNavigate('pur-order-status-edit')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+            onClick={handleJumpToCurrentWeek}
+            className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-blue-700 hover:bg-blue-50 border border-slate-200 transition cursor-pointer ml-1"
           >
-            📋 발주현황/수정 <ExternalLink size={10} />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleNavigate('pur-receiving-reg')}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
-          >
-            📥 입고등록(GSR) <ExternalLink size={10} />
+            이번 주
           </button>
         </div>
 
-        <div className="text-[11px] text-slate-500">
-          💡 스마트발주(GFS)의 442개 자재 발주량을 거래처별 납품 요일(월수금/화목토/매일) 패턴에 맞춰 분할·발주합니다.
-        </div>
-      </div>
-
-      {/* 3. 요일 탭 바 (실제 달력 날짜 연동) */}
-      <div className="bg-[#e2e8f0] border-b border-gray-300 px-3 flex items-center justify-between shrink-0 h-[40px] overflow-x-auto gap-2">
-        {/* 요일 탭들 */}
-        <div className="flex items-center gap-1">
+        {/* 7개 요일 세그먼트 버튼 (월~일) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           {DAY_CHARS.map((d, i) => {
             const isActive = dayIdx === i;
             const st = dayStats[i];
             const dateStr = weekDates[i];
-            const mmdd = dateStr ? dateStr.slice(5) : '';
+            const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
 
             return (
               <button
                 key={d}
                 type="button"
                 onClick={() => setDayIdx(i)}
-                className={`flex items-center gap-1.5 h-[32px] px-3 rounded-t text-[12px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex flex-col items-center justify-center min-w-[70px] sm:min-w-[84px] py-1.5 px-2 rounded-xl transition-all cursor-pointer border ${
                   isActive
-                    ? 'bg-white text-blue-700 border-t-2 border-t-blue-600 border-x border-gray-300 shadow-xs'
-                    : 'bg-transparent text-gray-600 hover:text-gray-900 hover:bg-slate-200/80'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/30 font-black'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
                 }`}
               >
-                <span>
-                  {d}요일 <span className="text-[10px] font-normal text-slate-400">({mmdd})</span>
-                </span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'bg-gray-300 text-gray-700'
+                <div className="flex items-center gap-1 text-[13px]">
+                  <span>{d}요일</span>
+                  <span
+                    className={`text-[11px] font-normal ${
+                      isActive ? 'text-blue-100' : 'text-slate-400'
+                    }`}
+                  >
+                    {mmdd}
+                  </span>
+                </div>
+                <div
+                  className={`mt-0.5 text-[11px] font-mono font-bold px-1.5 py-0.2 rounded-full ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : st.boxes > 0
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-slate-200/80 text-slate-500'
                   }`}
                 >
-                  {st.items}건 {st.boxes > 0 ? `${st.boxes}박스` : ''}
-                </span>
+                  {st.boxes > 0 ? `${st.boxes}box` : '0box'}
+                </div>
               </button>
             );
           })}
         </div>
-
-        {/* 주차 및 발주일자 네비게이터 */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-0.5 rounded shadow-2xs text-[11px]">
-            <span className="font-bold text-slate-700 flex items-center gap-1">
-              <Calendar size={12} className="text-blue-600" />
-              발주 주차:
-            </span>
-            <button
-              type="button"
-              onClick={handlePrevWeek}
-              className="p-0.5 hover:bg-gray-100 rounded text-gray-600"
-              title="전주"
-            >
-              <ChevronLeft size={13} />
-            </button>
-            <input
-              type="date"
-              value={orderDate}
-              onChange={(e) => setOrderDate(e.target.value)}
-              className="font-bold text-slate-800 text-[11.5px] outline-none w-[115px]"
-            />
-            <button
-              type="button"
-              onClick={handleNextWeek}
-              className="p-0.5 hover:bg-gray-100 rounded text-gray-600"
-              title="차주"
-            >
-              <ChevronRight size={13} />
-            </button>
-          </div>
-          <span className="text-[11.5px] font-extrabold text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200">
-            납품일자: {currentDayDate} ({DAY_CHARS[dayIdx]})
-          </span>
-        </div>
       </div>
 
-      {/* 4. 필터 바 (거래처 + 검색어 + 집계) */}
-      <div className="bg-[#f5f6f8] border-b border-[#cccccc] px-3 py-1.5 flex items-center justify-between shrink-0 h-[34px]">
-        <div className="flex items-center gap-3">
+      {/* ── 3. 필터 및 검색 바 ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 px-4 py-2.5 shadow-xs shrink-0 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* 거래처 선택 */}
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-gray-700 text-[11px]">거래처</span>
+            <span className="text-xs font-bold text-slate-600 shrink-0">거래처:</span>
             <select
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
-              className="bg-white border border-gray-300 px-2 py-0.5 text-[11px] font-medium rounded-xs shadow-2xs w-[200px] h-[22px] outline-none focus:border-blue-500"
+              className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="전체">전체 거래처 ({suppliers.length})</option>
               {suppliers.map((s) => (
@@ -568,150 +657,226 @@ export const MatOrderDayView: React.FC = () => {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-300 shadow-2xs">
-            <Search size={12} className="text-slate-400" />
+
+          {/* 납품패턴 필터 버튼 */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
+            {['전체', '월수금', '화목토', '매일'].map((pat) => (
+              <button
+                key={pat}
+                type="button"
+                onClick={() => setPatternFilter(pat)}
+                className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                  patternFilter === pat
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                {pat}
+              </button>
+            ))}
+          </div>
+
+          {/* 검색어 입력창 */}
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
             <input
               type="text"
-              placeholder="품명 검색"
+              placeholder="품명 / 거래처 검색..."
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="bg-transparent border-0 text-[11.5px] text-slate-900 w-[150px] focus:outline-hidden"
+              className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 sm:w-60"
             />
           </div>
         </div>
 
-        {/* 요일별 발주 합계 요약 */}
-        <div className="flex items-center gap-2">
-          {confirmedPoList.length > 0 && (
-            <div className="text-[11px] font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 font-bold">
-              전표: {confirmedPoList.map((p) => p.orderNo).join(', ')}
+        {/* 우측 전표 내역 안내 */}
+        <div className="flex items-center gap-2 text-xs">
+          {confirmedPoList.length > 0 ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg font-mono font-bold">
+              <span>발주번호:</span>
+              <span>{confirmedPoList.map((p) => p.orderNo).join(', ')}</span>
             </div>
+          ) : (
+            <span className="text-slate-400 font-medium">
+              💡 {DAY_CHARS[dayIdx]}요일 발주량이 입력된 품목만 표시됩니다.
+            </span>
           )}
-          <div className="text-[11.5px] text-gray-700 font-semibold bg-white px-3 py-0.5 rounded border border-gray-300 shadow-2xs flex items-center gap-2">
-            <span>{DAY_CHARS[dayIdx]}요일 발주:</span>
-            <strong className="text-emerald-700">{dayRows.length}품목</strong>
-            <strong className="text-blue-700">{dayTotals.boxes.toLocaleString()}박스</strong>
-            <strong className="text-slate-900">₩{Math.round(dayTotals.amt).toLocaleString()}</strong>
-          </div>
+          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200">
+            총 {dayRows.length}개 품목 표시 중
+          </span>
         </div>
       </div>
 
-      {/* 5. 요일 발주 대형 그리드 */}
-      <div className="flex-1 p-0.5 min-h-0 overflow-hidden flex flex-col bg-white">
-        <div className="flex-1 min-h-0 overflow-auto border border-[#a4abb6]">
+      {/* ── 4. 요일 발주 메인 데이터 그리드 (현대적이고 시원한 테이블) ── */}
+      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs flex flex-col">
+        <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="py-20 text-center text-gray-500 font-bold">
-              스마트발주(GFS) 마스터 시트 로딩 중...
+            <div className="w-full h-full flex flex-col items-center justify-center p-16 gap-3 text-slate-400">
+              <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+              <div className="text-sm font-bold text-slate-600">
+                스마트발주(GFS) 최신 발주 데이터를 불러오고 있습니다...
+              </div>
             </div>
           ) : (
-            <EditableTableWrapper>
-              <table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
-                <thead className="sticky top-0 z-20 bg-[#c5cbf0] text-gray-900 font-semibold border-b border-[#9098aa]">
-                  <tr className="h-[32px] leading-tight text-center whitespace-nowrap font-bold">
-                    <th className="border border-[#9098aa] px-1.5 py-0.5 w-[40px]">No</th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[160px] text-left">거래처명</th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[280px] text-left">품목명</th>
-                    <th className="border border-[#9098aa] px-1 py-0.5 min-w-[80px]">납품요일</th>
-                    <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px] text-center">보관창고</th>
-                    <th className="border border-[#9098aa] px-1 py-0.5 min-w-[95px] bg-amber-100/90 text-blue-900">
-                      {DAY_CHARS[dayIdx]}요일 발주량(✏️)
-                    </th>
-                    <th className="border border-[#9098aa] px-1 py-0.5 min-w-[65px] text-right">입수량</th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-right">봉단가</th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[100px] text-right">발주금액</th>
-                    <th className="border border-[#9098aa] px-1 py-0.5 min-w-[75px] text-right">주간총확정</th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[120px] text-left">비고</th>
+            <table className="w-full text-left border-collapse min-w-[1000px]">
+              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 text-[13px] font-black border-b border-slate-200 uppercase tracking-tight select-none">
+                <tr>
+                  <th className="py-3 px-3 text-center w-12">No</th>
+                  <th className="py-3 px-3.5 w-44">거래처명</th>
+                  <th className="py-3 px-4 min-w-[240px]">품목명</th>
+                  <th className="py-3 px-3 w-28 text-center">납품패턴</th>
+                  <th className="py-3 px-3 w-24 text-center">보관창고</th>
+                  <th className="py-3 px-3 w-36 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
+                    {DAY_CHARS[dayIdx]}요일 발주수량(✏️)
+                  </th>
+                  <th className="py-3 px-3 w-24 text-right">입수량</th>
+                  <th className="py-3 px-3 w-28 text-right">봉단가</th>
+                  <th className="py-3 px-3.5 w-36 text-right font-black">발주금액</th>
+                  <th className="py-3 px-3 w-28 text-right text-slate-500">주간총확정</th>
+                  <th className="py-3 px-4 min-w-[140px]">비고</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-[13.5px]">
+                {dayRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-20 text-center">
+                      <div className="max-w-md mx-auto flex flex-col items-center gap-3">
+                        <Package className="w-12 h-12 text-slate-300" />
+                        <div className="text-[15px] font-black text-slate-700">
+                          {DAY_CHARS[dayIdx]}요일({currentDayDate})에 예정된 발주 품목이 없습니다.
+                        </div>
+                        <p className="text-[13px] text-slate-500">
+                          거래처별 납품 요일 패턴상 오늘은 납품이 없거나, 다른 요일로 배정되어 있습니다. 상단의 다른 요일 탭을 확인해 보세요.
+                        </p>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {dayRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="py-20 text-center text-gray-400 italic">
-                        {DAY_CHARS[dayIdx]}요일에 해당하는 발주 품목이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    dayRows.map(({ r, c, dayQty }, idx) => (
+                ) : (
+                  dayRows.map(({ r, c, dayQty, pattern }, idx) => {
+                    const rowAmt = dayQty * c.pack * r.bagPrice;
+                    return (
                       <tr
                         key={r.id}
-                        className={`h-[26px] border-b border-gray-300 hover:bg-[#eef3fb] text-gray-900 ${
-                          idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'
+                        className={`hover:bg-blue-50/40 transition-colors ${
+                          idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
                         }`}
                       >
-                        <td className="border border-gray-300 text-center text-gray-500 font-mono text-[11px] bg-gray-50">
+                        {/* No */}
+                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-xs">
                           {idx + 1}
                         </td>
-                        <td
-                          className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left text-gray-800 text-[11.5px]"
-                          title={r.supplier}
-                        >
-                          {r.supplier}
+
+                        {/* 거래처명 */}
+                        <td className="py-2.5 px-3.5 font-bold text-slate-700 truncate max-w-[170px]">
+                          <span
+                            className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200"
+                            title={r.supplier}
+                          >
+                            {r.supplier}
+                          </span>
                         </td>
-                        <td
-                          className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left font-bold"
-                          title={r.name}
-                        >
-                          {r.name}
+
+                        {/* 품목명 */}
+                        <td className="py-2.5 px-4 font-black text-slate-900">
+                          <span title={r.name}>{r.name}</span>
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-[11px] font-bold text-blue-700">
-                          {classifyPattern(r.supplier)}
+
+                        {/* 납품패턴 뱃지 */}
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black border ${
+                              pattern === '월수금'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : pattern === '화목토'
+                                ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                : pattern === '매일'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {pattern}
+                          </span>
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-center text-gray-700 text-[11px]">
+
+                        {/* 보관창고 */}
+                        <td className="py-2.5 px-3 text-center text-slate-500 text-xs font-medium">
                           {r.warehouse || '-'}
                         </td>
-                        <td className="border border-gray-300 p-0 text-center font-mono bg-amber-50/50">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={dayQty}
-                            onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
-                            className="w-full h-full text-center font-black text-blue-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5 py-1 text-[12.5px]"
-                            style={{ textAlign: 'center' }}
-                          />
+
+                        {/* 요일 발주수량 (인라인 편집 가능) */}
+                        <td className="py-1.5 px-2.5 text-right bg-blue-50/40 border-x border-blue-100">
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={dayQty}
+                              onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
+                              className="w-20 text-right px-2 py-1 bg-white border border-blue-300 rounded-lg text-[14px] font-black font-mono text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                            />
+                            <span className="text-xs font-bold text-blue-700">box</span>
+                          </div>
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-600">
-                          {c.pack || '-'}
+
+                        {/* 입수량 */}
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 text-xs font-medium">
+                          {c.pack > 0 ? `${c.pack.toLocaleString()}` : '-'}
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
-                          {r.bagPrice ? r.bagPrice.toLocaleString() : '-'}
+
+                        {/* 봉단가 */}
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600 text-xs font-medium">
+                          {r.bagPrice > 0 ? `₩${r.bagPrice.toLocaleString()}` : '-'}
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-bold text-emerald-700 bg-emerald-50/20">
-                          {dayQty * c.pack * r.bagPrice
-                            ? Math.round(dayQty * c.pack * r.bagPrice).toLocaleString()
-                            : '-'}
+
+                        {/* 발주금액 */}
+                        <td className="py-2.5 px-3.5 text-right font-black font-mono text-[14px] text-slate-900">
+                          ₩{Math.round(rowAmt).toLocaleString()}
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-1.5 py-0.5 text-right font-mono text-gray-500">
-                          {c.finalBoxes.toLocaleString()}
+
+                        {/* 주간총확정 */}
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-400 text-xs">
+                          {c.finalBoxes.toLocaleString()} box
                         </td>
-                        <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-left text-gray-500 text-[11px]">
-                          {r.vendor ? `${r.vendor}` : ''}
-                          {r.dailyUsage ? ` · 일${r.dailyUsage}` : ''}
+
+                        {/* 비고 */}
+                        <td className="py-2.5 px-4 text-slate-500 text-xs truncate max-w-[160px]">
+                          {r.vendor || ''}
+                          {r.dailyUsage ? ` (일사용: ${r.dailyUsage})` : ''}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-                <tfoot className="sticky bottom-0 z-20 bg-[#ffffcc] border-t-2 border-[#9098aa] font-bold text-gray-900 shadow-inner">
-                  <tr className="h-[28px]">
-                    <td colSpan={5} className="border border-[#9098aa] px-2 py-1 text-center font-bold">
-                      합계 ({DAY_CHARS[dayIdx]}요일 납품: {currentDayDate})
-                    </td>
-                    <td className="border border-[#9098aa] px-1.5 py-1 text-right font-mono font-extrabold text-blue-900">
-                      {dayTotals.boxes.toLocaleString()} 박스
-                    </td>
-                    <td className="border border-[#9098aa] px-1 py-1"></td>
-                    <td className="border border-[#9098aa] px-2 py-1"></td>
-                    <td className="border border-[#9098aa] px-2 py-1 text-right font-mono font-black text-emerald-800">
-                      {dayTotals.amt ? `₩${Math.round(dayTotals.amt).toLocaleString()}` : '₩0'}
-                    </td>
-                    <td className="border border-[#9098aa] px-1 py-1"></td>
-                    <td className="border border-[#9098aa] px-2 py-1"></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </EditableTableWrapper>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           )}
+        </div>
+
+        {/* ── 하단 총합계 고정 바 ── */}
+        <div className="bg-slate-100 border-t border-slate-300 px-5 py-3 flex flex-wrap items-center justify-between text-[13.5px] font-extrabold shrink-0 gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-600">
+              납품일자: <strong className="text-slate-900">{currentDayDate} ({DAY_CHARS[dayIdx]}요일)</strong>
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-slate-600">
+              표시 품목수: <strong className="text-emerald-700 font-mono">{dayRows.length}</strong>건
+            </span>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div>
+              <span className="text-slate-600 mr-2">{DAY_CHARS[dayIdx]}요일 발주 총 박스수:</span>
+              <span className="font-mono font-black text-blue-700 text-base">
+                {dayTotals.boxes.toLocaleString()} <span className="text-xs font-sans">box</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-600 mr-2">{DAY_CHARS[dayIdx]}요일 발주 예정총액:</span>
+              <span className="font-mono font-black text-slate-900 text-lg sm:text-xl text-emerald-800">
+                ₩{Math.round(dayTotals.amt).toLocaleString()}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
