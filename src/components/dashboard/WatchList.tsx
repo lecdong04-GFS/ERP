@@ -33,8 +33,8 @@ export const WatchList: React.FC<WatchListProps> = ({ stockDays = [], fefoTop = 
 
   return (
     <section className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col min-w-0 overflow-hidden">
-      {/* Panel Header & Tab Switcher */}
-      <header className="px-4 py-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
+      {/* Panel Header & Tab Switcher (Height matched to h-[62px]) */}
+      <header className="h-[62px] px-4 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-1.5 bg-slate-200/80 p-1 rounded-xl border border-slate-300/70">
           <button
             type="button"

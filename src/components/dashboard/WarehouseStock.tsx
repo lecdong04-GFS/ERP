@@ -23,15 +23,15 @@ export const WarehouseStock: React.FC<WarehouseStockProps> = ({ rows, total, onN
 
   return (
     <section className="bg-white rounded-2xl border border-slate-200/90 shadow-xs flex flex-col overflow-hidden min-w-0">
-      {/* Panel Header */}
-      <header className="px-4 py-3 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
-            <Boxes className="w-4.5 h-4.5" />
+      {/* Panel Header (Height matched to h-[62px]) */}
+      <header className="h-[62px] px-4 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 shadow-xs">
+            <Boxes className="w-5 h-5" />
           </div>
           <div className="flex items-center gap-2">
-            <h3 className="text-[14px] font-extrabold text-slate-800 tracking-tight">창고별 재고금액</h3>
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+            <h3 className="text-[14.5px] font-black text-slate-800 tracking-tight">창고별 재고금액</h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[11.5px] font-black bg-amber-100 text-amber-800 border border-amber-300">
               합계 {compactWon(total)}
             </span>
           </div>
