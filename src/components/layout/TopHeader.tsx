@@ -106,9 +106,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         </button>
 
         {/* Server status */}
-        <div className="hidden lg:flex items-center gap-1.5 text-slate-300 font-mono text-[12px] bg-white/10 px-2.5 py-1 rounded-lg border border-white/15">
-          <Server className="w-3.5 h-3.5 text-emerald-400" />
-          <span>GFS-PROD-SRV01 [정상]</span>
+        <div className="hidden lg:flex items-center gap-1.5 text-slate-200 text-[12.5px] font-bold bg-white/10 px-2.5 py-1 rounded-lg border border-white/15 whitespace-nowrap shadow-2xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <span>실시간 관제 시스템 정상</span>
         </div>
 
         {/* Current Time */}
