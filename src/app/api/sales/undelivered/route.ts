@@ -125,6 +125,49 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 3. 미출 엑셀로 직접 등록된 납품/미납 상세 내역 병합
+    const michulDeliveries = deliveries.filter((d) => d.remark?.startsWith('[미출엑셀]'));
+    for (const d of michulDeliveries) {
+      const storeName = d.remark.replace('[미출엑셀]', '').split('(')[0].trim();
+      for (const dt of d.details) {
+        const rem = dt.remark || '';
+        const m = rem.match(/미출\s*(\d+)개\s*\(([0-9,]+)원\)/);
+        const unDeliv = m ? parseInt(m[1], 10) : 0;
+        const unDelivAmt = m ? parseInt(m[2].replace(/,/g, ''), 10) : 0;
+        const delivQty = dt.deliveryQty || 0;
+        const orderQty = delivQty + unDeliv;
+        const unitPrice = dt.unitPrice || (orderQty > 0 ? Math.round((dt.amount + unDelivAmt) / orderQty) : 0);
+
+        rows.push({
+          salesOrderId: 0,
+          orderNo: d.deliveryNo,
+          orderDate: d.deliveryDate,
+          centerCode: d.centerCode,
+          storeName: storeName || d.centerCode,
+          shift: d.shift || '1편',
+          orderType: '정규',
+          status: '완료',
+          productId: 0,
+          productCode: dt.productCode,
+          productName: dt.productName,
+          kind: '완제품',
+          category: '미출엑셀',
+          spec: '',
+          unit: 'ea',
+          unitPrice,
+          orderQty,
+          orderQty1: orderQty,
+          orderQty2: 0,
+          orderAmt: dt.amount + unDelivAmt,
+          deliveredQty: delivQty,
+          deliveredAmt: dt.amount,
+          unDelivQty: unDeliv,
+          unDelivAmt,
+          deliveryRefs: [{ deliveryId: d.id, qty: delivQty }],
+        });
+      }
+    }
+
     const onlyShort = searchParams.get('onlyShort') === '1';
     const filtered = onlyShort ? rows.filter((r) => r.unDelivQty > 0) : rows;
     const totalOrder = filtered.reduce((s, r) => s + r.orderQty, 0);

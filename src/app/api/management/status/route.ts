@@ -7,14 +7,22 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
 
-    const salesPurchase = await prisma.salesPurchaseStatus.findMany({
-      orderBy: { statusDate: 'desc' },
-      take: 50,
-    });
-    const provisional = await prisma.provisionalSalesStatus.findMany({
-      orderBy: { statusDate: 'desc' },
-      take: 50,
-    });
+    const provWhere: any = {};
+    if (date) {
+      provWhere.statusDate = date;
+    }
+
+    const [salesPurchase, provisional] = await Promise.all([
+      prisma.salesPurchaseStatus.findMany({
+        orderBy: { statusDate: 'desc' },
+        take: 50,
+      }),
+      prisma.provisionalSalesStatus.findMany({
+        where: provWhere,
+        orderBy: [{ statusDate: 'desc' }, { id: 'asc' }],
+        take: 100,
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,

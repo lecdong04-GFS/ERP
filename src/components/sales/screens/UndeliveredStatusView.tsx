@@ -5,6 +5,7 @@ import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesFilterBar } from '../common/SalesFilterBar';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { displayRemark } from '@/lib/gfs/docKey';
+import { usePipeline } from '@/context/PipelineContext';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -43,6 +44,7 @@ interface UndelivDetailRow {
 }
 
 export const UndeliveredStatusView: React.FC = () => {
+  const { openExcelOrderModal } = usePipeline();
   const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
   const [endDate, setEndDate] = useState(() => kstToday());
   const [summaries, setSummaries] = useState<UndelivSummaryRow[]>([]);
@@ -156,6 +158,7 @@ export const UndeliveredStatusView: React.FC = () => {
         title="미출현황"
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
+          { key: 'upload', label: '미출 엑셀 업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },
           { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: handleReset },
         ]}
         helpContent="주문 대비 미출고/미납품된 수량을 집계합니다. (미출 = 수주 − 납품, 수주·납품 등록이 실시간 반영)"

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '@/components/purchase/common/PurchaseDataGrid';
-import { Calendar } from 'lucide-react';
+import { Calendar, RefreshCw } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { usePipeline } from '@/context/PipelineContext';
 
 interface ProvisionalSalesRow {
   id: number;
@@ -19,51 +20,76 @@ interface ProvisionalSalesRow {
 }
 
 const SAMPLE_PROV_DATA: ProvisionalSalesRow[] = [
-  { id: 1, partnerName: 'GSR 고정', provQty: 4200, provAmt: 8120000, undelivQty: 0, undelivAmt: 0, confirmQty: 4200, confirmAmt: 8120000, achieveRate: 100.0 },
-  { id: 2, partnerName: 'GSR 곤지암', provQty: 3800, provAmt: 7350000, undelivQty: 50, undelivAmt: 95000, confirmQty: 3750, confirmAmt: 7255000, achieveRate: 98.7 },
-  { id: 3, partnerName: 'GSR 김해', provQty: 5400, provAmt: 10450000, undelivQty: 0, undelivAmt: 0, confirmQty: 5400, confirmAmt: 10450000, achieveRate: 100.0 },
-  { id: 4, partnerName: 'GSR 남양주', provQty: 3200, provAmt: 6180000, undelivQty: 20, undelivAmt: 38000, confirmQty: 3180, confirmAmt: 6142000, achieveRate: 99.4 },
-  { id: 5, partnerName: 'GSR 대구', provQty: 4100, provAmt: 7920000, undelivQty: 0, undelivAmt: 0, confirmQty: 4100, confirmAmt: 7920000, achieveRate: 100.0 },
-  { id: 6, partnerName: 'GSR 대전', provQty: 3600, provAmt: 6950000, undelivQty: 30, undelivAmt: 58000, confirmQty: 3570, confirmAmt: 6892000, achieveRate: 99.2 },
-  { id: 7, partnerName: 'GSR 도화', provQty: 2900, provAmt: 5610000, undelivQty: 0, undelivAmt: 0, confirmQty: 2900, confirmAmt: 5610000, achieveRate: 100.0 },
-  { id: 8, partnerName: 'GSR 동포천', provQty: 2400, provAmt: 4650000, undelivQty: 0, undelivAmt: 0, confirmQty: 2400, confirmAmt: 4650000, achieveRate: 100.0 },
-  { id: 9, partnerName: 'GSR 북광주', provQty: 3100, provAmt: 5990000, undelivQty: 10, undelivAmt: 19000, confirmQty: 3090, confirmAmt: 5971000, achieveRate: 99.7 },
-  { id: 10, partnerName: 'GSR 사천', provQty: 1800, provAmt: 3480000, undelivQty: 0, undelivAmt: 0, confirmQty: 1800, confirmAmt: 3480000, achieveRate: 100.0 },
-  { id: 11, partnerName: 'GSR 송파', provQty: 4500, provAmt: 8700000, undelivQty: 0, undelivAmt: 0, confirmQty: 4500, confirmAmt: 8700000, achieveRate: 100.0 },
-  { id: 12, partnerName: 'GSR 신광주', provQty: 3900, provAmt: 7540000, undelivQty: 40, undelivAmt: 76000, confirmQty: 3860, confirmAmt: 7464000, achieveRate: 99.0 },
-  { id: 13, partnerName: 'GSR 양산', provQty: 2800, provAmt: 5420000, undelivQty: 0, undelivAmt: 0, confirmQty: 2800, confirmAmt: 5420000, achieveRate: 100.0 },
-  { id: 14, partnerName: 'GSR 용인', provQty: 5600, provAmt: 10850000, undelivQty: 0, undelivAmt: 0, confirmQty: 5600, confirmAmt: 10850000, achieveRate: 100.0 },
-  { id: 15, partnerName: 'GSR 원주', provQty: 2100, provAmt: 4060000, undelivQty: 0, undelivAmt: 0, confirmQty: 2100, confirmAmt: 4060000, achieveRate: 100.0 },
-  { id: 16, partnerName: 'GSR 제주', provQty: 1500, provAmt: 2900000, undelivQty: 0, undelivAmt: 0, confirmQty: 1500, confirmAmt: 2900000, achieveRate: 100.0 },
-  { id: 17, partnerName: 'GSR 칠곡', provQty: 4800, provAmt: 9280000, undelivQty: 0, undelivAmt: 0, confirmQty: 4800, confirmAmt: 9280000, achieveRate: 100.0 },
+  { id: 1, partnerName: '양산조리센터(수D)', provQty: 1, provAmt: 2480, undelivQty: 1, undelivAmt: 2480, confirmQty: 0, confirmAmt: 0, achieveRate: 0.0 },
+  { id: 2, partnerName: '부산조리센터(수D)', provQty: 4, provAmt: 9920, undelivQty: 4, undelivAmt: 9920, confirmQty: 0, confirmAmt: 0, achieveRate: 0.0 },
+  { id: 3, partnerName: '(주)지에스리테일(해인CVS)', provQty: 2540, provAmt: 4625000, undelivQty: 12, undelivAmt: 19800, confirmQty: 2528, confirmAmt: 4605200, achieveRate: 99.6 },
+  { id: 4, partnerName: '㈜지에스리테일익산일배', provQty: 1200, provAmt: 2180000, undelivQty: 5, undelivAmt: 8500, confirmQty: 1195, confirmAmt: 2171500, achieveRate: 99.6 },
+  { id: 5, partnerName: '(주)지에스리테일김해일배', provQty: 1850, provAmt: 3350000, undelivQty: 8, undelivAmt: 14200, confirmQty: 1842, confirmAmt: 3335800, achieveRate: 99.6 },
+  { id: 6, partnerName: '지에스리테일경산저온', provQty: 820, provAmt: 1480000, undelivQty: 3, undelivAmt: 5400, confirmQty: 817, confirmAmt: 1474600, achieveRate: 99.6 },
+  { id: 7, partnerName: '(주)지에스리테일신광주저', provQty: 672, provAmt: 1215960, undelivQty: 54, undelivAmt: 125753, confirmQty: 618, confirmAmt: 1090207, achieveRate: 89.7 },
 ];
 
 const COLUMNS: PurchaseGridColumnDef[] = [
-  { key: 'partnerName', label: '거래처명', minWidth: '240px', align: 'left', sticky: true, leftOffset: '36px' },
-  { key: 'provQty', label: '가매출수량', width: '90px', align: 'right', format: 'number' },
-  { key: 'provAmt', label: '가매출금액', width: '120px', align: 'right', format: 'currency' },
-  { key: 'undelivQty', label: '미출수량', width: '85px', align: 'right', format: 'number', dangerIfNegative: true },
-  { key: 'undelivAmt', label: '미출금액', width: '105px', align: 'right', format: 'currency', dangerIfNegative: true },
-  { key: 'confirmQty', label: '확정수량', width: '90px', align: 'right', format: 'number' },
-  { key: 'confirmAmt', label: '확정금액', width: '130px', align: 'right', format: 'currency', highlight: true },
+  { key: 'partnerName', label: '거래처(센터명)', minWidth: '240px', align: 'left', sticky: true, leftOffset: '36px' },
+  { key: 'provQty', label: '가매출수량', width: '95px', align: 'right', format: 'number' },
+  { key: 'provAmt', label: '가매출금액', width: '125px', align: 'right', format: 'currency' },
+  { key: 'undelivQty', label: '미출수량', width: '90px', align: 'right', format: 'number', dangerIfNegative: true },
+  { key: 'undelivAmt', label: '미출금액', width: '115px', align: 'right', format: 'currency', dangerIfNegative: true },
+  { key: 'confirmQty', label: '확정수량', width: '95px', align: 'right', format: 'number' },
+  { key: 'confirmAmt', label: '최종 확정금액', width: '140px', align: 'right', format: 'currency', highlight: true },
   { key: 'achieveRate', label: '달성율(%)', width: '90px', align: 'right' },
 ];
 
 export const ProvisionalSalesStatusView: React.FC = () => {
-  const [date, setDate] = useState('2026-10-30');
+  const { openExcelOrderModal } = usePipeline();
+  const [date, setDate] = useState('2026-11-03');
   const [periodType, setPeriodType] = useState('일간');
   const [dataList, setDataList] = useState<ProvisionalSalesRow[]>(SAMPLE_PROV_DATA);
+  const [loading, setLoading] = useState(false);
+
+  const loadData = useCallback(async (targetDate: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/management/status?date=${targetDate}`);
+      const json = await res.json();
+      if (json.success && json.data?.provisional && json.data.provisional.length > 0) {
+        const rows: ProvisionalSalesRow[] = json.data.provisional.map((p: any, idx: number) => {
+          const provAmt = Number(p.provisionalSales) || 0;
+          const undelivAmt = Number(p.undeliveredAmount) || 0;
+          const confirmAmt = Number(p.confirmedAmount) || Math.max(0, provAmt - undelivAmt);
+          // 단가 역산 또는 기준 수량 환산
+          const estPrice = provAmt > 0 ? 1800 : 1;
+          const provQty = Math.round(provAmt / estPrice);
+          const undelivQty = Math.round(undelivAmt / estPrice);
+          const confirmQty = Math.max(0, provQty - undelivQty);
+          const rate = provAmt > 0 ? ((confirmAmt / provAmt) * 100).toFixed(1) : '100.0';
+          return {
+            id: idx + 1,
+            partnerName: p.remark || `GSR 센터 ${idx + 1}`,
+            provQty,
+            provAmt,
+            undelivQty,
+            undelivAmt,
+            confirmQty,
+            confirmAmt,
+            achieveRate: parseFloat(rate),
+          };
+        });
+        setDataList(rows);
+      } else {
+        // 해당 일자 데이터가 없으면 기본 샘플 유지
+        setDataList(SAMPLE_PROV_DATA);
+      }
+    } catch (err) {
+      console.error('Fetch provisional sales failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch('/api/management/status')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.provisional && json.data.provisional.length > 0) {
-          // Connected with live endpoint
-        }
-      })
-      .catch((err) => console.error('Fetch provisional sales failed:', err));
-  }, []);
+    loadData(date);
+  }, [date, loadData]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
@@ -71,7 +97,8 @@ export const ProvisionalSalesStatusView: React.FC = () => {
       <SalesActionBar
         title="가매출/미출/확정금액현황"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => alert('조회 완료') },
+          { key: 'search', label: '조회', icon: 'search', variant: 'secondary', onClick: () => loadData(date) },
+          { key: 'upload', label: '미출/수주 엑셀 업로드', icon: 'excel', variant: 'primary', onClick: openExcelOrderModal },
           {
             key: 'excel',
             label: '엑셀다운로드',
@@ -85,7 +112,7 @@ export const ProvisionalSalesStatusView: React.FC = () => {
                 data: dataList,
               }),
           },
-          { key: 'reset', label: '초기화', icon: 'reset', variant: 'secondary', onClick: () => alert('초기화 완료') },
+          { key: 'reset', label: '새로고침', icon: 'reset', variant: 'secondary', onClick: () => loadData(date) },
         ]}
         helpContent="수주 주문 기준 가매출액과 생산/물류 결품으로 인한 미출액을 차감하여 당일 최종 확정 매출금액을 센터별로 집계합니다."
       />

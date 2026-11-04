@@ -22,6 +22,7 @@ import {
   ParsedExcelResult,
 } from '@/services/excel/gsRetailExcelService';
 import { parseBonbaljuRows } from '@/lib/gfs/bonbaljuIntake';
+import { parseMichulRows, MichulParseResult } from '@/lib/gfs/michulIntake';
 import * as XLSX from 'xlsx';
 import { usePipeline } from '@/context/PipelineContext';
 
@@ -39,7 +40,8 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<ParsedExcelResult | null>(null);
-  const [parsedSource, setParsedSource] = useState<'GS표준' | '본발주'>('GS표준');
+  const [parsedMichul, setParsedMichul] = useState<MichulParseResult | null>(null);
+  const [parsedSource, setParsedSource] = useState<'GS표준' | '본발주' | '미출'>('GS표준');
   const [parsedOrderDate, setParsedOrderDate] = useState<string | null>(null);
   const [parsedKind, setParsedKind] = useState<'정규' | '추가' | '슈퍼'>('정규');
   const [parsedDocKeys, setParsedDocKeys] = useState<string[]>([]);
@@ -50,24 +52,27 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
   const handleFileChange = async (file: File) => {
     setFileName(file.name);
     setIsProcessing(true);
+    setParsedMichul(null);
     try {
       const buffer = await file.arrayBuffer();
-      const result = parseGsRetailExcelBuffer(buffer);
-      const hasQty = result.totalQty > 0 && result.orders.length > 0;
-      if (hasQty) {
-        setParsedSource('GS표준');
-        setParsedOrderDate(null);
-        setParsedKind('정규');
-        setParsedDocKeys([]);
-        setParsedData(result);
-        return;
-      }
-      // 본발주(B2B EDI ordview) 폴백: 상품코드/낱개수량/발주단가 + 발주일자(수주받은 날짜)
+
+      // 1. 미출(미납) 엑셀 및 본발주 시트 우선 탐지
       const wb = XLSX.read(buffer, { type: 'array' });
       for (const sn of wb.SheetNames) {
         const ws = wb.Sheets[sn];
         if (!ws) continue;
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+        // (1) 미출고/미납정보 엑셀 감지
+        const michul = parseMichulRows(rows);
+        if (michul && michul.items.length > 0) {
+          setParsedSource('미출');
+          setParsedMichul(michul);
+          setParsedData(null);
+          return;
+        }
+
+        // (2) 본발주(B2B EDI ordview) 감지: 정규, 추가(1편), 슈퍼
         const bon = parseBonbaljuRows(rows);
         if (bon && bon.items.length > 0) {
           setParsedSource('본발주');
@@ -98,7 +103,10 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
           return;
         }
       }
-      // 둘 다 아니면 GS표준 결과(0건) 그대로 표시
+
+      // 2. 점포별 GS 표준 발주서 분석
+      const result = parseGsRetailExcelBuffer(buffer);
+      const hasQty = result.totalQty > 0 && result.orders.length > 0;
       setParsedSource('GS표준');
       setParsedOrderDate(null);
       setParsedKind('정규');
@@ -216,9 +224,49 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
     openPipelineModal();
   };
 
+  const handleApplyMichul = async () => {
+    if (!parsedMichul || parsedMichul.items.length === 0) {
+      alert('반영할 미출 내역 데이터가 없습니다.');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/sales/undelivered/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tradeDate: parsedMichul.tradeDate,
+          items: parsedMichul.items,
+        }),
+      });
+      const json = await res.json();
+      if (!json?.success) {
+        alert('미출 내역 반영 실패: ' + (json?.error || '알 수 없는 오류'));
+        return;
+      }
+      alert(
+        `✓ ${parsedMichul.tradeDate} 미출 내역서 반영 완료!\n\n` +
+          `• 대상 센터: ${parsedMichul.storeCount}개 조리/물류센터\n` +
+          `• 미출 품목: ${parsedMichul.productCount}개 품목 (총 ${parsedMichul.totalUndelivQty}개 결품)\n` +
+          `• 미출 차감액: ₩${parsedMichul.totalUndelivAmt.toLocaleString()}원\n\n` +
+          `[미출현황] 및 [가매출/미출/확정금액현황] 메뉴에 실시간 반영되었습니다.`
+      );
+      onClose();
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('미출 데이터를 서버에 저장하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleReset = () => {
     setFileName(null);
     setParsedData(null);
+    setParsedMichul(null);
     setParsedOrderDate(null);
     setParsedSource('GS표준');
     setParsedKind('정규');
@@ -384,6 +432,125 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs transition-colors cursor-pointer"
                 >
                   붙여넣은 데이터 파싱 및 검증
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Parsed Michul (미출고) Summary Stats & Action */}
+          {parsedMichul && (
+            <div className="bg-white border-2 border-rose-300 rounded-xl p-4 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-rose-100 pb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2.5 py-1 bg-rose-600 text-white rounded-lg text-xs font-black shadow-xs">
+                    🚨 GS리테일 미출고(미납정보) 내역서 감지
+                  </span>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                    <span>기준 납품일자:</span>
+                    <span className="text-rose-700 font-mono font-black">{parsedMichul.tradeDate}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-1 text-[11.5px] text-slate-500 hover:text-slate-800 cursor-pointer font-bold"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>다시 올리기</span>
+                </button>
+              </div>
+
+              {/* 4 Stat Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="text-[11px] text-slate-500 font-bold">총 발주(주문)</div>
+                  <div className="text-[17px] font-black font-mono text-slate-800 mt-1">
+                    {parsedMichul.totalOrderQty.toLocaleString()}
+                    <span className="text-xs font-normal text-slate-500 ml-1">개</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    ₩{Math.round(parsedMichul.totalOrderAmt).toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                  <div className="text-[11px] text-emerald-800 font-bold">정상 납품 완료</div>
+                  <div className="text-[17px] font-black font-mono text-emerald-700 mt-1">
+                    {parsedMichul.totalDelivQty.toLocaleString()}
+                    <span className="text-xs font-normal text-emerald-600 ml-1">개</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-700 font-mono mt-0.5">
+                    ₩{Math.round(parsedMichul.totalDelivAmt).toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl">
+                  <div className="text-[11px] text-rose-800 font-bold flex items-center justify-center gap-1">
+                    <span>🚨 결품 (미출 차감)</span>
+                  </div>
+                  <div className="text-[17px] font-black font-mono text-rose-600 mt-1">
+                    {parsedMichul.totalUndelivQty.toLocaleString()}
+                    <span className="text-xs font-normal text-rose-600 ml-1">개 결품</span>
+                  </div>
+                  <div className="text-[11.5px] text-rose-700 font-mono font-black mt-0.5">
+                    -₩{parsedMichul.totalUndelivAmt.toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
+                  <div className="text-[11px] text-blue-800 font-bold">대상 물류센터</div>
+                  <div className="text-[17px] font-black font-mono text-blue-700 mt-1">
+                    {parsedMichul.storeCount}
+                    <span className="text-xs font-normal text-blue-600 ml-1">개 센터</span>
+                  </div>
+                  <div className="text-[11px] text-blue-600 font-mono mt-0.5">
+                    {parsedMichul.productCount}개 상품 분할
+                  </div>
+                </div>
+              </div>
+
+              {/* Table Preview */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[220px] overflow-y-auto">
+                <table className="w-full text-[11.5px] border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 sticky top-0 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2 px-3 text-left">센터명</th>
+                      <th className="py-2 px-2 text-left">바코드</th>
+                      <th className="py-2 px-3 text-left">상품명</th>
+                      <th className="py-2 px-2 text-right">발주</th>
+                      <th className="py-2 px-2 text-right">납품</th>
+                      <th className="py-2 px-2 text-right text-rose-600">미출수량</th>
+                      <th className="py-2 px-3 text-right text-rose-600">미출금액</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {parsedMichul.items.map((it, idx) => (
+                      <tr key={idx} className="hover:bg-rose-50/40 transition">
+                        <td className="py-1.5 px-3 font-semibold text-slate-800">{it.storeName}</td>
+                        <td className="py-1.5 px-2 font-mono text-slate-500">{it.productCode}</td>
+                        <td className="py-1.5 px-3 font-bold text-slate-900 truncate max-w-[200px]">{it.productName}</td>
+                        <td className="py-1.5 px-2 text-right font-mono">{it.orderQty.toLocaleString()}</td>
+                        <td className="py-1.5 px-2 text-right font-mono text-emerald-700 font-bold">{it.delivQty.toLocaleString()}</td>
+                        <td className="py-1.5 px-2 text-right font-mono text-rose-600 font-black">{it.undelivQty}</td>
+                        <td className="py-1.5 px-3 text-right font-mono text-rose-600 font-black">₩{it.undelivAmt.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* One-Click Apply Button */}
+              <div className="pt-2 flex items-center justify-between">
+                <p className="text-[11.5px] text-slate-500 font-medium">
+                  * 확인 버튼을 누르면 <b className="text-slate-800">[미출현황]</b>과 <b className="text-slate-800">[가매출/미출/확정금액현황]</b>에 실시간 반영됩니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleApplyMichul}
+                  disabled={isProcessing}
+                  className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-black text-[13px] rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4.5 h-4.5 text-white" />
+                  <span>🚨 미출 내역 ERP 즉시 반영 (확정매출 차감)</span>
                 </button>
               </div>
             </div>
@@ -567,18 +734,29 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
             >
               닫기
             </button>
-            <button
-              disabled={!parsedData || parsedData.orders.length === 0 || isProcessing}
-              onClick={handleApplyPipeline}
-              className={`px-4 py-1.5 rounded font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ${
-                parsedData && parsedData.orders.length > 0
-                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-extrabold active:scale-95'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <Zap className="w-4 h-4 fill-black stroke-black" />
-              <span>생산-원가 파이프라인 즉시 전개 실행</span>
-            </button>
+            {parsedMichul ? (
+              <button
+                disabled={isProcessing}
+                onClick={handleApplyMichul}
+                className="px-4 py-1.5 rounded font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-extrabold active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>미출 내역 ERP 즉시 반영 (확정매출 차감)</span>
+              </button>
+            ) : (
+              <button
+                disabled={!parsedData || parsedData.orders.length === 0 || isProcessing}
+                onClick={handleApplyPipeline}
+                className={`px-4 py-1.5 rounded font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ${
+                  parsedData && parsedData.orders.length > 0
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-extrabold active:scale-95'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                <Zap className="w-4 h-4 fill-black stroke-black" />
+                <span>생산-원가 파이프라인 즉시 전개 실행</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
