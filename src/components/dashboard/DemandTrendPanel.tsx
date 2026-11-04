@@ -19,7 +19,6 @@ import {
   Calendar,
   BarChart3,
   Table as TableIcon,
-  CheckCircle2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -301,12 +300,12 @@ function getFormatted14Dates(
 /** 14일 인라인 미니 스파크라인 SVG 컴포넌트 */
 const MiniSparkline: React.FC<{
   data: number[];
-  color: string;
+  color?: string;
   width?: number;
   height?: number;
-}> = ({ data, color, width = 135, height = 40 }) => {
+}> = ({ data, color = '#334155', width = 120, height = 36 }) => {
   if (!data || data.length < 2) {
-    return <span className="text-gray-400 text-xs font-bold">-</span>;
+    return <span className="text-slate-400 text-xs font-bold">-</span>;
   }
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -331,12 +330,11 @@ const MiniSparkline: React.FC<{
       <polyline
         fill="none"
         stroke={color}
-        strokeWidth="2.5"
+        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        points={points}
       />
-      <circle cx={w - pad} cy={lastY} r="3.5" fill={color} className="animate-pulse" />
+      <circle cx={w - pad} cy={lastY} r="3" fill={color} />
     </svg>
   );
 };
@@ -426,164 +424,157 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
     };
   }, [selectedItem, dateList]);
 
-  const themeColor =
-    activeTab === 'surge'
-      ? { stroke: '#059669', fill: '#10b981', badge: 'bg-emerald-50 text-emerald-800 border-emerald-300' }
-      : activeTab === 'drop'
-      ? { stroke: '#e11d48', fill: '#f43f5e', badge: 'bg-rose-50 text-rose-800 border-rose-300' }
-      : { stroke: '#2563eb', fill: '#3b82f6', badge: 'bg-blue-50 text-blue-800 border-blue-300' };
-
   const dateRangeLabel = useMemo(() => {
     if (!dateList || dateList.length < 2) return '';
     return `${dateList[0].fullDate || dateList[0].shortLabel} ~ ${
       dateList[dateList.length - 1].fullDate || dateList[dateList.length - 1].shortLabel
-    } (14일간)`;
+    }`;
   }, [dateList]);
 
   return (
-    <div className="erp-card flex flex-col bg-white border border-[var(--line)] rounded-2xl shadow-md overflow-hidden shrink-0">
-      {/* ── Top Header ────────────────────────── */}
-      <div className="h-[56px] px-5 sm:px-6 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between border-b border-slate-700 shrink-0">
+    <div className="erp-card flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden shrink-0">
+      
+      {/* ── 1. Top Executive Header (절제된 슬레이트-차콜 테마) ─── */}
+      <div className="h-[56px] px-5 sm:px-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-500/25 rounded-xl border border-indigo-400/40 text-indigo-300">
-            <Activity className="w-5.5 h-5.5" />
+          <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 flex items-center justify-center">
+            <Activity className="w-4.5 h-4.5 text-slate-200" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-black text-[17px] tracking-tight">
-                수주 트렌드 & 품목 모멘텀 콕핏
+              <span className="font-bold text-[16.5px] tracking-tight text-white">
+                수주 모멘텀 & 트렌드 분석
               </span>
-              <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-black bg-indigo-500/30 text-indigo-200 border border-indigo-400/50 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                14일 롤링 분석
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                14일 롤링 기준
               </span>
             </div>
             {dateRangeLabel && (
-              <div className="text-[12px] text-slate-300 font-mono font-medium flex items-center gap-1.5 mt-0.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                <span>분석기간: {dateRangeLabel}</span>
+              <div className="text-[11.5px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>분석 기간: {dateRangeLabel}</span>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 text-[13.5px]">
+        <div className="flex items-center gap-2 text-[13px]">
           <button
             type="button"
             onClick={() => onNavigate?.('sales-order-upload')}
-            className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer font-black"
+            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition flex items-center gap-1.5 font-bold cursor-pointer outline-none focus:outline-none"
             title="주문등록GSR 전체 화면으로 이동"
           >
             <span>주문등록(GSR)</span>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
           </button>
           <button
             type="button"
             onClick={() => onNavigate?.('pur-gfs-smart-order')}
-            className="px-4 py-1.5 bg-emerald-500/30 hover:bg-emerald-500/40 text-emerald-300 rounded-xl border border-emerald-400/50 transition flex items-center gap-1.5 cursor-pointer font-black"
+            className="px-3.5 py-1.5 bg-indigo-900/60 hover:bg-indigo-900 text-indigo-200 rounded-lg border border-indigo-700/60 transition flex items-center gap-1.5 font-bold cursor-pointer outline-none focus:outline-none"
             title="스마트 발주 화면으로 이동"
           >
             <span>스마트 발주 연계</span>
-            <ChevronRight className="w-4 h-4 text-emerald-400" />
+            <ChevronRight className="w-3.5 h-3.5 text-indigo-400" />
           </button>
         </div>
       </div>
 
-      {/* ── Dual Cockpit Body Grid (좌우 분할) ──── */}
+      {/* ── 2. Body Grid (좌우 2분할 레이아웃) ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 bg-white">
         
-        {/* [좌측 Zone: 5 / 12 열] 3대 핵심 모멘텀 1위 요약 카드 + 주야간 편수 배분 */}
-        <div className="lg:col-span-5 p-5 flex flex-col justify-between gap-4 bg-slate-50/80">
+        {/* [좌측 Zone: 5 / 12 열] 핵심 모멘텀 3대 진단 카드 + 편수 비율 */}
+        <div className="lg:col-span-5 p-5 flex flex-col justify-between gap-3.5 bg-slate-50/60">
           <div className="flex items-center justify-between px-1">
-            <span className="text-[16px] font-black text-slate-900 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-indigo-600" />
-              핵심 모멘텀 3대 진단
+            <span className="text-[14.5px] font-bold text-slate-800 flex items-center gap-2">
+              <Layers className="w-4.5 h-4.5 text-slate-700" />
+              핵심 모멘텀 3대 요약
             </span>
-            <span className="text-[12.5px] text-slate-500 font-bold">
-              클릭 시 우측 14일 정밀 차트 연동
+            <span className="text-[12px] text-slate-500 font-medium">
+              클릭 시 우측 차트 즉시 연동
             </span>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             {/* 1. 급상승 1위 카드 */}
             <div
               onClick={() => {
                 setActiveTab('surge');
                 setSelectedIdx(0);
               }}
-              className={`p-4 rounded-2xl border-2 transition cursor-pointer shadow-xs ${
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer box-border outline-none focus:outline-none select-none ${
                 activeTab === 'surge' && selectedIdx === 0
-                  ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-400/30'
-                  : 'bg-white border-emerald-200 hover:border-emerald-400'
+                  ? 'bg-white border-2 border-slate-900 shadow-sm'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[14.5px] font-black text-emerald-700 flex items-center gap-1.5">
-                  <Flame className="w-4.5 h-4.5 text-emerald-500 fill-emerald-500" />
+                <span className="text-[13px] font-bold text-slate-900 flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-emerald-600" />
                   주간 급상승 1위
                 </span>
-                <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                   자재 안전확보
                 </span>
               </div>
               {topSurge ? (
-                <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="mt-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-black text-[16px] text-slate-900 truncate" title={topSurge.name}>
+                    <div className="font-bold text-[14.5px] text-slate-900 truncate" title={topSurge.name}>
                       {topSurge.name}
                     </div>
-                    <div className="text-[13px] text-slate-600 flex items-center gap-2 mt-1.5 font-semibold">
-                      <span>일평균 <b className="font-mono text-slate-900 font-black">{topSurge.avgDailyQty.toLocaleString()}</b>ea</span>
+                    <div className="text-[12px] text-slate-500 flex items-center gap-2 mt-1 font-medium">
+                      <span>일평균 <b className="font-mono text-slate-800 font-bold">{topSurge.avgDailyQty.toLocaleString()}</b>ea</span>
                       <span className="text-slate-300">|</span>
-                      <span className="font-black text-emerald-600 font-mono flex items-center">
-                        <ArrowUpRight className="w-4 h-4 mr-0.5" />+{topSurge.pct}%
+                      <span className="font-bold text-emerald-700 font-mono flex items-center">
+                        <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" />+{topSurge.pct}%
                       </span>
                     </div>
                   </div>
-                  <div className="shrink-0 bg-white px-2 py-1 rounded-xl border border-emerald-100 shadow-2xs">
-                    <MiniSparkline data={topSurge.spark14} color="#059669" width={115} height={38} />
+                  <div className="shrink-0 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                    <MiniSparkline data={topSurge.spark14} color="#059669" width={105} height={32} />
                   </div>
                 </div>
               ) : null}
             </div>
 
-            {/* 2. 캐시카우 1위 카드 */}
+            {/* 2. 최다 판매 캐시카우 1위 카드 */}
             <div
               onClick={() => {
                 setActiveTab('volume');
                 setSelectedIdx(0);
               }}
-              className={`p-4 rounded-2xl border-2 transition cursor-pointer shadow-xs ${
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer box-border outline-none focus:outline-none select-none ${
                 activeTab === 'volume' && selectedIdx === 0
-                  ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-400/30'
-                  : 'bg-white border-blue-200 hover:border-blue-400'
+                  ? 'bg-white border-2 border-slate-900 shadow-sm'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[14.5px] font-black text-blue-700 flex items-center gap-1.5">
-                  <Award className="w-4.5 h-4.5 text-blue-500 fill-blue-500" />
-                  최다 판매 캐시카우
+                <span className="text-[13px] font-bold text-slate-900 flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-slate-800" />
+                  최다 판매 1위 (캐시카우)
                 </span>
-                <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-black bg-blue-100 text-blue-800 border border-blue-300">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                   안정 연속생산
                 </span>
               </div>
               {topVolume ? (
-                <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="mt-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-black text-[16px] text-slate-900 truncate" title={topVolume.name}>
+                    <div className="font-bold text-[14.5px] text-slate-900 truncate" title={topVolume.name}>
                       {topVolume.name}
                     </div>
-                    <div className="text-[13px] text-slate-600 flex items-center gap-2 mt-1.5 font-semibold">
-                      <span>일평균 <b className="font-mono text-slate-900 font-black">{topVolume.avgDailyQty.toLocaleString()}</b>ea</span>
+                    <div className="text-[12px] text-slate-500 flex items-center gap-2 mt-1 font-medium">
+                      <span>일평균 <b className="font-mono text-slate-800 font-bold">{topVolume.avgDailyQty.toLocaleString()}</b>ea</span>
                       <span className="text-slate-300">|</span>
-                      <span className="font-black text-blue-600 font-mono">
+                      <span className="font-bold text-slate-800 font-mono">
                         주간 {topVolume.sumLast7.toLocaleString()}ea
                       </span>
                     </div>
                   </div>
-                  <div className="shrink-0 bg-white px-2 py-1 rounded-xl border border-blue-100 shadow-2xs">
-                    <MiniSparkline data={topVolume.spark14} color="#2563eb" width={115} height={38} />
+                  <div className="shrink-0 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                    <MiniSparkline data={topVolume.spark14} color="#0f172a" width={105} height={32} />
                   </div>
                 </div>
               ) : null}
@@ -595,86 +586,88 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 setActiveTab('drop');
                 setSelectedIdx(0);
               }}
-              className={`p-4 rounded-2xl border-2 transition cursor-pointer shadow-xs ${
+              className={`p-3.5 rounded-xl border transition-all cursor-pointer box-border outline-none focus:outline-none select-none ${
                 activeTab === 'drop' && selectedIdx === 0
-                  ? 'bg-rose-50/70 border-rose-500 ring-2 ring-rose-400/30'
-                  : 'bg-white border-rose-200 hover:border-rose-400'
+                  ? 'bg-white border-2 border-slate-900 shadow-sm'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[14.5px] font-black text-rose-700 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4.5 h-4.5 text-rose-500 fill-rose-500" />
-                  급감 주의 (불용 위험)
+                <span className="text-[13px] font-bold text-slate-900 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  급감 주의 1위 (불용 위험)
                 </span>
-                <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                   포장재 발주동결
                 </span>
               </div>
               {topDrop ? (
-                <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="mt-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-black text-[16px] text-slate-900 truncate" title={topDrop.name}>
+                    <div className="font-bold text-[14.5px] text-slate-900 truncate" title={topDrop.name}>
                       {topDrop.name}
                     </div>
-                    <div className="text-[13px] text-slate-600 flex items-center gap-2 mt-1.5 font-semibold">
-                      <span>일평균 <b className="font-mono text-slate-900 font-black">{topDrop.avgDailyQty.toLocaleString()}</b>ea</span>
+                    <div className="text-[12px] text-slate-500 flex items-center gap-2 mt-1 font-medium">
+                      <span>일평균 <b className="font-mono text-slate-800 font-bold">{topDrop.avgDailyQty.toLocaleString()}</b>ea</span>
                       <span className="text-slate-300">|</span>
-                      <span className="font-black text-rose-600 font-mono flex items-center">
-                        <ArrowDownRight className="w-4 h-4 mr-0.5" />{topDrop.pct}%
+                      <span className="font-bold text-rose-600 font-mono flex items-center">
+                        <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />{topDrop.pct}%
                       </span>
                     </div>
                   </div>
-                  <div className="shrink-0 bg-white px-2 py-1 rounded-xl border border-rose-100 shadow-2xs">
-                    <MiniSparkline data={topDrop.spark14} color="#e11d48" width={115} height={38} />
+                  <div className="shrink-0 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                    <MiniSparkline data={topDrop.spark14} color="#e11d48" width={105} height={32} />
                   </div>
                 </div>
               ) : null}
             </div>
           </div>
 
-          {/* 주간 1편/2편 배분 인디케이터 바 */}
+          {/* 주야간 편수 비율 (차분한 슬레이트 바) */}
           {data.shiftRatio && (
-            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between text-[13.5px]">
-              <span className="font-black text-slate-800">주/야간 수주편수 비율:</span>
+            <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-[12.5px]">
+              <span className="font-bold text-slate-700">주/야간 수주편수 비율:</span>
               <div className="flex items-center gap-2.5">
-                <span className="font-mono font-black text-indigo-700 text-[14px]">1편(밤) {data.shiftRatio.shift1Pct}%</span>
-                <div className="w-28 h-3.5 bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
+                <span className="font-mono font-bold text-slate-900">1편(밤) {data.shiftRatio.shift1Pct}%</span>
+                <div className="w-24 h-3 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200">
                   <div
-                    className="bg-indigo-600 h-full"
+                    className="bg-slate-800 h-full"
                     style={{ width: `${data.shiftRatio.shift1Pct}%` }}
                     title={`1편(밤): ${data.shiftRatio.shift1Pct}%`}
                   />
                   <div
-                    className="bg-purple-500 h-full"
+                    className="bg-slate-400 h-full"
                     style={{ width: `${data.shiftRatio.shift2Pct}%` }}
                     title={`2편(낮): ${data.shiftRatio.shift2Pct}%`}
                   />
                 </div>
-                <span className="font-mono font-black text-purple-700 text-[14px]">2편(낮) {data.shiftRatio.shift2Pct}%</span>
+                <span className="font-mono font-bold text-slate-600">2편(낮) {data.shiftRatio.shift2Pct}%</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* [우측 Zone: 7 / 12 열] 14일 롤링 모멘텀 집계 (테이블 & 정밀 그래프 토글) */}
+        {/* [우측 Zone: 7 / 12 열] 14일 롤링 모멘텀 집계 (테이블 & 정밀 그래프) */}
         <div className="lg:col-span-7 p-5 flex flex-col justify-between">
-          {/* Sub Header & Segmented Tabs */}
+          
+          {/* Sub Header & Segmented Tabs (모던 미니멀리즘 탭) */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 mb-3 border-b border-slate-200">
-            {/* 카테고리 탭 (급상승 / 급감 / 최다) */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+            
+            {/* 카테고리 탭: 통일된 다크 슬레이트 액티브 스타일 (알록달록함 제거) */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
               <button
                 type="button"
                 onClick={() => {
                   setActiveTab('surge');
                   setSelectedIdx(0);
                 }}
-                className={`px-3.5 py-1.5 rounded-xl font-black text-[13.5px] transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg font-bold text-[13px] transition cursor-pointer flex items-center gap-1.5 outline-none focus:outline-none select-none ${
                   activeTab === 'surge'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                <Flame className="w-4 h-4" />
+                <Flame className={`w-3.5 h-3.5 ${activeTab === 'surge' ? 'text-emerald-400' : 'text-slate-500'}`} />
                 <span>급상승 TOP 5</span>
               </button>
               <button
@@ -683,13 +676,13 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                   setActiveTab('drop');
                   setSelectedIdx(0);
                 }}
-                className={`px-3.5 py-1.5 rounded-xl font-black text-[13.5px] transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg font-bold text-[13px] transition cursor-pointer flex items-center gap-1.5 outline-none focus:outline-none select-none ${
                   activeTab === 'drop'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                <TrendingDown className="w-4 h-4" />
+                <TrendingDown className={`w-3.5 h-3.5 ${activeTab === 'drop' ? 'text-rose-400' : 'text-slate-500'}`} />
                 <span>급감 주의 TOP 5</span>
               </button>
               <button
@@ -698,13 +691,13 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                   setActiveTab('volume');
                   setSelectedIdx(0);
                 }}
-                className={`px-3.5 py-1.5 rounded-xl font-black text-[13.5px] transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3.5 py-1.5 rounded-lg font-bold text-[13px] transition cursor-pointer flex items-center gap-1.5 outline-none focus:outline-none select-none ${
                   activeTab === 'volume'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                <Award className="w-4 h-4" />
+                <Award className={`w-3.5 h-3.5 ${activeTab === 'volume' ? 'text-amber-300' : 'text-slate-500'}`} />
                 <span>최다 판매 TOP 5</span>
               </button>
             </div>
@@ -715,9 +708,9 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewMode('table')}
-                  className={`px-2.5 py-1 rounded-lg text-[12.5px] font-black flex items-center gap-1 transition ${
+                  className={`px-2.5 py-1 rounded-lg text-[12px] font-bold flex items-center gap-1 transition outline-none focus:outline-none ${
                     viewMode === 'table'
-                      ? 'bg-white text-slate-900 shadow-xs'
+                      ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                   title="5대 품목 요약표 보기"
@@ -728,9 +721,9 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewMode('chart')}
-                  className={`px-2.5 py-1 rounded-lg text-[12.5px] font-black flex items-center gap-1 transition ${
+                  className={`px-2.5 py-1 rounded-lg text-[12px] font-bold flex items-center gap-1 transition outline-none focus:outline-none ${
                     viewMode === 'chart'
-                      ? 'bg-white text-slate-900 shadow-xs'
+                      ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                   title="14일 정밀 추이 그래프 보기"
@@ -743,27 +736,27 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl border border-indigo-200 transition flex items-center gap-1.5 text-[12.5px] font-black cursor-pointer shadow-2xs"
+                className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-300 transition flex items-center gap-1.5 text-[12px] font-bold cursor-pointer outline-none focus:outline-none shadow-2xs"
                 title="14일 정밀 추이 전체화면 모달 열기"
               >
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
+                <Maximize2 className="w-3.5 h-3.5 text-slate-600" />
                 <span>정밀 분석 확대</span>
               </button>
             </div>
           </div>
 
-          {/* ── View Mode: 1. 요약표 (Table View) ────────────────── */}
+          {/* ── View Mode 1: 요약표 (Table View) ──────────────────── */}
           {viewMode === 'table' ? (
             <div className="flex flex-col gap-3">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-[14px] border-collapse">
+                <table className="w-full text-left text-[13.5px] border-collapse">
                   <thead>
-                    <tr className="text-slate-700 font-black text-[13px] border-b-2 border-slate-200 pb-2 bg-slate-50/70">
+                    <tr className="text-slate-700 font-bold text-[12.5px] border-b border-slate-200 pb-2 bg-slate-50">
                       <th className="py-2.5 px-3 w-10 text-center rounded-l-lg">No</th>
-                      <th className="py-2.5 px-3">품목명 / 바코드</th>
+                      <th className="py-2.5 px-3">품목명 / 코드</th>
                       <th className="py-2.5 px-3 w-36 text-right">7일 수주량 (일평균)</th>
                       <th className="py-2.5 px-3 w-28 text-right">전주대비</th>
-                      <th className="py-2.5 px-3 w-36 text-center">14일 추이 (클릭)</th>
+                      <th className="py-2.5 px-3 w-36 text-center">14일 추이</th>
                       <th className="py-2.5 px-3 w-32 text-center rounded-r-lg">추천 권고</th>
                     </tr>
                   </thead>
@@ -777,18 +770,18 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                         <tr
                           key={item.code}
                           onClick={() => setSelectedIdx(idx)}
-                          className={`transition-colors cursor-pointer group ${
+                          className={`transition-colors cursor-pointer outline-none focus:outline-none select-none ${
                             isSelected
-                              ? 'bg-indigo-50/80 font-bold'
-                              : 'hover:bg-slate-50/90'
+                              ? 'bg-slate-100/90 text-slate-900 border-l-4 border-slate-900'
+                              : 'hover:bg-slate-50 text-slate-800'
                           }`}
                         >
-                          <td className="py-3 px-3 text-center text-[14px]">
+                          <td className="py-3 px-3 text-center text-[13.5px]">
                             <span
-                              className={`w-6 h-6 inline-flex items-center justify-center rounded-full text-[12.5px] font-black ${
+                              className={`w-6 h-6 inline-flex items-center justify-center rounded-full text-[12px] font-bold ${
                                 isSelected
-                                  ? 'bg-indigo-600 text-white'
-                                  : 'text-slate-400 group-hover:text-slate-800'
+                                  ? 'bg-slate-900 text-white'
+                                  : 'text-slate-400'
                               }`}
                             >
                               {idx + 1}
@@ -796,31 +789,31 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                           </td>
                           <td className="py-3 px-3 min-w-[190px]">
                             <div
-                              className="font-black text-slate-900 text-[14.5px] truncate max-w-[240px] leading-snug"
+                              className="font-bold text-[14px] truncate max-w-[240px] leading-snug"
                               title={item.name}
                             >
                               {item.name}
                             </div>
-                            <div className="font-mono text-[12px] text-slate-500 font-medium mt-0.5">
+                            <div className="font-mono text-[11.5px] text-slate-500 font-normal mt-0.5">
                               {item.code}
                             </div>
                           </td>
                           <td className="py-3 px-3 text-right">
-                            <div className="font-mono font-black text-slate-900 text-[14px]">
+                            <div className="font-mono font-bold text-[13.5px]">
                               {item.sumLast7.toLocaleString()}ea
                             </div>
-                            <div className="font-mono text-[12px] text-slate-500 font-semibold mt-0.5">
+                            <div className="font-mono text-[11.5px] text-slate-500 mt-0.5">
                               일 {item.avgDailyQty.toLocaleString()}ea
                             </div>
                           </td>
                           <td className="py-3 px-3 text-right">
                             <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[12.5px] font-black font-mono shadow-2xs ${
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[12px] font-bold font-mono ${
                                 isPositive
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                  ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                                   : isNegative
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-300'
-                                  : 'bg-slate-100 text-slate-600'
+                                  ? 'text-rose-700 bg-rose-50 border border-rose-200'
+                                  : 'text-slate-600 bg-slate-100'
                               }`}
                             >
                               {isPositive ? '+' : ''}
@@ -828,34 +821,17 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                             </span>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <div
-                              className={`inline-block px-2 py-1 rounded-xl border transition ${
-                                isSelected
-                                  ? 'bg-white border-indigo-400 shadow-xs'
-                                  : 'bg-slate-50 border-slate-100 group-hover:border-slate-300'
-                              }`}
-                              title="클릭하여 하단 정밀 차트로 확인"
-                            >
+                            <div className="inline-block px-1.5 py-0.5 bg-slate-50 rounded-lg border border-slate-200">
                               <MiniSparkline
                                 data={item.spark14}
-                                color={themeColor.stroke}
-                                width={115}
-                                height={34}
+                                color="#0f172a"
+                                width={105}
+                                height={30}
                               />
                             </div>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-lg text-[12px] font-black ${
-                                item.recommendation === '자재 안전확보'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : item.recommendation === '포장재 발주동결'
-                                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                                  : item.recommendation === '안정 연속생산'
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
+                            <span className="inline-block px-2 py-0.5 rounded text-[11.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                               {item.recommendation}
                             </span>
                           </td>
@@ -868,44 +844,45 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
 
               {/* 하단 선택 품목 14일 인라인 미니 브리핑 바 */}
               {selectedItem && (
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[13px]">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[12.5px]">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[11.5px] font-black shrink-0">
-                      선택 품목
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-white text-[11px] font-bold shrink-0">
+                      선택
                     </span>
-                    <span className="font-black text-slate-900 truncate">
+                    <span className="font-bold text-slate-900 truncate">
                       {selectedItem.name}
                     </span>
-                    <span className="text-slate-400 font-mono text-[12px]">
+                    <span className="text-slate-500 font-mono text-[11.5px]">
                       ({selectedItem.code})
                     </span>
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-slate-600">
-                      14일 피크: <b className="font-mono text-slate-900 font-black">{chartStats.peak.toLocaleString()}ea</b> ({chartStats.peakDate})
+                      14일 최고: <b className="font-mono text-slate-900 font-bold">{chartStats.peak.toLocaleString()}ea</b> ({chartStats.peakDate})
                     </span>
                     <span className="text-slate-300">|</span>
                     <span className="text-slate-600">
-                      14일 평균: <b className="font-mono text-slate-900 font-black">{chartStats.avg.toLocaleString()}ea</b>
+                      14일 일평균: <b className="font-mono text-slate-900 font-bold">{chartStats.avg.toLocaleString()}ea</b>
                     </span>
                     <button
                       type="button"
                       onClick={() => setViewMode('chart')}
-                      className="ml-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[12px] font-black transition flex items-center gap-1 cursor-pointer"
+                      className="ml-2 px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11.5px] font-bold transition flex items-center gap-1 cursor-pointer outline-none focus:outline-none"
                     >
                       <BarChart3 className="w-3.5 h-3.5" />
-                      <span>14일 상세 그래프로 보기</span>
+                      <span>14일 정밀 차트 열기</span>
                     </button>
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            /* ── View Mode: 2. 14일 정밀 차트 (Interactive Chart View) ─── */
+            /* ── View Mode 2: 14일 정밀 차트 (완전한 인셋 보더로 테두리 깨짐 원천 방지) ─── */
             <div className="flex flex-col gap-3">
-              {/* 상단 5개 품목 빠른 선택 알약 */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              
+              {/* 상단 5개 품목 빠른 선택 알약 (p-1.5 패딩으로 스크롤 컨테이너 경계선 클리핑 완벽 차단) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
                 {currentList.map((item, idx) => {
                   const isSelected = selectedIdx === idx;
                   return (
@@ -913,15 +890,15 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                       key={item.code}
                       type="button"
                       onClick={() => setSelectedIdx(idx)}
-                      className={`px-3 py-1.5 rounded-xl text-[12.5px] font-black transition shrink-0 flex items-center gap-1.5 cursor-pointer border ${
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition shrink-0 flex items-center gap-1.5 cursor-pointer outline-none focus:outline-none select-none box-border ${
                         isSelected
-                          ? `${themeColor.badge} shadow-xs border-current font-black ring-1 ring-current`
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          ? 'bg-slate-900 text-white border border-slate-900 shadow-xs'
+                          : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                       }`}
                     >
-                      <span>#{idx + 1}</span>
+                      <span className={isSelected ? 'text-slate-300' : 'text-slate-400'}>#{idx + 1}</span>
                       <span className="truncate max-w-[130px]">{item.name}</span>
-                      <span className="font-mono text-[11px] opacity-75">
+                      <span className="font-mono text-[11px] opacity-80">
                         ({item.pct > 0 ? `+${item.pct}%` : `${item.pct}%`})
                       </span>
                     </button>
@@ -929,43 +906,43 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 })}
               </div>
 
-              {/* 선택된 품목 지표 요약 헤더 */}
+              {/* 선택된 품목 지표 요약 헤더 (차분한 슬레이트 박스) */}
               {selectedItem && (
-                <div className="bg-gradient-to-r from-slate-50 to-indigo-50/40 p-3.5 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-black text-[16px] text-slate-900">
+                      <span className="font-bold text-[15px] text-slate-900">
                         {selectedItem.name}
                       </span>
-                      <span className="px-2 py-0.5 rounded-md text-[11.5px] font-black bg-white border border-slate-300 text-slate-700">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-white border border-slate-300 text-slate-700">
                         {selectedItem.recommendation}
                       </span>
                     </div>
-                    <div className="text-[12px] text-slate-500 font-mono mt-0.5">
+                    <div className="text-[11.5px] text-slate-500 font-mono mt-0.5">
                       바코드: {selectedItem.code} | 분류: {selectedItem.category || '완성품'}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 text-[13px]">
+                  <div className="flex items-center gap-4 text-[12.5px]">
                     <div className="text-right">
-                      <div className="text-[11.5px] text-slate-500 font-bold">14일 총수주량</div>
-                      <div className="font-mono font-black text-slate-900 text-[15px]">
+                      <div className="text-[11px] text-slate-500 font-medium">14일 총수주량</div>
+                      <div className="font-mono font-bold text-slate-900 text-[14.5px]">
                         {chartStats.total.toLocaleString()}ea
                       </div>
                     </div>
-                    <div className="h-7 w-[1px] bg-slate-300" />
+                    <div className="h-6 w-[1px] bg-slate-300" />
                     <div className="text-right">
-                      <div className="text-[11.5px] text-slate-500 font-bold">일평균 수주량</div>
-                      <div className="font-mono font-black text-slate-900 text-[15px]">
+                      <div className="text-[11px] text-slate-500 font-medium">일평균 수주량</div>
+                      <div className="font-mono font-bold text-slate-900 text-[14.5px]">
                         {chartStats.avg.toLocaleString()}ea
                       </div>
                     </div>
-                    <div className="h-7 w-[1px] bg-slate-300" />
+                    <div className="h-6 w-[1px] bg-slate-300" />
                     <div className="text-right">
-                      <div className="text-[11.5px] text-slate-500 font-bold">최고 수주일(Peak)</div>
-                      <div className="font-mono font-black text-indigo-700 text-[15px]">
+                      <div className="text-[11px] text-slate-500 font-medium">최고 수주일(Peak)</div>
+                      <div className="font-mono font-bold text-slate-900 text-[14.5px]">
                         {chartStats.peak.toLocaleString()}ea
-                        <span className="text-[11.5px] font-normal text-slate-500 ml-1">
+                        <span className="text-[11px] font-normal text-slate-500 ml-1">
                           ({chartStats.peakDate})
                         </span>
                       </div>
@@ -974,17 +951,17 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 </div>
               )}
 
-              {/* 메인 14일 Recharts AreaChart */}
-              <div className="h-[210px] w-full bg-white rounded-2xl border border-slate-200 p-2.5 shadow-2xs">
+              {/* 메인 14일 Recharts AreaChart (모던 슬레이트-차콜 그라데이션) */}
+              <div className="h-[210px] w-full bg-white rounded-xl border border-slate-200 p-2.5">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={themeColor.fill} stopOpacity={0.35} />
-                        <stop offset="95%" stopColor={themeColor.fill} stopOpacity={0.0} />
+                        <stop offset="5%" stopColor="#0f172a" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#0f172a" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                     <XAxis
                       dataKey="date"
                       tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
@@ -1002,22 +979,22 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                         if (active && payload && payload.length) {
                           const p = payload[0].payload;
                           return (
-                            <div className="bg-slate-900/95 text-white p-3 rounded-xl shadow-xl border border-slate-700 text-[12.5px]">
+                            <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-[12px]">
                               <div className="text-slate-300 font-bold flex items-center gap-1.5 mb-1.5">
-                                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                                <Calendar className="w-3.5 h-3.5 text-slate-400" />
                                 <span>{p.fullDate || p.date}</span>
                               </div>
                               <div className="flex items-center justify-between gap-4 font-mono">
                                 <span className="text-slate-400">수주량:</span>
-                                <span className="font-black text-[15px] text-amber-300">
+                                <span className="font-bold text-[14.5px] text-white">
                                   {p.qty.toLocaleString()} ea
                                 </span>
                               </div>
                               {p.idx > 0 && (
-                                <div className="flex items-center justify-between gap-4 mt-1 font-mono text-[11.5px]">
+                                <div className="flex items-center justify-between gap-4 mt-1 font-mono text-[11px]">
                                   <span className="text-slate-400">전일대비:</span>
                                   <span
-                                    className={`font-black ${
+                                    className={`font-bold ${
                                       p.diff > 0
                                         ? 'text-emerald-400'
                                         : p.diff < 0
@@ -1044,17 +1021,17 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                         position: 'insideTopRight',
                         fill: '#64748b',
                         fontSize: 11,
-                        fontWeight: 700,
+                        fontWeight: 600,
                       }}
                     />
                     <Area
                       type="monotone"
                       dataKey="qty"
-                      stroke={themeColor.stroke}
-                      strokeWidth={3}
+                      stroke="#0f172a"
+                      strokeWidth={2.8}
                       fillOpacity={1}
                       fill="url(#trendGradient)"
-                      activeDot={{ r: 6, stroke: '#ffffff', strokeWidth: 2, fill: themeColor.stroke }}
+                      activeDot={{ r: 5, stroke: '#ffffff', strokeWidth: 2, fill: '#0f172a' }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1062,9 +1039,9 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
 
               {/* 하단 14일 일자별 수주량 정밀 그리드 */}
               <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <div className="text-[12px] font-black text-slate-700 mb-1.5 flex items-center justify-between px-1">
+                <div className="text-[11.5px] font-bold text-slate-700 mb-1.5 flex items-center justify-between px-1">
                   <span>14일 일자별 수주 실적 (EA)</span>
-                  <span className="text-slate-400 font-mono text-[11px]">*좌측부터 D-13 ~ D-Day</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">*좌측부터 D-13 ~ D-Day</span>
                 </div>
                 <div className="grid grid-cols-7 sm:grid-cols-14 gap-1 text-center">
                   {chartData.map((d, i) => {
@@ -1074,19 +1051,15 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                         key={i}
                         className={`p-1.5 rounded-lg border transition ${
                           isPeak
-                            ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-400/40'
-                            : 'bg-white border-slate-200'
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-800'
                         }`}
                         title={`${d.fullDate || d.date}: ${d.qty.toLocaleString()}ea`}
                       >
-                        <div className="text-[10px] font-mono font-bold text-slate-400">
+                        <div className={`text-[10px] font-mono ${isPeak ? 'text-slate-300 font-bold' : 'text-slate-400'}`}>
                           {d.shortDate}
                         </div>
-                        <div
-                          className={`text-[12px] font-mono font-black mt-0.5 truncate ${
-                            isPeak ? 'text-amber-700' : 'text-slate-800'
-                          }`}
-                        >
+                        <div className="text-[11.5px] font-mono font-bold mt-0.5 truncate">
                           {d.qty.toLocaleString()}
                         </div>
                       </div>
@@ -1100,22 +1073,22 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
 
       </div>
 
-      {/* ── 14일 정밀 추이 분석 대형 모달 (Full Detail Modal) ─────────── */}
+      {/* ── 3. 14일 정밀 추이 분석 대형 모달 (모던 슬레이트 테마) ──── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-300 overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl border border-slate-300 overflow-hidden flex flex-col max-h-[92vh]">
             
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex items-center justify-between shrink-0">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-500/25 rounded-xl border border-indigo-400/40 text-indigo-300">
-                  <BarChart3 className="w-6 h-6" />
+                <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200">
+                  <BarChart3 className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <h3 className="text-[18px] font-black tracking-tight">
+                  <h3 className="text-[17px] font-bold tracking-tight text-white">
                     14일 일자별 수주 정밀 추이 & 수요 모멘텀 분석
                   </h3>
-                  <p className="text-[12.5px] text-slate-300 font-mono mt-0.5">
+                  <p className="text-[12px] text-slate-400 font-mono mt-0.5">
                     기준일: ~{data.baseDate} ({dateRangeLabel})
                   </p>
                 </div>
@@ -1123,19 +1096,19 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 hover:bg-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
+                className="p-1.5 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-white cursor-pointer outline-none focus:outline-none"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-5 bg-slate-50/60">
+            <div className="p-6 overflow-y-auto space-y-4 bg-slate-50/50">
               
               {/* Category & Item Selector Pill Tabs */}
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] font-black text-slate-500 mr-1">분류:</span>
+                  <span className="text-[12.5px] font-bold text-slate-500 mr-1">분류:</span>
                   {(['surge', 'volume', 'drop'] as const).map((tabKey) => (
                     <button
                       key={tabKey}
@@ -1144,13 +1117,9 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                         setActiveTab(tabKey);
                         setSelectedIdx(0);
                       }}
-                      className={`px-3 py-1.5 rounded-xl text-[13px] font-black transition cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-[12.5px] font-bold transition cursor-pointer outline-none focus:outline-none select-none ${
                         activeTab === tabKey
-                          ? tabKey === 'surge'
-                            ? 'bg-emerald-600 text-white'
-                            : tabKey === 'drop'
-                            ? 'bg-rose-600 text-white'
-                            : 'bg-blue-600 text-white'
+                          ? 'bg-slate-900 text-white shadow-xs'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
@@ -1163,16 +1132,16 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                   ))}
                 </div>
 
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  <span className="text-[13px] font-black text-slate-500 mr-1">순위:</span>
+                <div className="flex items-center gap-1.5 overflow-x-auto p-1">
+                  <span className="text-[12.5px] font-bold text-slate-500 mr-1">순위:</span>
                   {currentList.map((it, idx) => (
                     <button
                       key={it.code}
                       type="button"
                       onClick={() => setSelectedIdx(idx)}
-                      className={`px-3 py-1 rounded-xl text-[12.5px] font-black transition cursor-pointer border ${
+                      className={`px-3 py-1 rounded-lg text-[12px] font-bold transition cursor-pointer border outline-none focus:outline-none select-none ${
                         selectedIdx === idx
-                          ? `${themeColor.badge} font-black ring-2 ring-current`
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                           : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
@@ -1185,42 +1154,42 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
               {/* 4 KPI Summary Cards for Selected Item */}
               {selectedItem && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                    <div className="text-[12.5px] font-bold text-slate-500">14일 총 수주량</div>
-                    <div className="text-[20px] font-mono font-black text-slate-900 mt-1">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-[11.5px] font-medium text-slate-500">14일 총 수주량</div>
+                    <div className="text-[19px] font-mono font-bold text-slate-900 mt-1">
                       {chartStats.total.toLocaleString()}
-                      <span className="text-[13px] font-normal text-slate-500 ml-1">ea</span>
+                      <span className="text-[12px] font-normal text-slate-500 ml-1">ea</span>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                    <div className="text-[12.5px] font-bold text-slate-500">일평균 수주량</div>
-                    <div className="text-[20px] font-mono font-black text-slate-900 mt-1">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-[11.5px] font-medium text-slate-500">일평균 수주량</div>
+                    <div className="text-[19px] font-mono font-bold text-slate-900 mt-1">
                       {chartStats.avg.toLocaleString()}
-                      <span className="text-[13px] font-normal text-slate-500 ml-1">ea/일</span>
+                      <span className="text-[12px] font-normal text-slate-500 ml-1">ea/일</span>
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                    <div className="text-[12.5px] font-bold text-slate-500">전주 대비 모멘텀</div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-[11.5px] font-medium text-slate-500">전주 대비 모멘텀</div>
                     <div
-                      className={`text-[20px] font-mono font-black mt-1 flex items-center ${
+                      className={`text-[19px] font-mono font-bold mt-1 flex items-center ${
                         selectedItem.pct > 0
-                          ? 'text-emerald-600'
+                          ? 'text-emerald-700'
                           : selectedItem.pct < 0
-                          ? 'text-rose-600'
-                          : 'text-slate-700'
+                          ? 'text-rose-700'
+                          : 'text-slate-800'
                       }`}
                     >
                       {selectedItem.pct > 0 ? `+${selectedItem.pct}%` : `${selectedItem.pct}%`}
                     </div>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                    <div className="text-[12.5px] font-bold text-slate-500">최고 수주일(Peak)</div>
-                    <div className="text-[20px] font-mono font-black text-amber-600 mt-1 truncate">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <div className="text-[11.5px] font-medium text-slate-500">최고 수주일(Peak)</div>
+                    <div className="text-[19px] font-mono font-bold text-slate-900 mt-1 truncate">
                       {chartStats.peak.toLocaleString()}
-                      <span className="text-[12px] font-normal text-slate-500 ml-1">
+                      <span className="text-[11.5px] font-normal text-slate-500 ml-1">
                         ({chartStats.peakDate})
                       </span>
                     </div>
@@ -1228,43 +1197,43 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 </div>
               )}
 
-              {/* Grand Chart (AreaChart 300px) */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <div className="flex items-center justify-between mb-4">
+              {/* Grand Chart (AreaChart 280px) */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center justify-between mb-3.5">
                   <div>
-                    <h4 className="text-[16px] font-black text-slate-900 flex items-center gap-2">
+                    <h4 className="text-[15px] font-bold text-slate-900 flex items-center gap-2">
                       <span>{selectedItem?.name}</span>
-                      <span className="px-2.5 py-0.5 rounded-lg text-[12px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                         {selectedItem?.recommendation}
                       </span>
                     </h4>
-                    <p className="text-[12.5px] text-slate-500 font-mono mt-0.5">
+                    <p className="text-[11.5px] text-slate-500 font-mono mt-0.5">
                       바코드: {selectedItem?.code} | 카테고리: {selectedItem?.category || '완성품'}
                     </p>
                   </div>
-                  <div className="text-[13px] text-slate-500 font-bold hidden sm:block">
-                    * 그래프 점에 마우스를 올리면 상세 일자별 수주량이 표시됩니다.
+                  <div className="text-[12px] text-slate-500 hidden sm:block">
+                    * 점에 마우스를 올리면 당일 수주량 및 전일대비 증감이 표시됩니다.
                   </div>
                 </div>
 
-                <div className="h-[280px] w-full">
+                <div className="h-[260px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 15, right: 20, left: 0, bottom: 5 }}>
                       <defs>
                         <linearGradient id="modalGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={themeColor.fill} stopOpacity={0.4} />
-                          <stop offset="95%" stopColor={themeColor.fill} stopOpacity={0.0} />
+                          <stop offset="5%" stopColor="#0f172a" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#0f172a" stopOpacity={0.0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                       <XAxis
                         dataKey="date"
-                        tick={{ fontSize: 12, fill: '#475569', fontWeight: 700 }}
+                        tick={{ fontSize: 11.5, fill: '#64748b', fontWeight: 600 }}
                         axisLine={{ stroke: '#cbd5e1' }}
                         tickLine={false}
                       />
                       <YAxis
-                        tick={{ fontSize: 12, fill: '#475569', fontWeight: 700 }}
+                        tick={{ fontSize: 11.5, fill: '#64748b', fontWeight: 600 }}
                         axisLine={false}
                         tickLine={false}
                         tickFormatter={(val) => (val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val)}
@@ -1274,22 +1243,22 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                           if (active && payload && payload.length) {
                             const p = payload[0].payload;
                             return (
-                              <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl border border-slate-700 text-[13px]">
-                                <div className="text-slate-300 font-bold flex items-center gap-1.5 mb-2">
-                                  <Calendar className="w-4 h-4 text-indigo-400" />
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-[12px]">
+                                <div className="text-slate-300 font-bold flex items-center gap-1.5 mb-1.5">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
                                   <span>{p.fullDate || p.date}</span>
                                 </div>
-                                <div className="flex items-center justify-between gap-5 font-mono">
+                                <div className="flex items-center justify-between gap-4 font-mono">
                                   <span className="text-slate-400">수주량:</span>
-                                  <span className="font-black text-[16px] text-amber-300">
+                                  <span className="font-bold text-[15px] text-white">
                                     {p.qty.toLocaleString()} ea
                                   </span>
                                 </div>
                                 {p.idx > 0 && (
-                                  <div className="flex items-center justify-between gap-5 mt-1.5 font-mono text-[12px]">
+                                  <div className="flex items-center justify-between gap-4 mt-1 font-mono text-[11px]">
                                     <span className="text-slate-400">전일대비:</span>
                                     <span
-                                      className={`font-black ${
+                                      className={`font-bold ${
                                         p.diff > 0
                                           ? 'text-emerald-400'
                                           : p.diff < 0
@@ -1309,24 +1278,24 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                       />
                       <ReferenceLine
                         y={chartStats.avg}
-                        stroke="#64748b"
+                        stroke="#94a3b8"
                         strokeDasharray="4 4"
                         label={{
-                          value: `14일 일평균 (${chartStats.avg.toLocaleString()}ea)`,
+                          value: `평균 ${chartStats.avg.toLocaleString()}ea`,
                           position: 'insideTopRight',
-                          fill: '#334155',
-                          fontSize: 12,
-                          fontWeight: 700,
+                          fill: '#475569',
+                          fontSize: 11.5,
+                          fontWeight: 600,
                         }}
                       />
                       <Area
                         type="monotone"
                         dataKey="qty"
-                        stroke={themeColor.stroke}
-                        strokeWidth={3.5}
+                        stroke="#0f172a"
+                        strokeWidth={3}
                         fillOpacity={1}
                         fill="url(#modalGradient)"
-                        activeDot={{ r: 7, stroke: '#ffffff', strokeWidth: 3, fill: themeColor.stroke }}
+                        activeDot={{ r: 6, stroke: '#ffffff', strokeWidth: 2, fill: '#0f172a' }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1334,10 +1303,10 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
               </div>
 
               {/* 14일 일자별 수주량 테이블 그리드 */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-                <h4 className="text-[15px] font-black text-slate-900 mb-3 flex items-center justify-between">
+              <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-2xs">
+                <h4 className="text-[13.5px] font-bold text-slate-900 mb-2.5 flex items-center justify-between">
                   <span>14일 일자별 정밀 수주 내역</span>
-                  <span className="text-[12px] text-slate-500 font-medium font-mono">단위: EA</span>
+                  <span className="text-[11.5px] text-slate-500 font-mono">단위: EA</span>
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-7 gap-2">
                   {chartData.map((d, i) => {
@@ -1345,38 +1314,40 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                     return (
                       <div
                         key={i}
-                        className={`p-3 rounded-xl border flex flex-col justify-between ${
+                        className={`p-2.5 rounded-lg border flex flex-col justify-between ${
                           isPeak
-                            ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-400/40'
-                            : 'bg-slate-50 border-slate-200'
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-900'
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[12px]">
-                          <span className="font-mono font-bold text-slate-700">{d.date}</span>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className={`font-mono font-bold ${isPeak ? 'text-slate-200' : 'text-slate-600'}`}>{d.date}</span>
                           {isPeak && (
-                            <span className="px-1.5 py-0.2 rounded text-[10.5px] font-black bg-amber-500 text-white">
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-white text-slate-900">
                               PEAK
                             </span>
                           )}
                         </div>
-                        <div className="text-[16px] font-mono font-black text-slate-900 mt-2 text-right">
+                        <div className="text-[15px] font-mono font-bold mt-1.5 text-right">
                           {d.qty.toLocaleString()}
-                          <span className="text-[11px] font-normal text-slate-500 ml-1">ea</span>
+                          <span className={`text-[10.5px] font-normal ml-1 ${isPeak ? 'text-slate-300' : 'text-slate-500'}`}>ea</span>
                         </div>
-                        <div className="text-[11px] font-mono text-right mt-1">
+                        <div className="text-[10.5px] font-mono text-right mt-0.5">
                           {i === 0 ? (
-                            <span className="text-slate-400">기준점</span>
+                            <span className={isPeak ? 'text-slate-400' : 'text-slate-400'}>기준</span>
                           ) : (
                             <span
                               className={`font-bold ${
-                                d.diff > 0
-                                  ? 'text-emerald-600'
+                                isPeak
+                                  ? 'text-slate-300'
+                                  : d.diff > 0
+                                  ? 'text-emerald-700'
                                   : d.diff < 0
-                                  ? 'text-rose-600'
+                                  ? 'text-rose-700'
                                   : 'text-slate-400'
                               }`}
                             >
-                              {d.diff > 0 ? `▲ +${d.diff.toLocaleString()}` : d.diff < 0 ? `▼ ${d.diff.toLocaleString()}` : '-'}
+                              {d.diff > 0 ? `+${d.diff.toLocaleString()}` : d.diff < 0 ? `${d.diff.toLocaleString()}` : '-'}
                             </span>
                           )}
                         </div>
@@ -1386,13 +1357,13 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                 </div>
               </div>
 
-              {/* SCM 조치 권고사항 가이드 */}
-              <div className="bg-gradient-to-r from-indigo-50 to-slate-50 p-4.5 rounded-2xl border border-indigo-200 flex items-start gap-3.5">
-                <div className="p-2 bg-indigo-600 text-white rounded-xl shrink-0 mt-0.5">
-                  <Info className="w-5 h-5" />
+              {/* SCM 조치 권고사항 가이드 (차분한 슬레이트 박스) */}
+              <div className="bg-slate-100 p-4 rounded-xl border border-slate-200 flex items-start gap-3">
+                <div className="p-1.5 bg-slate-800 text-white rounded-lg shrink-0 mt-0.5">
+                  <Info className="w-4.5 h-4.5" />
                 </div>
-                <div className="text-[13.5px] text-slate-700 leading-relaxed">
-                  <div className="font-black text-indigo-950 text-[14.5px] mb-1">
+                <div className="text-[13px] text-slate-700 leading-relaxed">
+                  <div className="font-bold text-slate-900 text-[13.5px] mb-0.5">
                     GFS 공급망(SCM) 현장 조치 권고
                   </div>
                   {activeTab === 'surge' ? (
@@ -1414,14 +1385,14 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-3.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
-              <span className="text-[12.5px] text-slate-500 font-medium">
+            <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <span className="text-[12px] text-slate-500 font-medium">
                 * 본 데이터는 GS EDI 본발주 수주 실적을 기반으로 실시간 집계됩니다.
               </span>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-[13.5px] font-black transition cursor-pointer"
+                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[13px] font-bold transition cursor-pointer outline-none focus:outline-none"
               >
                 닫기
               </button>
