@@ -570,20 +570,11 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                 </table>
               </div>
 
-              {/* One-Click Apply Button */}
+              {/* Notice */}
               <div className="pt-2 flex items-center justify-between">
                 <p className="text-[11.5px] text-slate-500 font-medium">
-                  * 확인 버튼을 누르면 <b className="text-slate-800">[미출현황]</b>과 <b className="text-slate-800">[가매출/미출/확정금액현황]</b>에 실시간 반영됩니다.
+                  * 우측 하단의 <b className="text-rose-700 font-bold">[미출 내역 ERP 즉시 반영]</b> 버튼을 누르면 <b className="text-slate-800">[미출현황]</b>과 <b className="text-slate-800">[가매출/미출/확정금액현황]</b>에 실시간 차감 반영됩니다.
                 </p>
-                <button
-                  type="button"
-                  onClick={handleApplyMichul}
-                  disabled={isProcessing}
-                  className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-black text-[13px] rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-4.5 h-4.5 text-white" />
-                  <span>🚨 미출 내역 ERP 즉시 반영 (확정매출 차감)</span>
-                </button>
               </div>
             </div>
           )}
