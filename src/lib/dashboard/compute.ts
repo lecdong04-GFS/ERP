@@ -88,6 +88,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       warehouseRows,
       stockDaysRows,
       gyeRows,
+      todayPurchaseOrders,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
         where: { orderDate: { startsWith: thisYear }, status: { not: '취소' } },
@@ -144,6 +145,20 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         where: { isUsed: true },
         select: { id: true, name: true },
         orderBy: { sortOrder: 'asc' },
+      }),
+      prisma.purchaseOrder.findMany({
+        where: { orderDate: today, status: { not: '취소' } },
+        include: {
+          details: {
+            include: {
+              product: {
+                include: {
+                  prices: { take: 1, orderBy: { effectiveDate: 'desc' } },
+                },
+              },
+            },
+          },
+        },
       }),
     ]);
 
@@ -314,6 +329,17 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const todayOrderQty = todayOrders.reduce((s, o) => s + (o.totalQty || 0), 0);
     const todaySalesAmount = todayOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
     const yesterdaySalesAmount = yesterdayOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
+
+    const todayPurchasePartnerCount = new Set(todayPurchaseOrders.map((p) => p.partnerName)).size;
+    let todayPurchaseItemCount = 0;
+    let todayPurchaseAmount = 0;
+    for (const po of todayPurchaseOrders) {
+      todayPurchaseItemCount += po.details.length;
+      for (const d of po.details) {
+        const p = d.unitPrice || d.product?.prices?.[0]?.purchasePrice || 0;
+        todayPurchaseAmount += (d.orderQty || 1) * p;
+      }
+    }
 
     const deliveryTotalCount = todayDeliveries.length;
     const deliveryDoneCount = todayDeliveries.filter((d) => d.status === '완료').length;
@@ -541,6 +567,9 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         productionRate: prodPct,
         expiryUrgentCount,
         safetyShortageCount,
+        todayPurchaseItemCount,
+        todayPurchaseAmount: Math.round(todayPurchaseAmount),
+        todayPurchasePartnerCount,
       },
       pipeline: {
         orderQty: todayOrderQty,

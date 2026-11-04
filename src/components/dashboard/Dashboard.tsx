@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Sparkles,
   ShoppingBag,
+  ShoppingCart,
   ExternalLink,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
@@ -127,9 +128,13 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  // 실제 수주량 및 금액 (임시 더미 제거: 실제 DB 등록 수주 기준)
+  // 실제 수주량 및 금액 (실제 DB 등록 수주 기준)
   const actualOrderQty = k.todayOrderQty || 0;
   const actualSalesAmount = k.todaySalesAmount || 0;
+  // 실제 금일 자재 예상발주 (실제 DB 등록 발주 및 소요 기준)
+  const actualPoItemCount = k.todayPurchaseItemCount || 0;
+  const actualPoAmount = k.todayPurchaseAmount || 0;
+  const actualPoPartnerCount = k.todayPurchasePartnerCount || 0;
 
   return (
     <div className="flex flex-col w-full h-full bg-[#f1f5f9] overflow-y-auto p-4 sm:p-5 gap-4 sm:gap-5">
@@ -199,30 +204,46 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 카드 2: 스마트발주(GFS) */}
+        {/* 카드 2: 금일 자재 예상발주 (요일별) */}
         <div
-          onClick={() => navigate('pur-gfs-smart-order')}
-          className="bg-white hover:bg-slate-50 border border-emerald-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
+          onClick={() => navigate('pur-mat-order-day')}
+          className="bg-white hover:bg-slate-50 border border-amber-200 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">📦 스마트발주(GFS)</span>
-              <span className="px-2 py-0.5 rounded text-[11.5px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                자동연계
+              <span className="text-[14px] font-extrabold text-slate-700 tracking-tight">🛒 금일 자재 예상발주</span>
+              <span className="px-2 py-0.5 rounded text-[11px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                {actualPoItemCount > 0
+                  ? (actualPoPartnerCount > 0 ? `${actualPoPartnerCount}개사 대상` : '발주 산출')
+                  : '5시 실사 대기'}
               </span>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              <PackageCheck className="w-5.5 h-5.5" />
+            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              <ShoppingCart className="w-5.5 h-5.5" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-[26px] font-black tracking-tight text-emerald-700 leading-none">
-              BOM 소요량 자동산출
+            <div className="text-3xl sm:text-[34px] font-black font-mono tracking-tight text-amber-800 leading-none">
+              {actualPoItemCount > 0 ? (
+                <>
+                  {actualPoItemCount.toLocaleString()}
+                  <span className="text-sm font-extrabold text-slate-500 ml-1.5">품목 발주</span>
+                </>
+              ) : (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-[34px] font-black font-mono text-slate-400">0</span>
+                  <span className="text-[13px] font-bold text-slate-400">품목 (실사 후 산출)</span>
+                </div>
+              )}
             </div>
             <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-emerald-700 font-bold">10시 수주 즉시 소요량 계산</span>
-              <span className="text-emerald-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px]">
-                스마트발주 열기 <ArrowRight className="w-3.5 h-3.5" />
+              <span className="text-slate-700 font-bold truncate">
+                {actualPoAmount > 0
+                  ? `발주예정액: ₩${Math.round(actualPoAmount).toLocaleString()}`
+                  : '오후 5시 재고실사 후 자동산출'}
+              </span>
+              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+                자재발주(요일별) <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>

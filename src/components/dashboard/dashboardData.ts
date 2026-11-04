@@ -84,6 +84,9 @@ export interface KpiSummary {
   productionRate: number;
   expiryUrgentCount: number;
   safetyShortageCount: number;
+  todayPurchaseItemCount: number;
+  todayPurchaseAmount: number;
+  todayPurchasePartnerCount: number;
 }
 
 export interface DemandTrendItem {
@@ -165,6 +168,9 @@ export const EMPTY_STATS: DashboardStats = {
     productionRate: 0,
     expiryUrgentCount: 0,
     safetyShortageCount: 0,
+    todayPurchaseItemCount: 0,
+    todayPurchaseAmount: 0,
+    todayPurchasePartnerCount: 0,
   },
   pipeline: {
     orderQty: 0,

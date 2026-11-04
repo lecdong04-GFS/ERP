@@ -117,9 +117,9 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
               2
             </div>
             <div>
-              <span className="text-[11.5px] text-slate-300 block leading-tight font-medium">스마트발주(GFS)</span>
+              <span className="text-[11.5px] text-slate-300 block leading-tight font-medium">자재발주(요일별)</span>
               <span className="text-[14.5px] font-black text-emerald-300 font-mono">
-                BOM 자동소요
+                소요량 자동발주
               </span>
             </div>
           </div>
