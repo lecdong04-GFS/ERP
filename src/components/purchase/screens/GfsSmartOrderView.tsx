@@ -3,6 +3,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 interface UnmatchedMenu {
   menuName: string;
   qty: number;
@@ -456,11 +460,13 @@ export const GfsSmartOrderView: React.FC = () => {
 
     // GFS 화면에 표시된 발주금액 합계와 1원 단위까지 100% 일치
     const estAmt = orderables.reduce((sum, x) => sum + x.totalAmount, 0);
-    const targetOrderDate = selectedOrderDate || new Date().toISOString().slice(0, 10);
+    // 실제 발주서를 발행하는 발주일자는 오늘(당일) 날짜 기준
+    const targetOrderDate = kstToday();
 
     const ok = window.confirm(
       `[스마트발주 원클릭 ERP 확정]\n` +
-        `• 발주 기준일: ${targetOrderDate}\n` +
+        `• 발주일자: ${targetOrderDate} (오늘 당일 확정)\n` +
+        `• 수주/재고 기준: ${selectedOrderDate || '최신'} 주문서 / ${selectedStockDate || '최신'} 실사재고\n` +
         `• 발주 대상: 총 ${orderables.length}개 품목\n` +
         `• 확정 발주금액: 약 ₩${Math.round(estAmt).toLocaleString()}원\n\n` +
         `GFS 화면에 계산된 금액 그대로 ERP 발주서를 즉시 생성·저장하시겠습니까?`

@@ -1014,8 +1014,32 @@ export const OrderStatusEditView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-[13.5px]">
                   {filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-20 text-center text-slate-400 font-bold">
-                        조회된 발주 내역이 없습니다. (상단 날짜 또는 검색 조건을 확인해 주세요)
+                      <td colSpan={13} className="py-16 text-center">
+                        <div className="max-w-md mx-auto flex flex-col items-center gap-3">
+                          <Package className="w-12 h-12 text-slate-300" />
+                          <div className="text-[15px] font-black text-slate-700">
+                            선택하신 기간({startDate} ~ {endDate})에 등록된 발주 내역이 없습니다.
+                          </div>
+                          <p className="text-[13px] text-slate-500">
+                            스마트발주(GFS)에서 발주 확정 시 저장된 날짜가 다르거나, 아직 오늘자 발주 확정을 진행하지 않았을 수 있습니다.
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPeriod('yesterday')}
+                              className="px-3.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+                            >
+                              📅 어제 발주내역 확인
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPeriod('7days')}
+                              className="px-3.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold hover:bg-slate-200 transition cursor-pointer"
+                            >
+                              📊 최근 7일 전체 보기
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ) : (

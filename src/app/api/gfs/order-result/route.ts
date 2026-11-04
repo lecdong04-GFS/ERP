@@ -56,20 +56,17 @@ export async function POST(req: NextRequest) {
       groups.get(pid)!.push(it);
     }
 
-    let resolvedDefaultPartner: { id: string; name: string } | null = null;
-    if (groups.has('__DEFAULT__')) {
-      const firstPartner = await prisma.partner.findFirst({
-        where: { isUsed: true },
+    // 기본 거래처 확보 (미지정 품목용 안전장치)
+    let resolvedDefaultPartner = await prisma.partner.findFirst({
+      where: { isUsed: true },
+      select: { id: true, name: true },
+      orderBy: { id: 'asc' },
+    });
+    if (!resolvedDefaultPartner) {
+      resolvedDefaultPartner = await prisma.partner.create({
+        data: { id: 'P-DEFAULT', name: '일반거래처(미지정)', partnerType: 'P' },
         select: { id: true, name: true },
-        orderBy: { id: 'asc' },
       });
-      if (!firstPartner) {
-        return NextResponse.json(
-          { success: false, error: '유효한 거래처가 없어 발주서를 생성할 수 없습니다.' },
-          { status: 400 }
-        );
-      }
-      resolvedDefaultPartner = firstPartner;
     }
 
     const createdOrders: { orderNo: string; itemCount: number }[] = [];
@@ -92,6 +89,12 @@ export async function POST(req: NextRequest) {
         : [];
     const partnerById = new Map(foundPartners.map((p) => [p.id, p]));
     const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
+
+    // 기본 거래처 등록
+    if (resolvedDefaultPartner) {
+      partnerById.set(resolvedDefaultPartner.id, resolvedDefaultPartner);
+      partnerByName.set(resolvedDefaultPartner.name, resolvedDefaultPartner);
+    }
 
     const allCodes = [
       ...new Set(
@@ -116,25 +119,24 @@ export async function POST(req: NextRequest) {
       menuName: string;
       detail: string;
     }[] = [];
-    // 발주서 생성은 채번 충돌 방지를 위해 그룹별 순차 처리 (건당 2회)
+
+    // 발주번호 채번 시퀀스 (당일 기존 번호 기준 중복 없이 연속 채번)
+    const prefix = `PO-${today.replace(/-/g, '')}`;
+    const baseCount = await prisma.purchaseOrder.count({
+      where: { orderNo: { startsWith: prefix } },
+    });
+    let orderSeq = baseCount;
+
+    // 발주서 생성: 거래처별 순차 생성 (어떤 품목도 누락되지 않고 100% 저장)
     for (const [pid, groupItems] of groups) {
-      const usePartnerId = pid === '__DEFAULT__' ? resolvedDefaultPartner!.id : pid;
+      const usePartnerId = pid === '__DEFAULT__' ? resolvedDefaultPartner.id : pid;
       const partner =
         partnerById.get(usePartnerId) ??
-        (groupNames.has(pid) ? partnerByName.get(groupNames.get(pid)!) : undefined);
-      if (!partner) {
-        return NextResponse.json(
-          { success: false, error: `거래처를 찾을 수 없습니다: ${usePartnerId}` },
-          { status: 400 }
-        );
-      }
+        (groupNames.has(pid) ? partnerByName.get(groupNames.get(pid)!) : undefined) ??
+        resolvedDefaultPartner;
 
-      // 발주번호 채번: PO-YYYYMMDD-###
-      const prefix = `PO-${today.replace(/-/g, '')}`;
-      const countToday = await prisma.purchaseOrder.count({
-        where: { orderNo: { startsWith: prefix } },
-      });
-      const orderNo = `${prefix}-${String(countToday + 1).padStart(3, '0')}`;
+      orderSeq += 1;
+      const orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
 
       // 품목 매칭 (productCode 기준, 일괄 조회 결과 사용)
       const detailData: {
