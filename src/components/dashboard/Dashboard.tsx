@@ -163,15 +163,15 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ===================================================================== */}
-      {/* 2. 4대 실물 핵심 액션 카드 (수주총액·발주예정액 최우선 시인성 극대화) */}
+      {/* 2. 4대 실물 핵심 액션 카드 (수주총액·수주수량·발주예정액 최우선 시인성) */}
       {/* ===================================================================== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
-        {/* 카드 1: 금일 GS25 완제품 수주 (수주총액 최우선 강조) */}
+        {/* 카드 1: 금일 GS25 완제품 수주 (수주총액 & 수주수량 동시 강조) */}
         <div
           onClick={() => navigate('sales-order-summary-gsr')}
           className="bg-white hover:bg-slate-50/90 border border-slate-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[14px] font-extrabold text-slate-700 tracking-tight flex items-center gap-1.5">
               <span>🍱</span> 금일 GS25 완제품 수주
             </span>
@@ -181,19 +181,12 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/80 tracking-tight flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 inline-block" />
-                수주총액
-              </span>
-              {actualOrderQty > 0 && (
-                <span className="text-[12px] font-bold text-slate-500 font-mono">
-                  <span className="font-extrabold text-slate-800">{actualOrderQty.toLocaleString()}</span> ea 주문
-                </span>
-              )}
+            <div className="text-[11.5px] font-extrabold text-blue-700 uppercase tracking-wide flex items-center gap-1 mb-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 inline-block" />
+              수주총액
             </div>
 
-            <div className="text-[27px] sm:text-[32px] xl:text-[28px] 2xl:text-[33px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1.5">
+            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
               {actualSalesAmount > 0 ? (
                 <>
                   <span className="text-xl sm:text-2xl font-bold text-blue-600 mr-1">₩</span>
@@ -207,25 +200,34 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
 
-            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2.5 border-t border-slate-100">
-              <span className="text-slate-600 font-medium truncate">
-                {actualOrderQty > 0
-                  ? `총 ${actualOrderQty.toLocaleString()} ea 완제품 생산`
-                  : '금일 수주 파일 등록 전'}
-              </span>
-              <span className="text-blue-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+            {/* 수주받은 수량 (요청 반영: 대형 22px 폰트로 크게 강조) */}
+            <div className="mt-2.5 px-3 py-2 rounded-xl bg-blue-50/80 border border-blue-100 flex items-center justify-between">
+              <span className="text-[12px] font-extrabold text-blue-900">수주수량</span>
+              {actualOrderQty > 0 ? (
+                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-blue-700 leading-none">
+                  {actualOrderQty.toLocaleString()}
+                  <span className="text-[13px] font-extrabold text-blue-900 ml-1">ea</span>
+                </span>
+              ) : (
+                <span className="text-[12.5px] font-bold text-slate-400">0 ea (등록 대기)</span>
+              )}
+            </div>
+
+            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-slate-500 font-medium truncate">완제품 생산 연동</span>
+              <span className="text-blue-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 수주집계 보기 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
         </div>
 
-        {/* 카드 2: 금일 자재 예상발주 (발주예정액 최우선 강조) */}
+        {/* 카드 2: 금일 자재 예상발주 (발주예정액 & 품목수 동시 강조) */}
         <div
           onClick={() => navigate('pur-mat-order-day')}
           className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[14px] font-extrabold text-slate-700 tracking-tight flex items-center gap-1.5">
               <span>🛒</span> 금일 자재 예상발주
             </span>
@@ -235,24 +237,12 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 tracking-tight flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 inline-block" />
-                발주예정액
-              </span>
-              <span className="text-[12px] font-bold text-slate-500 font-mono">
-                {actualPoItemCount > 0 ? (
-                  <>
-                    <span className="font-extrabold text-slate-800">{actualPoItemCount.toLocaleString()}</span> 품목
-                    {actualPoPartnerCount > 0 && <span className="text-slate-400 text-[11px] ml-1">({actualPoPartnerCount}개사)</span>}
-                  </>
-                ) : (
-                  <span className="text-amber-700 text-[11px] font-bold">5시 실사 대기</span>
-                )}
-              </span>
+            <div className="text-[11.5px] font-extrabold text-amber-800 uppercase tracking-wide flex items-center gap-1 mb-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 inline-block" />
+              발주예정액
             </div>
 
-            <div className="text-[27px] sm:text-[32px] xl:text-[28px] 2xl:text-[33px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1.5">
+            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
               {actualPoAmount > 0 ? (
                 <>
                   <span className="text-xl sm:text-2xl font-bold text-amber-600 mr-1">₩</span>
@@ -261,18 +251,30 @@ export const Dashboard: React.FC = () => {
               ) : (
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(오후 5시 산출)</span>
+                  <span className="text-[12px] font-bold text-slate-400">(5시 산출)</span>
                 </div>
               )}
             </div>
 
-            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2.5 border-t border-slate-100">
-              <span className="text-slate-600 font-medium truncate">
-                {actualPoItemCount > 0
-                  ? `${actualPoItemCount}개 품목 발주 (${actualPoPartnerCount}개 협력사)`
-                  : '오후 5시 재고실사 후 자동산출'}
-              </span>
-              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+            {/* 발주 품목 및 협력사 수 */}
+            <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-between">
+              <span className="text-[12px] font-extrabold text-amber-900">발주대상</span>
+              {actualPoItemCount > 0 ? (
+                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-amber-800 leading-none">
+                  {actualPoItemCount.toLocaleString()}
+                  <span className="text-[13px] font-extrabold text-amber-900 ml-1">품목</span>
+                  {actualPoPartnerCount > 0 && (
+                    <span className="text-[11.5px] font-bold text-amber-700 ml-1">({actualPoPartnerCount}개사)</span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-[12.5px] font-bold text-slate-400">오후 5시 자동산출</span>
+              )}
+            </div>
+
+            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-slate-500 font-medium truncate">오후 5시 재고실사 후 확정</span>
+              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 자재발주(요일별) <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -284,7 +286,7 @@ export const Dashboard: React.FC = () => {
           onClick={() => navigate('inv-lookup')}
           className="bg-white hover:bg-slate-50/90 border border-rose-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[14px] font-extrabold text-slate-700 tracking-tight flex items-center gap-1.5">
               <span>🚨</span> 재고 소진 임박 자재
             </span>
@@ -294,17 +296,17 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/80 tracking-tight flex items-center gap-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11.5px] font-extrabold text-rose-700 uppercase tracking-wide flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
                 결품 위험
               </span>
-              <span className="text-[11.5px] font-black text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded">
+              <span className="text-[11px] font-black text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded">
                 D-1.5 미달
               </span>
             </div>
 
-            <div className="text-[27px] sm:text-[32px] xl:text-[28px] 2xl:text-[33px] font-black font-mono tracking-tight text-rose-600 leading-none truncate my-1.5">
+            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-rose-600 leading-none truncate my-1">
               {stats.stockDaysTop.length > 0 ? (
                 <>
                   {stats.stockDaysTop.length}
@@ -318,11 +320,17 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
 
-            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2.5 border-t border-slate-100">
-              <span className="truncate max-w-[170px] text-slate-600 font-medium">
-                {stats.stockDaysTop[0]?.name ? `주의: ${stats.stockDaysTop[0]?.name}` : '소진 임박 자재 없음'}
+            {/* 주의 자재 안내 박스 */}
+            <div className="mt-2.5 px-3 py-2 rounded-xl bg-rose-50/80 border border-rose-200 flex items-center justify-between">
+              <span className="text-[12px] font-extrabold text-rose-900">임박자재</span>
+              <span className="text-[13px] font-extrabold text-rose-700 truncate max-w-[150px]">
+                {stats.stockDaysTop[0]?.name || '결품 위험 없음'}
               </span>
-              <span className="text-rose-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+            </div>
+
+            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-slate-500 font-medium truncate">실시간 재고 실사 연동</span>
+              <span className="text-rose-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
@@ -334,7 +342,7 @@ export const Dashboard: React.FC = () => {
           onClick={() => navigate('pur-expiry-status')}
           className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
         >
-          <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-[14px] font-extrabold text-slate-700 tracking-tight flex items-center gap-1.5">
               <span>⏳</span> 유통기한 FEFO 선출고
             </span>
@@ -344,17 +352,17 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 tracking-tight flex items-center gap-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11.5px] font-extrabold text-amber-800 uppercase tracking-wide flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-600 inline-block" />
                 선출고 관리
               </span>
-              <span className="text-[11.5px] font-black text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
+              <span className="text-[11px] font-black text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
                 D-3 이내
               </span>
             </div>
 
-            <div className="text-[27px] sm:text-[32px] xl:text-[28px] 2xl:text-[33px] font-black font-mono tracking-tight text-amber-800 leading-none truncate my-1.5">
+            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-amber-800 leading-none truncate my-1">
               {stats.fefoTop.length > 0 ? (
                 <>
                   {stats.fefoTop.length}
@@ -368,11 +376,17 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
 
-            <div className="text-[12.5px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2.5 border-t border-slate-100">
-              <span className="truncate max-w-[170px] text-slate-600 font-medium">
-                {stats.fefoTop[0]?.name ? `임박: ${stats.fefoTop[0]?.name}` : 'D-3 이내 임박 없음'}
+            {/* 선출고 자재 안내 박스 */}
+            <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-between">
+              <span className="text-[12px] font-extrabold text-amber-900">임박자재</span>
+              <span className="text-[13px] font-extrabold text-amber-800 truncate max-w-[150px]">
+                {stats.fefoTop[0]?.name || '선출고 대상 없음'}
               </span>
-              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12.5px] shrink-0">
+            </div>
+
+            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="text-slate-500 font-medium truncate">유통기한 FEFO 기준</span>
+              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 유통기한 현황 <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
