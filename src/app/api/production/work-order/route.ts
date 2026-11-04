@@ -11,10 +11,27 @@ export async function GET(req: NextRequest) {
     const gyeId = searchParams.get('gyeId');
     const status = searchParams.get('status');
 
+    let targetDate: string | null | undefined = workDate;
+    if (!targetDate) {
+      const latestWo = await prisma.workOrder.findFirst({
+        orderBy: { workDate: 'desc' },
+        select: { workDate: true },
+      });
+      targetDate = latestWo?.workDate;
+      if (!targetDate) {
+        const latestSo = await prisma.salesOrder.findFirst({
+          where: { status: { not: '취소' } },
+          orderBy: { orderDate: 'desc' },
+          select: { orderDate: true },
+        });
+        targetDate = latestSo?.orderDate || new Date().toISOString().slice(0, 10);
+      }
+    }
+
     const where: any = {};
-    if (workDate) where.workDate = workDate;
-    if (shift) where.shift = shift;
-    if (gyeId) where.gyeId = gyeId;
+    if (targetDate) where.workDate = targetDate;
+    if (shift && shift !== '전체') where.shift = shift;
+    if (gyeId && gyeId !== 'ALL' && gyeId !== 'all') where.gyeId = gyeId;
     if (status) where.status = status;
 
     const workOrders = await prisma.workOrder.findMany({
@@ -27,14 +44,14 @@ export async function GET(req: NextRequest) {
     });
 
     if (workOrders.length > 0) {
-      return NextResponse.json({ success: true, data: workOrders });
+      return NextResponse.json({ success: true, data: workOrders, workDate: targetDate });
     }
 
     // DB에 등록된 수주(SalesOrderDetail) 기반으로 라인별 실시간 작업지시 자동 전개
     const recentOrders = await prisma.salesOrder.findMany({
       where: {
         status: { not: '취소' },
-        ...(workDate ? { orderDate: workDate } : {}),
+        ...(targetDate ? { orderDate: targetDate } : {}),
       },
       include: {
         details: {
@@ -59,15 +76,15 @@ export async function GET(req: NextRequest) {
         if (!p || dt.totalQty <= 0) continue;
 
         // Gye 라인 판별 (p.gyeId 우선, 명칭 기반 fallback)
-        let targetGyeId = p.gyeId || 'GFS005';
-        let gyeName = p.gye?.name || '성형장(김밥)';
+        let targetGyeId = 'GFS004';
+        let gyeName = '성형장(도시락)';
         const name = p.name || '';
-        if (name.includes('삼각') || p.kind === '주먹밥' || name.includes('전주비빔')) {
+        if (name.includes('삼각') || name.includes('더큰') || name.includes('주먹밥')) {
           targetGyeId = 'GFS007';
           gyeName = '성형장(삼각김밥)';
-        } else if (name.includes('도시락') || p.kind === '도시락' || name.includes('마파두부') || name.includes('제육') || name.includes('덮밥')) {
-          targetGyeId = 'GFS004';
-          gyeName = '성형장(도시락)';
+        } else if (name.includes('김밥') || name.includes('무스비') || name.includes('꼬마')) {
+          targetGyeId = 'GFS005';
+          gyeName = '성형장(김밥)';
         } else if (name.includes('샌드') || p.kind === '샌드위치') {
           targetGyeId = 'GFS002';
           gyeName = '성형장(샌드위치)';
@@ -76,7 +93,7 @@ export async function GET(req: NextRequest) {
           gyeName = '성형장(햄버거)';
         }
 
-        if (gyeId && targetGyeId !== gyeId) continue;
+        if (gyeId && gyeId !== 'ALL' && gyeId !== 'all' && targetGyeId !== gyeId) continue;
 
         const key = `${targetGyeId}-${p.productCode}`;
         const existing = seen.get(key);
