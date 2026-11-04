@@ -488,6 +488,42 @@ export const MatOrderDayView: React.FC = () => {
     }
   };
 
+  // 엑셀 내보내기
+  const handleExportExcel = () => {
+    const exportData = dayRows.map(({ r, c, dayQty, pattern }, idx) => ({
+      No: idx + 1,
+      거래처명: r.supplier,
+      품목명: r.name,
+      납품요일패턴: pattern,
+      보관창고: r.warehouse || '-',
+      발주수량_박스: dayQty,
+      입수량: c.pack || 0,
+      단가: r.bagPrice,
+      금액: Math.round(dayQty * c.pack * r.bagPrice),
+      전체확정박스: c.finalBoxes,
+      비고: r.vendor || '',
+    }));
+
+    exportGridToExcel({
+      filename: `자재발주_요일별_${currentDayDate}_${DAY_CHARS[dayIdx]}요일`,
+      sheetName: `${DAY_CHARS[dayIdx]}요일발주`,
+      columns: [
+        { key: 'No', label: 'No' },
+        { key: '거래처명', label: '거래처명' },
+        { key: '품목명', label: '품목명' },
+        { key: '납품요일패턴', label: '납품패턴' },
+        { key: '보관창고', label: '보관창고' },
+        { key: '발주수량_박스', label: '발주량(박스)' },
+        { key: '입수량', label: '입수량' },
+        { key: '단가', label: '단가' },
+        { key: '금액', label: '금액' },
+        { key: '전체확정박스', label: '주간총확정' },
+        { key: '비고', label: '비고' },
+      ],
+      data: exportData,
+    });
+  };
+
   // ── 입고 검수 핸들러 ──
   const handleInboundQtyChange = (detailId: number, val: string) => {
     const num = Math.max(0, Number(val) || 0);
@@ -687,22 +723,125 @@ export const MatOrderDayView: React.FC = () => {
             </p>
           </div>
 
-          {/* 메인 듀얼 모드 스위처 (발주 vs 입고) */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+          {/* 우측 상단 핵심 실행 액션 버튼 모음 */}
+          <div className="flex items-center gap-2">
+            {mainMode === 'order' ? (
+              <>
+                {/* 발주 확정 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleSaveDay}
+                  disabled={isSaving || dayRows.length === 0}
+                  className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-black text-white shadow-md transition-all cursor-pointer ${
+                    dayRows.length > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse hover:shadow-lg'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                  title="선택한 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
+                >
+                  <Save className="w-4 h-4 stroke-[2.5]" />
+                  <span>
+                    {isSaving
+                      ? '발주서 생성 중...'
+                      : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 (PO생성) ]`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetDay}
+                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  title="수동 수정한 수량을 원래 자동 계산 수량으로 복원합니다."
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="hidden sm:inline">수량 초기화</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  title="엑셀 다운로드"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">엑셀</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadOrderSheet}
+                  disabled={isLoading}
+                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                  title="새로고침"
+                >
+                  <RefreshCw className={`w-4 h-4 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </>
+            ) : (
+              <>
+                {/* 입고 검수 완료 및 재고 반영 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleConfirmInboundReceiving}
+                  disabled={isReceivingSaving || filteredInboundItems.length === 0}
+                  className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-black text-white shadow-md transition-all cursor-pointer ${
+                    filteredInboundItems.length > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse hover:shadow-lg'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                  title="실제 도착한 수량만 창고 현재고와 자재수불부에 즉시 반영합니다."
+                >
+                  <Truck className="w-4 h-4 stroke-[2.5]" />
+                  <span>
+                    {isReceivingSaving
+                      ? '재고 반영 중...'
+                      : '[ 🚚 검수완료 & 실제 재고 즉시 반영 ]'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFillAllOrderQty}
+                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  title="오기로 한 발주수량 그대로 전량 정상 채우기"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">전량 정상채우기</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadInboundPending}
+                  disabled={isLoadingInbound}
+                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                  title="새로고침"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 text-emerald-600 ${isLoadingInbound ? 'animate-spin' : ''}`}
+                  />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── 2단: 2개 메인 탭 전환 바 (확실한 탭 네비게이션) ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setMainMode('order')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer border ${
                 mainMode === 'order'
-                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400/30'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/30'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
               }`}
             >
               <Package className="w-4 h-4" />
               <span>① 오늘 발주할 양 (주문서 작성)</span>
               <span
                 className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
-                  mainMode === 'order' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                  mainMode === 'order' ? 'bg-white/20 text-white font-bold' : 'bg-white text-slate-700'
                 }`}
               >
                 {dayRows.length}품목
@@ -712,10 +851,10 @@ export const MatOrderDayView: React.FC = () => {
             <button
               type="button"
               onClick={() => setMainMode('inbound')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer border ${
                 mainMode === 'inbound'
-                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400/30'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-400/30'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
               }`}
             >
               <Truck className="w-4 h-4" />
@@ -730,6 +869,14 @@ export const MatOrderDayView: React.FC = () => {
                 {inboundItems.length}건 대기
               </span>
             </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            {mainMode === 'order' ? (
+              <span>💡 수량 확인 후 우측 상단 <strong>[발주 확정 저장]</strong>을 누르시면 발주서가 즉시 생성됩니다.</span>
+            ) : (
+              <span>💡 실제 도착 수량을 입력 후 우측 상단 <strong>[검수완료 & 재고 반영]</strong>을 누르시면 됩니다.</span>
+            )}
           </div>
         </div>
 
@@ -953,52 +1100,10 @@ export const MatOrderDayView: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* 입고 검수 모드 컨트롤 바: 수량 채우기 및 재고 반영 액션 */
+        /* 입고 검수 모드 보조 바: 필터 및 자재수불부 바로가기 */
         <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs shrink-0 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleConfirmInboundReceiving}
-              disabled={isReceivingSaving || filteredInboundItems.length === 0}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13.5px] font-black text-white shadow-sm transition-all cursor-pointer ${
-                filteredInboundItems.length > 0
-                  ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 hover:shadow-md'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-              }`}
-              title="실제 도착한 수량만 창고 현재고와 자재수불부에 즉시 반영합니다."
-            >
-              <Truck className="w-4 h-4 stroke-[2.5]" />
-              <span>
-                {isReceivingSaving ? '재고 반영 중...' : '🚚 검수완료 & 실제 재고 즉시 반영'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleFillAllOrderQty}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer"
-              title="오기로 한 발주수량 그대로 전량 정상 입고로 채웁니다."
-            >
-              <Check className="w-4 h-4 text-emerald-600" />
-              <span>전량 정상입고 채우기</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={loadInboundPending}
-              disabled={isLoadingInbound}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer disabled:opacity-50"
-              title="입고 대기 목록 새로고침"
-            >
-              <RefreshCw
-                className={`w-4 h-4 text-blue-600 ${isLoadingInbound ? 'animate-spin' : ''}`}
-              />
-              <span>새로고침</span>
-            </button>
-          </div>
-
-          {/* 입고 상태 필터 및 자재수불부 바로가기 */}
-          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-slate-700">검수 필터:</span>
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
               {[
                 { id: '전체', label: '전체 보기' },
@@ -1019,14 +1124,16 @@ export const MatOrderDayView: React.FC = () => {
                 </button>
               ))}
             </div>
+          </div>
 
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => handleNavigate('inv-mat-ledger')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-black transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-black transition cursor-pointer"
               title="자재수불부 화면으로 이동하여 입출고 통장 내역 확인"
             >
-              <span>자재수불부 확인</span>
+              <span>자재수불부(입출고 통장) 확인</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
