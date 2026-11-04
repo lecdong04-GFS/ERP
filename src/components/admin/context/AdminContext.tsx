@@ -97,6 +97,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateUser = useCallback((updated: AdminUserItem) => {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('gfs-user-updated', { detail: updated }));
+    }
     fetch('/api/admin/user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

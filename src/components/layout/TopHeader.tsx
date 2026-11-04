@@ -6,6 +6,8 @@ import { usePipeline } from '@/context/PipelineContext';
 import { usePrintReport } from '@/context/PrintReportContext';
 import { useSession, signOut } from 'next-auth/react';
 import { erpConfirm } from '@/context/ConfirmContext';
+import { useTabs } from '@/context/TabContext';
+import { getMenuItemById } from '@/config/menuConfig';
 import { NotificationCenter } from './NotificationCenter';
 
 interface TopHeaderProps {
@@ -17,7 +19,40 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
   const { data: session } = useSession();
   const { openPipelineModal, openExcelOrderModal } = usePipeline();
   const { openPrintModal } = usePrintReport();
+  const { openTab } = useTabs();
   const [timeStr, setTimeStr] = useState<string>('');
+  const [liveName, setLiveName] = useState<string>('');
+  const [liveDept, setLiveDept] = useState<string>('');
+
+  useEffect(() => {
+    // 1. 프로필 실시간 변경 이벤트 청취
+    const onUserUpdated = (e: any) => {
+      if (e?.detail) {
+        if (e.detail.userName) setLiveName(e.detail.userName);
+        if (e.detail.department) setLiveDept(e.detail.department);
+      }
+    };
+    window.addEventListener('gfs-user-updated', onUserUpdated);
+
+    // 2. DB에서 현재 로그인 사용자 이름 및 부서 로드
+    fetch('/api/admin/user')
+      .then((res) => res.json())
+      .then((res) => {
+        if (res.success && Array.isArray(res.data)) {
+          const currentId = (session?.user as any)?.loginId || 'admin';
+          const me = res.data.find((u: any) => u.loginId === currentId);
+          if (me) {
+            if (me.name) setLiveName(me.name);
+            if (me.department) setLiveDept(me.department);
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener('gfs-user-updated', onUserUpdated);
+    };
+  }, [session]);
 
   useEffect(() => {
     const update = () => {
@@ -42,9 +77,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
     }
   };
 
-  const userName = session?.user?.name || '전정우';
+  const userName = liveName || session?.user?.name || '전정우';
   const userRole = (session?.user as any)?.role || '관리자';
-  const userDept = (session?.user as any)?.department;
+  const userDept = liveDept !== '' ? liveDept : (session?.user as any)?.department;
 
   return (
     <header className="h-[52px] bg-[#0f172a] text-slate-200 px-3 sm:px-5 flex items-center justify-between gap-3 border-b border-white/10 select-none">
@@ -122,8 +157,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
 
         {/* User Info & Logout */}
         <div className="flex items-center gap-2.5 pl-2.5 border-l border-white/15">
-          <div className="hidden sm:flex items-center gap-2 text-slate-100 font-bold text-[13px]">
-            <User className="w-4.5 h-4.5 text-slate-300" />
+          <div
+            onClick={() => {
+              const item = getMenuItemById('admin-user-edit');
+              if (item) openTab(item);
+            }}
+            className="hidden sm:flex items-center gap-2 text-slate-100 font-bold text-[13px] hover:text-blue-300 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-white/10 group"
+            title="클릭하여 내 프로필(이름/부서/비밀번호) 수정"
+          >
+            <User className="w-4.5 h-4.5 text-slate-300 group-hover:text-blue-300 transition-colors" />
             <span>
               {userName}님{userDept ? ` (${userDept})` : ''}{' '}
               <span className="text-[11px] bg-white/15 text-white px-2 py-0.5 rounded-md border border-white/20 font-black">

@@ -39,6 +39,7 @@ export const UserRegView: React.FC = () => {
   const [formCompany, setFormCompany] = useState('(주)GFS');
   const [formUserId, setFormUserId] = useState('');
   const [formUserName, setFormUserName] = useState('');
+  const [formDepartment, setFormDepartment] = useState('');
   const [formOldPw, setFormOldPw] = useState('');
   const [formNewPw, setFormNewPw] = useState('');
   const [formConfirmPw, setFormConfirmPw] = useState('');
@@ -79,6 +80,7 @@ export const UserRegView: React.FC = () => {
     setFormCompany(user.company || '(주)GFS');
     setFormUserId(user.userId);
     setFormUserName(user.userName);
+    setFormDepartment(user.department || '');
     setFormOldPw('');
     setFormNewPw('');
     setFormConfirmPw('');
@@ -96,6 +98,7 @@ export const UserRegView: React.FC = () => {
     setFormCompany('(주)GFS');
     setFormUserId('');
     setFormUserName('');
+    setFormDepartment('(주)GFS');
     setFormOldPw('');
     setFormNewPw('');
     setFormConfirmPw('');
@@ -136,7 +139,7 @@ export const UserRegView: React.FC = () => {
         permLevel: '03',
         levelName: '03:일반사용자',
         company: formCompany,
-        department: '(주)GFS',
+        department: formDepartment.trim() || '(주)GFS',
         remark: formRemark,
         phone: formPhone,
         email: formEmail,
@@ -149,13 +152,14 @@ export const UserRegView: React.FC = () => {
       const updated: AdminUserItem = {
         ...selectedUser,
         userName: formUserName.trim(),
+        department: formDepartment.trim() || selectedUser.department,
         phone: formPhone,
         email: formEmail,
         empNo: formEmpNo,
         remark: formRemark,
       };
       updateUser(updated);
-      alert(`사용자 [${updated.userId}] 정보가 수정되었습니다.`);
+      alert(`사용자 [${updated.userId}] 정보가 수정되었습니다.\n• 이름: ${updated.userName}\n• 소속부서: ${updated.department}`);
     }
 
     setIsModalOpen(false);
@@ -472,8 +476,20 @@ export const UserRegView: React.FC = () => {
                   type="text"
                   value={formUserName}
                   onChange={(e) => setFormUserName(e.target.value)}
-                  placeholder="예: 전정우"
+                  placeholder="예: 홍길동"
                   className="flex-1 border border-gray-400 rounded px-2 py-1 bg-white focus:outline-none focus:border-blue-600 font-semibold"
+                />
+              </div>
+
+              {/* 부서 (헤더 괄호 표시 부분) */}
+              <div className="flex items-center">
+                <label className="w-24 font-bold text-gray-700">부서(소속팀)</label>
+                <input
+                  type="text"
+                  value={formDepartment}
+                  onChange={(e) => setFormDepartment(e.target.value)}
+                  placeholder="예: 대표이사실, 경영관리팀, 생산총괄"
+                  className="flex-1 border border-blue-400 rounded px-2 py-1 bg-blue-50/40 focus:outline-none focus:border-blue-600 font-bold text-blue-900"
                 />
               </div>
 
