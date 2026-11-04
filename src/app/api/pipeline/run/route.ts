@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-    });
+    }, { timeout: 60000, maxWait: 20000 });
 
     return NextResponse.json({
       success: true,
