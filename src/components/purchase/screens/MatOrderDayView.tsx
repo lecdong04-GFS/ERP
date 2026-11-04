@@ -832,745 +832,608 @@ export const MatOrderDayView: React.FC = () => {
     filteredInboundItems.length > 0 && filteredInboundItems.every((it) => it.checked);
 
   return (
-    <div className="flex flex-col h-full w-full bg-slate-50 text-slate-800 p-4 sm:p-5 overflow-hidden gap-3.5 select-none font-sans">
-      {/* ── 1. 상단 마스터 컨트롤 & 듀얼 모드 전환 바 ── */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs shrink-0 flex flex-col gap-4">
-        {/* 헤더 타이틀 및 주요 액션 버튼 */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2.5">
-              <span className="px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black tracking-wide">
-                공장 실시간 자재 관제탑
-              </span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                자재발주 <span className="text-blue-600 font-extrabold">(요일별 & 일일입고)</span>
-              </h1>
-              {confirmedPoList.length > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {DAY_CHARS[dayIdx]}요일 발주확정 · {confirmedPoList.length}건 ({poRangeSummary})
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-300 shadow-2xs">
-                  <Clock className="w-3.5 h-3.5" />
-                  {DAY_CHARS[dayIdx]}요일 발주 미확정
-                </span>
-              )}
-            </div>
-            <p className="text-xs sm:text-[13px] text-slate-500 font-medium">
-              오늘 거래처로 나갈 <strong>발주 주문서</strong>와, 오늘 공장 창고로 들어올 <strong>입고 물량 검수</strong>를 한 화면에서 완벽하게 통제합니다.
-            </p>
+    <div className="flex flex-col h-full w-full bg-slate-100 text-slate-800 p-2 sm:p-3 overflow-hidden gap-2 select-none font-sans">
+      {/* ── 1. 상단 마스터 헤더 바 (한 줄 타이틀 & 모드 탭 & 메인 액션 버튼) ── */}
+      <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-black">
+              자재 관제탑
+            </span>
+            <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+              자재발주 <span className="text-blue-600 font-extrabold">(요일별 & 일일입고)</span>
+            </h1>
           </div>
 
-          {/* 우측 상단 핵심 실행 액션 버튼 모음 */}
-          <div className="flex items-center gap-2">
-            {mainMode === 'order' ? (
-              <>
-                {/* 발주 확정 버튼 */}
-                <button
-                  type="button"
-                  onClick={handleSaveDay}
-                  disabled={isSaving || dayRows.length === 0}
-                  className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-black text-white shadow-md transition-all cursor-pointer ${
-                    dayRows.length > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse hover:shadow-lg'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                  }`}
-                  title="선택한 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
-                >
-                  <Save className="w-4 h-4 stroke-[2.5]" />
-                  <span>
-                    {isSaving
-                      ? '발주서 생성 중...'
-                      : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 (PO생성) ]`}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetDay}
-                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
-                  title="수동 수정한 수량을 원래 자동 계산 수량으로 복원합니다."
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="hidden sm:inline">수량 초기화</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleExportExcel}
-                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
-                  title="엑셀 다운로드"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="hidden sm:inline">엑셀</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={loadOrderSheet}
-                  disabled={isLoading}
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
-                  title="새로고침"
-                >
-                  <RefreshCw className={`w-4 h-4 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </>
-            ) : (
-              <>
-                {/* 입고 검수 완료 및 재고 반영 버튼 */}
-                <button
-                  type="button"
-                  onClick={handleConfirmInboundReceiving}
-                  disabled={isReceivingSaving || filteredInboundItems.length === 0}
-                  className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-black text-white shadow-md transition-all cursor-pointer ${
-                    filteredInboundItems.length > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse hover:shadow-lg'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                  }`}
-                  title="실제 도착한 수량만 창고 현재고와 자재수불부에 즉시 반영합니다."
-                >
-                  <Truck className="w-4 h-4 stroke-[2.5]" />
-                  <span>
-                    {isReceivingSaving
-                      ? '재고 반영 중...'
-                      : '[ 🚚 검수완료 & 실제 재고 즉시 반영 ]'}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleFillAllOrderQty}
-                  className="flex items-center gap-1 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
-                  title="오기로 한 발주수량 그대로 전량 정상 채우기"
-                >
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="hidden sm:inline">전량 정상채우기</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={loadInboundPending}
-                  disabled={isLoadingInbound}
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
-                  title="새로고침"
-                >
-                  <RefreshCw
-                    className={`w-4 h-4 text-emerald-600 ${isLoadingInbound ? 'animate-spin' : ''}`}
-                  />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── 2단: 2개 메인 탭 전환 바 (확실한 탭 네비게이션) ── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-          <div className="flex items-center gap-2">
+          {/* 2개 메인 모드 탭 (발주 vs 입고검수) */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
             <button
               type="button"
               onClick={() => setMainMode('order')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition cursor-pointer ${
                 mainMode === 'order'
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/30'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <Package className="w-4 h-4" />
-              <span>① 오늘 발주할 양 (주문서 작성)</span>
+              <Package className="w-3.5 h-3.5" />
+              <span>① 오늘 발주 주문서</span>
               <span
-                className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
-                  mainMode === 'order' ? 'bg-white/20 text-white font-bold' : 'bg-white text-slate-700'
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  mainMode === 'order' ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
                 }`}
               >
-                {dayRows.length}품목
+                {dayRows.length}
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => setMainMode('inbound')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-[13.5px] font-black transition-all cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-black transition cursor-pointer ${
                 mainMode === 'inbound'
-                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-400/30'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <Truck className="w-4 h-4" />
-              <span>② 오늘 창고에 들어올 양 (입고 검수 & 재고 반영)</span>
+              <Truck className="w-3.5 h-3.5" />
+              <span>② 오늘 입고 검수</span>
               <span
-                className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
-                  mainMode === 'inbound'
-                    ? 'bg-white/20 text-white font-bold'
-                    : 'bg-emerald-100 text-emerald-800 font-bold'
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  mainMode === 'inbound' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
                 }`}
               >
-                {inboundItems.length}건 대기
+                {inboundItems.length}
               </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-            {mainMode === 'order' ? (
-              <span>💡 수량 확인 후 우측 상단 <strong>[발주 확정 저장]</strong>을 누르시면 발주서가 즉시 생성됩니다.</span>
-            ) : (
-              <span>💡 실제 도착 수량을 입력 후 우측 상단 <strong>[검수완료 & 재고 반영]</strong>을 누르시면 됩니다.</span>
-            )}
-          </div>
+          {confirmedPoList.length > 0 ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-50 text-emerald-700 border border-emerald-300">
+              <CheckCircle2 className="w-3 h-3" />
+              {DAY_CHARS[dayIdx]}요일 발주확정 {confirmedPoList.length}건 ({poRangeSummary})
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+              <Clock className="w-3 h-3" />
+              {DAY_CHARS[dayIdx]}요일 미확정
+            </span>
+          )}
         </div>
 
-        {/* ── 2.5단: 발주 전략 모드 3단계 컨트롤러 (타이트 vs 표준 vs 보수적 안전) ── */}
-        {mainMode === 'order' && (
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 bg-linear-to-r from-slate-50 via-blue-50/20 to-slate-50 p-3 rounded-2xl border border-slate-200">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-black text-slate-700 flex items-center gap-1.5 mr-1">
-                <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-                발주 전략 모드:
-              </span>
+        {/* 우측 상단 액션 버튼 모음 */}
+        <div className="flex items-center gap-1.5">
+          {mainMode === 'order' ? (
+            <>
+              <button
+                type="button"
+                onClick={handleSaveDay}
+                disabled={isSaving || dayRows.length === 0}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black text-white shadow-xs transition cursor-pointer ${
+                  dayRows.length > 0
+                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                }`}
+                title="선택한 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
+              >
+                <Save className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>{isSaving ? '생성 중...' : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 ]`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDay}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                title="수량 초기화"
+              >
+                <RotateCcw className="w-3 h-3 text-slate-500" />
+                <span>초기화</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                title="엑셀 다운로드"
+              >
+                <Download className="w-3 h-3 text-emerald-600" />
+                <span>엑셀</span>
+              </button>
+              <button
+                type="button"
+                onClick={loadOrderSheet}
+                disabled={isLoading}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                title="새로고침"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleConfirmInboundReceiving}
+                disabled={isReceivingSaving || filteredInboundItems.length === 0}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black text-white shadow-xs transition cursor-pointer ${
+                  filteredInboundItems.length > 0
+                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                }`}
+                title="실제 도착한 수량만 창고 현재고와 자재수불부에 즉시 반영합니다."
+              >
+                <Truck className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>{isReceivingSaving ? '반영 중...' : '[ 🚚 검수완료 & 재고 즉시 반영 ]'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleFillAllOrderQty}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
+                title="오기로 한 발주수량 그대로 전량 정상 채우기"
+              >
+                <Check className="w-3 h-3 text-emerald-600" />
+                <span>전량 정상</span>
+              </button>
+              <button
+                type="button"
+                onClick={loadInboundPending}
+                disabled={isLoadingInbound}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                title="새로고침"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 text-emerald-600 ${isLoadingInbound ? 'animate-spin' : ''}`}
+                />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-              {/* ⚡ 타이트 모드 */}
+      {/* ── 2단: 주간/요일 캘린더 네비게이션 + 전략 모드 컨트롤러 (슬림 단일 바) ── */}
+      <div className="bg-white rounded-xl border border-slate-200 px-3 py-1.5 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2">
+        {mainMode === 'order' ? (
+          <>
+            {/* 좌측: 주간 이동 + 7개 요일 세그먼트 버튼 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                <button
+                  type="button"
+                  onClick={handlePrevWeek}
+                  className="p-1 hover:bg-white rounded text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                  title="이전 주차"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <div className="flex items-center gap-1 px-1.5 text-xs font-black text-slate-800">
+                  <Calendar className="w-3 h-3 text-blue-600" />
+                  <span>{weekRangeText}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextWeek}
+                  className="p-1 hover:bg-white rounded text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                  title="다음 주차"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleJumpToCurrentWeek}
+                  className="px-2 py-0.5 text-[11px] font-bold rounded bg-white text-blue-700 hover:bg-blue-50 border border-slate-200 transition cursor-pointer"
+                >
+                  이번주
+                </button>
+              </div>
+
+              {/* 7개 요일 탭 버튼 */}
+              <div className="flex items-center gap-1">
+                {DAY_CHARS.map((d, i) => {
+                  const isActive = dayIdx === i;
+                  const st = dayStats[i];
+                  const dateStr = weekDates[i];
+                  const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
+
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDayIdx(i)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer border ${
+                        isActive
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs font-black ring-1 ring-blue-400/40'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
+                      }`}
+                    >
+                      <span>{d}</span>
+                      <span className={`text-[10px] font-normal ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                        {mmdd}
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-1 py-0.2 rounded ${
+                          isActive
+                            ? 'bg-white/20 text-white font-bold'
+                            : st.boxes > 0
+                            ? 'bg-blue-100 text-blue-800 font-bold'
+                            : 'bg-slate-200/70 text-slate-500'
+                        }`}
+                      >
+                        {st.boxes > 0 ? `${st.boxes}b` : '0'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 우측: 3-tier 전략 모드 스위치 */}
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+              <span className="text-[11px] font-black text-slate-600 flex items-center gap-1">
+                <SlidersHorizontal className="w-3 h-3 text-blue-600" />
+                전략:
+              </span>
               <button
                 type="button"
                 onClick={() => setStrategyMode('tight')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                className={`px-2 py-0.5 rounded text-[11px] font-black transition cursor-pointer border ${
                   strategyMode === 'tight'
-                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm ring-2 ring-amber-300'
-                    : 'bg-white hover:bg-amber-50 text-slate-700 border-slate-200 hover:border-amber-300'
+                    ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
                 }`}
-                title="신선식품 폐기 방지 및 창고 회전율 극대화 (매일처 1.8~2.0일치 압축)"
+                title="⚡ 타이트 모드: 매일처 1.8~2.0일치 압축, 폐기 손실 방지"
               >
-                <Zap className="w-3.5 h-3.5" />
-                <span>⚡ 타이트 모드</span>
-                <span className="text-[10px] opacity-80 font-normal hidden sm:inline">(최소재고·신선도)</span>
+                ⚡ 타이트
               </button>
-
-              {/* ⚖️ 표준 모드 */}
               <button
                 type="button"
                 onClick={() => setStrategyMode('standard')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                className={`px-2 py-0.5 rounded text-[11px] font-black transition cursor-pointer border ${
                   strategyMode === 'standard'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-300'
-                    : 'bg-white hover:bg-blue-50 text-slate-700 border-slate-200 hover:border-blue-300'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50'
                 }`}
-                title="공장 엑셀 마스터 목표 기준일수 100% 준수 (정석 운영)"
+                title="⚖️ 표준 모드: 마스터 기준 정석 운영"
               >
-                <Scale className="w-3.5 h-3.5" />
-                <span>⚖️ 표준 모드</span>
-                <span className="text-[10px] opacity-80 font-normal hidden sm:inline">(마스터 기준 정석)</span>
+                ⚖️ 표준
               </button>
-
-              {/* 🛡️ 보수적 안전 모드 */}
               <button
                 type="button"
                 onClick={() => setStrategyMode('safety')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border ${
+                className={`px-2 py-0.5 rounded text-[11px] font-black transition cursor-pointer border ${
                   strategyMode === 'safety'
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-300'
-                    : 'bg-white hover:bg-emerald-50 text-slate-700 border-slate-200 hover:border-emerald-300'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
                 }`}
-                title="결품 0% 방어 버퍼 (+1.0일 가산, 공정감모 5% 가산)"
+                title="🛡️ 보수적 안전 모드: 결품 차단 (+1일 및 감모 5% 가산)"
               >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>🛡️ 보수적 안전</span>
-                <span className="text-[10px] opacity-80 font-normal hidden sm:inline">(+1일 & 감모 5% 버퍼)</span>
+                🛡️ 안전
               </button>
             </div>
-
-            {/* 금요일 추천 안내 or 전략 설명 */}
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-              {new Date(currentDayDate).getDay() === 5 ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[11.5px] font-black border border-emerald-300 animate-pulse">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                  금요일 스마트 추천: 주말(토/일) 배송 공백 방어를 위해 [보수적 안전 모드] 가동 중
-                </span>
-              ) : (
-                <span className="text-[11.5px] text-slate-500 font-medium">
-                  {strategyMode === 'tight' && '⚡ 최소 재고 유지: 당일 생산 중심 급회전, 폐기 손실 방지'}
-                  {strategyMode === 'standard' && '⚖️ 표준 운영: 거래처별 마스터 목표일수를 그대로 적용'}
-                  {strategyMode === 'safety' && '🛡️ 안전 강화: 납기지연(+1일) 및 조리감모(5%) 가산하여 결품 차단'}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── 모드별 핵심 KPI 4종 지표 카드 ── */}
-        {mainMode === 'order' ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-slate-500">
-                  {DAY_CHARS[dayIdx]}요일 발주 예정총액
-                </span>
-                <div className="text-lg sm:text-xl font-black font-mono text-indigo-700 tracking-tight mt-0.5">
-                  ₩{Math.round(dayTotals.amt).toLocaleString()}
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-indigo-100/70 text-indigo-700 flex items-center justify-center font-bold">
-                ₩
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-slate-500">
-                  {DAY_CHARS[dayIdx]}요일 발주 총 박스수
-                </span>
-                <div className="text-lg sm:text-xl font-black font-mono text-blue-700 tracking-tight mt-0.5">
-                  {dayTotals.boxes.toLocaleString()}{' '}
-                  <span className="text-xs font-sans font-bold">box</span>
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-blue-100/70 text-blue-700 flex items-center justify-center">
-                <Boxes className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-slate-500">평균 재고유지일 (Runway)</span>
-                <div className="text-lg sm:text-xl font-black font-mono text-emerald-700 tracking-tight mt-0.5">
-                  {dayTotals.avgRunway.toFixed(1)} <span className="text-xs font-sans font-bold">일치 보유</span>
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-emerald-100/70 text-emerald-700 flex items-center justify-center">
-                <Clock className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-slate-500">주의 품목 현황</span>
-                <div className="text-sm sm:text-base font-black tracking-tight mt-0.5 flex items-center gap-1.5">
-                  <span className="text-rose-600 font-mono">🚨 {dayTotals.criticalCount}</span>
-                  <span className="text-slate-300">/</span>
-                  <span className="text-amber-600 font-mono">⚠️ {dayTotals.warningCount}</span>
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
+          </>
         ) : (
-          /* 입고 검수 KPI 카드 */
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-            <div className="bg-emerald-50/50 rounded-xl p-3 border border-emerald-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-emerald-700">
-                  오늘 입고 예정 총 금액
-                </span>
-                <div className="text-lg sm:text-xl font-black font-mono text-emerald-900 tracking-tight mt-0.5">
-                  ₩{Math.round(inboundStats.totalAmount).toLocaleString()}
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-                ₩
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-slate-500">오기로 한 박스 (발주량)</span>
-                <div className="text-lg sm:text-xl font-black font-mono text-slate-800 tracking-tight mt-0.5">
-                  {inboundStats.totalOrder.toLocaleString()}{' '}
-                  <span className="text-xs font-sans font-bold">box</span>
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-slate-200/70 text-slate-700 flex items-center justify-center">
-                <Boxes className="w-5 h-5" />
+          /* 입고 검수 모드 서브 바 */
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-700">검수 상태:</span>
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold">
+                {[
+                  { id: '전체', label: '전체 보기' },
+                  { id: '미납', label: '⚠️ 미납/결품만' },
+                  { id: '정상', label: '✅ 정상입고만' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setInboundStatusFilter(tab.id)}
+                    className={`px-2.5 py-1 rounded text-xs transition cursor-pointer ${
+                      inboundStatusFilter === tab.id
+                        ? 'bg-blue-600 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="bg-blue-50/50 rounded-xl p-3 border border-blue-200/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11.5px] font-bold text-blue-700">실제 도착 박스 (검수량)</span>
-                <div className="text-lg sm:text-xl font-black font-mono text-blue-900 tracking-tight mt-0.5">
-                  {inboundStats.totalActual.toLocaleString()}{' '}
-                  <span className="text-xs font-sans font-bold">box</span>
-                </div>
-              </div>
-              <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center">
-                <Truck className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div
-              className={`rounded-xl p-3 border flex items-center justify-between ${
-                inboundStats.diff > 0
-                  ? 'bg-rose-50 border-rose-300 animate-pulse'
-                  : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              <div>
-                <span
-                  className={`text-[11.5px] font-bold ${
-                    inboundStats.diff > 0 ? 'text-rose-700' : 'text-slate-500'
-                  }`}
-                >
-                  미납 / 결품 수량 (안 온 것)
-                </span>
-                <div
-                  className={`text-lg sm:text-xl font-black font-mono tracking-tight mt-0.5 ${
-                    inboundStats.diff > 0 ? 'text-rose-700' : 'text-slate-700'
-                  }`}
-                >
-                  {inboundStats.diff > 0 ? `▼ ${inboundStats.diff.toLocaleString()}` : '0'}{' '}
-                  <span className="text-xs font-sans font-bold">box</span>
-                </div>
-              </div>
-              <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                  inboundStats.diff > 0
-                    ? 'bg-rose-100 text-rose-700'
-                    : 'bg-slate-200 text-slate-500'
-                }`}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleNavigate('inv-mat-ledger')}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-black transition cursor-pointer"
+                title="자재수불부 화면으로 이동하여 입출고 통장 내역 확인"
               >
-                <AlertTriangle className="w-5 h-5" />
-              </div>
+                <span>자재수불부(입출고 통장) 확인</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </div>
+          </>
         )}
       </div>
 
-      {/* ── 2. 모드별 컨트롤 바 ── */}
-      {mainMode === 'order' ? (
-        /* 발주 모드: 주간 & 요일 세그먼트 */
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs shrink-0 flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button
-              type="button"
-              onClick={handlePrevWeek}
-              className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
-              title="이전 주차"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-1.5 px-2 text-xs font-extrabold text-slate-800">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" />
-              <span>주간: {weekRangeText}</span>
+      {/* ── 3단: 핵심 KPI 지표 칩 + 검색/필터 바 (슬림 단일 바) ── */}
+      <div className="bg-white rounded-xl border border-slate-200 px-3 py-1.5 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
+        {mainMode === 'order' ? (
+          <>
+            {/* 좌측: 초슬림 KPI 뱃지 4종 */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500">예정총액:</span>
+                <span className="font-mono font-black text-indigo-700">
+                  ₩{Math.round(dayTotals.amt).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500">총발주:</span>
+                <span className="font-mono font-black text-blue-700">
+                  {dayTotals.boxes.toLocaleString()} box
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500">평균 Runway:</span>
+                <span className="font-mono font-black text-emerald-700">
+                  {dayTotals.avgRunway.toFixed(1)}일
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500">주의품목:</span>
+                <span className="font-mono font-black text-rose-600">🚨 {dayTotals.criticalCount}</span>
+                <span className="text-slate-300">/</span>
+                <span className="font-mono font-black text-amber-600">⚠️ {dayTotals.warningCount}</span>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleNextWeek}
-              className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
-              title="다음 주차"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleJumpToCurrentWeek}
-              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white text-blue-700 hover:bg-blue-50 border border-slate-200 transition cursor-pointer ml-1"
-            >
-              이번 주
-            </button>
-          </div>
 
-          {/* 7개 요일 세그먼트 버튼 */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-            {DAY_CHARS.map((d, i) => {
-              const isActive = dayIdx === i;
-              const st = dayStats[i];
-              const dateStr = weekDates[i];
-              const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
+            {/* 우측: 필터 및 검색 및 발행 전표 드로어 */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 거래처 필터 */}
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="전체">전체 거래처</option>
+                {suppliers.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
 
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDayIdx(i)}
-                  className={`flex flex-col items-center justify-center min-w-[70px] sm:min-w-[84px] py-1.5 px-2 rounded-xl transition-all cursor-pointer border ${
-                    isActive
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/30 font-black'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
+              {/* 납품패턴 필터 */}
+              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold">
+                {['전체', '월수금', '화목토', '매일'].map((pat) => (
+                  <button
+                    key={pat}
+                    type="button"
+                    onClick={() => setPatternFilter(pat)}
+                    className={`px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
+                      patternFilter === pat
+                        ? 'bg-blue-600 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    {pat}
+                  </button>
+                ))}
+              </div>
+
+              {/* 발주 대상만 보기 토글 */}
+              <button
+                type="button"
+                onClick={() => setShowOnlyOrderable((prev) => !prev)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-black transition cursor-pointer border ${
+                  showOnlyOrderable
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                }`}
+                title="발주량이 잡힌 품목만 보기 or 전체 442개 품목 탐색하기"
+              >
+                <Package className="w-3 h-3" />
+                <span>{showOnlyOrderable ? '발주대상만' : '전체품목'}</span>
+                <span
+                  className={`text-[10px] font-mono px-1 rounded-full ${
+                    showOnlyOrderable ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
                   }`}
                 >
-                  <div className="flex items-center gap-1 text-[13px]">
-                    <span>{d}요일</span>
+                  {dayRows.length}
+                </span>
+              </button>
+
+              {/* 검색창 */}
+              <div className="relative flex items-center">
+                <Search className="w-3 h-3 text-slate-400 absolute left-2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="품명 / 거래처 검색..."
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  className="pl-7 pr-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-36 sm:w-48"
+                />
+              </div>
+
+              {/* 발행 전표 목록 드로어 버튼 */}
+              {confirmedPoList.length > 0 && (
+                <div className="relative" ref={poDrawerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPoDrawer((prev) => !prev)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition shadow-2xs cursor-pointer border ${
+                      showPoDrawer
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                    }`}
+                    title="클릭하여 거래처별 발행된 발주서 전표 목록을 확인합니다."
+                  >
+                    <FileText
+                      className={`w-3.5 h-3.5 ${showPoDrawer ? 'text-white' : 'text-emerald-600'}`}
+                    />
+                    <span className="font-extrabold">{confirmedPoList.length}건 발행</span>
                     <span
-                      className={`text-[11px] font-normal ${
-                        isActive ? 'text-blue-100' : 'text-slate-400'
+                      className={`font-mono text-[10.5px] px-1 py-0.2 rounded font-bold border ${
+                        showPoDrawer
+                          ? 'bg-white/20 text-white border-white/30'
+                          : 'bg-white text-emerald-700 border-emerald-200'
                       }`}
                     >
-                      {mmdd}
+                      {poRangeSummary}
                     </span>
-                  </div>
-                  <div
-                    className={`mt-0.5 text-[11px] font-mono font-bold px-1.5 py-0.2 rounded-full ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : st.boxes > 0
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-slate-200/80 text-slate-500'
-                    }`}
-                  >
-                    {st.boxes > 0 ? `${st.boxes}box` : '0box'}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        /* 입고 검수 모드 보조 바: 필터 및 자재수불부 바로가기 */
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs shrink-0 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-700">검수 필터:</span>
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-              {[
-                { id: '전체', label: '전체 보기' },
-                { id: '미납', label: '⚠️ 미납/결품만' },
-                { id: '정상', label: '✅ 정상입고만' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setInboundStatusFilter(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                    inboundStatusFilter === tab.id
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                    <ChevronDown
+                      className={`w-3 h-3 transition-transform ${
+                        showPoDrawer ? 'rotate-180 text-white' : 'text-emerald-600'
+                      }`}
+                    />
+                  </button>
+
+                  {/* 거래처별 발주서 상세 팝오버 카드 */}
+                  {showPoDrawer && (
+                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in slide-in-from-top-1">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                        <div>
+                          <div className="text-[13px] font-black text-slate-800 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                            {currentDayDate} ({DAY_CHARS[dayIdx]}) 발행 발주서
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                            총 <strong className="text-emerald-700">{confirmedPoList.length}건</strong> 전표 · 합계{' '}
+                            <strong className="text-slate-900 font-mono">
+                              ₩{Math.round(totalConfirmedPoAmount).toLocaleString()}
+                            </strong>원
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowPoDrawer(false)}
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* 전표 목록 리스트 */}
+                      <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
+                        {confirmedPoList.map((p) => {
+                          const seq = p.orderNo ? p.orderNo.split('-')[2] || '' : '';
+                          const supplierName = p.partnerName || p.partner?.name || '일반거래처';
+                          const itemCount = p.details?.length || 0;
+                          return (
+                            <div
+                              key={p.id}
+                              className="py-2 px-1.5 flex items-center justify-between hover:bg-slate-50 rounded-lg transition"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  #{seq}
+                                </span>
+                                <div>
+                                  <div className="text-xs font-black text-slate-800">{supplierName}</div>
+                                  <div className="text-[10.5px] font-mono text-slate-400">{p.orderNo}</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-xs font-black font-mono text-slate-900">
+                                  ₩{Math.round(p.totalAmount || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10.5px] text-slate-400 font-medium">
+                                  {itemCount}개 품목
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* 하단 발주현황 바로가기 버튼 */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPoDrawer(false);
+                            handleNavigate('pur-order-status-edit');
+                          }}
+                          className="w-full py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-blue-200"
+                        >
+                          <span>발주현황/수정 메뉴에서 전체 전표 열기</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleNavigate('inv-mat-ledger')}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-black transition cursor-pointer"
-              title="자재수불부 화면으로 이동하여 입출고 통장 내역 확인"
-            >
-              <span>자재수불부(입출고 통장) 확인</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. 필터 및 검색 바 ── */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 px-4 py-2.5 shadow-xs shrink-0 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* 거래처 선택 */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-600 shrink-0">거래처:</span>
-            <select
-              value={supplierFilter}
-              onChange={(e) => setSupplierFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-            >
-              <option value="전체">전체 거래처</option>
-              {suppliers.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 발주 모드일 때만 납품패턴 필터 표시 */}
-          {mainMode === 'order' && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
-              {['전체', '월수금', '화목토', '매일'].map((pat) => (
-                <button
-                  key={pat}
-                  type="button"
-                  onClick={() => setPatternFilter(pat)}
-                  className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
-                    patternFilter === pat
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  {pat}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* 발주 모드일 때 발주 대상만 보기 vs 전체 보기 토글 */}
-          {mainMode === 'order' && (
-            <button
-              type="button"
-              onClick={() => setShowOnlyOrderable((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer border ${
-                showOnlyOrderable
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-              }`}
-              title="발주량이 잡힌 품목만 보기 or 전체 442개 품목 탐색하기"
-            >
-              <Package className="w-3.5 h-3.5" />
-              <span>{showOnlyOrderable ? '📦 발주대상만 보기' : '📋 전체 품목 보기'}</span>
-              <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                  showOnlyOrderable ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+          </>
+        ) : (
+          /* 입고 검수 KPI & 필터 바 */
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200">
+                <span className="text-[11px] font-bold text-emerald-800">입고예정:</span>
+                <span className="font-mono font-black text-emerald-900">
+                  ₩{Math.round(inboundStats.totalAmount).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[11px] font-bold text-slate-500">발주량:</span>
+                <span className="font-mono font-black text-slate-800">
+                  {inboundStats.totalOrder.toLocaleString()} box
+                </span>
+              </div>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200">
+                <span className="text-[11px] font-bold text-blue-800">실도착:</span>
+                <span className="font-mono font-black text-blue-900">
+                  {inboundStats.totalActual.toLocaleString()} box
+                </span>
+              </div>
+              <div
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border ${
+                  inboundStats.diff > 0
+                    ? 'bg-rose-50 border-rose-300 text-rose-700 animate-pulse font-black'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 font-bold'
                 }`}
               >
-                {dayRows.length}
-              </span>
-            </button>
-          )}
-
-          {/* 검색어 입력창 */}
-          <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
-            <input
-              type="text"
-              placeholder={
-                mainMode === 'order'
-                  ? '품명 / 거래처 검색...'
-                  : '품명 / 거래처 / 발주번호 검색...'
-              }
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 sm:w-60"
-            />
-          </div>
-        </div>
-
-        {/* 우측 전표 내역 안내 및 액션 */}
-        {mainMode === 'order' ? (
-          <div className="flex items-center gap-2 text-xs">
-            {confirmedPoList.length > 0 ? (
-              <div className="relative" ref={poDrawerRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowPoDrawer((prev) => !prev)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition shadow-2xs cursor-pointer border ${
-                    showPoDrawer
-                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                  }`}
-                  title="클릭하여 거래처별 발행된 발주서 전표 목록을 확인합니다."
-                >
-                  <FileText
-                    className={`w-3.5 h-3.5 ${showPoDrawer ? 'text-white' : 'text-emerald-600'}`}
-                  />
-                  <span className="font-extrabold">발주서 {confirmedPoList.length}건 발행</span>
-                  <span
-                    className={`font-mono text-[11px] px-1.5 py-0.2 rounded-md font-bold border ${
-                      showPoDrawer
-                        ? 'bg-white/20 text-white border-white/30'
-                        : 'bg-white text-emerald-700 border-emerald-200'
-                    }`}
-                  >
-                    {poRangeSummary}
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform ${
-                      showPoDrawer ? 'rotate-180 text-white' : 'text-emerald-600'
-                    }`}
-                  />
-                </button>
-
-                {/* 거래처별 발주서 상세 팝오버 카드 */}
-                {showPoDrawer && (
-                  <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in slide-in-from-top-1">
-                    <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100">
-                      <div>
-                        <div className="text-[13px] font-black text-slate-800 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                          {currentDayDate} ({DAY_CHARS[dayIdx]}) 발행 발주서
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          총 <strong className="text-emerald-700">{confirmedPoList.length}건</strong>{' '}
-                          전표 · 합계{' '}
-                          <strong className="text-slate-900 font-mono">
-                            ₩{Math.round(totalConfirmedPoAmount).toLocaleString()}
-                          </strong>
-                          원
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowPoDrawer(false)}
-                        className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* 전표 목록 리스트 */}
-                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
-                      {confirmedPoList.map((p) => {
-                        const seq = p.orderNo ? p.orderNo.split('-')[2] || '' : '';
-                        const supplierName = p.partnerName || p.partner?.name || '일반거래처';
-                        const itemCount = p.details?.length || 0;
-                        return (
-                          <div
-                            key={p.id}
-                            className="py-2 px-1.5 flex items-center justify-between hover:bg-slate-50 rounded-lg transition"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                #{seq}
-                              </span>
-                              <div>
-                                <div className="text-xs font-black text-slate-800">{supplierName}</div>
-                                <div className="text-[10.5px] font-mono text-slate-400">{p.orderNo}</div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-xs font-black font-mono text-slate-900">
-                                ₩{Math.round(p.totalAmount || 0).toLocaleString()}
-                              </div>
-                              <div className="text-[10.5px] text-slate-400 font-medium">
-                                {itemCount}개 품목
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* 하단 발주현황 바로가기 버튼 */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowPoDrawer(false);
-                          handleNavigate('pur-order-status-edit');
-                        }}
-                        className="w-full py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-blue-200"
-                      >
-                        <span>발주현황/수정 메뉴에서 전체 전표 열기</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <span className="text-[11px]">미납/결품:</span>
+                <span className="font-mono font-black">
+                  {inboundStats.diff > 0 ? `▼ ${inboundStats.diff.toLocaleString()} box` : '0 box'}
+                </span>
               </div>
-            ) : (
-              <span className="text-slate-400 font-medium">
-                💡 {DAY_CHARS[dayIdx]}요일 발주량이 입력된 품목만 표시됩니다.
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* 거래처 필터 */}
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="전체">전체 거래처</option>
+                {suppliers.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+
+              {/* 검색창 */}
+              <div className="relative flex items-center">
+                <Search className="w-3 h-3 text-slate-400 absolute left-2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="품명 / 거래처 / 발주번호..."
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  className="pl-7 pr-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44 sm:w-56"
+                />
+              </div>
+
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded border border-slate-200 text-[11px]">
+                {filteredInboundItems.length}개 입고 대기
               </span>
-            )}
-            <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200">
-              총 {dayRows.length}개 품목 표시 중
-            </span>
-          </div>
-        ) : (
-          /* 입고 모드 안내 */
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500 font-medium">
-              💡 실제 하역된 수량만 입력하시면 <strong>미납된 수량은 자동으로 차감되어 잔량으로 보존</strong>됩니다.
-            </span>
-            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 font-bold rounded-lg border border-emerald-200">
-              총 {filteredInboundItems.length}개 입고 품목 대기 중
-            </span>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
       {/* ── 4. 메인 데이터 테이블 (발주 테이블 or 입고 검수 테이블) ── */}
-      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs flex flex-col">
+      <div className="flex-1 min-h-[420px] bg-white rounded-xl border border-slate-300 overflow-hidden shadow-xs flex flex-col">
         {mainMode === 'order' ? (
           /* ──────── ① 오늘 발주할 양 테이블 ──────── */
           <div className="flex-1 overflow-auto">
@@ -1586,8 +1449,8 @@ export const MatOrderDayView: React.FC = () => {
                 <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 text-[12px] font-black border-b border-slate-200 uppercase tracking-tight select-none">
                   <tr>
                     <th className="py-2.5 px-2 text-center w-10">No</th>
-                    <th className="py-2.5 px-3 w-36">거래처명</th>
-                    <th className="py-2.5 px-3.5 min-w-[200px]">품목명</th>
+                    <th className="py-2.5 px-3 min-w-[150px] w-44">거래처명</th>
+                    <th className="py-2.5 px-3.5 min-w-[280px]">품목명</th>
                     <th className="py-2.5 px-2 w-20 text-center">패턴</th>
                     <th className="py-2.5 px-2 w-16 text-center">창고</th>
                     <th className="py-2.5 px-3 w-28 text-right bg-slate-50 text-slate-700">
@@ -1647,9 +1510,9 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 거래처명 */}
-                          <td className="py-2 px-3 font-bold text-slate-700 truncate max-w-[150px]">
+                          <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">
                             <span
-                              className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200"
+                              className="inline-block px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200"
                               title={r.supplier}
                             >
                               {r.supplier}
@@ -1908,8 +1771,8 @@ export const MatOrderDayView: React.FC = () => {
                     </th>
                     <th className="py-3 px-2 text-center w-12">No</th>
                     <th className="py-3 px-3 w-32 text-center">발주번호</th>
-                    <th className="py-3 px-3.5 w-40">거래처명</th>
-                    <th className="py-3 px-4 min-w-[220px]">품목명</th>
+                    <th className="py-3 px-3.5 min-w-[150px] w-44">거래처명</th>
+                    <th className="py-3 px-4 min-w-[280px]">품목명</th>
                     <th className="py-3 px-3 w-24 text-center">보관창고</th>
                     <th className="py-3 px-3 w-32 text-right bg-slate-200/60 font-black">
                       오기로 한 수량 (발주량)
@@ -1985,8 +1848,10 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 거래처명 */}
-                          <td className="py-2.5 px-3.5 font-bold text-slate-700 truncate max-w-[150px]">
-                            {item.partnerName}
+                          <td className="py-2.5 px-3.5 font-bold text-slate-800 whitespace-nowrap">
+                            <span className="inline-block px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200">
+                              {item.partnerName}
+                            </span>
                           </td>
 
                           {/* 품목명 */}

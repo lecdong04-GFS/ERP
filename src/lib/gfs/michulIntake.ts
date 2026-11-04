@@ -185,3 +185,4 @@ export function parseMichulRows(rows: any[][]): MichulParseResult | null {
     productCount: new Set(items.map((it) => it.productCode)).size,
   };
 }
+
