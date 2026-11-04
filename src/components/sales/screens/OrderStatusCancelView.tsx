@@ -140,7 +140,7 @@ export const OrderStatusCancelView: React.FC = () => {
       setDetails(newDetails);
       setSelectedHeaderId((prev) => {
         if (prev !== null && newHeaders.some((h) => h.id === prev)) return prev;
-        return newHeaders.length > 0 ? newHeaders[0].id : null;
+        return null;
       });
     } catch (err) {
       console.error('Failed to load sales orders', err);
@@ -342,12 +342,22 @@ export const OrderStatusCancelView: React.FC = () => {
         <div className="h-[54%] flex flex-col bg-white border border-gray-400 shadow-2xs overflow-hidden">
           <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300 flex items-center justify-between">
             <span>내역 (품목별 주문·납품·미납)</span>
-            <span className="text-[11.5px] text-gray-500 font-mono">데이터수: {currentDetailList.length}</span>
+            <span className="text-[11.5px] text-gray-500 font-mono">
+              {selectedHeaderId ? `선택된 주문: ${headers.find((h) => h.id === selectedHeaderId)?.orderId || ''} (${currentDetailList.length}개 품목)` : '주문 미선택'}
+            </span>
           </div>
 
           <div className="flex-1 overflow-auto">
-            {currentDetailList.length === 0 ? (
-              <div className="py-10 text-center text-gray-400">선택된 주문의 품목이 없습니다.</div>
+            {selectedHeaderId === null ? (
+              <div className="py-14 text-center text-gray-400 flex flex-col items-center justify-center gap-2">
+                <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="text-sm font-medium text-gray-600">상단 주문 목록에서 확인하실 주문을 클릭하시면 상세 품목 내역이 표시됩니다.</span>
+                <span className="text-xs text-gray-400">상단 [엑셀 수주 GS25] 버튼을 통해 당일 엑셀 발주서를 업로드할 수 있습니다.</span>
+              </div>
+            ) : currentDetailList.length === 0 ? (
+              <div className="py-10 text-center text-gray-400">해당 주문에 등록된 품목 내역이 없습니다.</div>
             ) : (
             <EditableTableWrapper readOnly><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
               <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
