@@ -110,13 +110,6 @@ export async function GET() {
       });
     }
 
-    // 5) 실제 발주서(BOM) 연동 사실 (진짜 DB)
-    const masterName = (masterSnap?.payload as any)?.fileName || '★★발주서양식통합★★(최신본).xlsx';
-    const masterAsOf = masterSnap?.asOf || (masterSnap?.payload as any)?.asOf || today;
-    messages.push({
-      type: 'success' as const,
-      text: `[발주서 BOM 동기화] ${masterName} (${masterAsOf}) 기준 442개 원부자재 레시피 정합성 100% 가동 중`,
-    });
 
     // 6) 오늘 실제 출하 현황 (출하 건이 있을 경우)
     if (todayDeliveries && todayDeliveries.length > 0) {
