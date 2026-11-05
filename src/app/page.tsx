@@ -101,7 +101,7 @@ function ErpApp() {
 
       {/* 2-1. 알림바 (GNB 바로 아래 실시간 롤링 알림 & 3대 핵심 퀵 액션) */}
       <div className="h-[38px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[13px] select-none shadow-2xs shrink-0">
-        <div className="flex items-center gap-2.5 overflow-hidden max-w-2xl">
+        <div className="flex items-center gap-2.5 overflow-hidden flex-1 min-w-0 pr-4">
           <span
             className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
               currentTicker.type === 'danger'
