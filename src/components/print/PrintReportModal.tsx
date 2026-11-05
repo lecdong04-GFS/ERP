@@ -583,7 +583,7 @@ export const PrintReportModal: React.FC = () => {
                               )}
                             </td>
                             <td className="border border-black py-2 px-2 font-semibold text-blue-900 bg-blue-50/30">
-                              {r.warehouseName || '냉장창고2'}
+                              {r.warehouseName || '냉장2'}
                             </td>
                             <td className="border border-black py-2 px-1 font-mono text-slate-700">
                               {r.unit || 'g'}
@@ -611,7 +611,7 @@ export const PrintReportModal: React.FC = () => {
                           <tr key={w.id} className="text-center">
                             <td className="border border-black py-1 px-1 font-mono">{idx + 1}</td>
                             <td className="border border-black py-1 px-2 font-bold text-left">{w.partName}</td>
-                            <td className="border border-black py-1 px-1 font-medium text-blue-900">냉장창고2</td>
+                            <td className="border border-black py-1 px-1 font-medium text-blue-900">{w.lineName?.includes('성형') ? '냉장1' : '냉장2'}</td>
                             <td className="border border-black py-1 px-1 text-[10px] text-gray-700">{w.unit || 'ea'}</td>
                             <td className="border border-black py-1 px-1 font-mono font-extrabold text-right text-blue-900">
                               {(shiftFilter === '1편' ? w.orderQty1 : w.orderQty2).toLocaleString()}

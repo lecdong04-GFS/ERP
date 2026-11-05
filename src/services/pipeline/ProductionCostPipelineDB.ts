@@ -378,7 +378,7 @@ export class ProductionCostPipelineDBEngine {
                 partName: bd.childProduct.name,
                 partSpec: bd.childProduct.spec || '',
                 unit: bd.unit || bd.childProduct.unit || 'g',
-                warehouse: bd.childProduct.warehouse || '상온창고',
+                warehouse: bd.childProduct.warehouse || '상온',
                 totalReqQty: 0,
                 category: bd.childProduct.category || '원재료',
                 partnerId: bd.childProduct.partnerId,

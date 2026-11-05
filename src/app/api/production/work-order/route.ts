@@ -4,15 +4,47 @@ import { makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
 
 function normalizeWarehouse(rawWh?: string | null): string {
-  if (!rawWh) return '상온창고';
+  if (!rawWh) return '상온';
   const w = String(rawWh).trim();
-  if (w === '냉장1' || w === '냉장창고1') return '냉장창고1';
-  if (w === '냉장2' || w === '냉장창고2') return '냉장창고2';
-  if (w === '냉동' || w === '냉동창고') return '냉동창고';
-  if (w === '상온' || w === '상온창고') return '상온창고';
-  if (w === '부자재' || w === '부자재창고') return '부자재창고';
-  return w.endsWith('창고') ? w : `${w}창고`;
+  if (w === '냉장1' || w === '냉장창고1') return '냉장1';
+  if (w === '냉장2' || w === '냉장창고2') return '냉장2';
+  if (w === '냉동' || w === '냉동창고') return '냉동';
+  if (w === '상온' || w === '상온창고') return '상온';
+  if (w === '부자재' || w === '부자재창고') return '부자재';
+  return w.replace(/창고$/, '');
 }
+
+// 가공 반제품 / 전처리 규격품 정본 보관창고 사전 (사용자 지정 & 공장 실무 기준)
+const CUSTOM_ITEM_WAREHOUSE_MAP: Record<string, string> = {
+  '계란옷소시지전튀김_1/2컷': '냉동',
+  '계란옷소시지전튀김(52개)': '냉동',
+  '미니등심돈까스70_1/2컷': '냉동',
+  '고미트햄슬라이스_24등분': '상온',
+  '에그스크램블(해동)': '냉동',
+  '풍림)얇은고명지단H(해동)': '냉동',
+  '선진)김밥용남도떡갈비_1/2컷': '냉동',
+  '한울)유채나물무침(해동)': '냉동',
+  '한울)곤드레나물(해동)': '냉동',
+  '선진)통통한칼집소시지_1/2대각': '냉장1',
+  '야채계란말이_1/2대각컷': '냉장1',
+  '숯불갈비맛스모크햄(찹핑)': '냉장1',
+  '아워홈)부산어묵볼(봉당130개)': '냉장1',
+  '한울)볶음김치(자연탈수)': '냉장2',
+  '종가)백볶음김치(탈수)': '냉장2',
+  '반찬단지)진미채견과볶음': '냉장2',
+  '세천팜)8mm단무지': '냉장1',
+  '신슈단무지(꼬들단무지)': '상온',
+  '신슈알밥용단무지': '냉장2',
+  '깐쪽파슬라이스(2mm)(소독/탈수)': '냉장2',
+  '깐쪽파슬라이스(2mm)흰부위제거': '냉장2',
+  '양파슬라이스(3mm)(커팅)': '냉장2',
+  '양배추슬라이스3mm(세척)': '냉장2',
+  '[선]깍두기찹핑(7mm)': '냉장2',
+  '[선]콩나물찹핑(1cm)': '냉장2',
+  '[선]도라지찹핑(7mm)': '냉장2',
+  '[선]당근찹핑(7mm)': '냉장2',
+  '[선]시금치찹핑(7mm)': '냉장2',
+};
 
 function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -131,20 +163,91 @@ function determineWarehouse(prod: any, gyeName?: string | null, invWarehouse?: s
   if (invWarehouse) {
     return normalizeWarehouse(invWarehouse);
   }
+  const name = prod?.name || '';
+  if (CUSTOM_ITEM_WAREHOUSE_MAP[name]) {
+    return CUSTOM_ITEM_WAREHOUSE_MAP[name];
+  }
   if (prod?.inventories && prod.inventories.length > 0 && prod.inventories[0].warehouse) {
     return normalizeWarehouse(prod.inventories[0].warehouse);
   }
-  const name = prod?.name || '';
   const gName = gyeName || '';
-  if (name.includes('소스') || name.includes('야채') || name.includes('양파') || name.includes('채소') || gName.includes('채소')) {
-    return '냉장창고2';
+  const n = name.toLowerCase();
+  const g = gName.toLowerCase();
+
+  // 1. 냉동 품목 (해동 자재, 냉동육/가공품, 전/튀김류, 떡갈비, 지단, 스크램블 등)
+  if (
+    n.includes('해동') ||
+    n.includes('냉동') ||
+    n.includes('계란옷') ||
+    n.includes('소시지전') ||
+    n.includes('떡갈비') ||
+    n.includes('함박') ||
+    n.includes('패티') ||
+    n.includes('너비아니') ||
+    n.includes('물만두') ||
+    n.includes('오징어제육') ||
+    n.includes('지단') ||
+    n.includes('스크램블') ||
+    (n.includes('돈까스') && !n.includes('소스')) ||
+    (n.includes('치킨까스') && !n.includes('소스')) ||
+    (n.includes('까스') && !n.includes('소스'))
+  ) {
+    return '냉동';
   }
-  if (name.includes('제육') || name.includes('돈까스') || name.includes('고기') || name.includes('계란') || gName.includes('육류')) {
-    return '냉장창고1';
+
+  // 2. 냉장2 (소스류, 드레싱, 채소/야채류, 김치, 단무지, 피클, 나물류)
+  if (
+    n.includes('소스') ||
+    n.includes('드레싱') ||
+    n.includes('야채') ||
+    n.includes('채소') ||
+    n.includes('양파') ||
+    n.includes('파') ||
+    n.includes('당근') ||
+    n.includes('오이') ||
+    n.includes('배추') ||
+    n.includes('김치') ||
+    n.includes('단무지') ||
+    n.includes('피클') ||
+    n.includes('우엉') ||
+    n.includes('나물') ||
+    g.includes('채소')
+  ) {
+    return '냉장2';
   }
-  if (name.includes('냉동') || gName.includes('냉동')) return '냉동창고';
-  if (name.includes('용기') || name.includes('필름') || name.includes('BOX') || name.includes('박스')) return '부자재창고';
-  return '상온창고';
+
+  // 3. 냉장1 (신선육, 양념육, 햄, 소시지, 어묵, 맛살, 계란 등 신선 육가공)
+  if (
+    n.includes('제육') ||
+    n.includes('불고기') ||
+    n.includes('고기') ||
+    n.includes('돈육') ||
+    n.includes('우육') ||
+    n.includes('계란') ||
+    n.includes('소시지') ||
+    n.includes('햄') ||
+    n.includes('어묵') ||
+    n.includes('맛살') ||
+    g.includes('육류')
+  ) {
+    return '냉장1';
+  }
+
+  // 4. 부자재 (용기, 필름, 박스, 라벨 등)
+  if (
+    n.includes('용기') ||
+    n.includes('필름') ||
+    n.includes('box') ||
+    n.includes('박스') ||
+    n.includes('봉투') ||
+    n.includes('라벨') ||
+    n.includes('스티커')
+  ) {
+    return '부자재';
+  }
+
+  // 5. 상온 (스팸, 고미트, 캔/통조림, 버섯채, 분말, 건자재 등)
+  return '상온';
 }
 
 function addMinutesToTime(timeStr: string, minutes: number): string {
@@ -423,7 +526,7 @@ export async function GET(req: NextRequest) {
             prodQty: Math.round(item.qty * 0.98),
             lossRate: 2,
             yieldRate: 98,
-            warehouseName: '냉장창고1',
+            warehouseName: '냉장1',
             stockQty: 0,
             parentNames: [p.name],
           });

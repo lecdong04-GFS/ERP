@@ -810,7 +810,7 @@ export const WorkOrderStatusView: React.FC = () => {
                             className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-black text-sm sm:text-base border shadow-2xs ${whColor}`}
                           >
                             <WarehouseIcon size={16} />
-                            <span>{item.warehouseName || '냉장창고2'}</span>
+                            <span>{item.warehouseName || '냉장2'}</span>
                           </span>
                         </td>
 
