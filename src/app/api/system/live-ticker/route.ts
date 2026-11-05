@@ -75,7 +75,7 @@ export async function GET() {
 
       // 8. 오늘 생산 작업지시 건수
       prisma.workOrder.count({
-        where: { orderDate: today },
+        where: { workDate: today },
       }),
     ]);
 
