@@ -20,6 +20,7 @@ import {
   Flame,
   Search,
   Filter,
+  GripVertical,
 } from 'lucide-react';
 import { usePipeline } from '@/context/PipelineContext';
 import { usePrintReport } from '@/context/PrintReportContext';
@@ -87,6 +88,10 @@ export const WorkOrderStatusView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
+  // 드래그 앤 드롭 상태
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
   // 데이터 로드
   const fetchWorkOrders = useCallback(async (date: string, sft: string, line: string) => {
     setLoading(true);
@@ -145,6 +150,68 @@ export const WorkOrderStatusView: React.FC = () => {
     });
 
     setItems(reordered);
+  };
+
+  // 드래그 앤 드롭 이동 핸들러
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newItems = [...items];
+    const [draggedItem] = newItems.splice(draggedIndex, 1);
+    newItems.splice(targetIndex, 0, draggedItem);
+
+    // workSeq 및 타임테이블 시간 재계산
+    let runningHour = 6;
+    let runningMin = 0;
+    const reordered = newItems.map((item, idx) => {
+      const startH = String(runningHour).padStart(2, '0');
+      const startM = String(runningMin).padStart(2, '0');
+      runningMin += 45;
+      if (runningMin >= 60) {
+        runningHour += Math.floor(runningMin / 60);
+        runningMin = runningMin % 60;
+      }
+      const endH = String(runningHour).padStart(2, '0');
+      const endM = String(runningMin).padStart(2, '0');
+
+      return {
+        ...item,
+        workSeq: idx + 1,
+        timeRange: `${startH}:${startM} ~ ${endH}:${endM}`,
+      };
+    });
+
+    setItems(reordered);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   // 상태 변경 토글 (대기 -> 진행중 -> 완료 -> 대기)
@@ -438,7 +505,7 @@ export const WorkOrderStatusView: React.FC = () => {
           {filteredItems.length === 0 ? (
             <span className="text-[11px] text-slate-400 py-1">편성된 작업 일정이 없습니다.</span>
           ) : (
-            filteredItems.map((item) => {
+            filteredItems.map((item, idx) => {
               const statusColor =
                 item.status === '완료'
                   ? 'bg-emerald-600 text-white border-emerald-700'
@@ -449,8 +516,21 @@ export const WorkOrderStatusView: React.FC = () => {
               return (
                 <div
                   key={item.id}
-                  className={`shrink-0 px-2.5 py-1 rounded-md border text-[11px] flex items-center gap-1.5 shadow-2xs transition-all ${statusColor}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={`shrink-0 px-2.5 py-1 rounded-md border text-[11px] flex items-center gap-1.5 shadow-2xs transition-all cursor-grab active:cursor-grabbing ${
+                    draggedIndex === idx
+                      ? 'opacity-40 scale-95 border-dashed border-blue-400'
+                      : dragOverIndex === idx
+                      ? 'ring-2 ring-blue-500 scale-105'
+                      : ''
+                  } ${statusColor}`}
                 >
+                  <GripVertical size={11} className="opacity-70" />
                   <span className="font-mono font-black opacity-80">#{item.workSeq}</span>
                   <span className="font-bold truncate max-w-[130px]">{item.productName}</span>
                   <span className="font-mono text-[10px] opacity-85">({item.timeRange})</span>
@@ -483,7 +563,7 @@ export const WorkOrderStatusView: React.FC = () => {
 
             <div className="text-[11.5px] text-slate-600 flex items-center gap-3">
               <span>
-                화살표 <strong className="text-blue-700 font-mono">▲ / ▼</strong>를 눌러 일의 순서를 자유롭게 조정할 수 있습니다.
+                💡 마우스로 행을 <strong className="text-blue-700">끌어서 놓기(드래그 앤 드롭)</strong>하거나 화살표 <strong className="text-blue-700 font-mono">▲ / ▼</strong>를 눌러 순서를 자유롭게 조정할 수 있습니다.
               </span>
             </div>
           </div>
@@ -545,13 +625,31 @@ export const WorkOrderStatusView: React.FC = () => {
                     return (
                       <tr
                         key={item.id}
-                        className={`hover:bg-blue-50/50 transition-colors ${
-                          item.status === '완료' ? 'bg-slate-50/60 opacity-80' : ''
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragOver={(e) => handleDragOver(e, idx)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        className={`transition-all select-none ${
+                          draggedIndex === idx
+                            ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
+                            : dragOverIndex === idx
+                            ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
+                            : item.status === '완료'
+                            ? 'bg-slate-50/60 opacity-80 hover:bg-slate-100'
+                            : 'hover:bg-blue-50/50'
                         }`}
                       >
-                        {/* 1. 순서 및 위/아래 이동 제어 */}
+                        {/* 1. 순서 및 드래그 핸들 & 위/아래 이동 제어 */}
                         <td className="py-2 px-1 text-center font-mono">
                           <div className="flex items-center justify-center gap-1">
+                            <span
+                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-0.5"
+                              title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
+                            >
+                              <GripVertical size={13} />
+                            </span>
                             <span className="font-black text-slate-900 w-5">{item.workSeq}</span>
                             <div className="flex flex-col gap-0.5">
                               <button
