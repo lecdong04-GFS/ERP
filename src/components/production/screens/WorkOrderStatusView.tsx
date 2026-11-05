@@ -615,29 +615,29 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
 
-        {/* 하단 요약 정보 카드 (시원하고 여유로운 배치) */}
-        <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 text-sm">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-medium">현재 라인:</span>
-              <span className="text-base font-extrabold text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200 inline-flex items-center gap-1.5">
-                <span>{currentLine.icon}</span>
+        {/* 하단 요약 정보 카드 (시원하고 여유로운 배치, 큼직한 폰트) */}
+        <div className="mt-4 pt-3.5 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-7">
+            <div className="flex items-center gap-2.5">
+              <span className="text-slate-600 font-bold text-sm sm:text-base">현재 라인:</span>
+              <span className="text-base sm:text-lg font-black text-blue-900 bg-blue-50 px-3.5 py-1.5 rounded-xl border-2 border-blue-200 inline-flex items-center gap-2 shadow-2xs">
+                <span className="text-xl">{currentLine.icon}</span>
                 <span>{currentLine.name}</span>
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-medium">총 지시품목:</span>
-              <span className="font-mono font-black text-slate-900 text-base">
+              <span className="text-slate-600 font-bold text-sm sm:text-base">총 지시품목:</span>
+              <span className="font-mono font-black text-slate-900 text-lg sm:text-xl">
                 {stats.totalCount}
               </span>
-              <span className="text-slate-500 text-xs">건</span>
+              <span className="text-slate-600 text-sm font-bold">건</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-500 font-medium">총 지시량:</span>
-              <span className="font-mono font-black text-indigo-950 text-base">
+              <span className="text-slate-600 font-bold text-sm sm:text-base">총 지시량:</span>
+              <span className="font-mono font-black text-indigo-950 text-xl sm:text-2xl">
                 {stats.totalQty.toLocaleString()}
               </span>
-              <span className="text-slate-500 text-xs">
+              <span className="text-slate-600 text-sm font-bold">
                 {selectedLine === '도시락' || selectedLine.includes('삼각') || selectedLine === '김밥'
                   ? 'ea'
                   : 'g / kg'}
@@ -645,8 +645,8 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+          <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
             <span>
               💡 순서를 마우스로 <strong>끌어다 놓거나(드래그)</strong> 화살표(<strong>▲/▼</strong>)를 누르면 바로 바뀝니다.
             </span>
@@ -654,30 +654,32 @@ export const WorkOrderStatusView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. 메인 작업지시 테이블 (올려주신 사진 양식 100% 매칭 + 큰 글자) */}
+      {/* 2. 메인 작업지시 테이블 (올려주신 사진 양식 100% 매칭 + 시원시원한 대형 폰트) */}
       <div className="flex-1 min-h-0 p-5 overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0 bg-white border border-slate-300 rounded-2xl shadow-sm overflow-hidden flex flex-col">
           {/* 테이블 상단 헤더 바 */}
-          <div className="bg-slate-50 px-6 py-3 border-b border-slate-300 flex items-center justify-between">
-            <div className="flex items-center gap-6 text-sm">
-              <div>
-                <span className="text-slate-500">라인명: </span>
-                <span className="font-black text-blue-900 text-base inline-flex items-center gap-1.5">
-                  <span>{currentLine.icon}</span>
+          <div className="bg-slate-50 px-6 py-4 border-b border-slate-300 flex items-center justify-between">
+            <div className="flex items-center gap-8 text-base">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">라인명:</span>
+                <span className="font-black text-blue-900 text-lg sm:text-xl inline-flex items-center gap-2">
+                  <span className="text-2xl">{currentLine.icon}</span>
                   <span>{currentLine.name}</span>
                 </span>
               </div>
-              <div>
-                <span className="text-slate-500">월/일: </span>
-                <span className="font-bold text-slate-900">{workDate}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">월/일:</span>
+                <span className="font-black text-slate-900 text-lg sm:text-xl">{workDate}</span>
               </div>
-              <div>
-                <span className="text-slate-500">시프트명: </span>
-                <span className="font-black text-emerald-800">{shift}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">시프트명:</span>
+                <span className="font-black text-emerald-800 text-lg sm:text-xl bg-emerald-50 border border-emerald-300 px-3 py-1 rounded-xl">
+                  {shift}
+                </span>
               </div>
             </div>
 
-            <div className="text-xs text-slate-400">
+            <div className="text-sm text-slate-500 font-semibold hidden md:block">
               * BOM 기준 로스율(수율)이 자동 반영된 실제 투입 지시량입니다.
             </div>
           </div>
@@ -686,31 +688,31 @@ export const WorkOrderStatusView: React.FC = () => {
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
               <div className="py-32 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-bold text-slate-600">작업지시 목록을 불러오는 중입니다...</span>
+                <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-base font-bold text-slate-600">작업지시 목록을 불러오는 중입니다...</span>
               </div>
             ) : filteredItems.length === 0 ? (
               <div className="py-32 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-                <AlertCircle className="w-10 h-10 text-slate-300" />
-                <span className="text-base font-bold text-slate-700">
-                  선택하신 라인({selectedLine})에 등록된 작업지시 품목이 없습니다.
+                <AlertCircle className="w-12 h-12 text-slate-300" />
+                <span className="text-lg font-bold text-slate-700">
+                  선택하신 라인({currentLine.name})에 등록된 작업지시 품목이 없습니다.
                 </span>
-                <span className="text-xs text-slate-400">
-                  상단 라인 선택에서 다른 라인(커팅실, 취반, 조리실 등)을 선택해 보세요.
+                <span className="text-sm text-slate-500">
+                  상단 라인 선택에서 다른 라인(커팅실, 취반기, 조리실 등)을 선택해 보세요.
                 </span>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-sm">
-                <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-10 border-b border-slate-300 text-center">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-base sm:text-lg">
                   <tr>
-                    <th className="py-3.5 px-3 w-28 text-center">순서</th>
-                    <th className="py-3.5 px-4 text-left">제품명</th>
-                    <th className="py-3.5 px-3 w-36 text-center">창고명</th>
-                    <th className="py-3.5 px-3 w-28 text-center">규격/단위</th>
-                    <th className="py-3.5 px-4 text-right w-36">지시량</th>
-                    <th className="py-3.5 px-3 w-36 text-center">작업시간</th>
-                    <th className="py-3.5 px-3 w-32 text-center">완료여부</th>
-                    <th className="py-3.5 px-4 w-36 text-center">담당자</th>
+                    <th className="py-4 px-3 w-32 text-center">순서</th>
+                    <th className="py-4 px-5 text-left">제품명</th>
+                    <th className="py-4 px-4 w-44 text-center">창고명</th>
+                    <th className="py-4 px-3 w-32 text-center">규격/단위</th>
+                    <th className="py-4 px-5 text-right w-44">지시량</th>
+                    <th className="py-4 px-4 w-48 text-center">작업시간</th>
+                    <th className="py-4 px-4 w-36 text-center">완료여부</th>
+                    <th className="py-4 px-4 w-40 text-center">담당자</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -751,14 +753,14 @@ export const WorkOrderStatusView: React.FC = () => {
                       >
                         {/* 1. 순서 (손잡이, 큼직한 번호, 위/아래 버튼) */}
                         <td className="py-4 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-2">
                             <span
-                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-1"
+                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-1.5 rounded-lg hover:bg-slate-200/60"
                               title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
                             >
-                              <GripVertical size={16} />
+                              <GripVertical size={20} />
                             </span>
-                            <span className="font-mono font-black text-slate-900 text-base w-7">
+                            <span className="font-mono font-black text-slate-900 text-lg sm:text-xl w-8">
                               {item.workSeq}
                             </span>
                             <div className="flex flex-col gap-0.5 ml-0.5">
@@ -766,30 +768,30 @@ export const WorkOrderStatusView: React.FC = () => {
                                 onClick={() => moveItem(idx, 'UP')}
                                 disabled={idx === 0}
                                 title="위로 순서 올리기"
-                                className="p-1 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                className="p-1.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded-lg transition-colors"
                               >
-                                <ArrowUp size={13} />
+                                <ArrowUp size={16} />
                               </button>
                               <button
                                 onClick={() => moveItem(idx, 'DOWN')}
                                 disabled={idx === filteredItems.length - 1}
                                 title="아래로 순서 내리기"
-                                className="p-1 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                className="p-1.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded-lg transition-colors"
                               >
-                                <ArrowDown size={13} />
+                                <ArrowDown size={16} />
                               </button>
                             </div>
                           </div>
                         </td>
 
-                        {/* 2. 제품명 (크고 뚜렷하게) */}
-                        <td className="py-4 px-4 text-left">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-extrabold text-slate-950 text-base leading-tight">
+                        {/* 2. 제품명 (크고 뚜렷하게 18px Bold) */}
+                        <td className="py-4 px-5 text-left">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-black text-slate-950 text-base sm:text-lg leading-snug">
                               {item.productName}
                             </span>
                             {item.lossRate > 0 && (
-                              <span className="text-xs text-slate-400 font-medium">
+                              <span className="text-sm text-slate-500 font-bold">
                                 * 로스율 {item.lossRate}% (수율 {item.yieldRate}%)
                               </span>
                             )}
@@ -797,48 +799,48 @@ export const WorkOrderStatusView: React.FC = () => {
                         </td>
 
                         {/* 3. 창고명 (알아보기 쉬운 큰 뱃지) */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-4 px-4 text-center">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs border shadow-2xs ${whColor}`}
+                            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl font-black text-sm sm:text-base border shadow-2xs ${whColor}`}
                           >
-                            <WarehouseIcon size={13} />
+                            <WarehouseIcon size={16} />
                             <span>{item.warehouseName || '냉장창고2'}</span>
                           </span>
                         </td>
 
                         {/* 4. 규격/단위 */}
                         <td className="py-4 px-3 text-center font-mono">
-                          <span className="bg-slate-100 px-2.5 py-1 rounded-md text-xs font-bold text-slate-700 border border-slate-200">
+                          <span className="bg-slate-100 px-3 py-1.5 rounded-lg text-sm sm:text-base font-black text-slate-800 border border-slate-200">
                             {item.unit || 'g'}
                           </span>
                         </td>
 
-                        {/* 5. 지시량 (굵고 큼직한 시원한 숫자) */}
-                        <td className="py-4 px-4 text-right font-mono font-black text-blue-900 text-lg">
+                        {/* 5. 지시량 (굵고 큼직한 시원한 숫자 22~24px) */}
+                        <td className="py-4 px-5 text-right font-mono font-black text-blue-900 text-xl sm:text-2xl tracking-tight">
                           {Number(item.orderQty || 0).toLocaleString()}
                         </td>
 
                         {/* 6. 작업시간 */}
-                        <td className="py-4 px-3 text-center font-mono text-xs">
-                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 px-2.5 py-1 rounded-lg font-bold">
-                            <Clock size={12} className="text-slate-500" />
+                        <td className="py-4 px-4 text-center font-mono">
+                          <span className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-900 border border-slate-300 px-3 py-1.5 rounded-xl font-extrabold text-sm sm:text-base">
+                            <Clock size={16} className="text-blue-600" />
                             <span>{item.timeRange || '06:00 ~ 06:45'}</span>
                           </span>
                         </td>
 
-                        {/* 7. 완료여부 (크고 누르기 편한 원클릭 버튼) */}
-                        <td className="py-4 px-3 text-center">
+                        {/* 7. 완료여부 (크고 누르기 편한 대형 버튼) */}
+                        <td className="py-4 px-4 text-center">
                           <button
                             onClick={() => toggleStatus(idx)}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black border shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5 mx-auto ${
+                            className={`px-4 py-2 rounded-xl text-sm sm:text-base font-black border shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-2 mx-auto active:scale-95 ${
                               isDone
                                 ? 'bg-emerald-600 text-white border-emerald-700'
                                 : isProgress
                                 ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
-                                : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
                             }`}
                           >
-                            {isDone && <Check size={13} />}
+                            {isDone && <Check size={18} />}
                             <span>{isDone ? '완료' : isProgress ? '진행중' : '대기'}</span>
                           </button>
                         </td>
@@ -849,7 +851,7 @@ export const WorkOrderStatusView: React.FC = () => {
                             type="text"
                             value={item.assignee || '김반장'}
                             onChange={(e) => updateAssignee(idx, e.target.value)}
-                            className="w-24 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-center text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-center text-sm sm:text-base font-black text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </td>
                       </tr>
@@ -860,20 +862,20 @@ export const WorkOrderStatusView: React.FC = () => {
             )}
           </div>
 
-          {/* 테이블 하단 합계 요약 바 */}
-          <div className="bg-slate-50 px-6 py-3 border-t border-slate-300 flex items-center justify-between text-sm font-bold text-slate-700">
-            <div>
-              <span>총 지시품목: </span>
-              <span className="font-mono text-blue-800 text-base">{filteredItems.length}</span>
-              <span>건</span>
+          {/* 테이블 하단 합계 요약 바 (대형 폰트) */}
+          <div className="bg-slate-50 px-6 py-4 border-t-2 border-slate-300 flex items-center justify-between text-base font-bold text-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-600">총 지시품목: </span>
+              <span className="font-mono text-blue-900 text-xl font-black">{filteredItems.length}</span>
+              <span className="text-slate-600">건</span>
             </div>
             <div className="flex items-center gap-6">
-              <div>
-                <span>총 지시량 합계: </span>
-                <span className="font-mono text-indigo-950 text-xl font-black">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600">총 지시량 합계: </span>
+                <span className="font-mono text-indigo-950 text-2xl sm:text-3xl font-black">
                   {stats.totalQty.toLocaleString()}
                 </span>
-                <span className="text-slate-500 text-xs ml-1">
+                <span className="text-slate-600 text-sm font-bold ml-1">
                   {selectedLine === '도시락' || selectedLine.includes('삼각') || selectedLine === '김밥'
                     ? 'ea'
                     : 'g / kg'}
