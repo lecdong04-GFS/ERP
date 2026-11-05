@@ -278,16 +278,39 @@ export async function GET(req: NextRequest) {
       targetDate = latestSo?.orderDate || '2026-11-05';
     }
 
-    // 2) 실시간 재고(Inventory) 사전 인덱싱 (재고조회와 100% 동일한 정본 재고/창고 동기화)
-    const allInventories = await prisma.inventory.findMany({
-      include: { product: true },
-    });
-    const invMapByNorm = new Map<string, (typeof allInventories)[0]>();
-    const invMapByCode = new Map<string, (typeof allInventories)[0]>();
+    // 2) 실시간 재고(Inventory) 및 당일 재고조사표 스냅샷(InventorySnapshot) 통합 인덱싱 (단일 진실 공급원 확립)
+    // 업로드된 재고조사표(실사 확정)를 최우선 정본으로 동기화하여 재고조회와 100% 일치 보장
+    const [targetSnapshots, latestSnapshots, allInventories] = await Promise.all([
+      prisma.inventorySnapshot.findMany({
+        where: { snapshotDate: targetDate },
+      }),
+      prisma.inventorySnapshot.findMany({
+        take: 850,
+        orderBy: { snapshotDate: 'desc' },
+      }),
+      prisma.inventory.findMany({
+        include: { product: true },
+      }),
+    ]);
+
+    const activeSnapshots = targetSnapshots.length > 0 ? targetSnapshots : latestSnapshots;
+
+    const stockMapByNorm = new Map<string, { warehouse: string; currentQty: number; productCode?: string }>();
+    const stockMapByCode = new Map<string, { warehouse: string; currentQty: number; productCode?: string }>();
+
+    // 1단계: 실시간 재고(Inventory) 기본 등록
     for (const inv of allInventories) {
-      if (inv.productCode) invMapByCode.set(inv.productCode, inv);
-      if (inv.productName) invMapByNorm.set(normName(inv.productName), inv);
-      if (inv.product?.name) invMapByNorm.set(normName(inv.product.name), inv);
+      const info = { warehouse: normalizeWarehouse(inv.warehouse), currentQty: inv.currentQty, productCode: inv.productCode };
+      if (inv.productCode) stockMapByCode.set(inv.productCode, info);
+      if (inv.productName) stockMapByNorm.set(normName(inv.productName), info);
+      if (inv.product?.name) stockMapByNorm.set(normName(inv.product.name), info);
+    }
+
+    // 2단계 (최우선): 일일 재고조사표 스냅샷 덮어쓰기 (재고조회와 창고명/수량 100% 무결성 직결)
+    for (const snap of activeSnapshots) {
+      const info = { warehouse: normalizeWarehouse(snap.warehouse), currentQty: snap.currentQty, productCode: snap.productCode };
+      if (snap.productCode) stockMapByCode.set(snap.productCode, info);
+      if (snap.productName) stockMapByNorm.set(normName(snap.productName), info);
     }
 
     // 3) DB에 이미 저장된 WorkOrder가 있는지 확인
@@ -309,7 +332,7 @@ export async function GET(req: NextRequest) {
 
     if (savedOrders.length > 0) {
       const formatted = savedOrders.map((w, idx) => {
-        const inv = invMapByNorm.get(normName(w.productName)) || (w.productCode ? invMapByCode.get(w.productCode) : undefined);
+        const inv = stockMapByNorm.get(normName(w.productName)) || (w.productCode ? stockMapByCode.get(w.productCode) : undefined);
         const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(w.product, w.gyeName);
         const liveStock = inv ? inv.currentQty : (w.product?.inventories?.[0]?.currentQty || 0);
 
@@ -458,7 +481,7 @@ export async function GET(req: NextRequest) {
           const lossRate = Math.max(0, 100 - yieldRate);
           const reqQty = (item.qty * d.unitQty * (100 / yieldRate));
 
-          const inv = invMapByNorm.get(normName(chName)) || (ch.productCode ? invMapByCode.get(ch.productCode) : undefined);
+          const inv = stockMapByNorm.get(normName(chName)) || (ch.productCode ? stockMapByCode.get(ch.productCode) : undefined);
           const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(ch, gName);
           const currentStock = inv ? inv.currentQty : (ch.inventories?.[0]?.currentQty || 0);
 

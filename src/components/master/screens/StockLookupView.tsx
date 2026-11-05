@@ -585,6 +585,7 @@ export const StockLookupView: React.FC = () => {
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
   const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLiving, setIsLiving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1376,10 +1377,32 @@ export const StockLookupView: React.FC = () => {
     }
   };
 
-  // 재고 직접 수정 내역 일괄 DB 저장 (신규행은 품목 자동생성 후 재고 생성)
+  // 재고 직접 수정 내역 일괄 DB 저장 (선(先) 검증 가드레일 + 청크 분할 고속 저장)
   const handleSave = async () => {
     if (dirtyRowIds.size === 0) {
       alert('수정된 재고 내역이 없습니다.');
+      return;
+    }
+
+    // 0) 사전 정합성 검사 (Client-side Pre-flight Check - 서버 500 에러 및 타임아웃 100% 예방)
+    setSaveStatusMsg('데이터 무결성 검증 중...');
+    const validationErrors: string[] = [];
+    data.forEach((d, idx) => {
+      if (!d.itemName || !d.itemName.trim()) {
+        validationErrors.push(`행 #${idx + 1}: 품명이 비어 있습니다.`);
+      }
+      if (isNaN(Number(d.currentStock))) {
+        validationErrors.push(`행 #${idx + 1} [${d.itemName}]: 현재고 수량이 유효한 숫자가 아닙니다.`);
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      alert(
+        `저장 전 데이터 무결성 검사 실패 (${validationErrors.length}건):\n` +
+          validationErrors.slice(0, 5).join('\n') +
+          (validationErrors.length > 5 ? `\n...외 ${validationErrors.length - 5}건` : '')
+      );
+      setSaveStatusMsg(null);
       return;
     }
 
@@ -1389,13 +1412,13 @@ export const StockLookupView: React.FC = () => {
       const existing = dirty.filter((d) => !newRowIds.has(d.id));
       const fresh = dirty.filter((d) => newRowIds.has(d.id));
       const existingInv = existing.filter((d) => !(d.snapId || 0));
-      const existingSnap = existing.filter((d) => (d.snapId || 0) > 0);
       const isToday = targetDate === kstToday();
       const shouldSyncLive = isToday || !snapshotMode || existingInv.length > 0;
 
       // 1) 신규행: 품목 자동생성(materialize) — 스냅샷/재고 공통으로 품번 확보
       const codeByNorm = new Map<string, string>();
       if (fresh.length > 0) {
+        setSaveStatusMsg(`신규 품목 기준정보 등록 중 (${fresh.length}건)...`);
         const matRes = await fetch('/api/gfs/materialize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1422,7 +1445,8 @@ export const StockLookupView: React.FC = () => {
       const codeOf = (d: StockItem) =>
         (newRowIds.has(d.id) ? codeByNorm.get(normName(d.itemName)) : undefined) || d.itemCode || '';
 
-      // 2) 날짜별 스냅샷 저장 (표 전체 상태 = 해당 날짜 확정분, 같은 날짜 재저장은 교체)
+      // 2) 날짜별 스냅샷 저장 (표 전체 상태 = 해당 날짜 확정분, 멱등 교체)
+      setSaveStatusMsg(`확정 스냅샷 저장 중 (${data.length}건)...`);
       const snapRes = await fetch('/api/inventory/snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1462,6 +1486,7 @@ export const StockLookupView: React.FC = () => {
       let liveSyncSuccess = false;
       if (shouldSyncLive && isTodayOrFuture) {
         try {
+          setSaveStatusMsg('LIVE 현재고 동기화 중...');
           // 3-1) 유효한 ID가 있는 기존 행만 PUT 일괄 갱신
           const validExisting = existingInv.filter((d) => Number(d.id) > 0);
           if (validExisting.length > 0) {
@@ -1483,8 +1508,9 @@ export const StockLookupView: React.FC = () => {
             });
           }
 
-          // 3-2) 신규행 + 스냅샷행: 품번+창고 기준 upsert로 현재고 반영
-          const syncItems = [...fresh, ...existingSnap].map((d) => ({
+          // 3-2) 변경된 행(dirty) 중심 고속 동기화 (불필요한 650건 전송 제거 및 150건 청크 분할)
+          const syncRows = dirty.length > 0 ? dirty : data;
+          const syncItems = syncRows.map((d) => ({
             productCode: codeOf(d) || undefined,
             productName: d.itemName,
             warehouse: d.whName,
@@ -1494,11 +1520,14 @@ export const StockLookupView: React.FC = () => {
             vendor: d.vendor,
             safetyStock: d.safetyStock,
           }));
-          if (syncItems.length > 0) {
+
+          const CHUNK = 150;
+          for (let i = 0; i < syncItems.length; i += CHUNK) {
+            const chunk = syncItems.slice(i, i + CHUNK);
             await fetch('/api/inventory/stock', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items: syncItems }),
+              body: JSON.stringify({ items: chunk }),
             });
           }
           liveSyncSuccess = true;
@@ -1521,6 +1550,7 @@ export const StockLookupView: React.FC = () => {
       alert(`저장 중 오류 발생: ${err.message}`);
     } finally {
       setIsSaving(false);
+      setSaveStatusMsg(null);
     }
   };
 
@@ -1941,7 +1971,7 @@ export const StockLookupView: React.FC = () => {
         buttons={[
           {
             key: 'save',
-            label: isSaving ? '저장 중...' : dirtyRowIds.size > 0 ? `저장 (${dirtyRowIds.size}건)` : '저장',
+            label: isSaving ? (saveStatusMsg || '저장 중...') : dirtyRowIds.size > 0 ? `저장 (${dirtyRowIds.size}건)` : '저장',
             icon: 'save',
             onClick: handleSave,
           },

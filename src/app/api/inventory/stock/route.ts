@@ -79,32 +79,37 @@ export async function PUT(req: NextRequest) {
     const existingIdSet = new Set(existingInvs.map((x) => x.id));
     const prodIdMap = new Map(existingInvs.map((x) => [x.id, x.productId]));
 
-    // 2) 실제 존재하는 ID만 트랜잭션으로 안전하게 갱신
+    // 2) 실제 존재하는 ID만 50개 단위 청크 트랜잭션으로 안전하게 갱신 (대용량 락 및 타임아웃 방지)
     const validUpdates = updates.filter((u) => existingIdSet.has(Number(u.id)));
 
     let results: any[] = [];
     if (validUpdates.length > 0) {
-      results = await prisma.$transaction(
-        validUpdates.map((item) => {
-          const data: any = {};
-          if (item.currentQty !== undefined) data.currentQty = Number(item.currentQty);
-          if (item.dailyUsage !== undefined) data.dailyUsage = Number(item.dailyUsage);
-          if (item.unitPrice !== undefined) data.unitPrice = Number(item.unitPrice);
-          if (item.stockAmount !== undefined) {
-            data.stockAmount = Number(item.stockAmount);
-          } else if (item.currentQty !== undefined && item.unitPrice !== undefined) {
-            data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
-          }
-          if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
-          if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < validUpdates.length; i += CHUNK_SIZE) {
+        const slice = validUpdates.slice(i, i + CHUNK_SIZE);
+        const chunkResults = await prisma.$transaction(
+          slice.map((item) => {
+            const data: any = {};
+            if (item.currentQty !== undefined) data.currentQty = Number(item.currentQty);
+            if (item.dailyUsage !== undefined) data.dailyUsage = Number(item.dailyUsage);
+            if (item.unitPrice !== undefined) data.unitPrice = Number(item.unitPrice);
+            if (item.stockAmount !== undefined) {
+              data.stockAmount = Number(item.stockAmount);
+            } else if (item.currentQty !== undefined && item.unitPrice !== undefined) {
+              data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
+            }
+            if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
+            if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
 
-          return prisma.inventory.update({
-            where: { id: Number(item.id) },
-            data,
-            include: { product: true },
-          });
-        })
-      );
+            return prisma.inventory.update({
+              where: { id: Number(item.id) },
+              data,
+              include: { product: true },
+            });
+          })
+        );
+        results.push(...chunkResults);
+      }
     }
 
     // 3) 안전재고(Product.safetyStockQty) 업데이트가 있는 경우 별도 반영
@@ -162,61 +167,113 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '생성할 재고 내역이 없습니다.' }, { status: 400 });
     }
 
+    // N+1 순차 쿼리 제거: 전체 품목 및 기존 재고 1회 일괄 조회 후 메모리 매칭 (30초 타임아웃 원천 방지)
+    const allProducts = await prisma.product.findMany({
+      select: { id: true, productCode: true, name: true, category: true, warehouse: true, unit: true, safetyStockQty: true },
+    });
+    const prodByCode = new Map(allProducts.map((p) => [p.productCode, p]));
+    const prodByName = new Map<string, (typeof allProducts)[number]>();
+    allProducts.forEach((p) => {
+      if (!prodByName.has(p.name)) prodByName.set(p.name, p);
+    });
+
+    const allInventories = await prisma.inventory.findMany({
+      select: { id: true, productId: true, warehouse: true, expiryDate: true },
+    });
+    const invByProdAndWh = new Map<string, (typeof allInventories)[number]>();
+    allInventories.forEach((inv) => {
+      invByProdAndWh.set(`${inv.productId}||${inv.warehouse}`, inv);
+    });
+
+    const toUpdate: { id: number; currentQty: number; unitPrice: number; stockAmount: number; expiryDate?: string }[] = [];
+    const toCreate: any[] = [];
+    const prodSafetyUpdates: { id: number; safetyStockQty: number }[] = [];
     const created: { productCode: string; warehouse: string }[] = [];
+
     for (const it of items) {
       if (!it.productName && !it.productCode) continue;
-      let product = it.productCode
-        ? await prisma.product.findUnique({ where: { productCode: it.productCode } })
-        : await prisma.product.findFirst({ where: { name: it.productName } });
-      if (!product && it.productName) {
-        product = await prisma.product.findFirst({ where: { name: it.productName } });
-      }
+      const product = (it.productCode ? prodByCode.get(it.productCode) : undefined) ||
+                      (it.productName ? prodByName.get(it.productName) : undefined);
       if (!product) continue;
+
       // 안전재고가 비어 있으면 자동계산값으로 채움 (수기값 유지)
       const wantSafety = Math.max(0, Math.round(Number(it.safetyStock) || 0));
       if (wantSafety > 0 && !(Number(product.safetyStockQty) > 0)) {
-        try {
-          product = await prisma.product.update({
-            where: { id: product.id },
-            data: { safetyStockQty: wantSafety },
-          });
-        } catch {}
+        prodSafetyUpdates.push({ id: product.id, safetyStockQty: wantSafety });
+        product.safetyStockQty = wantSafety; // 중복 업데이트 방지
       }
+
       const warehouse = it.warehouse || product.warehouse || '상온';
       const qty = Number(it.currentQty) || 0;
       const price = Number(it.unitPrice) || 0;
-      // 같은 품목+창고 재고가 있으면 수량 갱신, 없으면 생성
-      const existInv = await prisma.inventory.findFirst({
-        where: { productId: product.id, warehouse },
-      });
+      const key = `${product.id}||${warehouse}`;
+      const existInv = invByProdAndWh.get(key);
+
       if (existInv) {
-        await prisma.inventory.update({
-          where: { id: existInv.id },
-          data: {
-            currentQty: qty,
-            unitPrice: price,
-            stockAmount: qty * price,
-            expiryDate: it.expiryDate !== undefined ? String(it.expiryDate) : existInv.expiryDate,
-          },
+        toUpdate.push({
+          id: existInv.id,
+          currentQty: qty,
+          unitPrice: price,
+          stockAmount: qty * price,
+          expiryDate: it.expiryDate !== undefined ? String(it.expiryDate) : existInv.expiryDate,
         });
       } else {
-        await prisma.inventory.create({
-          data: {
-            productId: product.id,
-            productCode: product.productCode,
-            productName: it.productName || product.name,
-            category: product.category,
-            warehouse,
-            currentQty: qty,
-            unit: product.unit,
-            unitPrice: price,
-            stockAmount: qty * price,
-            expiryDate: it.expiryDate ? String(it.expiryDate) : '',
-            remark: '재고조사표 업로드 생성',
-          },
+        toCreate.push({
+          productId: product.id,
+          productCode: product.productCode,
+          productName: it.productName || product.name,
+          category: product.category,
+          warehouse,
+          currentQty: qty,
+          unit: product.unit,
+          unitPrice: price,
+          stockAmount: qty * price,
+          expiryDate: it.expiryDate ? String(it.expiryDate) : '',
+          remark: '재고조사표 업로드 생성',
         });
+        // 동일 요청 내 중복 생성 방지를 위해 임시 키 등록
+        invByProdAndWh.set(key, { id: -1, productId: product.id, warehouse, expiryDate: '' });
       }
       created.push({ productCode: product.productCode, warehouse });
+    }
+
+    // 신규 생성은 createMany로 단 1번에 벌크 삽입
+    if (toCreate.length > 0) {
+      await prisma.inventory.createMany({
+        data: toCreate,
+        skipDuplicates: true,
+      });
+    }
+
+    // 기존 재고 업데이트는 50개씩 병렬 청크 처리 (타임아웃 방지)
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < toUpdate.length; i += CHUNK_SIZE) {
+      const chunk = toUpdate.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((u) =>
+          prisma.inventory.update({
+            where: { id: u.id },
+            data: {
+              currentQty: u.currentQty,
+              unitPrice: u.unitPrice,
+              stockAmount: u.stockAmount,
+              ...(u.expiryDate !== undefined ? { expiryDate: u.expiryDate } : {}),
+            },
+          })
+        )
+      );
+    }
+
+    // 품목 마스터 안전재고 보강 병렬 실행
+    if (prodSafetyUpdates.length > 0) {
+      await Promise.all(
+        prodSafetyUpdates.slice(0, 50).map((ps) =>
+          prisma.product.update({
+            where: { id: ps.id },
+            data: { safetyStockQty: ps.safetyStockQty },
+          }).catch(() => {})
+        )
+      );
     }
 
     await prisma.systemLog
