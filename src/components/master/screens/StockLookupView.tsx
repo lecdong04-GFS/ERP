@@ -1598,7 +1598,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'whName',
       label: locked ? '창고명 🔒' : '창고명',
-      width: '56px',
+      width: '3.8%',
+      minWidth: '54px',
       align: 'center',
       sortable: true,
       filterable: true,
@@ -1608,7 +1609,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'vendor',
       label: '거래처',
-      width: '88px',
+      width: '6.6%',
+      minWidth: '88px',
       align: 'left',
       sortable: true,
       filterable: true,
@@ -1618,7 +1620,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemCode',
       label: '품번',
-      width: '58px',
+      width: '4.2%',
+      minWidth: '58px',
       align: 'center',
       sortable: true,
       filterable: true,
@@ -1627,7 +1630,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemType',
       label: '구분',
-      width: '46px',
+      width: '3.2%',
+      minWidth: '44px',
       align: 'center',
       sortable: true,
       editable: false,
@@ -1635,7 +1639,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'category',
       label: '품종',
-      width: '54px',
+      width: '3.7%',
+      minWidth: '50px',
       align: 'center',
       sortable: true,
       editable: false,
@@ -1643,6 +1648,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemName',
       label: '품명',
+      width: '15.0%',
+      minWidth: '180px',
       sortable: true,
       filterable: true,
       editable: false,
@@ -1655,21 +1662,24 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'unit',
       label: '단위',
-      width: '38px',
+      width: '2.6%',
+      minWidth: '36px',
       align: 'center',
       editable: false,
     },
     {
       key: 'inboundDate',
       label: '입고일',
-      width: '46px',
+      width: '3.1%',
+      minWidth: '44px',
       align: 'center',
       editable: false,
     },
     {
       key: 'dailyUsage',
       label: locked ? '일사용량 🔒' : '일사용량',
-      width: '74px',
+      width: '5.1%',
+      minWidth: '70px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1698,7 +1708,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'estDailyUsage',
       label: '추정일사용량',
-      width: '78px',
+      width: '5.4%',
+      minWidth: '74px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1725,7 +1736,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'packUnit',
       label: '입수량',
-      width: '44px',
+      width: '3.0%',
+      minWidth: '42px',
       align: 'right',
       format: 'number',
       editable: false,
@@ -1733,7 +1745,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'boxQty',
       label: locked ? '박스 🔒' : '박스',
-      width: '44px',
+      width: '3.0%',
+      minWidth: '42px',
       align: 'right',
       format: 'number',
       editable: !locked,
@@ -1741,7 +1754,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'pieceQty',
       label: locked ? '낱개 🔒' : '낱개',
-      width: '44px',
+      width: '3.0%',
+      minWidth: '42px',
       align: 'right',
       format: 'number',
       editable: !locked,
@@ -1749,7 +1763,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'inQty',
       label: '입고수량',
-      width: '54px',
+      width: '3.7%',
+      minWidth: '52px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1758,7 +1773,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'prevStock',
       label: locked ? '전일재고 🔒' : '전일재고',
-      width: '58px',
+      width: '4.0%',
+      minWidth: '56px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1767,7 +1783,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'currentStock',
       label: locked ? '현재고 🔒' : '현재고',
-      width: '58px',
+      width: '4.2%',
+      minWidth: '58px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1786,7 +1803,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'diffStock',
       label: '전일대비증감',
-      width: '68px',
+      width: '4.8%',
+      minWidth: '66px',
       align: 'right',
       sortable: true,
       editable: false,
@@ -1803,7 +1821,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'stockDays',
       label: '재고유지일',
-      width: '60px',
+      width: '4.2%',
+      minWidth: '58px',
       align: 'right',
       sortable: true,
       editable: false,
@@ -1827,7 +1846,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'safetyStock',
       label: '안전재고',
-      width: '54px',
+      width: '3.8%',
+      minWidth: '54px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1853,7 +1873,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'shortage',
       label: '과부족',
-      width: '54px',
+      width: '3.8%',
+      minWidth: '54px',
       align: 'right',
       format: 'number',
       highlightNegative: true,
@@ -1868,7 +1889,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'status',
       label: '상태',
-      width: '44px',
+      width: '3.0%',
+      minWidth: '44px',
       align: 'center',
       sortable: true,
       filterable: true,
@@ -1893,7 +1915,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'unitPrice',
       label: locked ? '단가 🔒' : '단가',
-      width: '60px',
+      width: '4.4%',
+      minWidth: '62px',
       align: 'right',
       format: 'currency',
       editable: !locked,
@@ -1901,7 +1924,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'totalAmount',
       label: '재고금액',
-      width: '80px',
+      width: '5.8%',
+      minWidth: '78px',
       align: 'right',
       format: 'currency',
       sortable: true,
@@ -1970,9 +1994,8 @@ export const StockLookupView: React.FC = () => {
       />
 
       {/* 2. Filter Bar (단일 1줄 레이아웃) */}
-      <div className="bg-[#e4e8ee] border-b border-[#b0b8c2] px-3 py-1 text-[12px] shrink-0 overflow-x-auto whitespace-nowrap">
-        <div className="w-full max-w-[1480px] mx-auto flex items-center justify-between gap-x-2.5">
-          <div className="flex items-center gap-x-2.5 min-w-0">
+      <div className="bg-[#e4e8ee] border-b border-[#b0b8c2] px-3 py-1 flex items-center justify-between gap-x-2.5 text-[12px] shrink-0 overflow-x-auto whitespace-nowrap w-full">
+        <div className="flex items-center gap-x-2.5 min-w-0">
           {/* Target Date with prev/next */}
           <div className="flex shrink-0 items-center gap-1">
             <span className="font-semibold text-gray-700">기준일</span>
@@ -2204,89 +2227,82 @@ export const StockLookupView: React.FC = () => {
           </button>
         </div>
       </div>
-    </div>
 
       {/* 2-0. 당일 재고조사표 미등록 안내 슬림 배너 */}
       {!isCurrentDateUploaded && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-amber-900 text-[12px] shrink-0">
-          <div className="w-full max-w-[1480px] mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                <strong>[재고조사표 미등록 안내]</strong> <strong>{targetDate}</strong> 일자의 현장 실사 재고조사표가 아직 업로드되지 않아,{' '}
-                <span className="text-amber-800 font-bold bg-amber-100 px-1 py-0.5 rounded">실시간 전산 추정치(LIVE 현재고)</span>가 표시되고 있습니다.
-                현장 재고조사표 엑셀을 업로드하시면 해당 일자의 확정 실사 재고로 영구 보관됩니다.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-0.5 rounded text-[11px] shrink-0 cursor-pointer transition-colors shadow-2xs"
-            >
-              <Upload className="w-3 h-3" />
-              <span>재고조사표 엑셀 올리기</span>
-            </button>
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-between text-amber-900 text-[12px] shrink-0 w-full">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>[재고조사표 미등록 안내]</strong> <strong>{targetDate}</strong> 일자의 현장 실사 재고조사표가 아직 업로드되지 않아,{' '}
+              <span className="text-amber-800 font-bold bg-amber-100 px-1 py-0.5 rounded">실시간 전산 추정치(LIVE 현재고)</span>가 표시되고 있습니다.
+              현장 재고조사표 엑셀을 업로드하시면 해당 일자의 확정 실사 재고로 영구 보관됩니다.
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-0.5 rounded text-[11px] shrink-0 cursor-pointer transition-colors shadow-2xs"
+          >
+            <Upload className="w-3 h-3" />
+            <span>재고조사표 엑셀 올리기</span>
+          </button>
         </div>
       )}
 
       {/* 2-1. 빨간펜 확인필요 패널 (담당자 판단용, 클릭하면 해당 행으로 이동) */}
       {reviewOpen && reviewList.length > 0 && (
-        <div className="bg-red-50 border-b border-red-300 px-3 py-1.5 shrink-0">
-          <div className="w-full max-w-[1480px] mx-auto">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-red-800 text-[12px]">
-                확인필요 {reviewList.length}건
-              </span>
-              <span className="text-[11px] text-red-600">클릭하면 해당 품목으로 이동 · 확인 후 저장하세요</span>
+        <div className="bg-red-50 border-b border-red-300 px-3 py-1.5 shrink-0 w-full">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-red-800 text-[12px]">
+              확인필요 {reviewList.length}건
+            </span>
+            <span className="text-[11px] text-red-600">클릭하면 해당 품목으로 이동 · 확인 후 저장하세요</span>
+            <button
+              type="button"
+              onClick={() => setReviewOpen(false)}
+              className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="mt-1 flex gap-1.5 flex-wrap max-h-[76px] overflow-auto">
+            {reviewList.map((rv) => (
               <button
+                key={`${rv.kind}-${rv.id}`}
                 type="button"
-                onClick={() => setReviewOpen(false)}
-                className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100"
+                onClick={() => {
+                  setKeyword(rv.name);
+                  setSelectedRowId(rv.id);
+                }}
+                title="클릭하면 해당 품목만 표시"
+                className="px-2 py-0.5 bg-white border border-red-300 rounded text-[11px] hover:bg-red-100 text-left"
               >
-                닫기
+                <span className={`font-bold ${rv.kind === '신규' ? 'text-emerald-700' : 'text-red-700'}`}>
+                  [{rv.kind}]
+                </span>{' '}
+                <span className="text-gray-800">{rv.name}</span>{' '}
+                <span className="font-mono text-gray-600">
+                  {rv.oldQty.toLocaleString()} → {rv.curQty.toLocaleString()}
+                </span>
               </button>
-            </div>
-            <div className="mt-1 flex gap-1.5 flex-wrap max-h-[76px] overflow-auto">
-              {reviewList.map((rv) => (
-                <button
-                  key={`${rv.kind}-${rv.id}`}
-                  type="button"
-                  onClick={() => {
-                    setKeyword(rv.name);
-                    setSelectedRowId(rv.id);
-                  }}
-                  title="클릭하면 해당 품목만 표시"
-                  className="px-2 py-0.5 bg-white border border-red-300 rounded text-[11px] hover:bg-red-100 text-left"
-                >
-                  <span className={`font-bold ${rv.kind === '신규' ? 'text-emerald-700' : 'text-red-700'}`}>
-                    [{rv.kind}]
-                  </span>{' '}
-                  <span className="text-gray-800">{rv.name}</span>{' '}
-                  <span className="font-mono text-gray-600">
-                    {rv.oldQty.toLocaleString()} → {rv.curQty.toLocaleString()}
-                  </span>
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 3. Main Grid */}
-      <div className="flex-1 p-2 bg-[#d8dde5] overflow-auto flex flex-col items-center">
-        <div className="w-full max-w-[1480px] flex-1 bg-white border border-[#9aa2ad] shadow-sm flex flex-col overflow-hidden">
-          <MasterDataGrid
-            columns={columns}
-            data={filteredData}
-            selectedRowId={selectedRowId}
-            onRowClick={(row) => setSelectedRowId(row.id)}
-            onCellChange={handleCellChange}
-            showRowIndex={true}
-            summaryRow={false}
-            enablePagination={false}
-          />
-        </div>
+      {/* 3. Main Grid (여백 없이 전체 가로, 세로폭 100% 활용) */}
+      <div className="flex-1 w-full bg-white overflow-hidden flex flex-col">
+        <MasterDataGrid
+          columns={columns}
+          data={filteredData}
+          selectedRowId={selectedRowId}
+          onRowClick={(row) => setSelectedRowId(row.id)}
+          onCellChange={handleCellChange}
+          showRowIndex={true}
+          summaryRow={false}
+          enablePagination={false}
+        />
       </div>
     </div>
   );

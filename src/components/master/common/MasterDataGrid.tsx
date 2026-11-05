@@ -258,7 +258,10 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           <thead className="sticky top-0 z-20 bg-[#c0c7ea] border-b border-[#9ca3af] shadow-xs">
             <tr className="h-[30px]">
               {showRowIndex && (
-                <th className="w-[34px] bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 text-[11px]">
+                <th
+                  style={{ width: '2.2%', minWidth: '34px' }}
+                  className="bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 text-[11px]"
+                >
                   순번
                 </th>
               )}
@@ -320,7 +323,10 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                     }`}
                   >
                     {showRowIndex && (
-                      <td className="border-r border-[#e5e7eb] text-center text-gray-500 bg-[#f8fafc] text-[11px] font-mono">
+                      <td
+                        style={{ width: '2.2%', minWidth: '34px' }}
+                        className="border-r border-[#e5e7eb] text-center text-gray-500 bg-[#f8fafc] text-[11px] font-mono"
+                      >
                         {row.no !== undefined ? row.no : actualIndex}
                       </td>
                     )}
