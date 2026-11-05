@@ -32,6 +32,7 @@ export const PrintReportModal: React.FC = () => {
     printPayload,
     boxPayload,
     matReqPayload,
+    workOrderPayload,
     poPayload,
   } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
@@ -82,23 +83,36 @@ export const PrintReportModal: React.FC = () => {
     const wb = XLSX.utils.book_new();
 
     if (activeDocType === 'WORK_ORDER') {
-      const data = dispatchedWorkOrders.map((w, idx) => ({
-        순번: idx + 1,
-        공정코드: w.gyeId,
-        공정명: w.gyeName,
-        작업라인: w.lineName,
-        품목명: w.partName,
-        규격: w.partSpec,
-        단위: w.unit,
-        지시수량: shiftFilter === '1편' ? w.orderQty1 : w.orderQty2,
-        목표투입량: w.prodQty,
-        편수: shiftFilter,
-        배차완료시간: w.completeTime,
-        CCP점검: '중심온도 ≥75℃ / 성형실온 ≤18℃',
-      }));
+      const data = workOrderPayload
+        ? workOrderPayload.rows.map((r, idx) => ({
+            순서: r.workSeq || idx + 1,
+            라인명: workOrderPayload.lineName,
+            제품명: r.productName,
+            창고명: r.warehouseName,
+            규격: r.spec,
+            단위: r.unit,
+            지시량: r.orderQty,
+            작업시간: r.timeRange,
+            완료여부: r.status,
+            담당자: r.assignee,
+          }))
+        : dispatchedWorkOrders.map((w, idx) => ({
+            순번: idx + 1,
+            공정코드: w.gyeId,
+            공정명: w.gyeName,
+            작업라인: w.lineName,
+            품목명: w.partName,
+            규격: w.partSpec,
+            단위: w.unit,
+            지시수량: shiftFilter === '1편' ? w.orderQty1 : w.orderQty2,
+            목표투입량: w.prodQty,
+            편수: shiftFilter,
+            배차완료시간: w.completeTime,
+            CCP점검: '중심온도 ≥75℃ / 성형실온 ≤18℃',
+          }));
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, '작업지시서');
-      XLSX.writeFile(wb, `GFS_공정별작업지시서_${shiftFilter}_${printDate}.xlsx`);
+      XLSX.writeFile(wb, `GFS_작업지시서_${workOrderPayload?.lineName || shiftFilter}_${printDate}.xlsx`);
     } else if (activeDocType === 'MATERIAL_REQUIREMENT') {
       const rows = matReqPayload?.rows || [];
       const data = rows.map((r, idx) => ({
@@ -499,64 +513,124 @@ export const PrintReportModal: React.FC = () => {
               {/* 1. WORK ORDER VIEW */}
               {activeDocType === 'WORK_ORDER' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between text-xs font-semibold bg-gray-100 p-2 border border-gray-300">
-                    <div>
-                      <span>배송구분: </span>
-                      <span className="text-blue-800 font-extrabold text-sm mr-4">{shiftFilter} 출하</span>
-                      <span>대상라인: </span>
-                      <span className="font-bold">46개 계 (성형장, 취반실, 조리실, 가열실)</span>
+                  {/* 상단 라인명 / 월일 / 시프트명 메타 정보 바 (사용자 현장 사진 100% 일치) */}
+                  <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 border border-black font-semibold">
+                    <div className="flex items-center gap-6">
+                      <div>
+                        <span className="text-gray-500 font-normal">라인명: </span>
+                        <span className="font-extrabold text-blue-900 text-sm">
+                          {workOrderPayload?.lineName || '커팅실'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-normal">월/일: </span>
+                        <span className="font-bold text-gray-900">
+                          {workOrderPayload?.workDate || printDate}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-normal">시프트명: </span>
+                        <span className="font-extrabold text-emerald-800">
+                          {workOrderPayload?.shift || shiftFilter}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span>총 지시공정수: </span>
-                      <span className="font-mono font-bold text-blue-900">
-                        {dispatchedWorkOrders.length}건
-                      </span>
+                    <div className="text-right flex items-center gap-4">
+                      <div>
+                        <span className="text-gray-500 font-normal">총 지시품목: </span>
+                        <span className="font-mono font-black text-indigo-950 text-sm">
+                          {workOrderPayload ? workOrderPayload.rows.length : dispatchedWorkOrders.length}건
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-normal">총 지시수량: </span>
+                        <span className="font-mono font-black text-blue-900 text-sm">
+                          {workOrderPayload
+                            ? workOrderPayload.rows.reduce((sum, r) => sum + (Number(r.orderQty) || 0), 0).toLocaleString()
+                            : dispatchedWorkOrders.reduce((sum, w) => sum + (shiftFilter === '1편' ? w.orderQty1 : w.orderQty2), 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
+                  {/* 현장 지시서 테이블 */}
                   <table className="w-full text-xs border-collapse border border-black">
                     <thead className="bg-gray-100 text-center font-bold border-b-2 border-black">
                       <tr>
-                        <th className="border border-black py-1.5 px-1 w-8">No</th>
-                        <th className="border border-black py-1.5 px-2 w-16">공정코드</th>
-                        <th className="border border-black py-1.5 px-2 w-24">공정(계)명</th>
-                        <th className="border border-black py-1.5 px-2">품목명 (생산/반제품)</th>
-                        <th className="border border-black py-1.5 px-2 w-14">규격</th>
-                        <th className="border border-black py-1.5 px-2 text-right w-16">지시량</th>
-                        <th className="border border-black py-1.5 px-2 text-right w-16">투입량</th>
-                        <th className="border border-black py-1.5 px-2 w-14">배차완료</th>
-                        <th className="border border-black py-1.5 px-2 w-32">CCP 점검기준</th>
-                        <th className="border border-black py-1.5 px-2 w-12">확인</th>
+                        <th className="border border-black py-2 px-1 w-12">순서</th>
+                        <th className="border border-black py-2 px-3 text-left">제품명</th>
+                        <th className="border border-black py-2 px-2 w-28">창고명</th>
+                        <th className="border border-black py-2 px-2 w-20">규격/단위</th>
+                        <th className="border border-black py-2 px-2 text-right w-24">지시량</th>
+                        <th className="border border-black py-2 px-2 w-32">작업시간</th>
+                        <th className="border border-black py-2 px-2 w-20">완료여부</th>
+                        <th className="border border-black py-2 px-2 w-24">담당자</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-300">
-                      {dispatchedWorkOrders.map((w, idx) => (
-                        <tr key={w.id} className="text-center">
-                          <td className="border border-black py-1 px-1 font-mono">{idx + 1}</td>
-                          <td className="border border-black py-1 px-1 font-mono font-bold">{w.gyeId}</td>
-                          <td className="border border-black py-1 px-1 font-medium text-left">{w.gyeName}</td>
-                          <td className="border border-black py-1 px-2 font-bold text-left">{w.partName}</td>
-                          <td className="border border-black py-1 px-1 text-[10px] text-gray-700">{w.partSpec}</td>
-                          <td className="border border-black py-1 px-1 font-mono font-extrabold text-right text-blue-900">
-                            {(shiftFilter === '1편' ? w.orderQty1 : w.orderQty2).toLocaleString()}
-                          </td>
-                          <td className="border border-black py-1 px-1 font-mono text-right text-gray-800">
-                            {w.prodQty.toLocaleString()}
-                          </td>
-                          <td className="border border-black py-1 px-1 font-mono text-[10px]">{w.completeTime}</td>
-                          <td className="border border-black py-1 px-1 text-[9px] text-gray-600 text-left">
-                            중심온도 ≥75℃ / 성형실온 ≤18℃
-                          </td>
-                          <td className="border border-black py-1 px-1 text-center font-serif text-[10px] text-gray-400">
-                            (서명)
-                          </td>
-                        </tr>
-                      ))}
+                    <tbody className="divide-y divide-black">
+                      {workOrderPayload ? (
+                        workOrderPayload.rows.map((r, idx) => (
+                          <tr key={idx} className="text-center hover:bg-slate-50">
+                            <td className="border border-black py-2 px-1 font-mono font-bold text-gray-700">
+                              {r.workSeq || idx + 1}
+                            </td>
+                            <td className="border border-black py-2 px-3 font-bold text-left text-slate-900">
+                              {r.productName}
+                              {r.lossRate !== undefined && r.lossRate > 0 && (
+                                <span className="ml-2 text-[10px] text-gray-400 font-normal">
+                                  (로스 {r.lossRate}%)
+                                </span>
+                              )}
+                            </td>
+                            <td className="border border-black py-2 px-2 font-semibold text-blue-900 bg-blue-50/30">
+                              {r.warehouseName || '냉장창고2'}
+                            </td>
+                            <td className="border border-black py-2 px-1 font-mono text-slate-700">
+                              {r.unit || 'g'}
+                            </td>
+                            <td className="border border-black py-2 px-2 font-mono font-black text-right text-indigo-950 text-sm">
+                              {Number(r.orderQty || 0).toLocaleString()}
+                            </td>
+                            <td className="border border-black py-2 px-2 font-mono text-[11px] text-slate-600">
+                              {r.timeRange || '06:00 ~ 07:30'}
+                            </td>
+                            <td className="border border-black py-2 px-1 text-center">
+                              {r.status === '완료' ? (
+                                <span className="font-bold text-emerald-700 text-xs">✓ 완료</span>
+                              ) : (
+                                <span className="inline-block w-4 h-4 border border-black rounded-xs"></span>
+                              )}
+                            </td>
+                            <td className="border border-black py-2 px-2 font-serif text-[11px] text-gray-600">
+                              {r.assignee || '(서명)'}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        dispatchedWorkOrders.map((w, idx) => (
+                          <tr key={w.id} className="text-center">
+                            <td className="border border-black py-1 px-1 font-mono">{idx + 1}</td>
+                            <td className="border border-black py-1 px-2 font-bold text-left">{w.partName}</td>
+                            <td className="border border-black py-1 px-1 font-medium text-blue-900">냉장창고2</td>
+                            <td className="border border-black py-1 px-1 text-[10px] text-gray-700">{w.unit || 'ea'}</td>
+                            <td className="border border-black py-1 px-1 font-mono font-extrabold text-right text-blue-900">
+                              {(shiftFilter === '1편' ? w.orderQty1 : w.orderQty2).toLocaleString()}
+                            </td>
+                            <td className="border border-black py-1 px-1 font-mono text-[10px]">{w.completeTime || '06:00 ~ 07:30'}</td>
+                            <td className="border border-black py-1 px-1 text-center">
+                              <span className="inline-block w-4 h-4 border border-black rounded-xs"></span>
+                            </td>
+                            <td className="border border-black py-1 px-1 text-center font-serif text-[10px] text-gray-400">
+                              (서명)
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
 
                   <div className="text-[10px] text-gray-500 border-t border-gray-300 pt-2 flex justify-between items-center">
-                    <span>* 본 작업지시서는 식품위생법 및 HACCP 선행요건에 의거하여 2년간 보관됩니다.</span>
+                    <span>* 본 작업지시서는 식품위생법 및 HACCP 선행요건 관리기준에 의거하여 발행 및 보관됩니다.</span>
                     <span>페이지 1 / 1</span>
                   </div>
                 </div>

@@ -14,6 +14,27 @@ export type PrintDocumentType =
   | 'DELIVERY_BOX_LABEL'
   | 'MATERIAL_REQUIREMENT';
 
+export interface WorkOrderPrintRow {
+  workSeq: number;
+  productName: string;
+  warehouseName: string;
+  spec: string;
+  unit: string;
+  orderQty: number;
+  timeRange: string;
+  lossRate?: number;
+  yieldRate?: number;
+  status: string;
+  assignee: string;
+}
+
+export interface WorkOrderPrintPayload {
+  lineName: string;
+  workDate: string;
+  shift: string;
+  rows: WorkOrderPrintRow[];
+}
+
 export interface PurchaseOrderPrintPayload {
   orderNo: string;
   orderDate: string;
@@ -87,6 +108,8 @@ interface PrintReportContextType {
   setBoxPayload: (payload: DeliveryBoxLabelData[] | null) => void;
   matReqPayload: MatReqPrintPayload | null;
   setMatReqPayload: (payload: MatReqPrintPayload | null) => void;
+  workOrderPayload: WorkOrderPrintPayload | null;
+  setWorkOrderPayload: (payload: WorkOrderPrintPayload | null) => void;
   poPayload: PurchaseOrderPrintPayload | null;
   setPoPayload: (payload: PurchaseOrderPrintPayload | null) => void;
 }
@@ -99,6 +122,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [printPayload, setPrintPayload] = useState<DeliveryStatementPayload | null>(null);
   const [boxPayload, setBoxPayload] = useState<DeliveryBoxLabelData[] | null>(null);
   const [matReqPayload, setMatReqPayload] = useState<MatReqPrintPayload | null>(null);
+  const [workOrderPayload, setWorkOrderPayload] = useState<WorkOrderPrintPayload | null>(null);
   const [poPayload, setPoPayload] = useState<PurchaseOrderPrintPayload | null>(null);
 
   const openPrintModal = (docType?: PrintDocumentType) => {
@@ -113,6 +137,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
     setPrintPayload(null);
     setBoxPayload(null);
     setMatReqPayload(null);
+    setWorkOrderPayload(null);
     setPoPayload(null);
   };
 
@@ -130,6 +155,8 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
         setBoxPayload,
         matReqPayload,
         setMatReqPayload,
+        workOrderPayload,
+        setWorkOrderPayload,
         poPayload,
         setPoPayload,
       }}
