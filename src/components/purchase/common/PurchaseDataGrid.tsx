@@ -173,7 +173,7 @@ export const PurchaseDataGrid: React.FC<PurchaseDataGridProps> = ({
     if (col.warehouseDropdown) {
       return (
         <select
-          value={val || '상온보관고'}
+          value={val || '상온'}
           onChange={(e) => onRowChange?.(row.id, col.key, e.target.value)}
           onClick={(e) => e.stopPropagation()}
           className="w-full text-[12px] px-1.5 py-0.5 border border-blue-400 bg-white text-gray-800 focus:outline-none"

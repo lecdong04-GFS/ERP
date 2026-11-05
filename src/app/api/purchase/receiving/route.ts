@@ -147,14 +147,16 @@ export async function POST(req: NextRequest) {
         const isManualClose = Boolean(item.manualClose);
 
         // 1) 품목(Product) 조회 또는 생성
-        let product = await tx.product.findFirst({
-          where: {
-            OR: [
-              ...(item.productCode ? [{ productCode: item.productCode }] : []),
-              { name: item.name || item.productName },
-            ],
-          },
-        });
+        let product = item.productId
+          ? await tx.product.findUnique({ where: { id: Number(item.productId) } })
+          : await tx.product.findFirst({
+              where: {
+                OR: [
+                  ...(item.productCode ? [{ productCode: item.productCode }] : []),
+                  { name: item.name || item.productName },
+                ],
+              },
+            });
 
         if (!product) {
           product = await tx.product.create({
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
               spec: item.spec || '',
               unit: item.unit || 'ea',
               category: item.type || item.category || '원재료',
-              partnerId: finalPartnerId,
+              partnerId: item.partnerId || finalPartnerId,
             },
           });
         }
@@ -177,7 +179,16 @@ export async function POST(req: NextRequest) {
           item.lotNo ||
           `LOT-${receivingDate.replace(/-/g, '')}-${product.productCode.slice(-4)}`;
         const expiryDate = item.expiryDate || '2026-11-30';
-        const warehouse = item.warehouse || '상온보관고';
+        const rawWh = item.warehouse || '상온';
+        const warehouse = ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(rawWh)
+          ? rawWh
+          : rawWh.includes('냉동')
+          ? '냉동'
+          : rawWh.includes('냉장')
+          ? '냉장1'
+          : rawWh.includes('부재')
+          ? '부자재'
+          : '상온';
         const inspectResult =
           item.totalJudge === 'X' || item.inspectResult === '불합격' ? '불합격' : '합격';
 

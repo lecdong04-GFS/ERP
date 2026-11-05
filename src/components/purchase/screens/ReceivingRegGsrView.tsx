@@ -38,18 +38,18 @@ function getKoreanDayOfWeek(dateStr: string): string {
 
 // Fallback sample data in case DB has no pending orders
 const INITIAL_RECEIVING_DATA = [
-  { id: 1, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]1/2절김', spec: '200매*30ea', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '경기88바1234', recvQty: 2, unitQty: 30, pieceQty: 0, warehouse: '상온보관고', expiryDate: '2027-10-25', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 48000, recvAmt: 96000, diffQty: 0, lotNo: 'LOT-261029-D01', remark: '당일 도정미 직납' },
-  { id: 2, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]삼각김밥김', spec: '100매*32ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '경기88바1234', recvQty: 4, unitQty: 32, pieceQty: 0, warehouse: '상온보관고', expiryDate: '2027-10-25', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 52000, recvAmt: 208000, diffQty: 0, lotNo: 'LOT-261029-D02', remark: '' },
-  { id: 3, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]점보롤', spec: '450매*8롤', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '경기88바1234', recvQty: 2, unitQty: 8, pieceQty: 0, warehouse: '상온보관고', expiryDate: '2027-10-20', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 84000, diffQty: 0, lotNo: 'LOT-261029-D03', remark: '' },
-  { id: 4, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25338', method: '등록', supplier: '[네트웍스]두레', type: '부재료', name: '두레)ET-30', spec: '50ea*2줄', unit: 'box', orderQty: 6, prevRecvQty: 0, clientOutQty: 6, carNo: '충북80아5678', recvQty: 6, unitQty: 2, pieceQty: 0, warehouse: '부재료보관', expiryDate: '2028-10-29', carTemp: '20℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 38000, recvAmt: 228000, diffQty: 0, lotNo: 'LOT-261029-DR01', remark: '' },
-  { id: 5, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25326', method: '등록', supplier: '[네트웍스]CJ', type: '원재료', name: '[냉장]계란구이', spec: '1020g*12ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '서울92사7788', recvQty: 4, unitQty: 12, pieceQty: 0, warehouse: '육류냉장고', expiryDate: '2026-11-20', carTemp: '3.2℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 78000, recvAmt: 312000, diffQty: 0, lotNo: 'LOT-261029-CJ01', remark: '콜드체인 적정' },
-  { id: 6, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25325', method: '등록', supplier: '[네트웍스]오뚜기', type: '원재료', name: '[상온]케찹포션', spec: '3kg*4ea', unit: 'box', orderQty: 1, prevRecvQty: 0, clientOutQty: 1, carNo: '경기85아3344', recvQty: 1, unitQty: 4, pieceQty: 0, warehouse: '상온보관고', expiryDate: '2027-04-15', carTemp: '19℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 34000, recvAmt: 34000, diffQty: 0, lotNo: 'LOT-261029-OT01', remark: '' },
-  { id: 7, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25314', method: '등록', supplier: '[네트웍스]성경', type: '원재료', name: '[상온]성경김가루', spec: '500g*6ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '충북83바9900', recvQty: 4, unitQty: 6, pieceQty: 0, warehouse: '상온보관고', expiryDate: '2027-06-30', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 168000, diffQty: 0, lotNo: 'LOT-261029-SK01', remark: '' },
-  { id: 8, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25335', method: '등록', supplier: '[네트웍스]아이', type: '부재료', name: '혜자)순창/제육용기', spec: '600ea/box', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '인천81아1122', recvQty: 2, unitQty: 1, pieceQty: 0, warehouse: '부재료보관', expiryDate: '2028-10-29', carTemp: '21℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 65000, recvAmt: 130000, diffQty: 0, lotNo: 'LOT-261029-I01', remark: '' },
-  { id: 9, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25337', method: '등록', supplier: '[네트웍스]정우', type: '부재료', name: '정우)PP]5찬도시락용기', spec: '80ea*4pk/box', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '경기89바6677', recvQty: 4, unitQty: 4, pieceQty: 0, warehouse: '부재료보관', expiryDate: '2028-10-29', carTemp: '20℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 72000, recvAmt: 288000, diffQty: 0, lotNo: 'LOT-261029-JW01', remark: '' },
-  { id: 10, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉동]궁채나물', spec: '1kg*10ea', unit: 'box', orderQty: 1, prevRecvQty: 0, clientOutQty: 1, carNo: '서울90바4455', recvQty: 1, unitQty: 10, pieceQty: 0, warehouse: '냉동고', expiryDate: '2027-10-10', carTemp: '-18.5℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 63346, recvAmt: 63346, diffQty: 0, lotNo: 'LOT-261029-HS01', remark: '냉동 온도 검사필' },
-  { id: 11, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉장]다진맛살', spec: '10kg*2ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '서울90바4455', recvQty: 4, unitQty: 2, pieceQty: 0, warehouse: '육류냉장고', expiryDate: '2026-11-15', carTemp: '2.8℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 52000, recvAmt: 208000, diffQty: 0, lotNo: 'LOT-261029-HS02', remark: '' },
-  { id: 12, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉장]볶음김치', spec: '5kg*3ea', unit: 'box', orderQty: 10, prevRecvQty: 0, clientOutQty: 10, carNo: '서울90바4455', recvQty: 10, unitQty: 3, pieceQty: 0, warehouse: '채소류냉장', expiryDate: '2026-11-25', carTemp: '3.0℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 420000, diffQty: 0, lotNo: 'LOT-261029-HS03', remark: '' },
+  { id: 1, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]1/2절김', spec: '200매*30ea', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '경기88바1234', recvQty: 2, unitQty: 30, pieceQty: 0, warehouse: '상온', expiryDate: '2027-10-25', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 48000, recvAmt: 96000, diffQty: 0, lotNo: 'LOT-261029-D01', remark: '당일 도정미 직납' },
+  { id: 2, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]삼각김밥김', spec: '100매*32ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '경기88바1234', recvQty: 4, unitQty: 32, pieceQty: 0, warehouse: '상온', expiryDate: '2027-10-25', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 52000, recvAmt: 208000, diffQty: 0, lotNo: 'LOT-261029-D02', remark: '' },
+  { id: 3, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25315', method: '등록', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]점보롤', spec: '450매*8롤', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '경기88바1234', recvQty: 2, unitQty: 8, pieceQty: 0, warehouse: '상온', expiryDate: '2027-10-20', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 84000, diffQty: 0, lotNo: 'LOT-261029-D03', remark: '' },
+  { id: 4, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25338', method: '등록', supplier: '[네트웍스]두레', type: '부재료', name: '두레)ET-30', spec: '50ea*2줄', unit: 'box', orderQty: 6, prevRecvQty: 0, clientOutQty: 6, carNo: '충북80아5678', recvQty: 6, unitQty: 2, pieceQty: 0, warehouse: '부자재', expiryDate: '2028-10-29', carTemp: '20℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 38000, recvAmt: 228000, diffQty: 0, lotNo: 'LOT-261029-DR01', remark: '' },
+  { id: 5, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25326', method: '등록', supplier: '[네트웍스]CJ', type: '원재료', name: '[냉장]계란구이', spec: '1020g*12ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '서울92사7788', recvQty: 4, unitQty: 12, pieceQty: 0, warehouse: '냉장1', expiryDate: '2026-11-20', carTemp: '3.2℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 78000, recvAmt: 312000, diffQty: 0, lotNo: 'LOT-261029-CJ01', remark: '콜드체인 적정' },
+  { id: 6, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25325', method: '등록', supplier: '[네트웍스]오뚜기', type: '원재료', name: '[상온]케찹포션', spec: '3kg*4ea', unit: 'box', orderQty: 1, prevRecvQty: 0, clientOutQty: 1, carNo: '경기85아3344', recvQty: 1, unitQty: 4, pieceQty: 0, warehouse: '상온', expiryDate: '2027-04-15', carTemp: '19℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 34000, recvAmt: 34000, diffQty: 0, lotNo: 'LOT-261029-OT01', remark: '' },
+  { id: 7, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25314', method: '등록', supplier: '[네트웍스]성경', type: '원재료', name: '[상온]성경김가루', spec: '500g*6ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '충북83바9900', recvQty: 4, unitQty: 6, pieceQty: 0, warehouse: '상온', expiryDate: '2027-06-30', carTemp: '18℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 168000, diffQty: 0, lotNo: 'LOT-261029-SK01', remark: '' },
+  { id: 8, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25335', method: '등록', supplier: '[네트웍스]아이', type: '부재료', name: '혜자)순창/제육용기', spec: '600ea/box', unit: 'box', orderQty: 2, prevRecvQty: 0, clientOutQty: 2, carNo: '인천81아1122', recvQty: 2, unitQty: 1, pieceQty: 0, warehouse: '부자재', expiryDate: '2028-10-29', carTemp: '21℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 65000, recvAmt: 130000, diffQty: 0, lotNo: 'LOT-261029-I01', remark: '' },
+  { id: 9, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25337', method: '등록', supplier: '[네트웍스]정우', type: '부재료', name: '정우)PP]5찬도시락용기', spec: '80ea*4pk/box', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '경기89바6677', recvQty: 4, unitQty: 4, pieceQty: 0, warehouse: '부자재', expiryDate: '2028-10-29', carTemp: '20℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 72000, recvAmt: 288000, diffQty: 0, lotNo: 'LOT-261029-JW01', remark: '' },
+  { id: 10, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉동]궁채나물', spec: '1kg*10ea', unit: 'box', orderQty: 1, prevRecvQty: 0, clientOutQty: 1, carNo: '서울90바4455', recvQty: 1, unitQty: 10, pieceQty: 0, warehouse: '냉동', expiryDate: '2027-10-10', carTemp: '-18.5℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 63346, recvAmt: 63346, diffQty: 0, lotNo: 'LOT-261029-HS01', remark: '냉동 온도 검사필' },
+  { id: 11, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉장]다진맛살', spec: '10kg*2ea', unit: 'box', orderQty: 4, prevRecvQty: 0, clientOutQty: 4, carNo: '서울90바4455', recvQty: 4, unitQty: 2, pieceQty: 0, warehouse: '냉장1', expiryDate: '2026-11-15', carTemp: '2.8℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 52000, recvAmt: 208000, diffQty: 0, lotNo: 'LOT-261029-HS02', remark: '' },
+  { id: 12, orderDetailId: null, manualClose: false, orderDate: '2026-10-29', dayOfWeek: '목', orderNo: 'pc25322', method: '등록', supplier: '[네트웍스]한성', type: '원재료', name: '[냉장]볶음김치', spec: '5kg*3ea', unit: 'box', orderQty: 10, prevRecvQty: 0, clientOutQty: 10, carNo: '서울90바4455', recvQty: 10, unitQty: 3, pieceQty: 0, warehouse: '냉장2', expiryDate: '2026-11-25', carTemp: '3.0℃', markStatus: 'O', lookStatus: 'O', carClean: 'O', totalJudge: 'O', unitPrice: 42000, recvAmt: 420000, diffQty: 0, lotNo: 'LOT-261029-HS03', remark: '' },
 ];
 
 const COLUMNS: PurchaseGridColumnDef[] = [
@@ -111,25 +111,30 @@ export const ReceivingRegGsrView: React.FC = () => {
         let idx = 1;
         const loaded = json.data.map((dt: any) => {
           const po = dt.purchaseOrder || {};
-          const isCold = (dt.category || '').includes('냉장') || (dt.product?.name || '').includes('냉장');
-          const isFrozen = (dt.category || '').includes('냉동') || (dt.product?.name || '').includes('냉동');
-          const defaultWarehouse = isFrozen ? '냉동고' : isCold ? '육류냉장고' : '상온보관고';
+          const isCold1 = (dt.category || '').includes('육류') || (dt.productName || '').includes('육류') || (dt.productName || '').includes('패티');
+          const isCold = (dt.category || '').includes('냉장') || (dt.productName || '').includes('냉장') || (dt.product?.name || '').includes('냉장');
+          const isFrozen = (dt.category || '').includes('냉동') || (dt.productName || '').includes('냉동') || (dt.product?.name || '').includes('냉동');
+          const isSub = (dt.category || '').includes('부자재') || (dt.productCode || '').startsWith('R');
+          const defaultWarehouse = isFrozen ? '냉동' : isCold1 ? '냉장1' : isCold ? '냉장2' : isSub ? '부자재' : '상온';
           const defaultTemp = isFrozen ? '-18.0℃' : isCold ? '3.0℃' : '18.0℃';
 
           const remainQty = Number(dt.remainQty) > 0 ? Number(dt.remainQty) : Number(dt.orderQty) - Number(dt.receivedQty || 0);
-          const unitPrice = Number(dt.unitPrice || 0);
+          const unitPrice = Number(dt.unitPrice || dt.product?.unitPrice || 0);
 
           return {
             id: idx++,
             orderDetailId: dt.id,
             purchaseOrderId: po.id,
+            productId: dt.productId || dt.product?.id,
+            productCode: dt.productCode || dt.product?.productCode || '',
+            partnerId: po.partnerId || dt.product?.partnerId || '',
             manualClose: false,
             orderDate: po.orderDate || kstToday(),
             dayOfWeek: getKoreanDayOfWeek(po.orderDate || kstToday()),
             orderNo: po.orderNo || `PO-${dt.id}`,
             method: po.orderType || '스마트발주',
             supplier: po.partnerName || po.partner?.name || '협력사',
-            type: dt.category || (dt.productCode?.startsWith('R') ? '원재료' : '부재료'),
+            type: dt.category || (dt.productCode?.startsWith('R') ? '부자재' : '원재료'),
             name: dt.productName || dt.product?.name,
             spec: dt.product?.spec || '-',
             unit: dt.unit || dt.product?.unit || 'box',
@@ -140,7 +145,9 @@ export const ReceivingRegGsrView: React.FC = () => {
             recvQty: remainQty, // 기본값: 잔량 전량 입고 제안
             unitQty: Number(dt.orderUnitQty || 1),
             pieceQty: 0,
-            warehouse: dt.product?.warehouse || defaultWarehouse,
+            warehouse: dt.product?.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(dt.product.warehouse)
+              ? dt.product.warehouse
+              : defaultWarehouse,
             expiryDate: kstDaysAgo(-90), // 기본 유통기한 D+90
             carTemp: defaultTemp,
             markStatus: 'O',
@@ -230,6 +237,18 @@ export const ReceivingRegGsrView: React.FC = () => {
     );
   };
 
+  // 1-Click: 전 품목 입고수량 0으로 비우기 (도착한 품목만 직접 입력할 때)
+  const handleClearAllQty = () => {
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        recvQty: 0,
+        diffQty: -Number(r.clientOutQty || 0),
+        recvAmt: 0,
+      }))
+    );
+  };
+
   // 1-Click: 전 품목 HACCP 검수 적합(O) 일괄 지정
   const handlePassAllHaccp = () => {
     setRows((prev) =>
@@ -246,12 +265,18 @@ export const ReceivingRegGsrView: React.FC = () => {
   // DB 영구 저장 트랜잭션 실행
   const handleSaveReceiving = async () => {
     try {
-      const targetItems = rows.filter((r) => (Number(r.recvQty) > 0) || r.manualClose);
+      const targetItems = filteredRows.filter((r) => (Number(r.recvQty) > 0) || r.manualClose);
 
       if (targetItems.length === 0) {
-        alert('입고수량이 입력되었거나 수기종결로 체크된 품목이 없습니다.');
+        alert('입고수량이 0보다 큰 품목이 없거나 수기종결로 체크된 품목이 없습니다.\n실제 공장에 도착하여 검수한 품목의 입고수량을 확인해 주세요.');
         return;
       }
+
+      const confirmMsg = supplierFilter !== 'ALL'
+        ? `[${supplierFilter}] 매입처의 ${targetItems.length}개 품목을 실입고 확정(${recvDate})하시겠습니까?\n\n• 현재고(Inventory) 실시간 가산\n• 자재수불부(MaterialLedger) 입고 기록\n• 발주서 미입고 잔량 차감`
+        : `현재 표시된 ${targetItems.length}개 품목을 실입고 확정(${recvDate})하시겠습니까?\n\n• 매입처별로 개별 입고전표가 자동 분할 생성됩니다.\n• 현재고(Inventory) 가산 및 발주서 잔량이 즉시 갱신됩니다.`;
+
+      if (!confirm(confirmMsg)) return;
 
       setSaving(true);
       const res = await fetch('/api/purchase/receiving', {
@@ -259,8 +284,8 @@ export const ReceivingRegGsrView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           receivingDate: recvDate,
-          partnerId: 'V001',
-          partnerName: targetItems[0]?.supplier || '공급사',
+          partnerId: supplierFilter !== 'ALL' ? (targetItems[0]?.partnerId || 'V001') : 'V001',
+          partnerName: supplierFilter !== 'ALL' ? supplierFilter : '공급사',
           items: targetItems,
           createdBy: 'admin',
         }),
@@ -270,7 +295,7 @@ export const ReceivingRegGsrView: React.FC = () => {
       if (data.success) {
         alert(
           `[입고등록 성공]\n총 ${targetItems.length}건이 입고 완료되었습니다.\n` +
-          `• 현재고(Inventory) 가산 반영\n` +
+          `• 현재고(Inventory) 실시간 가산 반영 완료\n` +
           `• 자재수불부(MaterialLedger) 입고 기록 완료\n` +
           `• 발주서(PurchaseOrder) 미입고 잔량 차감 및 입고상태 갱신 완료`
         );
@@ -526,17 +551,27 @@ export const ReceivingRegGsrView: React.FC = () => {
           {/* 1-Click 간편 기능 버튼들 */}
           <button
             onClick={handleFillAllRemain}
-            className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300 rounded text-[11px] font-bold flex items-center gap-1 transition"
+            className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300 rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+            title="모든 품목의 입고수량을 미입고 잔량으로 자동 입력"
           >
             <Sparkles className="w-3 h-3 text-blue-600" />
-            <span>발주잔량 전량입고 채움</span>
+            <span>발주잔량 전량채움</span>
+          </button>
+          <button
+            onClick={handleClearAllQty}
+            className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+            title="입고수량을 0으로 비우고 실제 도착한 품목만 직접 입력"
+          >
+            <RotateCcw className="w-3 h-3 text-slate-600" />
+            <span>수량 비우기</span>
           </button>
           <button
             onClick={handlePassAllHaccp}
-            className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded text-[11px] font-bold flex items-center gap-1 transition"
+            className="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+            title="HACCP 표시/외관/청결/종합판정을 전체 적합(O)으로 설정"
           >
             <ShieldCheck className="w-3 h-3 text-emerald-600" />
-            <span>HACCP 전체적합(O) 설정</span>
+            <span>HACCP 전체적합(O)</span>
           </button>
           <div className="font-semibold bg-white px-2 py-0.5 border border-gray-300 text-[11px] rounded">
             표시 품목수: <span className="text-blue-700 font-bold">{filteredRows.length}</span>건
