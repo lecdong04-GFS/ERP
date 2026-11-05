@@ -177,7 +177,7 @@ function ErpApp() {
             className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
           >
             <Printer className="w-4 h-4 text-blue-600" />
-            <span>표준 양식 인쇄</span>
+            <span>표준 양식 센터</span>
           </button>
         </div>
       </div>

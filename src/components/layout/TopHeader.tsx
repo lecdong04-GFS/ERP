@@ -130,14 +130,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
           <span>파이프라인</span>
         </button>
 
-        {/* Standard Document Print Button */}
+        {/* Standard Document & Pipeline Center Button */}
         <button
           onClick={() => openPrintModal()}
-          className="hidden md:flex items-center gap-2 h-8.5 px-3.5 whitespace-nowrap shrink-0 bg-white/10 hover:bg-white/15 text-slate-100 border border-white/15 font-bold rounded-lg text-[13px] transition-all cursor-pointer"
-          title="HACCP 및 공정 작업지시서, 수불부 표준 규격 인쇄"
+          className="hidden md:flex items-center gap-2 h-8.5 px-3.5 whitespace-nowrap shrink-0 bg-gradient-to-r from-blue-600/80 to-indigo-600/80 hover:from-blue-600 hover:to-indigo-600 text-white border border-blue-400/30 font-extrabold rounded-lg text-[13px] transition-all cursor-pointer shadow-sm hover:shadow-md"
+          title="HACCP 감사 패키지 · 표준 엑셀 양식 다운/업로드 · 공인 전표 인쇄"
         >
-          <Printer className="w-4.5 h-4.5 text-blue-300" />
-          <span>표준 양식</span>
+          <Printer className="w-4 h-4 text-blue-200" />
+          <span>표준 양식 센터</span>
         </button>
 
         {/* Server status */}
