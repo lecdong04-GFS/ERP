@@ -98,7 +98,7 @@ export const UserPermMgmtView: React.FC = () => {
     void loadUsers();
   }, [loadUsers]);
 
-  // 2) 선택된 사용자의 90개 메뉴 권한 로드
+  // 2) 선택된 사용자의 전체 메뉴 권한 로드
   const loadPermissions = useCallback(async (userId: number) => {
     setLoadingPerms(true);
     try {
@@ -250,7 +250,7 @@ export const UserPermMgmtView: React.FC = () => {
 
   // 템플릿 프리셋: 관리자 권한 100% 부여
   const handleApplyAdminPreset = () => {
-    if (!confirm(`[${selectedUser?.name}] 사용자에게 시스템 전체 90개 메뉴의 관리자(모든 읽기/쓰기/삭제) 권한을 일괄 부여할까요?`)) return;
+    if (!confirm(`[${selectedUser?.name}] 사용자에게 시스템 전체 메뉴의 관리자(모든 읽기/쓰기/삭제) 권한을 일괄 부여할까요?`)) return;
     setPerms((prev) =>
       prev.map((p) => ({
         ...p,
@@ -391,7 +391,7 @@ export const UserPermMgmtView: React.FC = () => {
             onClick: () => setIsCopyModalOpen(true),
           },
         ]}
-        helpContent="사용자별 ERP 90개 메뉴에 대한 조회(읽기), 저장/수정(쓰기), 삭제, 엑셀 출력 권한을 1:1로 정밀하게 부여합니다. 프리셋 버튼으로 관리자/실무자 권한을 1초 만에 일괄 부여하거나 다른 사용자의 권한을 즉시 복제할 수 있습니다."
+        helpContent="사용자별 ERP 전체 실무 메뉴에 대한 조회(읽기), 저장/수정(쓰기), 삭제, 엑셀 출력 권한을 1:1로 정밀하게 부여합니다. 프리셋 버튼으로 관리자/실무자 권한을 1초 만에 일괄 부여하거나 다른 사용자의 권한을 즉시 복제할 수 있습니다."
       />
 
       {/* 2. Main 30:70 Split Layout */}
@@ -504,7 +504,7 @@ export const UserPermMgmtView: React.FC = () => {
                 type="button"
                 onClick={handleApplyAdminPreset}
                 className="px-2 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-300 text-purple-900 rounded text-[11.5px] font-bold transition-colors flex items-center gap-1"
-                title="모든 90개 메뉴 읽기/쓰기/삭제 100% 부여"
+                title="모든 메뉴 읽기/쓰기/삭제 100% 부여"
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
                 <span>관리자전체</span>
@@ -764,7 +764,7 @@ export const UserPermMgmtView: React.FC = () => {
 
             <div className="p-5 flex flex-col gap-3 text-[12.5px]">
               <div className="bg-blue-50 border border-blue-200 rounded p-3 text-blue-900 leading-relaxed">
-                원본 사용자의 90개 메뉴 권한 설정을 현재 선택된{' '}
+                원본 사용자의 전체 메뉴 권한 설정을 현재 선택된{' '}
                 <strong>
                   [{selectedUser?.name} ({selectedUser?.loginId})]
                 </strong>{' '}

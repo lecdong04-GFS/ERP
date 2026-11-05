@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const isAdmin = (user.role || '').includes('관리자') || user.loginId === 'admin';
 
-    // 90개 전체 메뉴에 대해 권한 매트릭스 완성
+    // 전체 실무 메뉴에 대해 권한 매트릭스 완성
     const fullPermissions = ALL_MENU_ITEMS.map((item, idx) => {
       const saved = permByMenu.get(item.id);
       if (saved) {
