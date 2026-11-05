@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
     await prisma.$transaction(async (tx) => {
       // 2-1. 작업지시서 DB 저장
       for (const wo of result.workOrders) {
-        const woNo = `WO-${orderDate.replace(/-/g, '')}-${wo.gyeId}-${wo.workSeq}`;
+        if (!wo.totalOrderQty || wo.totalOrderQty <= 0) continue;
+        const woNo = `WO-${orderDate.replace(/-/g, '')}-${shift}-${wo.gyeId}-${wo.workSeq}`;
 
         let product = await tx.product.findFirst({
           where: { name: wo.partName },

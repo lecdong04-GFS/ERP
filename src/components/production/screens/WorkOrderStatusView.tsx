@@ -80,7 +80,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const { openPrintModal, setWorkOrderPayload } = usePrintReport();
 
   // 조회 조건
-  const [workDate, setWorkDate] = useState('2026-11-04');
+  const [workDate, setWorkDate] = useState('2026-11-05');
   const [shift, setShift] = useState<'1편' | '2편' | '전체'>('1편');
   const [selectedLine, setSelectedLine] = useState<string>('커팅실');
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);

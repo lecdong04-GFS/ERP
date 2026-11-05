@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
+import { normName } from '@/lib/gfs/norm';
+
+function normalizeWarehouse(rawWh?: string | null): string {
+  if (!rawWh) return '상온창고';
+  const w = String(rawWh).trim();
+  if (w === '냉장1' || w === '냉장창고1') return '냉장창고1';
+  if (w === '냉장2' || w === '냉장창고2') return '냉장창고2';
+  if (w === '냉동' || w === '냉동창고') return '냉동창고';
+  if (w === '상온' || w === '상온창고') return '상온창고';
+  if (w === '부자재' || w === '부자재창고') return '부자재창고';
+  return w.endsWith('창고') ? w : `${w}창고`;
+}
 
 function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -115,15 +127,12 @@ const LINE_CONFIGS: Record<
   },
 };
 
-function determineWarehouse(prod: any, gyeName?: string | null): string {
+function determineWarehouse(prod: any, gyeName?: string | null, invWarehouse?: string | null): string {
+  if (invWarehouse) {
+    return normalizeWarehouse(invWarehouse);
+  }
   if (prod?.inventories && prod.inventories.length > 0 && prod.inventories[0].warehouse) {
-    const wh = prod.inventories[0].warehouse;
-    if (wh === '냉장2' || wh === '냉장창고2') return '냉장창고2';
-    if (wh === '냉장1' || wh === '냉장창고1') return '냉장창고1';
-    if (wh === '냉동' || wh === '냉동창고') return '냉동창고';
-    if (wh === '상온' || wh === '상온창고') return '상온창고';
-    if (wh === '부자재') return '부자재창고';
-    return wh;
+    return normalizeWarehouse(prod.inventories[0].warehouse);
   }
   const name = prod?.name || '';
   const gName = gyeName || '';
@@ -163,10 +172,22 @@ export async function GET(req: NextRequest) {
         orderBy: { orderDate: 'desc' },
         select: { orderDate: true },
       });
-      targetDate = latestSo?.orderDate || '2026-11-04';
+      targetDate = latestSo?.orderDate || '2026-11-05';
     }
 
-    // 2) DB에 이미 저장된 WorkOrder가 있는지 확인
+    // 2) 실시간 재고(Inventory) 사전 인덱싱 (재고조회와 100% 동일한 정본 재고/창고 동기화)
+    const allInventories = await prisma.inventory.findMany({
+      include: { product: true },
+    });
+    const invMapByNorm = new Map<string, (typeof allInventories)[0]>();
+    const invMapByCode = new Map<string, (typeof allInventories)[0]>();
+    for (const inv of allInventories) {
+      if (inv.productCode) invMapByCode.set(inv.productCode, inv);
+      if (inv.productName) invMapByNorm.set(normName(inv.productName), inv);
+      if (inv.product?.name) invMapByNorm.set(normName(inv.product.name), inv);
+    }
+
+    // 3) DB에 이미 저장된 WorkOrder가 있는지 확인
     const savedOrders = await prisma.workOrder.findMany({
       where: {
         workDate: targetDate,
@@ -184,32 +205,38 @@ export async function GET(req: NextRequest) {
     });
 
     if (savedOrders.length > 0) {
-      const formatted = savedOrders.map((w, idx) => ({
-        id: w.id,
-        workOrderNo: w.workOrderNo,
-        workDate: w.workDate,
-        shift: w.shift,
-        gyeId: w.gyeId,
-        gyeName: w.gyeName,
-        lineName: w.gyeName || line,
-        workSeq: w.workSeq || idx + 1,
-        productId: w.productId,
-        productCode: w.productCode,
-        partName: w.productName,
-        productName: w.productName,
-        warehouseName: determineWarehouse(w.product, w.gyeName),
-        partSpec: w.spec || '1ea',
-        spec: w.spec || '1ea',
-        unit: w.unit || 'g',
-        orderQty: w.orderQty,
-        prodQty: w.prodQty,
-        lossRate: 5,
-        yieldRate: 95,
-        stockQty: w.product?.inventories?.[0]?.currentQty || 0,
-        timeRange: w.completeTime || '06:00 ~ 07:30',
-        status: w.status || '대기',
-        assignee: w.createdBy || '담당자',
-      }));
+      const formatted = savedOrders.map((w, idx) => {
+        const inv = invMapByNorm.get(normName(w.productName)) || (w.productCode ? invMapByCode.get(w.productCode) : undefined);
+        const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(w.product, w.gyeName);
+        const liveStock = inv ? inv.currentQty : (w.product?.inventories?.[0]?.currentQty || 0);
+
+        return {
+          id: w.id,
+          workOrderNo: w.workOrderNo,
+          workDate: w.workDate,
+          shift: w.shift,
+          gyeId: w.gyeId,
+          gyeName: w.gyeName,
+          lineName: w.gyeName || line,
+          workSeq: w.workSeq || idx + 1,
+          productId: w.productId,
+          productCode: w.productCode,
+          partName: w.productName,
+          productName: w.productName,
+          warehouseName: wh,
+          partSpec: w.spec || '1ea',
+          spec: w.spec || '1ea',
+          unit: w.unit || 'g',
+          orderQty: w.orderQty,
+          prodQty: w.prodQty,
+          lossRate: 5,
+          yieldRate: 95,
+          stockQty: liveStock,
+          timeRange: w.completeTime || '06:00 ~ 07:30',
+          status: w.status || '대기',
+          assignee: w.createdBy || '담당자',
+        };
+      });
 
       return NextResponse.json({
         success: true,
@@ -220,7 +247,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3) DB에 미저장 상태라면: 수주(SalesOrder) + BOM 실시간 전개
+    // 4) DB에 미저장 상태라면: 수주(SalesOrder) + BOM 실시간 전개
     const salesOrders = await prisma.salesOrder.findMany({
       where: {
         orderDate: targetDate,
@@ -235,13 +262,12 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 주문 수량 집계
+    // 주문 수량 집계 (1편 / 2편 분리 철저 반영)
     const orderQtyMap = new Map<number, { product: any; qty: number }>();
     for (const so of salesOrders) {
       for (const dt of so.details) {
         if (!dt.product) continue;
-        const q = shift === '2편' ? dt.orderQty2 : shift === '1편' ? dt.orderQty1 : dt.totalQty;
-        const effectiveQty = q > 0 ? q : dt.totalQty;
+        const effectiveQty = shift === '2편' ? (dt.orderQty2 || 0) : shift === '1편' ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
         if (effectiveQty <= 0) continue;
 
         const cur = orderQtyMap.get(dt.productId);
@@ -329,13 +355,22 @@ export async function GET(req: NextRequest) {
           const lossRate = Math.max(0, 100 - yieldRate);
           const reqQty = (item.qty * d.unitQty * (100 / yieldRate));
 
+          const inv = invMapByNorm.get(normName(chName)) || (ch.productCode ? invMapByCode.get(ch.productCode) : undefined);
+          const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(ch, gName);
+          const currentStock = inv ? inv.currentQty : (ch.inventories?.[0]?.currentQty || 0);
+
+          // 소스류 단위 교정 (매 -> g)
+          let itemUnit = d.unit || ch.unit || 'g';
+          if ((chName.includes('소스') || gName.includes('소스')) && itemUnit === '매') {
+            itemUnit = 'g';
+          }
+
           const key = ch.name;
           const existing = itemsMap.get(key);
           if (existing) {
             existing.orderQty += reqQty;
             existing.prodQty += reqQty;
           } else {
-            const wh = determineWarehouse(ch, gName);
             itemsMap.set(key, {
               key,
               productId: ch.id,
@@ -346,13 +381,13 @@ export async function GET(req: NextRequest) {
               gyeId: gId || 'GFS011',
               gyeName: gName || line,
               spec: ch.spec || '1식',
-              unit: d.unit || ch.unit || 'g',
+              unit: itemUnit,
               orderQty: reqQty,
               prodQty: reqQty,
               lossRate: lossRate > 0 ? lossRate : 5,
               yieldRate,
               warehouseName: wh,
-              stockQty: ch.inventories?.[0]?.currentQty || 0,
+              stockQty: currentStock,
               parentNames: [item.product.name],
             });
           }
@@ -383,12 +418,12 @@ export async function GET(req: NextRequest) {
             gyeId: targetLineConfig.gyeIds[0] || 'GFS004',
             gyeName: targetLineConfig.label,
             spec: p.spec || '1ea',
-            unit: p.unit || 'ea',
-            orderQty: item.qty,
+            unit: 'ea',
+            orderQty: Math.round(item.qty),
             prodQty: Math.round(item.qty * 0.98),
             lossRate: 2,
             yieldRate: 98,
-            warehouseName: '성형장 보관',
+            warehouseName: '냉장창고1',
             stockQty: 0,
             parentNames: [p.name],
           });
@@ -403,8 +438,10 @@ export async function GET(req: NextRequest) {
       const timeRange = `${runningTime} ~ ${nextTime}`;
       runningTime = nextTime;
 
-      // 지시량 반올림 처리
-      const finalQty = row.unit === 'g' || row.unit === 'Kg'
+      // 지시량 반올림 처리 (공장 작업지시서는 깔끔한 정수 또는 소수점 1자리)
+      const finalQty = row.unit === 'g'
+        ? Math.round(row.orderQty)
+        : row.unit === 'Kg'
         ? Number(row.orderQty.toFixed(1))
         : Math.round(row.orderQty);
 
@@ -480,7 +517,7 @@ export async function POST(req: NextRequest) {
           await prisma.workOrder.create({
             data: {
               workOrderNo: r.workOrderNo,
-              workDate: workDate || r.workDate || '2026-11-04',
+              workDate: workDate || r.workDate || '2026-11-05',
               shift: shift || r.shift || '1편',
               gyeId: r.gyeId,
               gyeName: r.gyeName || line || '커팅실',

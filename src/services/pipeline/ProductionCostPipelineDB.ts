@@ -12,6 +12,7 @@
  *   5. 원가/손익 집계 → ProductPnL DB 저장
  */
 import { PrismaClient } from '@prisma/client';
+import { normName } from '@/lib/gfs/norm';
 import {
   OrderIntakeItem,
   WorkOrderDispatchItem,
@@ -249,11 +250,26 @@ export class ProductionCostPipelineDBEngine {
       },
     });
 
-    // DB BOM을 코드 기반 맵으로 변환
-    const dbBomMap = new Map<string, typeof bomHeaders[0]>();
+    // DB BOM을 코드 및 품명 기반 맵으로 변환
+    const dbBomByCode = new Map<string, typeof bomHeaders[0]>();
+    const dbBomByName = new Map<string, typeof bomHeaders[0]>();
+    const dbBomByNorm = new Map<string, typeof bomHeaders[0]>();
+
     for (const bh of bomHeaders) {
-      dbBomMap.set(bh.parentProduct.productCode, bh);
+      if (bh.parentProduct?.productCode) dbBomByCode.set(bh.parentProduct.productCode, bh);
+      if (bh.parentProduct?.name) {
+        dbBomByName.set(bh.parentProduct.name, bh);
+        dbBomByNorm.set(normName(bh.parentProduct.name), bh);
+      }
     }
+
+    const findDbBom = (order: { reprCode: string; reprName: string }) => {
+      return (
+        dbBomByCode.get(order.reprCode) ||
+        dbBomByName.get(order.reprName) ||
+        dbBomByNorm.get(normName(order.reprName))
+      );
+    };
 
     let dbBomUsed = 0;
     let legacyBomUsed = 0;
@@ -278,6 +294,16 @@ export class ProductionCostPipelineDBEngine {
     let seqCounter = 1;
 
     for (const order of mappedOrders) {
+      // shift 필터링 (1편 / 2편 엄격 분리)
+      const effOrderQty =
+        params.shift === '2편'
+          ? order.orderQty2
+          : params.shift === '1편'
+          ? order.orderQty1
+          : order.totalOrderQty;
+
+      if (effOrderQty <= 0) continue;
+
       // 완제품 성형장 지시 등록
       let moldingGye = { gyeId: 'GFS004', gyeName: '성형장(도시락)', line: '도시락1호라인' };
       if (order.category === '김밥') {
@@ -304,33 +330,33 @@ export class ProductionCostPipelineDBEngine {
         partSpec: '1ea/팩',
         unit: 'ea',
         nextProcess: '포장/금속검출',
-        totalOrderQty: order.totalOrderQty,
+        totalOrderQty: effOrderQty,
         orderQty1: order.orderQty1,
         orderQty2: order.orderQty2,
-        prodQty: order.totalOrderQty,
+        prodQty: effOrderQty,
         completeStatus: '대기',
         completeTime: '',
       });
 
       // BOM 전개: DB 우선, 없으면 레거시 폴백
-      const dbBom = dbBomMap.get(order.reprCode);
+      const dbBom = findDbBom(order);
       if (dbBom && dbBom.details.length > 0) {
         // === DB BOM 사용 ===
         dbBomUsed++;
         for (const bd of dbBom.details) {
           const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
-          const compTotalReq = Math.round(order.totalOrderQty * factor * 100) / 100;
+          const compTotalReq = Math.round(effOrderQty * factor * 100) / 100;
           const compReq1 = Math.round(order.orderQty1 * factor * 100) / 100;
           const compReq2 = Math.round(order.orderQty2 * factor * 100) / 100;
 
-          if (bd.level === 2 && bd.gye) {
+          if (bd.gye) {
             workOrderList.push({
               id: seqCounter++,
               gyeId: bd.gye.id,
               gyeName: bd.gye.name,
               lineName: bd.nextProcess || '자동배치',
               workSeq: seqCounter,
-              partName: bd.childProduct.name,
+              partName: bd.childProduct?.name || '',
               partSpec: `${bd.unitQty}${bd.unit} 배합`,
               unit: bd.unit,
               nextProcess: bd.nextProcess || moldingGye.gyeName,
@@ -343,18 +369,18 @@ export class ProductionCostPipelineDBEngine {
             });
           }
 
-          if (bd.level === 3 || (bd.level === 2 && !bd.gye)) {
-            const code = bd.childProduct.productCode;
-            const unitCost = bd.childProduct.prices[0]?.purchasePrice || 0;
+          if (bd.childProduct) {
+            const code = bd.childProduct.productCode || `MAT-${bd.childProductId}`;
+            const unitCost = bd.childProduct.prices?.[0]?.purchasePrice || 0;
             if (!materialRequirementMap[code]) {
               materialRequirementMap[code] = {
                 partCode: code,
                 partName: bd.childProduct.name,
-                partSpec: bd.childProduct.spec,
-                unit: bd.unit || bd.childProduct.unit,
-                warehouse: bd.childProduct.warehouse || '상온보관고',
+                partSpec: bd.childProduct.spec || '',
+                unit: bd.unit || bd.childProduct.unit || 'g',
+                warehouse: bd.childProduct.warehouse || '상온창고',
                 totalReqQty: 0,
-                category: bd.childProduct.category,
+                category: bd.childProduct.category || '원재료',
                 partnerId: bd.childProduct.partnerId,
                 partnerName: bd.childProduct.partner?.name || '',
                 unitCost,
@@ -369,7 +395,7 @@ export class ProductionCostPipelineDBEngine {
         const recipe = BOM_MASTER_RECIPES[order.reprCode];
         recipe.forEach((comp) => {
           const factor = comp.unitQty / (comp.yieldRate / 100);
-          const compTotalReq = Math.round(order.totalOrderQty * factor * 100) / 100;
+          const compTotalReq = Math.round(effOrderQty * factor * 100) / 100;
           const compReq1 = Math.round(order.orderQty1 * factor * 100) / 100;
           const compReq2 = Math.round(order.orderQty2 * factor * 100) / 100;
 
@@ -397,7 +423,7 @@ export class ProductionCostPipelineDBEngine {
           rawComponents.forEach((raw) => {
             if (raw.level === 3) {
               const rawFactor = raw.unitQty / (raw.yieldRate / 100);
-              const rawReq = Math.round(order.totalOrderQty * rawFactor * 100) / 100;
+              const rawReq = Math.round(effOrderQty * rawFactor * 100) / 100;
               if (!materialRequirementMap[raw.componentCode]) {
                 materialRequirementMap[raw.componentCode] = {
                   partCode: raw.componentCode,
@@ -431,6 +457,28 @@ export class ProductionCostPipelineDBEngine {
     // ============================================================
     addLog('STEP 5: 자재 차감 & FEFO', 'DB Inventory에서 실제 현재고 조회 후 FEFO 차감 적용 중...', 'info');
 
+    // DB에서 실제 재고 사전 로드 (유통기한 오름차순 = FEFO)
+    const allInventories = await prisma.inventory.findMany({
+      where: { currentQty: { gt: 0 } },
+      orderBy: { expiryDate: 'asc' }, // FEFO: 유통기한 가까운 것 먼저
+    });
+
+    const invMapByNorm = new Map<string, typeof allInventories>();
+    const invMapByCode = new Map<string, typeof allInventories>();
+    for (const inv of allInventories) {
+      if (inv.productCode) {
+        const list = invMapByCode.get(inv.productCode) || [];
+        list.push(inv);
+        invMapByCode.set(inv.productCode, list);
+      }
+      if (inv.productName) {
+        const k = normName(inv.productName);
+        const list = invMapByNorm.get(k) || [];
+        list.push(inv);
+        invMapByNorm.set(k, list);
+      }
+    }
+
     const materialDepletions: MaterialLedgerDepletionItem[] = [];
     const materialRequirements: MaterialRequirementRow[] = [];
 
@@ -438,17 +486,8 @@ export class ProductionCostPipelineDBEngine {
     for (const mat of Object.values(materialRequirementMap)) {
       idx++;
 
-      // DB에서 해당 자재의 실제 재고 조회 (유통기한 오름차순 = FEFO)
-      const inventories = await prisma.inventory.findMany({
-        where: {
-          OR: [
-            { productCode: mat.partCode },
-            { productName: mat.partName },
-          ],
-          currentQty: { gt: 0 },
-        },
-        orderBy: { expiryDate: 'asc' }, // FEFO: 유통기한 가까운 것 먼저
-      });
+      const matNorm = normName(mat.partName);
+      const inventories = invMapByCode.get(mat.partCode) || invMapByNorm.get(matNorm) || [];
 
       const totalStock = inventories.reduce((sum, inv) => sum + inv.currentQty, 0);
       const fefoLot = inventories.length > 0 ? inventories[0] : null;
@@ -515,7 +554,7 @@ export class ProductionCostPipelineDBEngine {
 
       // 직접재료비: DB BOM 또는 레거시 BOM
       let unitMaterialCost = 0;
-      const dbBom = dbBomMap.get(order.reprCode);
+      const dbBom = findDbBom(order);
       if (dbBom && dbBom.details.length > 0) {
         for (const bd of dbBom.details) {
           const price = bd.childProduct.prices[0]?.purchasePrice || 0;
