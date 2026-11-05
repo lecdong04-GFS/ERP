@@ -63,7 +63,7 @@ export const SystemUsageView: React.FC = () => {
   };
 
   const handleReset = () => {
-    setSelectedDate('2026-10-30');
+    setSelectedDate(new Date().toISOString().slice(0, 10));
     setSelectedSummaryPageCode('Uc_BOM');
     setSelectedActionName('조회');
     setSelectedSummaryRowId(2);
