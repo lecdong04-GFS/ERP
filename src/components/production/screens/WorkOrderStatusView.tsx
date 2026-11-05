@@ -367,21 +367,21 @@ export const WorkOrderStatusView: React.FC = () => {
                   />
                 </button>
 
-                {/* 내용에 맞게 최적화된 컴팩트 커스텀 옵션 팝오버 메뉴 (w-[350px]) */}
+                {/* 내용에 딱 맞게 정돈된 시원한 큰 글씨 팝오버 메뉴 (w-[360px] sm:w-[395px]) */}
                 {isLineDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-[330px] sm:w-[360px] bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[520px] overflow-y-auto">
+                  <div className="absolute left-0 top-full mt-2 w-[350px] sm:w-[395px] bg-white rounded-2xl shadow-2xl border-2 border-slate-200 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[540px] overflow-y-auto">
                     {/* 그룹 1: 전처리 및 조리 공정 */}
                     <div className="mb-2">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-xs sm:text-sm font-black text-slate-700 uppercase tracking-wide">
+                      <div className="px-3 py-1.5 flex items-center justify-between text-sm sm:text-base font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-1.5">
                         <span className="flex items-center gap-1.5">
-                          <span>🥗</span>
+                          <span className="text-lg">🥗</span>
                           <span>전처리 및 조리 공정</span>
                         </span>
-                        <span className="bg-blue-100 text-blue-800 text-[11px] px-2 py-0.5 rounded-full font-black">
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-black">
                           7개
                         </span>
                       </div>
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-1.5 space-y-1">
                         {ALL_LINES.filter((l) => l.group === '전처리 및 조리').map((l) => {
                           const isSelected = selectedLine === l.id;
                           return (
@@ -392,25 +392,25 @@ export const WorkOrderStatusView: React.FC = () => {
                                 setSelectedLine(l.id);
                                 setIsLineDropdownOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer border ${
+                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer border ${
                                 isSelected
                                   ? 'bg-blue-600 text-white shadow-sm border-blue-600'
                                   : 'bg-white hover:bg-blue-50/70 border-transparent hover:border-blue-200 text-slate-800'
                               }`}
                             >
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl leading-none shrink-0">{l.icon}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                                 <div>
                                   <div
-                                    className={`text-base font-black leading-tight ${
+                                    className={`text-lg font-black leading-tight ${
                                       isSelected ? 'text-white' : 'text-slate-900'
                                     }`}
                                   >
                                     {l.name}
                                   </div>
                                   <div
-                                    className={`text-xs mt-0.5 leading-tight ${
-                                      isSelected ? 'text-blue-100 font-bold' : 'text-slate-500'
+                                    className={`text-sm font-bold mt-0.5 leading-tight ${
+                                      isSelected ? 'text-blue-100' : 'text-slate-600'
                                     }`}
                                   >
                                     {l.desc}
@@ -418,8 +418,8 @@ export const WorkOrderStatusView: React.FC = () => {
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-1.5">
-                                  <Check size={14} className="text-white" />
+                                <div className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                  <Check size={16} className="text-white" />
                                 </div>
                               )}
                             </button>
@@ -433,16 +433,16 @@ export const WorkOrderStatusView: React.FC = () => {
 
                     {/* 그룹 2: 성형 및 포장 공정 */}
                     <div className="mb-2">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-xs sm:text-sm font-black text-slate-700 uppercase tracking-wide">
+                      <div className="px-3 py-1.5 flex items-center justify-between text-sm sm:text-base font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-1.5">
                         <span className="flex items-center gap-1.5">
-                          <span>🍱</span>
+                          <span className="text-lg">🍱</span>
                           <span>성형 및 포장 공정</span>
                         </span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[11px] px-2 py-0.5 rounded-full font-black">
+                        <span className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-black">
                           6개
                         </span>
                       </div>
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-1.5 space-y-1">
                         {ALL_LINES.filter((l) => l.group === '성형 및 포장').map((l) => {
                           const isSelected = selectedLine === l.id;
                           return (
@@ -453,25 +453,25 @@ export const WorkOrderStatusView: React.FC = () => {
                                 setSelectedLine(l.id);
                                 setIsLineDropdownOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer border ${
+                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer border ${
                                 isSelected
                                   ? 'bg-blue-600 text-white shadow-sm border-blue-600'
                                   : 'bg-white hover:bg-blue-50/70 border-transparent hover:border-blue-200 text-slate-800'
                               }`}
                             >
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl leading-none shrink-0">{l.icon}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                                 <div>
                                   <div
-                                    className={`text-base font-black leading-tight ${
+                                    className={`text-lg font-black leading-tight ${
                                       isSelected ? 'text-white' : 'text-slate-900'
                                     }`}
                                   >
                                     {l.name}
                                   </div>
                                   <div
-                                    className={`text-xs mt-0.5 leading-tight ${
-                                      isSelected ? 'text-blue-100 font-bold' : 'text-slate-500'
+                                    className={`text-sm font-bold mt-0.5 leading-tight ${
+                                      isSelected ? 'text-blue-100' : 'text-slate-600'
                                     }`}
                                   >
                                     {l.desc}
@@ -479,8 +479,8 @@ export const WorkOrderStatusView: React.FC = () => {
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-1.5">
-                                  <Check size={14} className="text-white" />
+                                <div className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                  <Check size={16} className="text-white" />
                                 </div>
                               )}
                             </button>
@@ -504,25 +504,25 @@ export const WorkOrderStatusView: React.FC = () => {
                               setSelectedLine(l.id);
                               setIsLineDropdownOpen(false);
                             }}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer border ${
+                            className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-left transition-all cursor-pointer border ${
                               isSelected
                                 ? 'bg-indigo-700 text-white shadow-sm border-indigo-700'
                                 : 'bg-indigo-50/50 hover:bg-indigo-50 border-indigo-200 text-slate-800'
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span className="text-2xl leading-none shrink-0">{l.icon}</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                               <div>
                                 <div
-                                  className={`text-base font-black leading-tight ${
+                                  className={`text-lg font-black leading-tight ${
                                     isSelected ? 'text-white' : 'text-indigo-950'
                                   }`}
                                 >
                                   {l.name}
                                 </div>
                                 <div
-                                  className={`text-xs mt-0.5 leading-tight ${
-                                    isSelected ? 'text-indigo-100 font-bold' : 'text-slate-500'
+                                  className={`text-sm font-bold mt-0.5 leading-tight ${
+                                    isSelected ? 'text-indigo-100' : 'text-slate-600'
                                   }`}
                                 >
                                   {l.desc}
@@ -530,8 +530,8 @@ export const WorkOrderStatusView: React.FC = () => {
                               </div>
                             </div>
                             {isSelected && (
-                              <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-1.5">
-                                <Check size={14} className="text-white" />
+                              <div className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                <Check size={16} className="text-white" />
                               </div>
                             )}
                           </button>
