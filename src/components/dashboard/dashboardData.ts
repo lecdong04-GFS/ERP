@@ -87,6 +87,10 @@ export interface KpiSummary {
   todayPurchaseItemCount: number;
   todayPurchaseAmount: number;
   todayPurchasePartnerCount: number;
+  todayReceivingTotal: number;
+  todayReceivingDone: number;
+  todayReceivingAmount: number;
+  todayReceivingPending: number;
 }
 
 export interface DemandTrendItem {
@@ -171,6 +175,10 @@ export const EMPTY_STATS: DashboardStats = {
     todayPurchaseItemCount: 0,
     todayPurchaseAmount: 0,
     todayPurchasePartnerCount: 0,
+    todayReceivingTotal: 0,
+    todayReceivingDone: 0,
+    todayReceivingAmount: 0,
+    todayReceivingPending: 0,
   },
   pipeline: {
     orderQty: 0,

@@ -89,6 +89,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       stockDaysRows,
       gyeRows,
       todayPurchaseOrders,
+      todayReceivingRows,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
         where: { orderDate: { startsWith: thisYear }, status: { not: '취소' } },
@@ -159,6 +160,10 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
             },
           },
         },
+      }),
+      prisma.receiving.findMany({
+        where: { receivingDate: today, status: { not: '취소' } },
+        select: { id: true, totalAmount: true, status: true, partnerName: true },
       }),
     ]);
 
@@ -345,6 +350,16 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const deliveryDoneCount = todayDeliveries.filter((d) => d.status === '완료').length;
     const deliveryRate =
       deliveryTotalCount > 0 ? Math.round((deliveryDoneCount / deliveryTotalCount) * 1000) / 10 : 0;
+
+    // ── 5.5. 금일 입고 현황 ────────────────────────────────
+    const todayReceivingTotal = todayReceivingRows.length;
+    const todayReceivingDone = todayReceivingRows.filter(
+      (r) => r.status === '검수완료' || r.status === '입고'
+    ).length;
+    const todayReceivingAmount = todayReceivingRows.reduce((s, r) => s + (r.totalAmount || 0), 0);
+    const todayReceivingPending = todayReceivingRows.filter(
+      (r) => r.status === '대기' || r.status === '검수대기'
+    ).length;
 
     // ── 6. 창고별 재고금액 ─────────────────────────────────
     const whMap = new Map<string, { items: number; amount: number }>();
@@ -553,7 +568,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       kpiSummary: {
         totalProducts: 0,
         totalPartners: 0,
-        totalInventoryItems: 0,
+        totalInventoryItems: warehouseRows.length,
         salesTotalMonth: Math.round(
           salesRows.reduce((s, o) => s + (o.amount || 0), 0) / 10000
         ),
@@ -570,6 +585,10 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         todayPurchaseItemCount,
         todayPurchaseAmount: Math.round(todayPurchaseAmount),
         todayPurchasePartnerCount,
+        todayReceivingTotal,
+        todayReceivingDone,
+        todayReceivingAmount: Math.round(todayReceivingAmount),
+        todayReceivingPending,
       },
       pipeline: {
         orderQty: todayOrderQty,
