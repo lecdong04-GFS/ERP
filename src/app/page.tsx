@@ -76,6 +76,42 @@ function ErpApp() {
 
   const currentTicker = tickerMessages[tickerIndex % tickerMessages.length] || tickerMessages[0];
 
+  // 알림바 신호등 상태 스타일 매핑 (동그라미가 잘리거나 사라지지 않도록 고정)
+  const tickerStyle = React.useMemo(() => {
+    switch (currentTicker.type) {
+      case 'danger':
+        return {
+          dotBg: 'bg-rose-500',
+          pingBg: 'bg-rose-400',
+          textColor: 'text-rose-600',
+        };
+      case 'warning':
+        return {
+          dotBg: 'bg-amber-500',
+          pingBg: 'bg-amber-400',
+          textColor: 'text-amber-700',
+        };
+      case 'success':
+        return {
+          dotBg: 'bg-emerald-500',
+          pingBg: 'bg-emerald-400',
+          textColor: 'text-emerald-700',
+        };
+      case 'primary':
+        return {
+          dotBg: 'bg-indigo-500',
+          pingBg: 'bg-indigo-400',
+          textColor: 'text-indigo-600',
+        };
+      default:
+        return {
+          dotBg: 'bg-blue-500',
+          pingBg: 'bg-blue-400',
+          textColor: 'text-blue-700',
+        };
+    }
+  }, [currentTicker.type]);
+
   const { activeTab, activeTabId } = useTabs();
   const {
     openPipelineModal,
@@ -101,35 +137,25 @@ function ErpApp() {
 
       {/* 2-1. 알림바 (GNB 바로 아래 실시간 롤링 알림 & 3대 핵심 퀵 액션) */}
       <div className="h-[38px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[13px] select-none shadow-2xs shrink-0">
-        <div className="flex items-center gap-2.5 overflow-hidden flex-1 min-w-0 pr-4">
-          <span
-            className={`w-2.5 h-2.5 rounded-full inline-block shrink-0 ${
-              currentTicker.type === 'danger'
-                ? 'bg-rose-500 animate-ping'
-                : currentTicker.type === 'warning'
-                ? 'bg-amber-500 animate-pulse'
-                : currentTicker.type === 'success'
-                ? 'bg-emerald-500'
-                : currentTicker.type === 'primary'
-                ? 'bg-indigo-500'
-                : 'bg-blue-500'
-            }`}
-          />
-          <span
-            className={`font-bold truncate transition-all duration-300 text-[13px] ${
-              currentTicker.type === 'danger'
-                ? 'text-rose-600'
-                : currentTicker.type === 'warning'
-                ? 'text-amber-700'
-                : currentTicker.type === 'success'
-                ? 'text-emerald-700'
-                : currentTicker.type === 'primary'
-                ? 'text-indigo-600'
-                : 'text-blue-700'
-            }`}
-          >
-            {currentTicker.text}
-          </span>
+        <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-4">
+          {/* 안정적인 이중 레이어 LED 인디케이터 (절대 잘리거나 깜빡임으로 사라지지 않고 영롱하게 반짝임) */}
+          <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
+            <span
+              className={`absolute inline-flex h-3.5 w-3.5 rounded-full opacity-60 animate-ping ${tickerStyle.pingBg}`}
+            />
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${tickerStyle.dotBg} shadow-xs`}
+            />
+          </div>
+
+          {/* 텍스트 영역 (텍스트만 안전하게 말줄임 처리되어 LED 인디케이터를 절대 침범하거나 자르지 않음) */}
+          <div className="overflow-hidden min-w-0 flex-1">
+            <span
+              className={`font-bold truncate block transition-all duration-300 text-[13px] ${tickerStyle.textColor}`}
+            >
+              {currentTicker.text}
+            </span>
+          </div>
         </div>
         <div className="hidden md:flex items-center gap-2">
           <button
