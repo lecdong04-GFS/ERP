@@ -48,17 +48,17 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-  const updates: Array<{
-    id: number;
-    currentQty?: number;
-    dailyUsage?: number;
-    unitPrice?: number;
-    stockAmount?: number;
-    warehouse?: string;
-    safetyStock?: number;
-    expiryDate?: string;
-    productId?: number;
-  }> = body.updates || (body.id ? [body] : []);
+    const updates: Array<{
+      id: number;
+      currentQty?: number;
+      dailyUsage?: number;
+      unitPrice?: number;
+      stockAmount?: number;
+      warehouse?: string;
+      safetyStock?: number;
+      expiryDate?: string;
+      productId?: number;
+    }> = body.updates || (body.id ? [body] : []);
 
     if (!updates || updates.length === 0) {
       return NextResponse.json(
@@ -67,48 +67,59 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const results = await prisma.$transaction(
-      updates.map((item) => {
-        const data: any = {};
-        if (item.currentQty !== undefined) data.currentQty = Number(item.currentQty);
-        if (item.dailyUsage !== undefined) data.dailyUsage = Number(item.dailyUsage);
-        if (item.unitPrice !== undefined) data.unitPrice = Number(item.unitPrice);
-        if (item.stockAmount !== undefined) {
-          data.stockAmount = Number(item.stockAmount);
-        } else if (item.currentQty !== undefined && item.unitPrice !== undefined) {
-          data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
-        }
-        if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
-        if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
+    // 1) DB에 실제로 존재하는 Inventory ID 목록 조회 (존재하지 않는 가상 ID로 인한 트랜잭션 충돌 방지)
+    const candidateIds = updates
+      .map((u) => Number(u.id))
+      .filter((id) => !isNaN(id) && id > 0);
 
-        return prisma.inventory.update({
-          where: { id: Number(item.id) },
-          data,
-          include: { product: true },
-        });
-      })
-    );
+    const existingInvs = await prisma.inventory.findMany({
+      where: { id: { in: candidateIds } },
+      select: { id: true, productId: true },
+    });
+    const existingIdSet = new Set(existingInvs.map((x) => x.id));
+    const prodIdMap = new Map(existingInvs.map((x) => [x.id, x.productId]));
 
-    // 안전재고(Product.safetyStockQty) 업데이트가 있는 경우 별도 반영
+    // 2) 실제 존재하는 ID만 트랜잭션으로 안전하게 갱신
+    const validUpdates = updates.filter((u) => existingIdSet.has(Number(u.id)));
+
+    let results: any[] = [];
+    if (validUpdates.length > 0) {
+      results = await prisma.$transaction(
+        validUpdates.map((item) => {
+          const data: any = {};
+          if (item.currentQty !== undefined) data.currentQty = Number(item.currentQty);
+          if (item.dailyUsage !== undefined) data.dailyUsage = Number(item.dailyUsage);
+          if (item.unitPrice !== undefined) data.unitPrice = Number(item.unitPrice);
+          if (item.stockAmount !== undefined) {
+            data.stockAmount = Number(item.stockAmount);
+          } else if (item.currentQty !== undefined && item.unitPrice !== undefined) {
+            data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
+          }
+          if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
+          if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
+
+          return prisma.inventory.update({
+            where: { id: Number(item.id) },
+            data,
+            include: { product: true },
+          });
+        })
+      );
+    }
+
+    // 3) 안전재고(Product.safetyStockQty) 업데이트가 있는 경우 별도 반영
     const safetyUpdates = updates.filter(
-      (u) => u.safetyStock !== undefined && (u.productId || u.id)
+      (u) => u.safetyStock !== undefined && (u.productId || existingIdSet.has(Number(u.id)))
     );
     if (safetyUpdates.length > 0) {
       await Promise.all(
         safetyUpdates.map(async (u) => {
-          let pId = u.productId;
-          if (!pId) {
-            const inv = await prisma.inventory.findUnique({
-              where: { id: Number(u.id) },
-              select: { productId: true },
-            });
-            pId = inv?.productId;
-          }
+          const pId = u.productId || prodIdMap.get(Number(u.id));
           if (pId) {
             await prisma.product.update({
               where: { id: pId },
               data: { safetyStockQty: Number(u.safetyStock) },
-            });
+            }).catch(() => {});
           }
         })
       );

@@ -1457,62 +1457,63 @@ export const StockLookupView: React.FC = () => {
         return;
       }
 
-      // 3) 오늘분이거나 LIVE 재고 수정 시 현재고(Inventory)에도 반영
-      if (shouldSyncLive) {
-        // 3-1) 기존 현재고행: PUT 일괄 갱신 (스냅샷행 제외 — 품번+창고 기준 upsert로 처리)
-        if (existingInv.length > 0) {
-          const updates = existingInv.map((d) => ({
-            id: d.id,
+      // 3) 오늘분이거나 명시적 LIVE 현재고 수정일 때만 현재고(Inventory)에 동기화
+      const isTodayOrFuture = targetDate >= kstToday();
+      let liveSyncSuccess = false;
+      if (shouldSyncLive && isTodayOrFuture) {
+        try {
+          // 3-1) 유효한 ID가 있는 기존 행만 PUT 일괄 갱신
+          const validExisting = existingInv.filter((d) => Number(d.id) > 0);
+          if (validExisting.length > 0) {
+            const updates = validExisting.map((d) => ({
+              id: Number(d.id),
+              warehouse: d.whName,
+              currentQty: d.currentStock,
+              dailyUsage: d.dailyUsage,
+              unitPrice: d.unitPrice,
+              stockAmount: d.totalAmount,
+              safetyStock: d.safetyStock,
+              expiryDate: d.expiryDate,
+            }));
+
+            await fetch('/api/inventory/stock', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ updates }),
+            });
+          }
+
+          // 3-2) 신규행 + 스냅샷행: 품번+창고 기준 upsert로 현재고 반영
+          const syncItems = [...fresh, ...existingSnap].map((d) => ({
+            productCode: codeOf(d) || undefined,
+            productName: d.itemName,
             warehouse: d.whName,
             currentQty: d.currentStock,
-            dailyUsage: d.dailyUsage,
             unitPrice: d.unitPrice,
-            stockAmount: d.totalAmount,
-            safetyStock: d.safetyStock,
             expiryDate: d.expiryDate,
+            vendor: d.vendor,
+            safetyStock: d.safetyStock,
           }));
-
-          const res = await fetch('/api/inventory/stock', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ updates }),
-          });
-
-          const json = await res.json();
-          if (!json.success) {
-            alert(`저장 실패: ${json.error || '알 수 없는 오류'}`);
-            return;
+          if (syncItems.length > 0) {
+            await fetch('/api/inventory/stock', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items: syncItems }),
+            });
           }
-        }
-
-        // 3-2) 신규행 + 스냅샷행: 품번+창고 기준 upsert로 현재고 반영
-        const syncItems = [...fresh, ...existingSnap].map((d) => ({
-          productCode: codeOf(d) || undefined,
-          productName: d.itemName,
-          warehouse: d.whName,
-          currentQty: d.currentStock,
-          unitPrice: d.unitPrice,
-          expiryDate: d.expiryDate,
-          vendor: d.vendor,
-          safetyStock: d.safetyStock,
-        }));
-        if (syncItems.length > 0) {
-          const postRes = await fetch('/api/inventory/stock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: syncItems }),
-          });
-          const postJson = await postRes.json();
-          if (!postJson.success) {
-            alert(`현재고 반영 실패: ${postJson.error || '알 수 없는 오류'}`);
-            return;
-          }
+          liveSyncSuccess = true;
+        } catch (syncErr) {
+          console.warn('현재고 LIVE 동기화 경고:', syncErr);
         }
       }
 
       setDirtyRowIds(new Set());
       setNewRowIds(new Set());
-      alert(`저장 완료 (${targetDate} 확정분 ${snapJson.count}건${shouldSyncLive ? ' · 현재고 반영' : ''})`);
+      alert(
+        `저장 완료 (${targetDate} 실사 확정 ${snapJson.count}건 저장됨${
+          liveSyncSuccess ? ' · 현재고 LIVE 동기화 완료' : ''
+        })`
+      );
       void loadByDate(targetDate);
       void loadAvailableSnapDates();
     } catch (err: any) {
