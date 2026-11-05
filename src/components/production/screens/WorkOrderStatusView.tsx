@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ProductionActionBar } from '../common/ProductionActionBar';
 import {
   Calendar,
   Clock,
@@ -12,17 +11,12 @@ import {
   Save,
   Printer,
   RotateCcw,
-  Sparkles,
   Warehouse as WarehouseIcon,
-  Layers,
-  ChefHat,
-  Scissors,
-  Flame,
   Search,
-  Filter,
   GripVertical,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
-import { usePipeline } from '@/context/PipelineContext';
 import { usePrintReport } from '@/context/PrintReportContext';
 
 interface WorkOrderItem {
@@ -51,28 +45,25 @@ interface WorkOrderItem {
   assignee: string;
 }
 
-// 11대 공정 라인 탭 목록 (생산현장.xlsx 기준)
-const PREP_LINES = [
-  { id: '커팅실', label: '커팅실', icon: Scissors, badge: '야채/소스 전처리' },
-  { id: '취반', label: '취반기', icon: ChefHat, badge: '밥짓기' },
-  { id: '조리', label: '조리실', icon: Flame, badge: '볶음/가열' },
-  { id: '튀김', label: '튀김실', icon: Flame, badge: '오븐/까스' },
-  { id: '계량', label: '계량실', icon: Layers, badge: '양념/분말' },
-  { id: '채소', label: '채소실', icon: Scissors, badge: '세척/선별' },
-  { id: '샐러드', label: '샐러드실', icon: ChefHat, badge: '토핑/믹싱' },
-];
-
-const FORMING_LINES = [
-  { id: '삼각1', label: '삼각1호기', icon: Layers, badge: '삼각김밥' },
-  { id: '삼각2', label: '삼각2호기', icon: Layers, badge: '삼각김밥' },
-  { id: '삼각3', label: '삼각3호기', icon: Layers, badge: '더큰삼각' },
-  { id: '김밥', label: '김밥라인', icon: Layers, badge: '줄김밥/무스비' },
-  { id: '도시락', label: '도시락라인', icon: ChefHat, badge: '정식/한상' },
-  { id: '조리빵', label: '조리빵라인', icon: ChefHat, badge: '샌드/버거' },
+// 11대 공정 라인 목록 (생산현장.xlsx 기준)
+const ALL_LINES = [
+  { group: '전처리 및 조리', id: '커팅실', label: '✂️ 커팅실 (야채/소스 전처리)' },
+  { group: '전처리 및 조리', id: '취반', label: '🍚 취반기 (밥짓기)' },
+  { group: '전처리 및 조리', id: '조리', label: '🍳 조리실 (볶음/가열)' },
+  { group: '전처리 및 조리', id: '튀김', label: '🍗 튀김실 (오븐/까스)' },
+  { group: '전처리 및 조리', id: '계량', label: '⚖️ 계량실 (양념/분말)' },
+  { group: '전처리 및 조리', id: '채소', label: '🥬 채소실 (세척/선별)' },
+  { group: '전처리 및 조리', id: '샐러드', label: '🥗 샐러드실 (토핑/믹싱)' },
+  { group: '성형 및 포장', id: '삼각1', label: '🍙 삼각1호기 (삼각김밥)' },
+  { group: '성형 및 포장', id: '삼각2', label: '🍙 삼각2호기 (삼각김밥)' },
+  { group: '성형 및 포장', id: '삼각3', label: '🍙 삼각3호기 (더큰삼각)' },
+  { group: '성형 및 포장', id: '김밥', label: '🍱 김밥라인 (줄김밥/무스비)' },
+  { group: '성형 및 포장', id: '도시락', label: '🍱 도시락라인 (정식/한상)' },
+  { group: '성형 및 포장', id: '조리빵', label: '🥪 조리빵라인 (샌드/버거)' },
+  { group: '통합', id: 'ALL', label: '🌟 전체 공정 통합보기' },
 ];
 
 export const WorkOrderStatusView: React.FC = () => {
-  const { openPipelineModal } = usePipeline();
   const { openPrintModal, setWorkOrderPayload } = usePrintReport();
 
   // 조회 조건
@@ -80,7 +71,6 @@ export const WorkOrderStatusView: React.FC = () => {
   const [shift, setShift] = useState<'1편' | '2편' | '전체'>('1편');
   const [selectedLine, setSelectedLine] = useState<string>('커팅실');
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'aggregate' | 'detailed'>('aggregate');
 
   // 작업 데이터
   const [items, setItems] = useState<WorkOrderItem[]>([]);
@@ -246,7 +236,7 @@ export const WorkOrderStatusView: React.FC = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setSaveToast('✨ 작업 순서와 상태가 성공적으로 저장되었습니다!');
+        setSaveToast('✨ 작업 순서가 성공적으로 저장되었습니다!');
         setTimeout(() => setSaveToast(null), 3000);
       }
     } catch (err) {
@@ -257,7 +247,7 @@ export const WorkOrderStatusView: React.FC = () => {
     }
   };
 
-  // [작업지시서(A4)] 인쇄 모달 열기 (현장 사진 양식 100% 매칭 데이터 주입)
+  // [작업지시서(A4)] 인쇄 모달 열기
   const handleOpenPrint = () => {
     setWorkOrderPayload({
       lineName: selectedLine,
@@ -280,7 +270,7 @@ export const WorkOrderStatusView: React.FC = () => {
     openPrintModal('WORK_ORDER');
   };
 
-  // 검색 필터 적용 목록
+  // 검색 필터
   const filteredItems = useMemo(() => {
     if (!searchTerm.trim()) return items;
     const term = searchTerm.toLowerCase();
@@ -292,318 +282,237 @@ export const WorkOrderStatusView: React.FC = () => {
     );
   }, [items, searchTerm]);
 
-  // 집계 통계
+  // 집계 수치
   const stats = useMemo(() => {
     const totalCount = items.length;
     const totalQty = items.reduce((sum, i) => sum + (Number(i.orderQty) || 0), 0);
     const completedCount = items.filter((i) => i.status === '완료').length;
     const inProgressCount = items.filter((i) => i.status === '진행중').length;
-    const progressRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-    return { totalCount, totalQty, completedCount, inProgressCount, progressRate };
+    return { totalCount, totalQty, completedCount, inProgressCount };
   }, [items]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f8fafc] select-none text-[12px] font-sans">
-      {/* 1. 상단 액션 바 */}
-      <ProductionActionBar
-        title="공정별 작업지시서 (현장 발행 및 순서 관리)"
-        buttons={[
-          {
-            key: 'save',
-            label: saving ? '저장중...' : '💾 순서 및 지시 저장',
-            icon: 'save',
-            onClick: handleSaveOrders,
-          },
-          {
-            key: 'print',
-            label: '🖨️ 작업지시서(A4)',
-            icon: 'print',
-            onClick: handleOpenPrint,
-          },
-          {
-            key: 'refresh',
-            label: '새로고침',
-            icon: 'reset',
-            onClick: () => void fetchWorkOrders(workDate, shift, selectedLine),
-          },
-        ]}
-        helpContent="수주 및 BOM 레시피와 연동되어 각 라인(커팅실, 취반, 조리실 등)별 작업지시를 생성하고, 작업 순서(▲/▼)와 타임테이블을 현장 요구에 맞게 실시간 조정합니다."
-      />
-
-      {/* 저장 완료 알림 토스트 */}
+    <div className="flex flex-col h-full w-full bg-[#f1f5f9] select-none text-slate-800 font-sans">
+      {/* 알림 토스트 */}
       {saveToast && (
-        <div className="absolute top-14 right-6 z-50 bg-emerald-700 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-xs font-bold animate-bounce">
-          <CheckCircle2 size={16} />
+        <div className="fixed top-16 right-8 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-sm font-bold animate-bounce">
+          <CheckCircle2 size={18} />
           <span>{saveToast}</span>
         </div>
       )}
 
-      {/* 2. 상단 라인 네비게이터 (생산현장.xlsx 11대 공정 라인) */}
-      <div className="bg-white border-b border-slate-300 px-4 py-2.5 shadow-2xs">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* 라인 선택 탭 그룹 */}
-          <div className="flex items-center gap-4">
-            {/* 전처리 및 조리 파트 */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <Scissors size={13} className="text-blue-600" /> 전처리·조리:
+      {/* 1. 메인 헤더 컨트롤 바 (시원하고 직관적인 통합 바) */}
+      <div className="bg-white border-b border-slate-300 px-6 py-4 shadow-sm shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* 좌측: 핵심 3개 필터 (라인 선택, 날짜, 시프트) */}
+          <div className="flex flex-wrap items-center gap-4">
+            {/* 라인 선택 드롭다운 (큰 글자) */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-slate-500">라인:</span>
+              <div className="relative">
+                <select
+                  value={selectedLine}
+                  onChange={(e) => setSelectedLine(e.target.value)}
+                  className="appearance-none bg-blue-50/70 hover:bg-blue-100/60 border-2 border-blue-600 text-blue-950 font-black text-base px-4 py-2 pr-9 rounded-xl shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <optgroup label="── 전처리 및 조리 라인 ──">
+                    {ALL_LINES.filter((l) => l.group === '전처리 및 조리').map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="── 성형 및 포장 라인 ──">
+                    {ALL_LINES.filter((l) => l.group === '성형 및 포장').map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <option value="ALL">🌟 전체 공정 통합보기</option>
+                </select>
+                <ChevronDown
+                  size={18}
+                  className="absolute right-3 top-3 text-blue-700 pointer-events-none"
+                />
+              </div>
+            </div>
+
+            {/* 작업일자 피커 */}
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
+              <span className="text-sm font-bold text-slate-500 flex items-center gap-1">
+                <Calendar size={16} className="text-blue-600" /> 월/일:
               </span>
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-                {PREP_LINES.map((l) => (
+              <input
+                type="date"
+                value={workDate}
+                onChange={(e) => setWorkDate(e.target.value)}
+                className="bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              />
+            </div>
+
+            {/* 시프트(편수) 큼직한 알약 탭 */}
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
+              <span className="text-sm font-bold text-slate-500">시프트:</span>
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-300">
+                {(['1편', '2편', '전체'] as const).map((s) => (
                   <button
-                    key={l.id}
-                    onClick={() => setSelectedLine(l.id)}
-                    className={`px-3 py-1 rounded-md text-[11.5px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      selectedLine === l.id
+                    key={s}
+                    onClick={() => setShift(s)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-black transition-all cursor-pointer ${
+                      shift === s
                         ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                        : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
                     }`}
                   >
-                    <span>{l.label}</span>
+                    {s}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 성형 파트 */}
-            <div className="flex items-center gap-1.5 pl-3 border-l border-slate-300">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <ChefHat size={13} className="text-indigo-600" /> 성형라인:
-              </span>
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-                {FORMING_LINES.map((l) => (
-                  <button
-                    key={l.id}
-                    onClick={() => setSelectedLine(l.id)}
-                    className={`px-2.5 py-1 rounded-md text-[11.5px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      selectedLine === l.id
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>{l.label}</span>
-                  </button>
-                ))}
-                <button
-                  onClick={() => setSelectedLine('ALL')}
-                  className={`px-2.5 py-1 rounded-md text-[11.5px] font-bold transition-all cursor-pointer ${
-                    selectedLine === 'ALL'
-                      ? 'bg-slate-800 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                  }`}
-                >
-                  전체통합
-                </button>
-              </div>
+            {/* 품목 검색창 */}
+            <div className="relative pl-2 border-l border-slate-300">
+              <Search size={16} className="absolute left-5 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="품목명 검색..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
+              />
             </div>
           </div>
 
-          {/* 우측 종합 지표 뱃지 */}
+          {/* 우측: 큼직하고 시원한 3대 액션 버튼 */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-blue-50/70 border border-blue-200 px-3 py-1 rounded-lg">
-              <span className="text-slate-500 text-[11px]">지시량 합계:</span>
-              <span className="font-mono font-black text-blue-900 text-[13px]">
+            {/* 1. 작업지시서 인쇄 버튼 (대형 강조) */}
+            <button
+              onClick={handleOpenPrint}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Printer size={18} />
+              <span>🖨️ 작업지시서 인쇄 (A4)</span>
+            </button>
+
+            {/* 2. 순서 저장 버튼 */}
+            <button
+              onClick={handleSaveOrders}
+              disabled={saving}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-bold text-sm shadow-sm hover:shadow transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Save size={16} />
+              <span>{saving ? '저장 중...' : '순서 저장'}</span>
+            </button>
+
+            {/* 3. 새로고침 */}
+            <button
+              onClick={() => void fetchWorkOrders(workDate, shift, selectedLine)}
+              title="새로고침"
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors"
+            >
+              <RotateCcw size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* 하단 요약 정보 카드 (시원하고 여유로운 배치) */}
+        <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 text-sm">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium">현재 라인:</span>
+              <span className="text-base font-extrabold text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200">
+                {selectedLine}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium">총 지시품목:</span>
+              <span className="font-mono font-black text-slate-900 text-base">
+                {stats.totalCount}
+              </span>
+              <span className="text-slate-500 text-xs">건</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium">총 지시량:</span>
+              <span className="font-mono font-black text-indigo-950 text-base">
                 {stats.totalQty.toLocaleString()}
               </span>
-              <span className="text-blue-700 text-[11px]">
+              <span className="text-slate-500 text-xs">
                 {selectedLine === '도시락' || selectedLine.includes('삼각') || selectedLine === '김밥'
                   ? 'ea'
                   : 'g / kg'}
               </span>
             </div>
-            <div className="flex items-center gap-2 bg-emerald-50/70 border border-emerald-200 px-3 py-1 rounded-lg">
-              <span className="text-slate-500 text-[11px]">작업 진행률:</span>
-              <span className="font-mono font-black text-emerald-800 text-[13px]">
-                {stats.progressRate}%
-              </span>
-              <span className="text-emerald-700 text-[11px]">
-                ({stats.completedCount}/{stats.totalCount}건)
-              </span>
-            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>
+              💡 순서를 마우스로 <strong>끌어다 놓거나(드래그)</strong> 화살표(<strong>▲/▼</strong>)를 누르면 바로 바뀝니다.
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 3. 조회 제어 리본 (일자, 편수, 검색, 모드 스위치) */}
-      <div className="bg-white border-b border-slate-300 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-4">
-          {/* 작업일자 */}
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-slate-700 flex items-center gap-1">
-              <Calendar size={14} className="text-blue-600" />
-              월/일:
-            </span>
-            <input
-              type="date"
-              value={workDate}
-              onChange={(e) => setWorkDate(e.target.value)}
-              className="bg-slate-50 border border-slate-300 px-2.5 py-1 rounded text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
-            />
-          </div>
-
-          {/* 시프트명 (편수) */}
-          <div className="flex items-center gap-1.5 pl-3 border-l border-slate-300">
-            <span className="font-bold text-slate-700">시프트명:</span>
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-300">
-              {(['1편', '2편', '전체'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setShift(s)}
-                  className={`px-3 py-0.5 rounded text-[11px] font-bold cursor-pointer transition-colors ${
-                    shift === s
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 검색창 */}
-          <div className="relative pl-3 border-l border-slate-300">
-            <Search size={13} className="absolute left-5 top-2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="품목명, 창고명 검색..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-7 pr-3 py-1 bg-slate-50 border border-slate-300 rounded text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 w-48"
-            />
-          </div>
-        </div>
-
-        {/* 안내 뱃지 */}
-        <div className="flex items-center gap-2 text-[11.5px] text-slate-600">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>
-            선택 라인: <strong className="text-blue-800 font-bold">{selectedLine}</strong> | BOM 기준 로스율·수율 자동 반영됨
-          </span>
-        </div>
-      </div>
-
-      {/* 4. 상단 시각적 타임테이블 (시간표 간트 차트 바) */}
-      <div className="bg-white border-b border-slate-300 px-4 py-2.5">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2">
-            <Clock size={14} className="text-blue-600" />
-            <span className="font-extrabold text-slate-800 text-[12px]">
-              {selectedLine} 하루 작업 타임테이블 (06:00 ~ 19:00)
-            </span>
-            <span className="text-[11px] text-slate-500">
-              * 순서(▲/▼)를 변경하면 타임테이블 시간이 자동으로 연동 재배치됩니다.
-            </span>
-          </div>
-          <span className="text-[11px] font-mono text-slate-500 font-bold">
-            총 {filteredItems.length}개 작업 세션
-          </span>
-        </div>
-
-        {/* 타임라인 바 */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 min-h-[38px]">
-          {filteredItems.length === 0 ? (
-            <span className="text-[11px] text-slate-400 py-1">편성된 작업 일정이 없습니다.</span>
-          ) : (
-            filteredItems.map((item, idx) => {
-              const statusColor =
-                item.status === '완료'
-                  ? 'bg-emerald-600 text-white border-emerald-700'
-                  : item.status === '진행중'
-                  ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
-                  : 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-blue-50';
-
-              return (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, idx)}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, idx)}
-                  onDragEnd={handleDragEnd}
-                  className={`shrink-0 px-2.5 py-1 rounded-md border text-[11px] flex items-center gap-1.5 shadow-2xs transition-all cursor-grab active:cursor-grabbing ${
-                    draggedIndex === idx
-                      ? 'opacity-40 scale-95 border-dashed border-blue-400'
-                      : dragOverIndex === idx
-                      ? 'ring-2 ring-blue-500 scale-105'
-                      : ''
-                  } ${statusColor}`}
-                >
-                  <GripVertical size={11} className="opacity-70" />
-                  <span className="font-mono font-black opacity-80">#{item.workSeq}</span>
-                  <span className="font-bold truncate max-w-[130px]">{item.productName}</span>
-                  <span className="font-mono text-[10px] opacity-85">({item.timeRange})</span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* 5. 메인 작업지시서 테이블 (사진 양식 100% 매칭 + 순서 제어) */}
-      <div className="flex-1 min-h-0 p-3 overflow-hidden flex flex-col">
-        <div className="flex-1 min-h-0 bg-white border border-slate-300 rounded-lg shadow-xs overflow-hidden flex flex-col">
-          {/* 테이블 상단 헤더 (현장 사진과 동일 표기) */}
-          <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-300 flex items-center justify-between">
-            <div className="flex items-center gap-6 text-[12.5px]">
+      {/* 2. 메인 작업지시 테이블 (올려주신 사진 양식 100% 매칭 + 큰 글자) */}
+      <div className="flex-1 min-h-0 p-5 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 bg-white border border-slate-300 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+          {/* 테이블 상단 헤더 바 */}
+          <div className="bg-slate-50 px-6 py-3 border-b border-slate-300 flex items-center justify-between">
+            <div className="flex items-center gap-6 text-sm">
               <div>
-                <span className="text-slate-500 font-medium">라인명: </span>
-                <span className="font-black text-blue-900 text-sm">{selectedLine}</span>
+                <span className="text-slate-500">라인명: </span>
+                <span className="font-black text-blue-900 text-base">{selectedLine}</span>
               </div>
               <div>
-                <span className="text-slate-500 font-medium">월/일: </span>
+                <span className="text-slate-500">월/일: </span>
                 <span className="font-bold text-slate-900">{workDate}</span>
               </div>
               <div>
-                <span className="text-slate-500 font-medium">시프트명: </span>
+                <span className="text-slate-500">시프트명: </span>
                 <span className="font-black text-emerald-800">{shift}</span>
               </div>
             </div>
 
-            <div className="text-[11.5px] text-slate-600 flex items-center gap-3">
-              <span>
-                💡 마우스로 행을 <strong className="text-blue-700">끌어서 놓기(드래그 앤 드롭)</strong>하거나 화살표 <strong className="text-blue-700 font-mono">▲ / ▼</strong>를 눌러 순서를 자유롭게 조정할 수 있습니다.
-              </span>
+            <div className="text-xs text-slate-400">
+              * BOM 기준 로스율(수율)이 자동 반영된 실제 투입 지시량입니다.
             </div>
           </div>
 
-          {/* 테이블 그리드 영역 */}
+          {/* 테이블 본문 */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
-              <div className="py-24 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                <div className="w-7 h-7 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs font-semibold text-slate-600">BOM 레시피를 전개하여 작업지시를 산출 중입니다...</span>
+              <div className="py-32 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm font-bold text-slate-600">작업지시 목록을 불러오는 중입니다...</span>
               </div>
             ) : filteredItems.length === 0 ? (
-              <div className="py-24 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                <AlertCircle className="w-8 h-8 text-slate-300" />
-                <span className="text-sm font-semibold text-slate-600">
-                  선택하신 라인({selectedLine})에 편성된 작업지시 품목이 없습니다.
+              <div className="py-32 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+                <AlertCircle className="w-10 h-10 text-slate-300" />
+                <span className="text-base font-bold text-slate-700">
+                  선택하신 라인({selectedLine})에 등록된 작업지시 품목이 없습니다.
                 </span>
                 <span className="text-xs text-slate-400">
-                  상단 라인 탭(커팅실, 취반, 조리실 등)을 클릭하시거나 다른 일자를 선택해 주세요.
+                  상단 라인 선택에서 다른 라인(커팅실, 취반, 조리실 등)을 선택해 보세요.
                 </span>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse text-[12px]">
+              <table className="w-full text-left border-collapse text-sm">
                 <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-10 border-b border-slate-300 text-center">
                   <tr>
-                    <th className="py-2 px-1 w-20">순서 (조정)</th>
-                    <th className="py-2 px-3 text-left">제품명 (자재명)</th>
-                    <th className="py-2 px-2 w-28">창고명</th>
-                    <th className="py-2 px-2 w-20">규격/단위</th>
-                    <th className="py-2 px-2 text-right w-24">지시량</th>
-                    <th className="py-2 px-2 w-28">로스율(수율)</th>
-                    <th className="py-2 px-2 text-right w-20">현재고</th>
-                    <th className="py-2 px-2 w-32">작업시간</th>
-                    <th className="py-2 px-2 w-24">완료여부</th>
-                    <th className="py-2 px-2 w-28">담당자</th>
+                    <th className="py-3.5 px-3 w-28 text-center">순서</th>
+                    <th className="py-3.5 px-4 text-left">제품명</th>
+                    <th className="py-3.5 px-3 w-36 text-center">창고명</th>
+                    <th className="py-3.5 px-3 w-28 text-center">규격/단위</th>
+                    <th className="py-3.5 px-4 text-right w-36">지시량</th>
+                    <th className="py-3.5 px-3 w-36 text-center">작업시간</th>
+                    <th className="py-3.5 px-3 w-32 text-center">완료여부</th>
+                    <th className="py-3.5 px-4 w-36 text-center">담당자</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {filteredItems.map((item, idx) => {
-                    // 창고 뱃지 색상
+                    // 창고 뱃지 색상 (알아보기 쉬운 큰 디자인)
                     const whColor = item.warehouseName.includes('냉장2')
                       ? 'bg-blue-100 text-blue-900 border-blue-300'
                       : item.warehouseName.includes('냉장1')
@@ -615,12 +524,8 @@ export const WorkOrderStatusView: React.FC = () => {
                       : 'bg-purple-100 text-purple-900 border-purple-300';
 
                     // 상태 뱃지 색상
-                    const statusClass =
-                      item.status === '완료'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : item.status === '진행중'
-                        ? 'bg-amber-100 text-amber-800 border-amber-300 font-black'
-                        : 'bg-slate-100 text-slate-600 border-slate-300';
+                    const isDone = item.status === '완료';
+                    const isProgress = item.status === '진행중';
 
                     return (
                       <tr
@@ -636,113 +541,112 @@ export const WorkOrderStatusView: React.FC = () => {
                             ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
                             : dragOverIndex === idx
                             ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
-                            : item.status === '완료'
-                            ? 'bg-slate-50/60 opacity-80 hover:bg-slate-100'
-                            : 'hover:bg-blue-50/50'
+                            : isDone
+                            ? 'bg-slate-50/80 opacity-75'
+                            : 'hover:bg-blue-50/40'
                         }`}
                       >
-                        {/* 1. 순서 및 드래그 핸들 & 위/아래 이동 제어 */}
-                        <td className="py-2 px-1 text-center font-mono">
-                          <div className="flex items-center justify-center gap-1">
+                        {/* 1. 순서 (손잡이, 큼직한 번호, 위/아래 버튼) */}
+                        <td className="py-4 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
                             <span
-                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-0.5"
+                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-1"
                               title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
                             >
-                              <GripVertical size={13} />
+                              <GripVertical size={16} />
                             </span>
-                            <span className="font-black text-slate-900 w-5">{item.workSeq}</span>
-                            <div className="flex flex-col gap-0.5">
+                            <span className="font-mono font-black text-slate-900 text-base w-7">
+                              {item.workSeq}
+                            </span>
+                            <div className="flex flex-col gap-0.5 ml-0.5">
                               <button
                                 onClick={() => moveItem(idx, 'UP')}
                                 disabled={idx === 0}
                                 title="위로 순서 올리기"
-                                className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                className="p-1 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
                               >
-                                <ArrowUp size={11} />
+                                <ArrowUp size={13} />
                               </button>
                               <button
                                 onClick={() => moveItem(idx, 'DOWN')}
                                 disabled={idx === filteredItems.length - 1}
                                 title="아래로 순서 내리기"
-                                className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                className="p-1 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
                               >
-                                <ArrowDown size={11} />
+                                <ArrowDown size={13} />
                               </button>
                             </div>
                           </div>
                         </td>
 
-                        {/* 2. 제품명 (자재명) */}
-                        <td className="py-2 px-3 text-left">
-                          <div className="flex flex-col">
-                            <span className="font-extrabold text-slate-900 text-[12.5px]">
+                        {/* 2. 제품명 (크고 뚜렷하게) */}
+                        <td className="py-4 px-4 text-left">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-extrabold text-slate-950 text-base leading-tight">
                               {item.productName}
                             </span>
-                            <span className="text-[10.5px] text-slate-400 font-mono">
-                              코드: {item.productCode || `PRD-${item.productId}`}
-                            </span>
+                            {item.lossRate > 0 && (
+                              <span className="text-xs text-slate-400 font-medium">
+                                * 로스율 {item.lossRate}% (수율 {item.yieldRate}%)
+                              </span>
+                            )}
                           </div>
                         </td>
 
-                        {/* 3. 창고명 (사진 양식 100% 매칭: 냉장창고2 등) */}
-                        <td className="py-2 px-2 text-center">
+                        {/* 3. 창고명 (알아보기 쉬운 큰 뱃지) */}
+                        <td className="py-4 px-3 text-center">
                           <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-[11px] border ${whColor}`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-xs border shadow-2xs ${whColor}`}
                           >
-                            <WarehouseIcon size={11} />
+                            <WarehouseIcon size={13} />
                             <span>{item.warehouseName || '냉장창고2'}</span>
                           </span>
                         </td>
 
                         {/* 4. 규격/단위 */}
-                        <td className="py-2 px-2 text-center font-mono text-slate-700">
-                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">
+                        <td className="py-4 px-3 text-center font-mono">
+                          <span className="bg-slate-100 px-2.5 py-1 rounded-md text-xs font-bold text-slate-700 border border-slate-200">
                             {item.unit || 'g'}
                           </span>
                         </td>
 
-                        {/* 5. 지시량 (로스율 계산 반영 투입량) */}
-                        <td className="py-2 px-2 text-right font-mono font-black text-indigo-950 text-[13px]">
+                        {/* 5. 지시량 (굵고 큼직한 시원한 숫자) */}
+                        <td className="py-4 px-4 text-right font-mono font-black text-blue-900 text-lg">
                           {Number(item.orderQty || 0).toLocaleString()}
                         </td>
 
-                        {/* 6. 로스율 / 수율 */}
-                        <td className="py-2 px-2 text-center font-mono text-[11px] text-slate-600">
-                          <span className="text-amber-700 font-semibold">로스 {item.lossRate}%</span>
-                          <span className="text-slate-400 text-[10px] ml-1">(수율 {item.yieldRate}%)</span>
-                        </td>
-
-                        {/* 7. 현재고 */}
-                        <td className="py-2 px-2 text-right font-mono font-bold text-slate-600 text-[11px]">
-                          {Number(item.stockQty || 0).toLocaleString()}
-                        </td>
-
-                        {/* 8. 작업시간 (타임테이블) */}
-                        <td className="py-2 px-2 text-center font-mono text-[11px]">
-                          <span className="bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 rounded font-bold">
-                            {item.timeRange || '06:00 ~ 07:30'}
+                        {/* 6. 작업시간 */}
+                        <td className="py-4 px-3 text-center font-mono text-xs">
+                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 px-2.5 py-1 rounded-lg font-bold">
+                            <Clock size={12} className="text-slate-500" />
+                            <span>{item.timeRange || '06:00 ~ 06:45'}</span>
                           </span>
                         </td>
 
-                        {/* 9. 완료여부 (클릭 토글 버튼) */}
-                        <td className="py-2 px-2 text-center">
+                        {/* 7. 완료여부 (크고 누르기 편한 원클릭 버튼) */}
+                        <td className="py-4 px-3 text-center">
                           <button
                             onClick={() => toggleStatus(idx)}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border cursor-pointer transition-all ${statusClass}`}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black border shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5 mx-auto ${
+                              isDone
+                                ? 'bg-emerald-600 text-white border-emerald-700'
+                                : isProgress
+                                ? 'bg-amber-500 text-white border-amber-600 animate-pulse'
+                                : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
+                            }`}
                           >
-                            {item.status === '완료' && '✓ 완료'}
-                            {item.status === '진행중' && '⏳ 진행중'}
-                            {item.status === '대기' && '대기'}
+                            {isDone && <Check size={13} />}
+                            <span>{isDone ? '완료' : isProgress ? '진행중' : '대기'}</span>
                           </button>
                         </td>
 
-                        {/* 10. 담당자 */}
-                        <td className="py-2 px-2 text-center">
+                        {/* 8. 담당자 */}
+                        <td className="py-4 px-4 text-center">
                           <input
                             type="text"
                             value={item.assignee || '김반장'}
                             onChange={(e) => updateAssignee(idx, e.target.value)}
-                            className="w-20 px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-center text-[11px] font-bold text-slate-700 focus:bg-white focus:border-blue-500 focus:outline-none"
+                            className="w-24 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-center text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           />
                         </td>
                       </tr>
@@ -754,31 +658,24 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
 
           {/* 테이블 하단 합계 요약 바 */}
-          <div className="bg-slate-100 px-4 py-2 border-t border-slate-300 flex items-center justify-between text-xs font-bold text-slate-700">
+          <div className="bg-slate-50 px-6 py-3 border-t border-slate-300 flex items-center justify-between text-sm font-bold text-slate-700">
             <div>
               <span>총 지시품목: </span>
-              <span className="font-mono text-blue-800 text-[13px]">{filteredItems.length}</span>
+              <span className="font-mono text-blue-800 text-base">{filteredItems.length}</span>
               <span>건</span>
             </div>
             <div className="flex items-center gap-6">
               <div>
-                <span>총 소요/지시량 합계: </span>
-                <span className="font-mono text-indigo-900 text-sm font-black">
+                <span>총 지시량 합계: </span>
+                <span className="font-mono text-indigo-950 text-xl font-black">
                   {stats.totalQty.toLocaleString()}
                 </span>
-                <span className="text-slate-500 text-[11px] ml-1">
+                <span className="text-slate-500 text-xs ml-1">
                   {selectedLine === '도시락' || selectedLine.includes('삼각') || selectedLine === '김밥'
                     ? 'ea'
                     : 'g / kg'}
                 </span>
               </div>
-              <button
-                onClick={handleSaveOrders}
-                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold shadow-xs cursor-pointer flex items-center gap-1 text-[11.5px]"
-              >
-                <Save size={13} />
-                <span>순서 저장</span>
-              </button>
             </div>
           </div>
         </div>
