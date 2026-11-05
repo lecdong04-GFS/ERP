@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
-import { ChevronLeft, ChevronRight, RotateCw, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCw, Search, CheckCircle2, AlertCircle, Upload, Calendar } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { normName } from '@/lib/gfs/norm';
 
@@ -655,6 +655,35 @@ export const StockLookupView: React.FC = () => {
   const [snapshotMode, setSnapshotMode] = useState(false);
   // DB에 저장되어 있는 전체 실사 일자 목록
   const [availableSnapDates, setAvailableSnapDates] = useState<{ date: string; count: number }[]>([]);
+
+  // 기준일 스냅샷 확정 정보 (업로드 여부)
+  const currentSnapInfo = useMemo(() => {
+    return availableSnapDates.find((d) => d.date === targetDate);
+  }, [availableSnapDates, targetDate]);
+
+  const isCurrentDateUploaded = !!currentSnapInfo || snapshotMode;
+
+  // 최근 7일 캘린더 트래커 (기준일 포함 최근 7일의 업로드 여부)
+  const recentDaysTracker = useMemo(() => {
+    const list: Array<{ date: string; label: string; uploaded: boolean; count?: number; isTarget: boolean }> = [];
+    const base = new Date((targetDate || kstToday()) + 'T00:00:00');
+    for (let i = -5; i <= 1; i++) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      const iso = toLocalISODate(d);
+      const snap = availableSnapDates.find((s) => s.date === iso);
+      const m = d.getMonth() + 1;
+      const day = d.getDate();
+      list.push({
+        date: iso,
+        label: `${m}/${day}`,
+        uploaded: !!snap,
+        count: snap?.count,
+        isTarget: iso === targetDate,
+      });
+    }
+    return list;
+  }, [availableSnapDates, targetDate]);
   const estMapRef = useRef<{
     byWhAndKey: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
     byKeyOnly: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
@@ -1893,7 +1922,11 @@ export const StockLookupView: React.FC = () => {
           },
           {
             key: 'upload',
-            label: isUploading ? '업로드 중...' : '재고조사표 업로드',
+            label: isUploading
+              ? '업로드 중...'
+              : isCurrentDateUploaded
+              ? '✅ 재고조사표 덮어쓰기'
+              : '📤 재고조사표 업로드',
             icon: 'upload',
             onClick: () => fileRef.current?.click(),
           },
@@ -1968,6 +2001,69 @@ export const StockLookupView: React.FC = () => {
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
 
+            {/* 1. 당일 재고조사표 업로드 실시간 상태 뱃지 (Check Badge) */}
+            {isCurrentDateUploaded ? (
+              <span
+                className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-2.5 py-0.5 rounded text-[11px] shadow-2xs shrink-0"
+                title={`${targetDate} 일일 재고조사표 실사 확정 데이터 (${currentSnapInfo?.count || data.length}건)`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>재고조사표 등록완료 ({currentSnapInfo?.count || data.length}건 확정)</span>
+              </span>
+            ) : (
+              <div className="inline-flex items-center gap-1 shrink-0">
+                <span
+                  className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2 py-0.5 rounded text-[11px] shadow-2xs"
+                  title={`${targetDate} 일자의 확정 재고조사표가 아직 업로드되지 않았습니다.`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>재고조사표 미등록 (LIVE 추정치)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-0.5 rounded text-[11px] shadow-2xs cursor-pointer transition-colors"
+                  title="지금 당일 재고조사표 엑셀 업로드하기"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>지금 업로드</span>
+                </button>
+              </div>
+            )}
+
+            {/* 2. 최근 7일 주간 출석부 신호등 트래커 (원클릭 날짜 이동) */}
+            <div className="hidden lg:flex items-center gap-1 pl-2 border-l border-slate-300 ml-1 shrink-0">
+              <span className="text-[11px] text-slate-500 font-bold flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                <span>주간현황:</span>
+              </span>
+              <div className="flex items-center gap-1">
+                {recentDaysTracker.map((item) => (
+                  <button
+                    key={item.date}
+                    type="button"
+                    onClick={() => {
+                      setTargetDate(item.date);
+                      void loadByDate(item.date);
+                    }}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      item.isTarget
+                        ? 'ring-2 ring-blue-600 font-black shadow-xs bg-white text-blue-900'
+                        : 'hover:opacity-80'
+                    } ${
+                      item.uploaded
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                        : 'bg-white text-slate-400 border border-dashed border-slate-300'
+                    }`}
+                    title={`${item.date}: ${item.uploaded ? `재고조사표 등록됨 (${item.count}건)` : '미등록 (LIVE 추정재고)'}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${item.uploaded ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 저장된 실사일자 퀵선택 드롭다운 */}
             {availableSnapDates.length > 0 && (
               <select
@@ -1979,7 +2075,7 @@ export const StockLookupView: React.FC = () => {
                     void loadByDate(val);
                   }
                 }}
-                className="bg-emerald-50 text-emerald-800 border border-emerald-400 font-semibold rounded px-1.5 py-0.5 text-[12px] hover:bg-emerald-100 cursor-pointer shadow-sm"
+                className="bg-emerald-50 text-emerald-800 border border-emerald-400 font-semibold rounded px-1.5 py-0.5 text-[12px] hover:bg-emerald-100 cursor-pointer shadow-sm ml-1"
                 title="데이터베이스에 저장된 실사 일자 목록"
               >
                 <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
@@ -2106,6 +2202,28 @@ export const StockLookupView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* 2-0. 당일 재고조사표 미등록 안내 슬림 배너 */}
+      {!isCurrentDateUploaded && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-between text-amber-900 text-[12px] shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>[재고조사표 미등록 안내]</strong> <strong>{targetDate}</strong> 일자의 현장 실사 재고조사표가 아직 업로드되지 않아,{' '}
+              <span className="text-amber-800 font-bold bg-amber-100 px-1 py-0.5 rounded">실시간 전산 추정치(LIVE 현재고)</span>가 표시되고 있습니다.
+              현장 재고조사표 엑셀을 업로드하시면 해당 일자의 확정 실사 재고로 영구 보관됩니다.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-0.5 rounded text-[11px] shrink-0 cursor-pointer transition-colors shadow-2xs"
+          >
+            <Upload className="w-3 h-3" />
+            <span>재고조사표 엑셀 올리기</span>
+          </button>
+        </div>
+      )}
 
       {/* 2-1. 빨간펜 확인필요 패널 (담당자 판단용, 클릭하면 해당 행으로 이동) */}
       {reviewOpen && reviewList.length > 0 && (
