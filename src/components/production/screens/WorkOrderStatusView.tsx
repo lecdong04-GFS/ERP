@@ -56,24 +56,24 @@ interface LineInfo {
 
 const ALL_LINES: LineInfo[] = [
   // 1. 전처리 및 조리 공정
-  { group: '전처리 및 조리', id: '커팅실', name: '커팅실', desc: '야채/소스 전처리', icon: '✂️' },
-  { group: '전처리 및 조리', id: '취반', name: '취반기', desc: '밥짓기 공정', icon: '🍚' },
-  { group: '전처리 및 조리', id: '조리', name: '조리실', desc: '볶음 및 가열 조리', icon: '🍳' },
-  { group: '전처리 및 조리', id: '튀김', name: '튀김실', desc: '오븐 및 가스 튀김기', icon: '🍗' },
-  { group: '전처리 및 조리', id: '계량', name: '계량실', desc: '양념 및 분말 정밀 배합', icon: '⚖️' },
-  { group: '전처리 및 조리', id: '채소', name: '채소실', desc: '신선 채소 세척 및 선별', icon: '🥬' },
-  { group: '전처리 및 조리', id: '샐러드', name: '샐러드실', desc: '토핑 및 믹싱 공정', icon: '🥗' },
+  { group: '전처리 및 조리', id: '커팅실', name: '커팅실', desc: '야채 세절, 소스 배합 및 1차 전처리', icon: '✂️' },
+  { group: '전처리 및 조리', id: '취반', name: '취반기', desc: '대용량 밥짓기 및 배합초 혼합 가동', icon: '🍚' },
+  { group: '전처리 및 조리', id: '조리', name: '조리실', desc: '직화 볶음, 솥 가열 및 육류 조리', icon: '🍳' },
+  { group: '전처리 및 조리', id: '튀김', name: '튀김실', desc: '오븐 구이 및 가스 튀김기 가동', icon: '🍗' },
+  { group: '전처리 및 조리', id: '계량', name: '계량실', desc: '양념, 소스 및 분말 정밀 배합 계량', icon: '⚖️' },
+  { group: '전처리 및 조리', id: '채소', name: '채소실', desc: '신선 채소 버블 세척, 살균 및 선별', icon: '🥬' },
+  { group: '전처리 및 조리', id: '샐러드', name: '샐러드실', desc: '신선 토핑 믹싱 및 콜드체인 포장', icon: '🥗' },
 
   // 2. 성형 및 포장 공정
-  { group: '성형 및 포장', id: '삼각1', name: '삼각 1호기', desc: '일반 삼각김밥', icon: '🍙' },
-  { group: '성형 및 포장', id: '삼각2', name: '삼각 2호기', desc: '일반 삼각김밥', icon: '🍙' },
-  { group: '성형 및 포장', id: '삼각3', name: '삼각 3호기', desc: '더큰 삼각김밥', icon: '🍙' },
-  { group: '성형 및 포장', id: '김밥', name: '김밥 라인', desc: '줄김밥 및 사각 무스비', icon: '🍱' },
-  { group: '성형 및 포장', id: '도시락', name: '도시락 라인', desc: '정식, 한상, 덮밥 포장', icon: '🍱' },
-  { group: '성형 및 포장', id: '조리빵', name: '조리빵 라인', desc: '샌드위치 및 햄버거', icon: '🥪' },
+  { group: '성형 및 포장', id: '삼각1', name: '삼각 1호기', desc: '대표 삼각김밥 고속 자동 성형/포장', icon: '🍙' },
+  { group: '성형 및 포장', id: '삼각2', name: '삼각 2호기', desc: '대표 삼각김밥 자동 성형/포장', icon: '🍙' },
+  { group: '성형 및 포장', id: '삼각3', name: '삼각 3호기', desc: '더큰 삼각김밥 전용 자동 라인', icon: '🍙' },
+  { group: '성형 및 포장', id: '김밥', name: '김밥 라인', desc: '줄김밥 및 사각 무스비 성형/포장', icon: '🍱' },
+  { group: '성형 및 포장', id: '도시락', name: '도시락 라인', desc: '정식, 한상, 덮밥 도시락 세팅/실링', icon: '🍱' },
+  { group: '성형 및 포장', id: '조리빵', name: '조리빵 라인', desc: '샌드위치, 햄버거 조립 및 포장', icon: '🥪' },
 
   // 3. 통합
-  { group: '통합', id: 'ALL', name: '전체 공정 통합보기', desc: '전 공정 작업지시 일괄 조회', icon: '🌟' },
+  { group: '통합', id: 'ALL', name: '전체 공정 통합보기', desc: '전체 공정의 작업지시를 한 화면에서 통합 조회', icon: '🌟' },
 ];
 
 export const WorkOrderStatusView: React.FC = () => {
@@ -341,44 +341,53 @@ export const WorkOrderStatusView: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* 좌측: 핵심 3개 필터 (라인 선택, 날짜, 시프트) */}
           <div className="flex flex-wrap items-center gap-4">
-            {/* 라인 선택 커스텀 드롭다운 (시원하고 깔끔한 대형 팝오버) */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-500">라인:</span>
+            {/* 라인 선택 커스텀 드롭다운 (넓고 시원시원한 대형 팝오버) */}
+            <div className="flex items-center gap-2.5">
+              <span className="text-base font-black text-slate-700">라인:</span>
               <div className="relative" ref={lineDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsLineDropdownOpen((prev) => !prev)}
-                  className="bg-white hover:bg-blue-50/70 border-2 border-blue-500 hover:border-blue-600 px-4 py-2 rounded-xl shadow-xs transition-all flex items-center gap-3 cursor-pointer select-none group"
+                  className="bg-white hover:bg-blue-50/80 border-2 border-blue-500 hover:border-blue-600 px-5 py-2.5 rounded-2xl shadow-sm hover:shadow transition-all flex items-center gap-3.5 cursor-pointer select-none group"
                 >
-                  <span className="text-2xl leading-none">{currentLine.icon}</span>
+                  <span className="text-3xl leading-none">{currentLine.icon}</span>
                   <div className="flex flex-col text-left">
-                    <span className="text-base font-black text-slate-900 group-hover:text-blue-900 leading-tight">
+                    <span className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-blue-900 leading-tight">
                       {currentLine.name}
                     </span>
-                    <span className="text-[11px] font-bold text-slate-500 leading-tight">
+                    <span className="text-xs sm:text-sm font-bold text-blue-700 leading-tight mt-0.5">
                       {currentLine.desc}
                     </span>
                   </div>
                   <ChevronDown
-                    size={18}
-                    className={`text-blue-600 transition-transform duration-200 ml-1.5 ${
+                    size={22}
+                    className={`text-blue-600 transition-transform duration-200 ml-2 ${
                       isLineDropdownOpen ? 'rotate-180' : ''
                     }`}
                   />
                 </button>
 
-                {/* 세련된 커스텀 옵션 팝오버 메뉴 */}
+                {/* 큼직하고 시원한 커스텀 옵션 팝오버 메뉴 (w-[500px]) */}
                 {isLineDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-88 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[520px] overflow-y-auto">
+                  <div className="absolute left-0 top-full mt-2 w-[340px] xs:w-[420px] sm:w-[500px] bg-white rounded-2xl shadow-2xl border-2 border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[580px] overflow-y-auto">
+                    {/* 상단 안내 바 */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between text-xs sm:text-sm font-bold text-slate-600">
+                      <span>공정 라인을 클릭하면 작업지시서가 즉시 전환됩니다.</span>
+                      <span className="text-blue-600 font-black">총 14개 공정</span>
+                    </div>
+
                     {/* 그룹 1: 전처리 및 조리 공정 */}
-                    <div className="mb-2">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-xs font-black text-slate-500 uppercase tracking-wider">
-                        <span>🥗 전처리 및 조리 공정</span>
-                        <span className="bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-full font-bold">
+                    <div className="mb-3">
+                      <div className="px-3 py-2 flex items-center justify-between text-sm sm:text-base font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-2">
+                        <span className="flex items-center gap-2">
+                          <span className="text-lg">🥗</span>
+                          <span>전처리 및 조리 공정</span>
+                        </span>
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-black">
                           7개 라인
                         </span>
                       </div>
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-2 space-y-1.5">
                         {ALL_LINES.filter((l) => l.group === '전처리 및 조리').map((l) => {
                           const isSelected = selectedLine === l.id;
                           return (
@@ -389,25 +398,25 @@ export const WorkOrderStatusView: React.FC = () => {
                                 setSelectedLine(l.id);
                                 setIsLineDropdownOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-left transition-all cursor-pointer border ${
                                 isSelected
-                                  ? 'bg-blue-600 text-white shadow-sm'
-                                  : 'hover:bg-slate-100 text-slate-800'
+                                  ? 'bg-blue-600 text-white shadow-md border-blue-600'
+                                  : 'bg-white hover:bg-blue-50/70 border-slate-200/80 hover:border-blue-300 text-slate-800'
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl leading-none">{l.icon}</span>
+                              <div className="flex items-center gap-3.5">
+                                <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                                 <div>
                                   <div
-                                    className={`text-base font-black ${
+                                    className={`text-lg sm:text-xl font-black leading-tight ${
                                       isSelected ? 'text-white' : 'text-slate-900'
                                     }`}
                                   >
                                     {l.name}
                                   </div>
                                   <div
-                                    className={`text-xs ${
-                                      isSelected ? 'text-blue-100' : 'text-slate-500'
+                                    className={`text-xs sm:text-sm font-bold mt-0.5 leading-snug ${
+                                      isSelected ? 'text-blue-100' : 'text-slate-600'
                                     }`}
                                   >
                                     {l.desc}
@@ -415,8 +424,8 @@ export const WorkOrderStatusView: React.FC = () => {
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                                  <Check size={16} className="text-white" />
+                                <div className="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                  <Check size={18} className="text-white" />
                                 </div>
                               )}
                             </button>
@@ -426,17 +435,20 @@ export const WorkOrderStatusView: React.FC = () => {
                     </div>
 
                     {/* 구분선 */}
-                    <div className="border-t border-slate-200 my-2" />
+                    <div className="border-t-2 border-slate-100 my-3" />
 
                     {/* 그룹 2: 성형 및 포장 공정 */}
-                    <div className="mb-2">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-xs font-black text-slate-500 uppercase tracking-wider">
-                        <span>🍱 성형 및 포장 공정</span>
-                        <span className="bg-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-full font-bold">
+                    <div className="mb-3">
+                      <div className="px-3 py-2 flex items-center justify-between text-sm sm:text-base font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-2">
+                        <span className="flex items-center gap-2">
+                          <span className="text-lg">🍱</span>
+                          <span>성형 및 포장 공정</span>
+                        </span>
+                        <span className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-black">
                           6개 라인
                         </span>
                       </div>
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-2 space-y-1.5">
                         {ALL_LINES.filter((l) => l.group === '성형 및 포장').map((l) => {
                           const isSelected = selectedLine === l.id;
                           return (
@@ -447,25 +459,25 @@ export const WorkOrderStatusView: React.FC = () => {
                                 setSelectedLine(l.id);
                                 setIsLineDropdownOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-left transition-all cursor-pointer border ${
                                 isSelected
-                                  ? 'bg-blue-600 text-white shadow-sm'
-                                  : 'hover:bg-slate-100 text-slate-800'
+                                  ? 'bg-blue-600 text-white shadow-md border-blue-600'
+                                  : 'bg-white hover:bg-blue-50/70 border-slate-200/80 hover:border-blue-300 text-slate-800'
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl leading-none">{l.icon}</span>
+                              <div className="flex items-center gap-3.5">
+                                <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                                 <div>
                                   <div
-                                    className={`text-base font-black ${
+                                    className={`text-lg sm:text-xl font-black leading-tight ${
                                       isSelected ? 'text-white' : 'text-slate-900'
                                     }`}
                                   >
                                     {l.name}
                                   </div>
                                   <div
-                                    className={`text-xs ${
-                                      isSelected ? 'text-blue-100' : 'text-slate-500'
+                                    className={`text-xs sm:text-sm font-bold mt-0.5 leading-snug ${
+                                      isSelected ? 'text-blue-100' : 'text-slate-600'
                                     }`}
                                   >
                                     {l.desc}
@@ -473,8 +485,8 @@ export const WorkOrderStatusView: React.FC = () => {
                                 </div>
                               </div>
                               {isSelected && (
-                                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                                  <Check size={16} className="text-white" />
+                                <div className="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                  <Check size={18} className="text-white" />
                                 </div>
                               )}
                             </button>
@@ -484,7 +496,7 @@ export const WorkOrderStatusView: React.FC = () => {
                     </div>
 
                     {/* 구분선 */}
-                    <div className="border-t border-slate-200 my-2" />
+                    <div className="border-t-2 border-slate-100 my-3" />
 
                     {/* 그룹 3: 통합 보기 */}
                     <div>
@@ -498,25 +510,25 @@ export const WorkOrderStatusView: React.FC = () => {
                               setSelectedLine(l.id);
                               setIsLineDropdownOpen(false);
                             }}
-                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-all cursor-pointer border ${
                               isSelected
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'hover:bg-indigo-50/80 text-slate-800'
+                                ? 'bg-indigo-700 text-white shadow-md border-indigo-700'
+                                : 'bg-indigo-50/40 hover:bg-indigo-50 border-indigo-200 text-slate-800'
                             }`}
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-2xl leading-none">{l.icon}</span>
+                            <div className="flex items-center gap-3.5">
+                              <span className="text-3xl leading-none shrink-0">{l.icon}</span>
                               <div>
                                 <div
-                                  className={`text-base font-black ${
-                                    isSelected ? 'text-white' : 'text-slate-900'
+                                  className={`text-lg sm:text-xl font-black leading-tight ${
+                                    isSelected ? 'text-white' : 'text-indigo-950'
                                   }`}
                                 >
                                   {l.name}
                                 </div>
                                 <div
-                                  className={`text-xs ${
-                                    isSelected ? 'text-indigo-100' : 'text-slate-500'
+                                  className={`text-xs sm:text-sm font-bold mt-0.5 leading-snug ${
+                                    isSelected ? 'text-indigo-100' : 'text-slate-600'
                                   }`}
                                 >
                                   {l.desc}
@@ -524,8 +536,8 @@ export const WorkOrderStatusView: React.FC = () => {
                               </div>
                             </div>
                             {isSelected && (
-                              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                                <Check size={16} className="text-white" />
+                              <div className="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
+                                <Check size={18} className="text-white" />
                               </div>
                             )}
                           </button>
