@@ -15,6 +15,10 @@ export interface SheetRowInput {
   vendor: string;
   finalBoxes: number;
   manual: boolean;
+  pendingBoxes?: number;
+  pendingOrderNos?: string[];
+  latestOrderDate?: string;
+  baseIncoming?: number;
 }
 
 export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as const;

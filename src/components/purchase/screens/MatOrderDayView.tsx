@@ -233,6 +233,10 @@ export const MatOrderDayView: React.FC = () => {
             vendor: r.vendor || '',
             finalBoxes: suggest,
             manual: false,
+            pendingBoxes: r.pendingBoxes || 0,
+            pendingOrderNos: r.pendingOrderNos || [],
+            latestOrderDate: r.latestOrderDate || '',
+            baseIncoming: r.baseIncoming || 0,
           };
         });
         setRows(loaded);
@@ -538,6 +542,26 @@ export const MatOrderDayView: React.FC = () => {
       return;
     }
 
+    // ── [안전 가드레일] 중복 발주 사전 감지 (이미 기발주 전표가 발행된 품목이 포함되어 있는지 점검) ──
+    const duplicateItems = dayRows
+      .filter(({ r, m }) => m.dayQty > 0 && (r.pendingBoxes || 0) > 0)
+      .map(
+        ({ r, m }) =>
+          `• ${r.name} (기발주: ${r.pendingBoxes}box -> 추가발주: ${m.dayQty}box, 전표: ${(r.pendingOrderNos || []).slice(0, 2).join(', ')})`
+      );
+
+    if (duplicateItems.length > 0) {
+      const msg =
+        `⚠️ [중복 발주 주의 경고]\n\n` +
+        `선택하신 품목 중 ${duplicateItems.length}개 품목은 이미 발주 전표가 발행되어 운송/미입고 대기 중입니다:\n\n` +
+        duplicateItems.slice(0, 5).join('\n') +
+        (duplicateItems.length > 5 ? `\n...외 ${duplicateItems.length - 5}건` : '') +
+        `\n\n정말로 이 품목들을 '추가 발주'하시겠습니까?\n(취소를 누르면 중복 발주가 방지되고 저장이 중단됩니다.)`;
+      if (!confirm(msg)) {
+        return;
+      }
+    }
+
     if (
       !confirm(
         `[${currentDayDate} (${DAY_CHARS[dayIdx]}요일)] 납품분으로 총 ${
@@ -610,6 +634,7 @@ export const MatOrderDayView: React.FC = () => {
         );
         loadConfirmedPo();
         loadInboundPending();
+        loadOrderSheet();
       } else {
         alert('발주 확정 실패: ' + json.error);
       }
@@ -1563,7 +1588,13 @@ export const MatOrderDayView: React.FC = () => {
                               <span className="text-xs text-slate-500 font-sans ml-0.5">봉</span>
                             </div>
                             <div className="text-[11.5px] text-slate-500 font-sans font-medium whitespace-nowrap">
-                              (재고 {r.currentStock} + 입고 {r.incoming})
+                              (재고 {r.currentStock} + 입고 {r.incoming}
+                              {(r.pendingBoxes || 0) > 0 ? (
+                                <span className="ml-1 text-emerald-700 font-bold">
+                                  [기발주 {r.pendingBoxes}box 포함]
+                                </span>
+                              ) : null}
+                              )
                             </div>
                           </td>
 
@@ -1581,7 +1612,11 @@ export const MatOrderDayView: React.FC = () => {
 
                           {/* 재고유지일 (Runway) */}
                           <td className="py-2.5 px-3 text-center bg-blue-50/30 border-x border-blue-100 whitespace-nowrap">
-                            {m.auditStatus === 'critical' ? (
+                            {(r.pendingBoxes || 0) > 0 && m.suggestedBoxes === 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
+                                ✅ {m.stockDays.toFixed(1)}일 (기발주 {r.pendingBoxes}box 확보)
+                              </span>
+                            ) : m.auditStatus === 'critical' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300 animate-pulse whitespace-nowrap">
                                 🚨 {m.stockDays.toFixed(1)}일 (임박)
                               </span>
@@ -1636,17 +1671,28 @@ export const MatOrderDayView: React.FC = () => {
                           {/* 요일 발주수량 (추천치 대비 확정) */}
                           <td className="py-1.5 px-2.5 text-right bg-amber-50/40 border-x border-amber-200 whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                              {m.week[dayIdx] > 0 && (
+                              {(r.pendingBoxes || 0) > 0 ? (
+                                <span
+                                  className="text-[11px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full font-sans whitespace-nowrap shadow-xs"
+                                  title={`발주번호: ${(r.pendingOrderNos || []).join(', ') || '전표발행완료'}`}
+                                >
+                                  ✅ 기발주 {r.pendingBoxes}box
+                                </span>
+                              ) : m.week[dayIdx] > 0 ? (
                                 <span className="text-[11.5px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
                                   추천 {m.week[dayIdx]}
                                 </span>
-                              )}
+                              ) : null}
                               <input
                                 type="number"
                                 min={0}
                                 value={m.dayQty}
                                 onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
-                                className="w-20 text-right px-2 py-1 bg-white border border-amber-300 rounded-lg text-[15px] font-black font-mono text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                                className={`w-20 text-right px-2 py-1 bg-white border rounded-lg text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs ${
+                                  (r.pendingBoxes || 0) > 0
+                                    ? 'border-emerald-300 text-emerald-950 focus:ring-emerald-500'
+                                    : 'border-amber-300 text-amber-950 focus:ring-amber-500'
+                                }`}
                               />
                               <span className="text-xs font-black text-amber-950">box</span>
                             </div>
