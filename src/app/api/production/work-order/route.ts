@@ -639,27 +639,54 @@ export async function POST(req: NextRequest) {
               createdBy: r.assignee || existing.createdBy,
             },
           });
-        } else if (r.productId && r.gyeId) {
-          await prisma.workOrder.create({
-            data: {
-              workOrderNo: r.workOrderNo,
-              workDate: workDate || r.workDate || '2026-11-05',
-              shift: shift || r.shift || '1편',
-              gyeId: r.gyeId,
-              gyeName: r.gyeName || line || '커팅실',
-              productId: r.productId,
-              productCode: r.productCode || '',
-              productName: r.productName || r.partName || '',
-              spec: r.spec || '',
-              unit: r.unit || 'g',
-              orderQty: Number(r.orderQty) || 0,
-              prodQty: Number(r.prodQty) || Number(r.orderQty) || 0,
-              workSeq: Number(r.workSeq) || 1,
-              status: r.status || '대기',
-              completeTime: r.timeRange || '06:00 ~ 07:30',
-              createdBy: r.assignee || '김반장',
-            },
-          });
+        } else {
+          let pId = r.productId;
+          let gId = r.gyeId;
+          if (!pId && r.productName) {
+            const prod = await prisma.product.findFirst({
+              where: { name: { contains: r.productName.slice(0, 4) } },
+              select: { id: true, productCode: true, spec: true, unit: true },
+            });
+            if (prod) {
+              pId = prod.id;
+              if (!r.productCode) r.productCode = prod.productCode;
+              if (!r.spec) r.spec = prod.spec;
+              if (!r.unit) r.unit = prod.unit;
+            } else {
+              const anyP = await prisma.product.findFirst({ select: { id: true } });
+              if (anyP) pId = anyP.id;
+            }
+          }
+          if (!gId) {
+            const anyGye = await prisma.gyeMaster.findFirst({
+              where: { name: { contains: line || '성형' } },
+              select: { id: true },
+            });
+            gId = anyGye?.id || (await prisma.gyeMaster.findFirst({ select: { id: true } }))?.id || 'GFS004';
+          }
+
+          if (pId && gId) {
+            await prisma.workOrder.create({
+              data: {
+                workOrderNo: r.workOrderNo,
+                workDate: workDate || r.workDate || '2026-11-06',
+                shift: shift || r.shift || '1편',
+                gyeId: gId,
+                gyeName: r.gyeName || line || '성형',
+                productId: pId,
+                productCode: r.productCode || '',
+                productName: r.productName || r.partName || '',
+                spec: r.spec || '',
+                unit: r.unit || 'ea',
+                orderQty: Number(r.orderQty) || 0,
+                prodQty: Number(r.prodQty) || Number(r.orderQty) || 0,
+                workSeq: Number(r.workSeq) || 1,
+                status: r.status || '대기',
+                completeTime: r.timeRange || r.completeTime || '09:30 ~ 10:30',
+                createdBy: r.assignee || '김반장',
+              },
+            });
+          }
         }
       }
 
