@@ -1466,7 +1466,7 @@ export const MatOrderDayView: React.FC = () => {
               <div className="w-full h-full flex flex-col items-center justify-center p-16 gap-3 text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
                 <div className="text-sm font-bold text-slate-600">
-                  스마트발주(GFS) 최신 발주 데이터를 불러오고 있습니다...
+                  자재발주(요일별) 최신 발주 데이터를 불러오고 있습니다...
                 </div>
               </div>
             ) : (
@@ -1842,7 +1842,7 @@ export const MatOrderDayView: React.FC = () => {
                             현재 입고 대기 중인 발주 물량이 없습니다.
                           </div>
                           <p className="text-[13px] text-slate-500">
-                            이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 스마트발주 또는 1번 탭에서 발주서를 먼저 생성해 주세요.
+                            이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 상단 [오늘 발주할 양] 탭에서 발주서를 먼저 생성해 주세요.
                           </p>
                         </div>
                       </td>

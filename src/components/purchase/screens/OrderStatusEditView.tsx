@@ -685,16 +685,16 @@ export const OrderStatusEditView: React.FC = () => {
                   발주 현황 및 수정 관제
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200">
-                  자체발주 실시간 100% 동기화
+                  자재발주 실시간 100% 동기화
                 </span>
               </div>
               <p className="text-[12.5px] font-medium text-slate-500 mt-1">
-                자체발주(요일별)에서 확정한 거래처별 박스 수량과 금액이 실시간 연동되며, 인라인 수정 및 삭제가 가능합니다.
+                자재발주(요일별)에서 확정한 거래처별 박스 수량과 금액이 실시간 연동되며, 인라인 수정 및 삭제가 가능합니다.
               </p>
             </div>
           </div>
 
-          {/* 우측 빠른 액션: 자체발주 바로가기 & 데이터 새로고침 */}
+          {/* 우측 빠른 액션: 자재발주 바로가기 & 데이터 새로고침 */}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -702,7 +702,7 @@ export const OrderStatusEditView: React.FC = () => {
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[13px] font-extrabold shadow-sm transition cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>자체발주(요일별) 이동</span>
+              <span>자재발주(요일별) 이동</span>
             </button>
             <button
               type="button"
@@ -1058,7 +1058,7 @@ export const OrderStatusEditView: React.FC = () => {
                             선택하신 기간({startDate} ~ {endDate})에 등록된 발주 내역이 없습니다.
                           </div>
                           <p className="text-[13px] text-slate-500">
-                            [자체발주(요일별)]에서 발주를 확정하시면 해당 내역이 이곳에 실시간으로 표시됩니다.
+                            [자재발주(요일별)]에서 발주를 확정하시면 해당 내역이 이곳에 실시간으로 표시됩니다.
                           </p>
                           <div className="flex items-center gap-2 mt-2">
                             <button

@@ -35,8 +35,7 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       { id: 'pur-mat-req-print', title: '자재소요량출력(GSR)', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-order-req-confirm', title: '발주소요량확정', categoryId: 'purchase', categoryName: '매입관리' },
-      { id: 'pur-mat-order-day', title: '자재발주(요일별)', categoryId: 'purchase', categoryName: '매입관리' },
-      { id: 'pur-gfs-smart-order', title: '스마트발주(GFS)', categoryId: 'purchase', categoryName: '매입관리', badge: 'GFS' },
+      { id: 'pur-mat-order-day', title: '자재발주(요일별)', categoryId: 'purchase', categoryName: '매입관리', badge: '핵심' },
       { id: 'pur-order-simulation', title: '발주시뮬레이션', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-order-status-edit', title: '발주현황/수정', categoryId: 'purchase', categoryName: '매입관리' },
       { id: 'pur-order-print', title: '발주서출력', categoryId: 'purchase', categoryName: '매입관리' },
@@ -131,10 +130,18 @@ export const MENU_CATEGORIES: MenuCategory[] = [
   },
 ];
 
+// 구버전 또는 축약 메뉴 ID -> 현행 표준 메뉴 ID 매핑 (하위 호환성 100% 보장)
+const MENU_ALIASES: Record<string, string> = {
+  'pur-gfs-smart-order': 'pur-mat-order-day',
+  'gfs-smart-order': 'pur-mat-order-day',
+  'smart-order': 'pur-mat-order-day',
+};
+
 // Helper to look up any menu item by id
 export const ALL_MENU_ITEMS: MenuItem[] = MENU_CATEGORIES.flatMap((c) => c.items);
 
 export const getMenuItemById = (id: string): MenuItem | undefined => {
-  return ALL_MENU_ITEMS.find((item) => item.id === id);
+  const resolvedId = MENU_ALIASES[id] || id;
+  return ALL_MENU_ITEMS.find((item) => item.id === resolvedId);
 };
 

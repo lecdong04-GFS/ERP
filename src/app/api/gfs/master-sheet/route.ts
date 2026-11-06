@@ -104,8 +104,8 @@ export async function POST(req: NextRequest) {
           loginId: me.loginId || 'admin',
           userName: uploadedBy,
           action: '데이터변경',
-          menuId: 'purchase-gfs-smart',
-          menuName: '스마트발주(GFS)',
+          menuId: 'pur-mat-order-day',
+          menuName: '자재발주(요일별)',
           detail: `발주서 마스터(신메뉴·BOM) 영구 교체: ${fileName} (${asOf})`,
         },
       })

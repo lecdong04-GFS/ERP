@@ -376,15 +376,15 @@ export const ReceivingRegGsrView: React.FC = () => {
             발주-입고 파이프라인 연계:
           </span>
           <span className="text-[11px] text-slate-300">
-            [스마트발주(GFS)] → [발주소요량확정] → [발주현황/수정] → <strong>[입고등록(GSR)]</strong> → [재고현황]
+            [자재발주(요일별)] → [발주소요량확정] → [발주현황/수정] → <strong>[입고등록(GSR)]</strong> → [재고현황]
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => openPipelineTab('pur-gfs-smart-order')}
+            onClick={() => openPipelineTab('pur-mat-order-day')}
             className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
           >
-            <span>스마트발주(GFS)</span>
+            <span>자재발주(요일별)</span>
             <ExternalLink className="w-3 h-3" />
           </button>
           <button

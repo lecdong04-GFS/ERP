@@ -187,10 +187,10 @@ export async function POST(req: NextRequest) {
           orderDate: today,
           partnerId: partner.id,
           partnerName: partner.name,
-          orderType: 'GFS스마트',
+          orderType: '자재발주',
           status: '발주',
           totalAmount,
-          remark: memo || 'GFS 스마트발주 연동 생성',
+          remark: memo || '자재발주(요일별) 연동 생성',
           createdBy: actorLabel,
           details: { create: detailData },
         },
@@ -202,9 +202,9 @@ export async function POST(req: NextRequest) {
         ...(Number.isFinite(Number((me as any)?.id)) ? { userId: Number((me as any).id) } : {}),
         loginId: String(me.loginId || ''),
         userName: String(me.name || ''),
-        action: 'GFS발주생성',
-        menuId: 'pur-gfs-smart-order',
-        menuName: '스마트발주(GFS)',
+        action: '자재발주생성',
+        menuId: 'pur-mat-order-day',
+        menuName: '자재발주(요일별)',
         detail: `${actorLabel} 발주서 ${orderNo} 생성 (${detailData.length}품목, ${totalAmount.toLocaleString()}원)`,
       });
     }
@@ -212,10 +212,10 @@ export async function POST(req: NextRequest) {
       await prisma.systemLog.createMany({ data: logRows }).catch(() => {});
     }
 
-    // ── MaterialRequirement 테이블에 GFS 확정 내역 동기화 (파이프라인 연계) ──
+    // ── MaterialRequirement 테이블에 자재발주 확정 내역 동기화 (파이프라인 연계) ──
     try {
       await prisma.materialRequirement.deleteMany({
-        where: { reqDate: today, remark: { contains: '스마트발주' } },
+        where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
       });
       const matReqData = items
         .filter((it) => Number(it.orderQty) > 0)
@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
             currentStock: 0,
             shortageQty: Number(it.orderQty) || 0,
             status: '확정',
-            remark: '스마트발주(GFS) 확정',
+            remark: '자재발주(요일별) 확정',
           };
         });
       if (matReqData.length > 0) {

@@ -203,7 +203,7 @@ export async function GET(req: NextRequest) {
 
       let status = '정상 재고';
       if (isConfirmed) {
-        status = '확정완료(스마트발주)';
+        status = '확정완료(자재발주)';
       } else if (finalOrderQty > 0) {
         status = '발주대상';
       }

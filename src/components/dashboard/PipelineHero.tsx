@@ -148,16 +148,16 @@ export const PipelineHero: React.FC<PipelineHeroProps> = ({
             <span className={deadlineColor}>{deadlineLabel}</span>
           </div>
 
-          {/* 스마트발주 바로가기 하이라이트 버튼 */}
+          {/* 자재발주(요일별) 바로가기 하이라이트 버튼 */}
           {onNavigate && (
             <button
               type="button"
-              onClick={() => onNavigate('pur-gfs-smart-order')}
+              onClick={() => onNavigate('pur-mat-order-day')}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-[13.5px] transition shadow-md hover:shadow-lg cursor-pointer border border-emerald-400/40"
-              title="원조 엑셀뷰 및 스마트발주 관제 화면으로 즉시 이동합니다."
+              title="자재발주(요일별) 발주 관제 화면으로 즉시 이동합니다."
             >
               <Zap className="w-4 h-4 fill-current text-amber-300" />
-              <span>스마트발주 열기</span>
+              <span>자재발주(요일별) 열기</span>
             </button>
           )}
 

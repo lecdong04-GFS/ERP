@@ -470,11 +470,11 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onNavigate?.('pur-gfs-smart-order')}
+            onClick={() => onNavigate?.('pur-mat-order-day')}
             className="px-3.5 py-1.5 bg-indigo-900/60 hover:bg-indigo-900 text-indigo-200 rounded-lg border border-indigo-700/60 transition flex items-center gap-1.5 font-bold cursor-pointer outline-none focus:outline-none"
-            title="스마트 발주 화면으로 이동"
+            title="자재발주(요일별) 화면으로 이동"
           >
-            <span>스마트 발주 연계</span>
+            <span>자재발주(요일별) 연계</span>
             <ChevronRight className="w-3.5 h-3.5 text-indigo-400" />
           </button>
         </div>

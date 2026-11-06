@@ -421,10 +421,10 @@ export const MatOrderNormalView: React.FC = () => {
           <span className="font-bold text-slate-600">🔗 발주 파이프라인 연계:</span>
           <button
             type="button"
-            onClick={() => handleNavigate('pur-gfs-smart-order')}
+            onClick={() => handleNavigate('pur-mat-order-day')}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 shadow-2xs transition-colors cursor-pointer"
           >
-            🍱 스마트발주(GFS) 열기 <ExternalLink size={10} />
+            🍱 자재발주(요일별) 열기 <ExternalLink size={10} />
           </button>
           <button
             type="button"

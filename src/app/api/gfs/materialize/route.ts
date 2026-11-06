@@ -306,9 +306,9 @@ export async function POST(req: NextRequest) {
             userId: Number(me.id) || undefined,
             loginId: String(me.loginId || ''),
             userName: String(me.name || ''),
-            action: 'GFS자동생성',
-            menuId: 'pur-gfs-smart-order',
-            menuName: '스마트발주(GFS)',
+            action: '자재마스터동기화',
+            menuId: 'pur-mat-order-day',
+            menuName: '자재발주(요일별)',
             detail: `${me.name || me.loginId} materialize: 매칭 ${matched.length}건, 신규 ${created.filter((c) => c.type === 'product').length}건`,
           },
         })

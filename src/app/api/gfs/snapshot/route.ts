@@ -86,10 +86,10 @@ export async function POST(req: NextRequest) {
           userId: Number(me.id) || undefined,
           loginId: String(me.loginId || ''),
           userName: String(me.name || ''),
-          action: 'GFS재고유지일저장',
-          menuId: 'pur-gfs-smart-order',
-          menuName: '스마트발주(GFS)',
-          detail: `${me.name || me.loginId} GFS 재고유지일 ${saved}건 저장 (${asOf})${skipped ? `, 미매칭 ${skipped}건 제외` : ''}`,
+          action: '재고유지일저장',
+          menuId: 'pur-mat-order-day',
+          menuName: '자재발주(요일별)',
+          detail: `${me.name || me.loginId} 재고유지일 ${saved}건 저장 (${asOf})${skipped ? `, 미매칭 ${skipped}건 제외` : ''}`,
         },
       })
       .catch(() => {});

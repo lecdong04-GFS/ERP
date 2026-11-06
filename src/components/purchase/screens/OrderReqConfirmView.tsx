@@ -362,7 +362,7 @@ export const OrderReqConfirmView: React.FC = () => {
             {hasGfsOrders ? (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
                 <CheckCircle2 size={11} />
-                스마트발주(GFS) 확정 연계 완료 ({confirmedOrderNos.length}건 전표)
+                자재발주(요일별) 확정 연계 완료 ({confirmedOrderNos.length}건 전표)
               </span>
             ) : (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
@@ -421,16 +421,16 @@ export const OrderReqConfirmView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. 파이프라인 바로가기 바 (스마트발주 ◀ 커맨드센터 / 발주현황 / 입고등록) */}
+      {/* 2. 파이프라인 바로가기 바 (자재발주 ◀ 커맨드센터 / 발주현황 / 입고등록) */}
       <div className="bg-[#edf2f7] border-b border-[#cbd5e1] px-3 py-1 flex items-center justify-between shrink-0 text-[11.5px]">
         <div className="flex items-center gap-2">
           <span className="font-bold text-slate-600">🔗 발주 파이프라인 연계:</span>
           <button
             type="button"
-            onClick={() => handleNavigate('pur-gfs-smart-order')}
+            onClick={() => handleNavigate('pur-mat-order-day')}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 shadow-2xs transition-colors cursor-pointer"
           >
-            🍱 스마트발주(GFS) 열기 <ExternalLink size={10} />
+            🍱 자재발주(요일별) 열기 <ExternalLink size={10} />
           </button>
           <button
             type="button"
@@ -449,7 +449,7 @@ export const OrderReqConfirmView: React.FC = () => {
         </div>
 
         <div className="text-[11px] text-slate-500">
-          💡 스마트발주(GFS)에서 발주 저장 시, 본 화면 및 발주·입고 파이프라인에 실시간 연동됩니다.
+          💡 [자재발주(요일별)]에서 발주 저장 시, 본 화면 및 발주·입고 파이프라인에 실시간 연동됩니다.
         </div>
       </div>
 
