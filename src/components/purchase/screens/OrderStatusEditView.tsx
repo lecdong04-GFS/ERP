@@ -91,11 +91,13 @@ export const OrderStatusEditView: React.FC = () => {
   const { openTab } = useTabs();
   const { openPrintModal, setPoPayload } = usePrintReport();
 
-  // 빠른 조회 기간 (기본값: 오늘 당일 초고속 0.05초 조회)
+  // 빠른 조회 기간 (기본값: 최근 7일간 발주 내역 자동 탐색)
   const today = useMemo(() => kstToday(), []);
-  const [startDate, setStartDate] = useState(() => memorySavedDates.start || today);
+  const [startDate, setStartDate] = useState(() => memorySavedDates.start || kstDaysAgo(6));
   const [endDate, setEndDate] = useState(() => memorySavedDates.end || today);
-  const [periodPreset, setPeriodPreset] = useState<'today' | 'yesterday' | '3days' | '7days' | 'custom'>('today');
+  const [periodPreset, setPeriodPreset] = useState<'today' | 'yesterday' | '3days' | '7days' | 'custom'>(() =>
+    memorySavedDates.start ? 'custom' : '7days'
+  );
 
   // 필터 & 검색
   const [supplierFilter, setSupplierFilter] = useState('전체');
@@ -210,9 +212,7 @@ export const OrderStatusEditView: React.FC = () => {
 
       setMasterList(newMasters);
       setFlatItems(newFlat);
-      if (newMasters.length > 0 && selectedMasterId === null) {
-        setSelectedMasterId(newMasters[0].id);
-      }
+      setSelectedMasterId((prev) => (prev && newMasters.some((m) => m.id === prev) ? prev : (newMasters[0]?.id || null)));
       setStatusMsg(`총 ${newMasters.length}건 발주서 (${newFlat.length}개 품목) 조회 완료`);
     } catch (err: any) {
       console.error('발주현황 로드 실패:', err);
@@ -220,7 +220,7 @@ export const OrderStatusEditView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedMasterId]);
+  }, []);
 
   // 최초 로딩: 기본 오늘 일자 조회
   useEffect(() => {
@@ -436,24 +436,43 @@ export const OrderStatusEditView: React.FC = () => {
       );
       if (!ok) return;
 
+      const detailIdsToDelete = checkedDetails.map((x) => x.id);
+      const detailIdSet = new Set(detailIdsToDelete);
+
       try {
         const res = await fetch('/api/purchase/order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'delete_details',
-            detailIds: checkedDetails.map((x) => x.id),
+            detailIds: detailIdsToDelete,
           }),
         });
-        const json = await res.json();
-        if (json.success) {
+        const json = await res.json().catch(() => null);
+        if (json?.success) {
+          // 1. 즉시 로컬 상태에서 제거 (즉각 반영)
+          setFlatItems((prev) => prev.filter((x) => !detailIdSet.has(x.id)));
+          setMasterList((prev) =>
+            prev
+              .map((m) => {
+                const remainingDetails = m.details.filter((d) => !detailIdSet.has(d.id));
+                const newAmt = remainingDetails.reduce((sum, d) => sum + d.amount, 0);
+                return {
+                  ...m,
+                  itemCount: remainingDetails.length,
+                  orderAmt: newAmt,
+                  details: remainingDetails,
+                };
+              })
+              .filter((m) => m.itemCount > 0)
+          );
           alert(`✅ ${json.message || '선택한 품목이 성공적으로 삭제되었습니다.'}`);
-          loadData(startDate, endDate);
+          loadData(startDate, endDate, true);
         } else {
-          alert('삭제 실패: ' + (json.error || '오류 발생'));
+          alert('삭제 실패: ' + (json?.error || '오류 발생'));
         }
       } catch (err: any) {
-        alert('삭제 통신 오류: ' + err.message);
+        alert('삭제 통신 오류: ' + (err?.message || err));
       }
     } else {
       // 발주서(마스터) 단위 삭제
@@ -480,23 +499,29 @@ export const OrderStatusEditView: React.FC = () => {
       );
       if (!ok) return;
 
+      const masterIdsToDelete = checkedMasters.map((m) => m.id);
+      const masterIdSet = new Set(masterIdsToDelete);
+
       try {
         const res = await fetch('/api/purchase/order', {
-          method: 'DELETE',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            ids: checkedMasters.map((m) => m.id),
+            action: 'delete',
+            ids: masterIdsToDelete,
           }),
         });
-        const json = await res.json();
-        if (json.success) {
+        const json = await res.json().catch(() => null);
+        if (json?.success) {
+          setMasterList((prev) => prev.filter((m) => !masterIdSet.has(m.id)));
+          setFlatItems((prev) => prev.filter((x) => !masterIdSet.has(x.orderId)));
           alert(`✅ ${json.message || '선택한 발주서가 성공적으로 삭제되었습니다.'}`);
-          loadData(startDate, endDate);
+          loadData(startDate, endDate, true);
         } else {
-          alert('발주서 삭제 실패: ' + (json.error || '오류'));
+          alert('발주서 삭제 실패: ' + (json?.error || '오류'));
         }
       } catch (err: any) {
-        alert('삭제 통신 오류: ' + err.message);
+        alert('삭제 통신 오류: ' + (err?.message || err));
       }
     }
   };
@@ -524,15 +549,30 @@ export const OrderStatusEditView: React.FC = () => {
           detailId: item.id,
         }),
       });
-      const json = await res.json();
-      if (json.success) {
+      const json = await res.json().catch(() => null);
+      if (json?.success) {
+        setFlatItems((prev) => prev.filter((x) => x.id !== item.id));
+        setMasterList((prev) =>
+          prev
+            .map((m) => {
+              if (m.id !== item.orderId) return m;
+              const remainingDetails = m.details.filter((d) => d.id !== item.id);
+              return {
+                ...m,
+                itemCount: remainingDetails.length,
+                orderAmt: remainingDetails.reduce((sum, d) => sum + d.amount, 0),
+                details: remainingDetails,
+              };
+            })
+            .filter((m) => m.itemCount > 0)
+        );
         alert(`✅ ${json.message || '품목이 삭제되었습니다.'}`);
-        loadData(startDate, endDate);
+        loadData(startDate, endDate, true);
       } else {
-        alert('삭제 실패: ' + (json.error || '오류'));
+        alert('삭제 실패: ' + (json?.error || '오류'));
       }
     } catch (e: any) {
-      alert('오류: ' + e.message);
+      alert('오류: ' + (e?.message || e));
     }
   };
 
@@ -1048,12 +1088,19 @@ export const OrderStatusEditView: React.FC = () => {
                       return (
                         <tr
                           key={item.id}
-                          className={`transition duration-100 hover:bg-blue-50/50 ${
-                            isMod
+                          onClick={(e) => {
+                            const target = e.target as HTMLElement;
+                            if (target.closest('input') || target.closest('button') || target.closest('select')) return;
+                            handleToggleItemCheck(item.id);
+                          }}
+                          className={`transition duration-100 cursor-pointer ${
+                            item.checked
+                              ? 'bg-blue-50/90 font-medium'
+                              : isMod
                               ? 'bg-amber-50/80 border-l-4 border-l-amber-500'
                               : idx % 2 === 1
-                              ? 'bg-slate-50/40'
-                              : 'bg-white'
+                              ? 'bg-slate-50/40 hover:bg-slate-100/60'
+                              : 'bg-white hover:bg-slate-50'
                           }`}
                         >
                           {/* 체크박스 */}
@@ -1310,6 +1357,7 @@ export const OrderStatusEditView: React.FC = () => {
                             <th className="py-2.5 px-3 text-right">박스단가</th>
                             <th className="py-2.5 px-3 text-right">금액</th>
                             <th className="py-2.5 px-3 text-center">상태</th>
+                            <th className="py-2.5 px-3 text-center w-14">삭제</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-[13px]">
@@ -1328,6 +1376,16 @@ export const OrderStatusEditView: React.FC = () => {
                               </td>
                               <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-600">
                                 {d.status}
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSingleItem(d)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer hover:bg-rose-50"
+                                  title="이 품목만 발주서에서 삭제"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </td>
                             </tr>
                           ))}
