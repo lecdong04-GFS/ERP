@@ -366,3 +366,124 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
     return localRes;
   }
 }
+
+/**
+ * 최근 7일(약 1주일 이동평균) 기준 실사용 평균 산출
+ * targetDate 기준 이전 8일 이내의 스냅샷 데이터만 추출하여 일평균 소진량을 계산
+ */
+export async function getRollingUsage7DaysWithDb(
+  prisma: any,
+  targetDate?: string,
+  _forceRefresh = false,
+): Promise<EstimatedUsageResult> {
+  try {
+    const allDates = await prisma.inventorySnapshot.groupBy({
+      by: ['snapshotDate'],
+      orderBy: { snapshotDate: 'desc' },
+    });
+    const dateList: string[] = allDates.map((d: any) => d.snapshotDate);
+    if (dateList.length === 0) {
+      return { byWhAndKey: {}, byKeyOnly: {}, fileCount: 0, dateRange: ['', ''] };
+    }
+    const curTarget = targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate) ? targetDate : dateList[0];
+    const tDateObj = new Date(curTarget + 'T00:00:00Z');
+
+    const windowDates = dateList
+      .filter((d) => {
+        const diff = (tDateObj.getTime() - new Date(d + 'T00:00:00Z').getTime()) / 86400000;
+        return diff >= 0 && diff <= 8; // 최근 7~8일 구간
+      })
+      .sort();
+
+    if (windowDates.length < 2) {
+      return { byWhAndKey: {}, byKeyOnly: {}, fileCount: windowDates.length, dateRange: [curTarget, curTarget] };
+    }
+
+    const dbRows: Array<{
+      snapshotDate: string;
+      warehouse: string;
+      productName: string;
+      currentQty: number;
+      packUnit: number;
+    }> = await prisma.inventorySnapshot.findMany({
+      where: { snapshotDate: { in: windowDates } },
+      select: {
+        snapshotDate: true,
+        warehouse: true,
+        productName: true,
+        currentQty: true,
+        packUnit: true,
+      },
+      orderBy: [{ snapshotDate: 'asc' }],
+    });
+
+    const series = new Map<string, Array<{ date: string; qty: number }>>();
+    const meta = new Map<string, { warehouse: string; canonKey: string; productName: string; packUnit: number }>();
+
+    for (const r of dbRows) {
+      const wh = r.warehouse || '상온';
+      const ck = canonNormName(r.productName);
+      if (!ck) continue;
+      const mk = `${wh}|${ck}`;
+      const pack = Number(r.packUnit) > 0 ? Number(r.packUnit) : 1;
+      if (!meta.has(mk) || (meta.get(mk)!.packUnit <= 1 && pack > 1)) {
+        meta.set(mk, { warehouse: wh, canonKey: ck, productName: r.productName, packUnit: pack });
+      }
+      if (!series.has(mk)) series.set(mk, []);
+      series.get(mk)!.push({ date: r.snapshotDate, qty: Number(r.currentQty) || 0 });
+    }
+
+    const byWhAndKey: Record<string, EstimatedUsageEntry> = {};
+    const byKeyCounts = new Map<string, string[]>();
+
+    series.forEach((pts, mk) => {
+      const m = meta.get(mk);
+      if (!m) return;
+      const drops: number[] = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const d = daysBetween(p1.date, p2.date);
+        if (p1.qty > p2.qty && p1.qty > 0) {
+          drops.push((p1.qty - p2.qty) / d);
+        }
+      }
+      if (drops.length === 0) return;
+      const avg = drops.reduce((s, v) => s + v, 0) / drops.length;
+      const rounded = avg >= 10 ? Math.round(avg * 10) / 10 : Math.round(avg * 100) / 100;
+      const pack = m.packUnit > 0 ? m.packUnit : 1;
+      const entry: EstimatedUsageEntry = {
+        warehouse: m.warehouse,
+        canonKey: m.canonKey,
+        productName: m.productName,
+        packUnit: pack,
+        estDailyUsage: rounded,
+        estDailyBox: rounded > 0 ? Math.round((rounded / pack) * 100) / 100 : 0,
+        sampleCount: drops.length,
+        observedDays: pts.length,
+      };
+      byWhAndKey[mk] = entry;
+      if (!byKeyCounts.has(m.canonKey)) byKeyCounts.set(m.canonKey, []);
+      byKeyCounts.get(m.canonKey)!.push(mk);
+    });
+
+    const byKeyOnly: Record<string, EstimatedUsageEntry> = {};
+    byKeyCounts.forEach((mks, ck) => {
+      if (mks.length === 1) {
+        byKeyOnly[ck] = byWhAndKey[mks[0]];
+      } else {
+        const active = mks.map((k) => byWhAndKey[k]).filter((e) => e && e.estDailyUsage > 0);
+        if (active.length > 0) byKeyOnly[ck] = active[0];
+      }
+    });
+
+    return {
+      byWhAndKey,
+      byKeyOnly,
+      fileCount: windowDates.length,
+      dateRange: [windowDates[0], windowDates[windowDates.length - 1]],
+    };
+  } catch {
+    return { byWhAndKey: {}, byKeyOnly: {}, fileCount: 0, dateRange: ['', ''] };
+  }
+}

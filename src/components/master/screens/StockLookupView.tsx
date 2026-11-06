@@ -43,8 +43,9 @@ interface StockItem {
   inboundDate: string; // 입고일 (D+2 등)
   expiryDate: string; // 유통기한
   orderDay: string; // 발주일
-  dailyUsage: number; // 일사용량 (현재고 기준 봉/낱개/롤 단위)
+  dailyUsage: number; // 예측 일사용량 (현재고 기준 봉/낱개/롤 단위)
   actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
+  avg7DailyUsage?: number; // 실사용 평균(7일) (최근 7일간의 실제 일평균 소진량)
   hasPrevStock?: boolean; // 전일 재고 실사 존재 여부
   prevSnapDate?: string; // 비교 기준 전일 실사 일자 (YYYY-MM-DD)
   estDailyUsage?: number; // 추정일사용량 (1개월 재고조사표 실소진량 기반, 현재고 기준 봉/낱개/롤 단위)
@@ -707,7 +708,7 @@ export const StockLookupView: React.FC = () => {
         : fetch('/api/inventory/stock').then((res) => res.json()),
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
-      fetch('/api/inventory/estimated-usage').then((res) => res.json()).catch(() => null),
+      fetch(`/api/inventory/estimated-usage?days=7&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
       .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson]) => {
@@ -874,6 +875,7 @@ export const StockLookupView: React.FC = () => {
               orderDay: inv.product?.partner?.orderDay || '',
               dailyUsage: dailyU,
               actualDailyUsage: actualUsageVal,
+              avg7DailyUsage: estDaily > 0 ? estDaily : 0,
               hasPrevStock,
               prevSnapDate,
               estDailyUsage: estDaily,
@@ -958,6 +960,7 @@ export const StockLookupView: React.FC = () => {
                 orderDay: '',
                 dailyUsage: daily,
                 actualDailyUsage: actualUsageVal,
+                avg7DailyUsage: estDaily > 0 ? estDaily : 0,
                 hasPrevStock,
                 prevSnapDate,
                 estDailyUsage: estDaily,
@@ -1744,9 +1747,9 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'dailyUsage',
-      label: locked ? '일사용량 🔒' : '일사용량',
+      label: locked ? '예측 일사용량 🔒' : '예측 일사용량',
       width: '5.1%',
-      minWidth: '70px',
+      minWidth: '76px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1762,8 +1765,8 @@ export const StockLookupView: React.FC = () => {
             className="font-mono text-gray-800 whitespace-nowrap"
             title={
               pack > 1
-                ? `기준 일사용량: ${disp} (현재고 기준 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
-                : `기준 일사용량: ${disp} (현재고 기준 단위)`
+                ? `예측 일사용량: ${disp} (기준 발주 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
+                : `예측 일사용량: ${disp} (기준 발주 단위)`
             }
           >
             {disp}
@@ -1775,8 +1778,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'actualDailyUsage',
       label: '당일 실사용량',
-      width: '5.5%',
-      minWidth: '80px',
+      width: '5.1%',
+      minWidth: '76px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1827,10 +1830,40 @@ export const StockLookupView: React.FC = () => {
       },
     },
     {
+      key: 'avg7DailyUsage',
+      label: '실사용 평균(7일)',
+      width: '5.3%',
+      minWidth: '82px',
+      align: 'right',
+      format: 'number',
+      sortable: true,
+      editable: false,
+      render: (v, row) => {
+        const num = Number(v);
+        if (!(num > 0)) return <span className="text-gray-400 font-mono text-xs">-</span>;
+        const pack = Number(row.packUnit) || 1;
+        const disp = Number(num.toFixed(1)).toLocaleString();
+        const boxVal = pack > 1 ? Number((num / pack).toFixed(1)) : 0;
+        const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
+        const samples = row.estSampleCount || 0;
+        return (
+          <span
+            className="font-mono font-bold text-violet-700 whitespace-nowrap"
+            title={`최근 7일 실사용 평균: ${Number(num.toFixed(2)).toLocaleString()} (일평균 실소진량 · 관측 ${samples}회)${
+              pack > 1 ? ` · 약 ${(num / pack).toFixed(2)}박스/일 (입수량 ${pack})` : ''
+            }`}
+          >
+            {disp}
+            {boxTxt && <span className="ml-0.5 text-[10px] text-violet-500 font-normal font-sans">{boxTxt}</span>}
+          </span>
+        );
+      },
+    },
+    {
       key: 'packUnit',
       label: '입수량',
-      width: '3.0%',
-      minWidth: '42px',
+      width: '2.8%',
+      minWidth: '38px',
       align: 'right',
       format: 'number',
       editable: false,
@@ -1838,8 +1871,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'boxQty',
       label: locked ? '박스 🔒' : '박스',
-      width: '3.0%',
-      minWidth: '42px',
+      width: '2.8%',
+      minWidth: '38px',
       align: 'right',
       format: 'number',
       editable: !locked,
@@ -1847,8 +1880,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'pieceQty',
       label: locked ? '낱개 🔒' : '낱개',
-      width: '3.0%',
-      minWidth: '42px',
+      width: '2.8%',
+      minWidth: '38px',
       align: 'right',
       format: 'number',
       editable: !locked,
@@ -1856,8 +1889,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'inQty',
       label: '입고수량',
-      width: '3.7%',
-      minWidth: '52px',
+      width: '3.4%',
+      minWidth: '48px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1866,8 +1899,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'prevStock',
       label: locked ? '전일재고 🔒' : '전일재고',
-      width: '4.0%',
-      minWidth: '56px',
+      width: '3.8%',
+      minWidth: '52px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1876,8 +1909,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'currentStock',
       label: locked ? '현재고 🔒' : '현재고',
-      width: '4.2%',
-      minWidth: '58px',
+      width: '4.0%',
+      minWidth: '56px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1896,8 +1929,8 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'diffStock',
       label: '전일대비증감',
-      width: '4.8%',
-      minWidth: '66px',
+      width: '4.4%',
+      minWidth: '60px',
       align: 'right',
       sortable: true,
       editable: false,
