@@ -8,7 +8,6 @@ import { DeliveryRegistrationView } from './screens/DeliveryRegistrationView';
 import { DeliveryStatusEditView } from './screens/DeliveryStatusEditView';
 import { ItemDeliveryStatusView } from './screens/ItemDeliveryStatusView';
 import { StatementIssueView } from './screens/StatementIssueView';
-import { ShippingOrderStatusView } from './screens/ShippingOrderStatusView';
 import { TagPrintView } from './screens/TagPrintView';
 import { UndeliveredRegView } from './screens/UndeliveredRegView';
 import { UndeliveredStatusView } from './screens/UndeliveredStatusView';
@@ -36,8 +35,6 @@ export const SalesScreenRouter: React.FC<SalesScreenRouterProps> = ({ tab }) => 
       return <ItemDeliveryStatusView />;
     case 'sales-statement-issue':
       return <StatementIssueView />;
-    case 'sales-shipping-order-status':
-      return <ShippingOrderStatusView />;
     case 'sales-tag-print':
       return <TagPrintView />;
     case 'sales-undelivered-reg':

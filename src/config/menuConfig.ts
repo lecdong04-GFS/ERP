@@ -23,7 +23,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { id: 'sales-delivery-status-edit', title: '납품현황/수정', categoryId: 'sales', categoryName: '매출관리' },
       { id: 'sales-item-delivery-status', title: '품목별납품현황', categoryId: 'sales', categoryName: '매출관리' },
       { id: 'sales-statement-issue', title: '거래명세서발행', categoryId: 'sales', categoryName: '매출관리' },
-      { id: 'sales-shipping-order-status', title: '출하지시현황', categoryId: 'sales', categoryName: '매출관리' },
       { id: 'sales-tag-print', title: '꼬리표출력', categoryId: 'sales', categoryName: '매출관리' },
       { id: 'sales-undelivered-reg', title: '매출등록', categoryId: 'sales', categoryName: '매출관리' },
       { id: 'sales-undelivered-status', title: '미출현황', categoryId: 'sales', categoryName: '매출관리' },
