@@ -406,7 +406,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         label: '자재 소요 부족',
         count: shortageCount,
         unit: '건',
-        menuId: 'pur-mat-order-normal',
+        menuId: 'pur-mat-order-day',
       });
     }
     if (undeliveredOrders.length > 0) {

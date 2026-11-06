@@ -18,6 +18,7 @@ interface ProductionScreenRouterProps {
 export const ProductionScreenRouter: React.FC<ProductionScreenRouterProps> = ({ tab }) => {
   switch (tab.menuId) {
     case 'prod-work-order-status':
+    case 'work-order-status':
       return <WorkOrderStatusView />;
     case 'prod-input-result-reg':
       return <InputResultRegView />;

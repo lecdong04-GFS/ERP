@@ -409,14 +409,14 @@ export const ReceivingRegGsrView: React.FC = () => {
             <ExternalLink className="w-3 h-3" />
           </button>
           <button
-            onClick={() => openPipelineTab('pur-recv-status-edit')}
+            onClick={() => openPipelineTab('pur-receiving-status-edit')}
             className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
           >
             <span>입고현황/수정</span>
             <ExternalLink className="w-3 h-3" />
           </button>
           <button
-            onClick={() => openPipelineTab('inv-stock-status')}
+            onClick={() => openPipelineTab('inv-lookup')}
             className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-[11px] font-bold transition flex items-center gap-1"
           >
             <span>현재고현황</span>

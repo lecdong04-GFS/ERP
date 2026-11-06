@@ -159,7 +159,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         <div className="flex items-center gap-2.5 pl-2.5 border-l border-white/15">
           <div
             onClick={() => {
-              const item = getMenuItemById('admin-user-edit');
+              const item = getMenuItemById('admin-user-reg');
               if (item) openTab(item);
             }}
             className="hidden sm:flex items-center gap-2 text-slate-100 font-bold text-[13px] hover:text-blue-300 cursor-pointer transition-colors px-2 py-1 rounded-lg hover:bg-white/10 group"

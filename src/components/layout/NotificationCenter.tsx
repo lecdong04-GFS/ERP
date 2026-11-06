@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, AlertTriangle, AlertCircle, Info, Check, Clock, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
+import { getMenuItemById } from '@/config/menuConfig';
 
 export interface NotificationItem {
   id: string;
@@ -21,7 +22,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     title: '안전재고 미달 경고',
     message: '[원재료] 국내산 경기미 백미(햅쌀) 현재고가 안전재고(50포) 이하입니다 (현재 38포).',
     time: '10분 전',
-    tabId: 'inventory-safety-stock',
+    tabId: 'inv-safety-stock-mgmt',
     read: false,
   },
   {
@@ -30,7 +31,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     title: '유통기한 임박 주의 (D-3)',
     message: '[원재료] [냉장]다진맛살 10kg 유통기한이 3일 남았습니다. FEFO 선출고 권장.',
     time: '25분 전',
-    tabId: 'purchase-expiry',
+    tabId: 'pur-expiry-status',
     read: false,
   },
   {
@@ -48,7 +49,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     title: '자동 연산 파이프라인 가동 완료',
     message: '46개 계 작업지시서 생성 및 레시피 소요량 FEFO 자재 자동 차감 완료.',
     time: '2시간 전',
-    tabId: 'production-work-order-status',
+    tabId: 'prod-work-order-status',
     read: true,
   },
 ];
@@ -79,23 +80,43 @@ export const NotificationCenter: React.FC = () => {
   const handleItemClick = (item: NotificationItem) => {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, read: true } : i)));
     if (item.tabId) {
-      const catId = item.tabId.split('-')[0];
-      const catMap: Record<string, string> = {
-        sales: '영업관리',
-        purchase: '구매관리',
-        production: '생산관리',
-        inventory: '재고관리',
-        master: '기준정보',
-        cost: '원가관리',
-        management: '경영관리',
-        admin: '시스템관리',
-      };
-      openTab({
-        id: item.tabId,
-        title: item.title,
-        categoryId: catId,
-        categoryName: catMap[catId] || '업무관리',
-      });
+      const targetMenu = getMenuItemById(item.tabId);
+      if (targetMenu) {
+        openTab(targetMenu);
+      } else {
+        const catId = item.tabId.split('-')[0];
+        const catMap: Record<string, string> = {
+          sales: '매출관리',
+          pur: '매입관리',
+          purchase: '매입관리',
+          prod: '생산관리',
+          production: '생산관리',
+          inv: '재고관리',
+          inventory: '재고관리',
+          master: '기준정보',
+          cost: '원가관리',
+          mgmt: '경영관리',
+          management: '경영관리',
+          admin: '관리자전용',
+          work: '업무관리',
+        };
+        const standardCatId =
+          catId === 'pur'
+            ? 'purchase'
+            : catId === 'prod'
+            ? 'production'
+            : catId === 'inv'
+            ? 'inventory'
+            : catId === 'mgmt'
+            ? 'management'
+            : catId;
+        openTab({
+          id: item.tabId,
+          title: item.title,
+          categoryId: standardCatId,
+          categoryName: catMap[catId] || '업무관리',
+        });
+      }
       setIsOpen(false);
     }
   };

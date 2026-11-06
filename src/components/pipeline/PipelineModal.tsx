@@ -301,7 +301,7 @@ export const PipelineModal: React.FC = () => {
             <span className="text-[11px] font-bold text-gray-700 mr-1">연동 화면 바로가기:</span>
 
             <button
-              onClick={() => handleOpenTargetTab('work-order-status', '작업지시현황', 'production')}
+              onClick={() => handleOpenTargetTab('prod-work-order-status', '작업지시현황', 'production')}
               className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-400 rounded text-[11px] font-medium text-gray-800 shadow-2xs"
             >
               <ClipboardList className="w-3 h-3 text-purple-700" />

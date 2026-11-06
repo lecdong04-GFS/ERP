@@ -132,9 +132,21 @@ export const MENU_CATEGORIES: MenuCategory[] = [
 
 // 구버전 또는 축약 메뉴 ID -> 현행 표준 메뉴 ID 매핑 (하위 호환성 100% 보장)
 const MENU_ALIASES: Record<string, string> = {
+  // 발주 체계 일원화
   'pur-gfs-smart-order': 'pur-mat-order-day',
   'gfs-smart-order': 'pur-mat-order-day',
   'smart-order': 'pur-mat-order-day',
+  'pur-mat-order-normal': 'pur-mat-order-day',
+  // 입고 및 재고 파이프라인
+  'pur-recv-status-edit': 'pur-receiving-status-edit',
+  'inv-stock-status': 'inv-lookup',
+  'inventory-safety-stock': 'inv-safety-stock-mgmt',
+  'purchase-expiry': 'pur-expiry-status',
+  // 생산 파이프라인
+  'work-order-status': 'prod-work-order-status',
+  'production-work-order-status': 'prod-work-order-status',
+  // 관리자 및 사용자 프로필
+  'admin-user-edit': 'admin-user-reg',
 };
 
 // Helper to look up any menu item by id
