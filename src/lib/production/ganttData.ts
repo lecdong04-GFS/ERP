@@ -33,12 +33,13 @@ export interface ProductSpeed {
 
 export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
   {
-    "id": "line-3",
+    "id": "sh-line-0",
     "name": "도시락 1",
+    "category": "성형",
     "totalBlocks": 55,
     "blocks": [
       {
-        "id": "blk-3-4",
+        "id": "sh-line-0-blk-0",
         "name": "고진많도시락",
         "type": "생산",
         "startCol": 4,
@@ -50,7 +51,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-3-12",
+        "id": "sh-line-0-blk-28",
         "name": "청소",
         "type": "청소",
         "startCol": 12,
@@ -62,7 +63,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 535
       },
       {
-        "id": "blk-3-13",
+        "id": "sh-line-0-blk-1",
         "name": "뭘좋아할지몰라",
         "type": "생산",
         "startCol": 13,
@@ -74,7 +75,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-3-21",
+        "id": "sh-line-0-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 21,
@@ -86,7 +87,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 580
       },
       {
-        "id": "blk-3-22",
+        "id": "sh-line-0-blk-30",
         "name": "동원맛참",
         "type": "생산",
         "startCol": 22,
@@ -98,7 +99,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-3-23",
+        "id": "sh-line-0-blk-31",
         "name": "청소",
         "type": "청소",
         "startCol": 23,
@@ -110,7 +111,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 590
       },
       {
-        "id": "blk-3-24",
+        "id": "sh-line-0-blk-2",
         "name": "혜자)너비아니닭강정",
         "type": "생산",
         "startCol": 24,
@@ -122,7 +123,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 620
       },
       {
-        "id": "blk-3-30",
+        "id": "sh-line-0-blk-32",
         "name": "청소",
         "type": "청소",
         "startCol": 30,
@@ -134,7 +135,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-3-31",
+        "id": "sh-line-0-blk-3",
         "name": "조리면 6종",
         "type": "생산",
         "startCol": 31,
@@ -146,7 +147,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 650
       },
       {
-        "id": "blk-3-36",
+        "id": "sh-line-0-blk-33",
         "name": "청소",
         "type": "청소",
         "startCol": 36,
@@ -158,7 +159,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-3-37",
+        "id": "sh-line-0-blk-4",
         "name": "편스)이정현아시안푸드정식",
         "type": "생산",
         "startCol": 37,
@@ -170,7 +171,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 700
       },
       {
-        "id": "blk-3-46",
+        "id": "sh-line-0-blk-34",
         "name": "청소",
         "type": "청소",
         "startCol": 46,
@@ -182,7 +183,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-3-47",
+        "id": "sh-line-0-blk-5",
         "name": "매콤흑당갈비덮밥",
         "type": "생산",
         "startCol": 47,
@@ -194,7 +195,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 720
       },
       {
-        "id": "blk-3-50",
+        "id": "sh-line-0-blk-35",
         "name": "청소",
         "type": "청소",
         "startCol": 50,
@@ -206,7 +207,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-3-51",
+        "id": "sh-line-0-blk-36",
         "name": "동원델리햄도시락",
         "type": "생산",
         "startCol": 51,
@@ -218,7 +219,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-3-52",
+        "id": "sh-line-0-blk-37",
         "name": "청소",
         "type": "청소",
         "startCol": 52,
@@ -230,7 +231,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 735
       },
       {
-        "id": "blk-3-53",
+        "id": "sh-line-0-blk-6",
         "name": "편스)류수영숯불",
         "type": "생산",
         "startCol": 53,
@@ -242,7 +243,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 760
       },
       {
-        "id": "blk-3-58",
+        "id": "sh-line-0-blk-7",
         "name": "청소",
         "type": "청소",
         "startCol": 58,
@@ -254,7 +255,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 770
       },
       {
-        "id": "blk-3-60",
+        "id": "sh-line-0-blk-8",
         "name": "중식",
         "type": "휴게",
         "startCol": 60,
@@ -266,7 +267,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 830
       },
       {
-        "id": "blk-3-72",
+        "id": "sh-line-0-blk-9",
         "name": "혜자)한돈반반제육",
         "type": "생산",
         "startCol": 72,
@@ -278,7 +279,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 890
       },
       {
-        "id": "blk-3-84",
+        "id": "sh-line-0-blk-38",
         "name": "청소",
         "type": "청소",
         "startCol": 84,
@@ -290,7 +291,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 895
       },
       {
-        "id": "blk-3-85",
+        "id": "sh-line-0-blk-10",
         "name": "순살닭강정(매콤달콤)",
         "type": "생산",
         "startCol": 85,
@@ -302,7 +303,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-3-87",
+        "id": "sh-line-0-blk-39",
         "name": "청소",
         "type": "청소",
         "startCol": 87,
@@ -314,7 +315,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 910
       },
       {
-        "id": "blk-3-88",
+        "id": "sh-line-0-blk-11",
         "name": "타코야키",
         "type": "생산",
         "startCol": 88,
@@ -326,7 +327,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 920
       },
       {
-        "id": "blk-3-90",
+        "id": "sh-line-0-blk-40",
         "name": "청소",
         "type": "청소",
         "startCol": 90,
@@ -338,7 +339,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 925
       },
       {
-        "id": "blk-3-91",
+        "id": "sh-line-0-blk-12",
         "name": "X)주먹밥 2종",
         "type": "생산",
         "startCol": 91,
@@ -350,7 +351,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-3-96",
+        "id": "sh-line-0-blk-13",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -362,7 +363,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-3-100",
+        "id": "sh-line-0-blk-14",
         "name": "고진많도시락",
         "type": "생산",
         "startCol": 100,
@@ -374,7 +375,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1010
       },
       {
-        "id": "blk-3-108",
+        "id": "sh-line-0-blk-41",
         "name": "청소",
         "type": "청소",
         "startCol": 108,
@@ -386,7 +387,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-3-109",
+        "id": "sh-line-0-blk-15",
         "name": "뭘좋아할지몰라",
         "type": "생산",
         "startCol": 109,
@@ -398,7 +399,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1055
       },
       {
-        "id": "blk-3-117",
+        "id": "sh-line-0-blk-42",
         "name": "청소",
         "type": "청소",
         "startCol": 117,
@@ -410,7 +411,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1060
       },
       {
-        "id": "blk-3-118",
+        "id": "sh-line-0-blk-16",
         "name": "슈퍼전용 4종",
         "type": "생산",
         "startCol": 118,
@@ -422,7 +423,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1080
       },
       {
-        "id": "blk-3-122",
+        "id": "sh-line-0-blk-43",
         "name": "청소",
         "type": "청소",
         "startCol": 122,
@@ -434,7 +435,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1085
       },
       {
-        "id": "blk-3-123",
+        "id": "sh-line-0-blk-44",
         "name": "동원맛참",
         "type": "생산",
         "startCol": 123,
@@ -446,7 +447,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1090
       },
       {
-        "id": "blk-3-124",
+        "id": "sh-line-0-blk-45",
         "name": "청소",
         "type": "청소",
         "startCol": 124,
@@ -458,7 +459,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1095
       },
       {
-        "id": "blk-3-125",
+        "id": "sh-line-0-blk-46",
         "name": "동원델리햄도시락",
         "type": "생산",
         "startCol": 125,
@@ -470,7 +471,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1100
       },
       {
-        "id": "blk-3-126",
+        "id": "sh-line-0-blk-47",
         "name": "청소",
         "type": "청소",
         "startCol": 126,
@@ -482,7 +483,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1105
       },
       {
-        "id": "blk-3-148",
+        "id": "sh-line-0-blk-17",
         "name": "조리면 6종",
         "type": "생산",
         "startCol": 148,
@@ -494,7 +495,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1235
       },
       {
-        "id": "blk-3-153",
+        "id": "sh-line-0-blk-48",
         "name": "청소",
         "type": "청소",
         "startCol": 153,
@@ -506,7 +507,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1240
       },
       {
-        "id": "blk-3-154",
+        "id": "sh-line-0-blk-18",
         "name": "편스)이정현아시안푸드정식",
         "type": "생산",
         "startCol": 154,
@@ -518,7 +519,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1285
       },
       {
-        "id": "blk-3-163",
+        "id": "sh-line-0-blk-49",
         "name": "청소",
         "type": "청소",
         "startCol": 163,
@@ -530,7 +531,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1290
       },
       {
-        "id": "blk-3-164",
+        "id": "sh-line-0-blk-19",
         "name": "매콤흑당갈비덮밥",
         "type": "생산",
         "startCol": 164,
@@ -542,7 +543,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1305
       },
       {
-        "id": "blk-3-167",
+        "id": "sh-line-0-blk-50",
         "name": "청소",
         "type": "청소",
         "startCol": 167,
@@ -554,7 +555,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1310
       },
       {
-        "id": "blk-3-168",
+        "id": "sh-line-0-blk-20",
         "name": "편스)류수영숯불",
         "type": "생산",
         "startCol": 168,
@@ -566,7 +567,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1335
       },
       {
-        "id": "blk-3-173",
+        "id": "sh-line-0-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 173,
@@ -578,7 +579,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1345
       },
       {
-        "id": "blk-3-175",
+        "id": "sh-line-0-blk-22",
         "name": "혜자)너비아니닭강정",
         "type": "생산",
         "startCol": 175,
@@ -590,7 +591,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1375
       },
       {
-        "id": "blk-3-181",
+        "id": "sh-line-0-blk-51",
         "name": "청소",
         "type": "청소",
         "startCol": 181,
@@ -602,7 +603,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1380
       },
       {
-        "id": "blk-3-182",
+        "id": "sh-line-0-blk-23",
         "name": "혜자)한돈반반제육",
         "type": "생산",
         "startCol": 182,
@@ -614,7 +615,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1440
       },
       {
-        "id": "blk-3-194",
+        "id": "sh-line-0-blk-52",
         "name": "청소",
         "type": "청소",
         "startCol": 194,
@@ -626,7 +627,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1445
       },
       {
-        "id": "blk-3-195",
+        "id": "sh-line-0-blk-24",
         "name": "순살닭강정(매콤달콤)",
         "type": "생산",
         "startCol": 195,
@@ -638,7 +639,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1455
       },
       {
-        "id": "blk-3-197",
+        "id": "sh-line-0-blk-53",
         "name": "청소",
         "type": "청소",
         "startCol": 197,
@@ -650,7 +651,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1460
       },
       {
-        "id": "blk-3-198",
+        "id": "sh-line-0-blk-25",
         "name": "타코야키",
         "type": "생산",
         "startCol": 198,
@@ -662,7 +663,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1470
       },
       {
-        "id": "blk-3-200",
+        "id": "sh-line-0-blk-54",
         "name": "청소",
         "type": "청소",
         "startCol": 200,
@@ -674,7 +675,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1475
       },
       {
-        "id": "blk-3-201",
+        "id": "sh-line-0-blk-26",
         "name": "X)주먹밥 2종",
         "type": "생산",
         "startCol": 201,
@@ -686,7 +687,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1500
       },
       {
-        "id": "blk-3-206",
+        "id": "sh-line-0-blk-27",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 206,
@@ -697,16 +698,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1500,
         "endMin": 1520
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-4",
+    "id": "sh-line-1",
     "name": "김밥성형",
+    "category": "성형",
     "totalBlocks": 39,
     "blocks": [
       {
-        "id": "blk-4-4",
+        "id": "sh-line-1-blk-0",
         "name": "알찬김밥",
         "type": "생산",
         "startCol": 4,
@@ -718,7 +719,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 500
       },
       {
-        "id": "blk-4-6",
+        "id": "sh-line-1-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 6,
@@ -730,7 +731,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-4-7",
+        "id": "sh-line-1-blk-1",
         "name": "혜자)계란진미채김밥",
         "type": "생산",
         "startCol": 7,
@@ -742,7 +743,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 535
       },
       {
-        "id": "blk-4-13",
+        "id": "sh-line-1-blk-22",
         "name": "청소",
         "type": "청소",
         "startCol": 13,
@@ -754,7 +755,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 540
       },
       {
-        "id": "blk-4-14",
+        "id": "sh-line-1-blk-2",
         "name": "참치마요듬뿍김밥",
         "type": "생산",
         "startCol": 14,
@@ -766,7 +767,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-4-17",
+        "id": "sh-line-1-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 17,
@@ -778,7 +779,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-4-18",
+        "id": "sh-line-1-blk-3",
         "name": "한돈제육쌈김밥",
         "type": "생산",
         "startCol": 18,
@@ -790,7 +791,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 615
       },
       {
-        "id": "blk-4-29",
+        "id": "sh-line-1-blk-24",
         "name": "청소",
         "type": "청소",
         "startCol": 29,
@@ -802,7 +803,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 620
       },
       {
-        "id": "blk-4-30",
+        "id": "sh-line-1-blk-4",
         "name": "스팸계란마요김밥",
         "type": "생산",
         "startCol": 30,
@@ -814,7 +815,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 670
       },
       {
-        "id": "blk-4-40",
+        "id": "sh-line-1-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 40,
@@ -826,7 +827,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 675
       },
       {
-        "id": "blk-4-41",
+        "id": "sh-line-1-blk-5",
         "name": "참치햄샐러드마요김밥",
         "type": "생산",
         "startCol": 41,
@@ -838,7 +839,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-4-44",
+        "id": "sh-line-1-blk-26",
         "name": "청소",
         "type": "청소",
         "startCol": 44,
@@ -850,7 +851,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 695
       },
       {
-        "id": "blk-4-45",
+        "id": "sh-line-1-blk-6",
         "name": "대파크림치즈김밥",
         "type": "생산",
         "startCol": 45,
@@ -862,7 +863,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 735
       },
       {
-        "id": "blk-4-53",
+        "id": "sh-line-1-blk-27",
         "name": "청소",
         "type": "청소",
         "startCol": 53,
@@ -874,7 +875,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 740
       },
       {
-        "id": "blk-4-54",
+        "id": "sh-line-1-blk-7",
         "name": "중식",
         "type": "휴게",
         "startCol": 54,
@@ -886,7 +887,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 800
       },
       {
-        "id": "blk-4-66",
+        "id": "sh-line-1-blk-8",
         "name": "통)한돈카츠김밥",
         "type": "생산",
         "startCol": 66,
@@ -898,7 +899,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 860
       },
       {
-        "id": "blk-4-78",
+        "id": "sh-line-1-blk-28",
         "name": "청소",
         "type": "청소",
         "startCol": 78,
@@ -910,7 +911,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-4-79",
+        "id": "sh-line-1-blk-9",
         "name": "통)빅소시지김밥",
         "type": "생산",
         "startCol": 79,
@@ -922,7 +923,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-4-87",
+        "id": "sh-line-1-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 87,
@@ -934,7 +935,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 910
       },
       {
-        "id": "blk-4-96",
+        "id": "sh-line-1-blk-10",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -946,7 +947,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-4-100",
+        "id": "sh-line-1-blk-11",
         "name": "알찬김밥",
         "type": "생산",
         "startCol": 100,
@@ -958,7 +959,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 980
       },
       {
-        "id": "blk-4-102",
+        "id": "sh-line-1-blk-30",
         "name": "청소",
         "type": "청소",
         "startCol": 102,
@@ -970,7 +971,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-4-103",
+        "id": "sh-line-1-blk-12",
         "name": "혜자)계란진미채김밥",
         "type": "생산",
         "startCol": 103,
@@ -982,7 +983,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-4-109",
+        "id": "sh-line-1-blk-31",
         "name": "청소",
         "type": "청소",
         "startCol": 109,
@@ -994,7 +995,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1020
       },
       {
-        "id": "blk-4-110",
+        "id": "sh-line-1-blk-13",
         "name": "참치마요듬뿍김밥",
         "type": "생산",
         "startCol": 110,
@@ -1006,7 +1007,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1035
       },
       {
-        "id": "blk-4-113",
+        "id": "sh-line-1-blk-32",
         "name": "청소",
         "type": "청소",
         "startCol": 113,
@@ -1018,7 +1019,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-4-114",
+        "id": "sh-line-1-blk-14",
         "name": "참치햄샐러드마요김밥",
         "type": "생산",
         "startCol": 114,
@@ -1030,7 +1031,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1055
       },
       {
-        "id": "blk-4-117",
+        "id": "sh-line-1-blk-33",
         "name": "청소",
         "type": "청소",
         "startCol": 117,
@@ -1042,7 +1043,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1060
       },
       {
-        "id": "blk-4-118",
+        "id": "sh-line-1-blk-15",
         "name": "한돈제육쌈김밥",
         "type": "생산",
         "startCol": 118,
@@ -1054,7 +1055,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1115
       },
       {
-        "id": "blk-4-129",
+        "id": "sh-line-1-blk-34",
         "name": "청소",
         "type": "청소",
         "startCol": 129,
@@ -1066,7 +1067,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1120
       },
       {
-        "id": "blk-4-148",
+        "id": "sh-line-1-blk-16",
         "name": "스팸계란마요김밥",
         "type": "생산",
         "startCol": 148,
@@ -1078,7 +1079,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1260
       },
       {
-        "id": "blk-4-158",
+        "id": "sh-line-1-blk-35",
         "name": "청소",
         "type": "청소",
         "startCol": 158,
@@ -1090,7 +1091,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1265
       },
       {
-        "id": "blk-4-159",
+        "id": "sh-line-1-blk-17",
         "name": "대파크림치즈김밥",
         "type": "생산",
         "startCol": 159,
@@ -1102,7 +1103,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1305
       },
       {
-        "id": "blk-4-167",
+        "id": "sh-line-1-blk-36",
         "name": "청소",
         "type": "청소",
         "startCol": 167,
@@ -1114,7 +1115,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1310
       },
       {
-        "id": "blk-4-168",
+        "id": "sh-line-1-blk-18",
         "name": "통)한돈카츠김밥",
         "type": "생산",
         "startCol": 168,
@@ -1126,7 +1127,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1370
       },
       {
-        "id": "blk-4-180",
+        "id": "sh-line-1-blk-37",
         "name": "청소",
         "type": "청소",
         "startCol": 180,
@@ -1138,7 +1139,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1375
       },
       {
-        "id": "blk-4-181",
+        "id": "sh-line-1-blk-19",
         "name": "통)빅소시지김밥",
         "type": "생산",
         "startCol": 181,
@@ -1150,7 +1151,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1415
       },
       {
-        "id": "blk-4-189",
+        "id": "sh-line-1-blk-38",
         "name": "청소",
         "type": "청소",
         "startCol": 189,
@@ -1162,7 +1163,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1420
       },
       {
-        "id": "blk-4-191",
+        "id": "sh-line-1-blk-20",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 191,
@@ -1173,16 +1174,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1425,
         "endMin": 1445
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-5",
+    "id": "sh-line-2",
     "name": "김밥포장",
+    "category": "성형",
     "totalBlocks": 39,
     "blocks": [
       {
-        "id": "blk-5-8",
+        "id": "sh-line-2-blk-0",
         "name": "알찬김밥",
         "type": "생산",
         "startCol": 8,
@@ -1194,7 +1195,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 520
       },
       {
-        "id": "blk-5-10",
+        "id": "sh-line-2-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 10,
@@ -1206,7 +1207,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-5-11",
+        "id": "sh-line-2-blk-1",
         "name": "혜자)계란진미채김밥",
         "type": "생산",
         "startCol": 11,
@@ -1218,7 +1219,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-5-17",
+        "id": "sh-line-2-blk-22",
         "name": "청소",
         "type": "청소",
         "startCol": 17,
@@ -1230,7 +1231,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-5-18",
+        "id": "sh-line-2-blk-2",
         "name": "참치마요듬뿍김밥",
         "type": "생산",
         "startCol": 18,
@@ -1242,7 +1243,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-5-21",
+        "id": "sh-line-2-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 21,
@@ -1254,7 +1255,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 580
       },
       {
-        "id": "blk-5-22",
+        "id": "sh-line-2-blk-3",
         "name": "한돈제육쌈김밥",
         "type": "생산",
         "startCol": 22,
@@ -1266,7 +1267,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 635
       },
       {
-        "id": "blk-5-33",
+        "id": "sh-line-2-blk-24",
         "name": "청소",
         "type": "청소",
         "startCol": 33,
@@ -1278,7 +1279,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 640
       },
       {
-        "id": "blk-5-34",
+        "id": "sh-line-2-blk-4",
         "name": "스팸계란마요김밥",
         "type": "생산",
         "startCol": 34,
@@ -1290,7 +1291,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-5-44",
+        "id": "sh-line-2-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 44,
@@ -1302,7 +1303,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 695
       },
       {
-        "id": "blk-5-45",
+        "id": "sh-line-2-blk-5",
         "name": "참치햄샐러드마요김밥",
         "type": "생산",
         "startCol": 45,
@@ -1314,7 +1315,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 710
       },
       {
-        "id": "blk-5-48",
+        "id": "sh-line-2-blk-26",
         "name": "청소",
         "type": "청소",
         "startCol": 48,
@@ -1326,7 +1327,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 715
       },
       {
-        "id": "blk-5-49",
+        "id": "sh-line-2-blk-6",
         "name": "대파크림치즈김밥",
         "type": "생산",
         "startCol": 49,
@@ -1338,7 +1339,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 750
       },
       {
-        "id": "blk-5-56",
+        "id": "sh-line-2-blk-27",
         "name": "청소",
         "type": "청소",
         "startCol": 56,
@@ -1350,7 +1351,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 755
       },
       {
-        "id": "blk-5-58",
+        "id": "sh-line-2-blk-7",
         "name": "중식",
         "type": "휴게",
         "startCol": 58,
@@ -1362,7 +1363,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 820
       },
       {
-        "id": "blk-5-70",
+        "id": "sh-line-2-blk-8",
         "name": "통)한돈카츠김밥",
         "type": "생산",
         "startCol": 70,
@@ -1374,7 +1375,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 870
       },
       {
-        "id": "blk-5-80",
+        "id": "sh-line-2-blk-28",
         "name": "청소",
         "type": "청소",
         "startCol": 80,
@@ -1386,7 +1387,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 875
       },
       {
-        "id": "blk-5-81",
+        "id": "sh-line-2-blk-9",
         "name": "통)빅소시지김밥",
         "type": "생산",
         "startCol": 81,
@@ -1398,7 +1399,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-5-89",
+        "id": "sh-line-2-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 89,
@@ -1410,7 +1411,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 920
       },
       {
-        "id": "blk-5-96",
+        "id": "sh-line-2-blk-10",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -1422,7 +1423,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-5-104",
+        "id": "sh-line-2-blk-11",
         "name": "알찬김밥",
         "type": "생산",
         "startCol": 104,
@@ -1434,7 +1435,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1000
       },
       {
-        "id": "blk-5-106",
+        "id": "sh-line-2-blk-30",
         "name": "청소",
         "type": "청소",
         "startCol": 106,
@@ -1446,7 +1447,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1005
       },
       {
-        "id": "blk-5-107",
+        "id": "sh-line-2-blk-12",
         "name": "혜자)계란진미채김밥",
         "type": "생산",
         "startCol": 107,
@@ -1458,7 +1459,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1035
       },
       {
-        "id": "blk-5-113",
+        "id": "sh-line-2-blk-31",
         "name": "청소",
         "type": "청소",
         "startCol": 113,
@@ -1470,7 +1471,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-5-114",
+        "id": "sh-line-2-blk-13",
         "name": "참치마요듬뿍김밥",
         "type": "생산",
         "startCol": 114,
@@ -1482,7 +1483,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1055
       },
       {
-        "id": "blk-5-117",
+        "id": "sh-line-2-blk-32",
         "name": "청소",
         "type": "청소",
         "startCol": 117,
@@ -1494,7 +1495,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1060
       },
       {
-        "id": "blk-5-118",
+        "id": "sh-line-2-blk-14",
         "name": "참치햄샐러드마요김밥",
         "type": "생산",
         "startCol": 118,
@@ -1506,7 +1507,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-5-121",
+        "id": "sh-line-2-blk-33",
         "name": "청소",
         "type": "청소",
         "startCol": 121,
@@ -1518,7 +1519,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1080
       },
       {
-        "id": "blk-5-122",
+        "id": "sh-line-2-blk-15",
         "name": "한돈제육쌈김밥",
         "type": "생산",
         "startCol": 122,
@@ -1530,7 +1531,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1135
       },
       {
-        "id": "blk-5-133",
+        "id": "sh-line-2-blk-34",
         "name": "청소",
         "type": "청소",
         "startCol": 133,
@@ -1542,7 +1543,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1140
       },
       {
-        "id": "blk-5-151",
+        "id": "sh-line-2-blk-16",
         "name": "스팸계란마요김밥",
         "type": "생산",
         "startCol": 151,
@@ -1554,7 +1555,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1275
       },
       {
-        "id": "blk-5-161",
+        "id": "sh-line-2-blk-35",
         "name": "청소",
         "type": "청소",
         "startCol": 161,
@@ -1566,7 +1567,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1280
       },
       {
-        "id": "blk-5-162",
+        "id": "sh-line-2-blk-17",
         "name": "대파크림치즈김밥",
         "type": "생산",
         "startCol": 162,
@@ -1578,7 +1579,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1315
       },
       {
-        "id": "blk-5-169",
+        "id": "sh-line-2-blk-36",
         "name": "청소",
         "type": "청소",
         "startCol": 169,
@@ -1590,7 +1591,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1320
       },
       {
-        "id": "blk-5-171",
+        "id": "sh-line-2-blk-18",
         "name": "통)한돈카츠김밥",
         "type": "생산",
         "startCol": 171,
@@ -1602,7 +1603,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1375
       },
       {
-        "id": "blk-5-181",
+        "id": "sh-line-2-blk-37",
         "name": "청소",
         "type": "청소",
         "startCol": 181,
@@ -1614,7 +1615,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1380
       },
       {
-        "id": "blk-5-184",
+        "id": "sh-line-2-blk-19",
         "name": "통)빅소시지김밥",
         "type": "생산",
         "startCol": 184,
@@ -1626,7 +1627,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1430
       },
       {
-        "id": "blk-5-192",
+        "id": "sh-line-2-blk-38",
         "name": "청소",
         "type": "청소",
         "startCol": 192,
@@ -1638,7 +1639,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1435
       },
       {
-        "id": "blk-5-197",
+        "id": "sh-line-2-blk-20",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 197,
@@ -1649,16 +1650,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1455,
         "endMin": 1475
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-6",
+    "id": "sh-line-3",
     "name": "햄버거",
+    "category": "성형",
     "totalBlocks": 31,
     "blocks": [
       {
-        "id": "blk-6-4",
+        "id": "sh-line-3-blk-0",
         "name": "빅)내슈빌핫치킨버거",
         "type": "생산",
         "startCol": 4,
@@ -1670,7 +1671,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-6-12",
+        "id": "sh-line-3-blk-1",
         "name": "청소",
         "type": "청소",
         "startCol": 12,
@@ -1682,7 +1683,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 540
       },
       {
-        "id": "blk-6-14",
+        "id": "sh-line-3-blk-2",
         "name": "베이컨치즈버거",
         "type": "생산",
         "startCol": 14,
@@ -1694,7 +1695,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-6-18",
+        "id": "sh-line-3-blk-3",
         "name": "청소",
         "type": "청소",
         "startCol": 18,
@@ -1706,7 +1707,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 570
       },
       {
-        "id": "blk-6-20",
+        "id": "sh-line-3-blk-4",
         "name": "치즈버거",
         "type": "생산",
         "startCol": 20,
@@ -1718,7 +1719,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-6-23",
+        "id": "sh-line-3-blk-5",
         "name": "청소",
         "type": "청소",
         "startCol": 23,
@@ -1730,7 +1731,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 595
       },
       {
-        "id": "blk-6-25",
+        "id": "sh-line-3-blk-6",
         "name": "마일드통다리살치킨버거",
         "type": "생산",
         "startCol": 25,
@@ -1742,7 +1743,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 615
       },
       {
-        "id": "blk-6-29",
+        "id": "sh-line-3-blk-7",
         "name": "청소",
         "type": "청소",
         "startCol": 29,
@@ -1754,7 +1755,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-6-31",
+        "id": "sh-line-3-blk-8",
         "name": "하와이안버거",
         "type": "생산",
         "startCol": 31,
@@ -1766,7 +1767,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 635
       },
       {
-        "id": "blk-6-33",
+        "id": "sh-line-3-blk-9",
         "name": "청소",
         "type": "청소",
         "startCol": 33,
@@ -1778,7 +1779,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 645
       },
       {
-        "id": "blk-6-35",
+        "id": "sh-line-3-blk-10",
         "name": "데리버거",
         "type": "생산",
         "startCol": 35,
@@ -1790,7 +1791,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-6-37",
+        "id": "sh-line-3-blk-11",
         "name": "청소",
         "type": "청소",
         "startCol": 37,
@@ -1802,7 +1803,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 665
       },
       {
-        "id": "blk-6-39",
+        "id": "sh-line-3-blk-12",
         "name": "밥바)김자반무스비",
         "type": "생산",
         "startCol": 39,
@@ -1814,7 +1815,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 675
       },
       {
-        "id": "blk-6-41",
+        "id": "sh-line-3-blk-13",
         "name": "청소",
         "type": "청소",
         "startCol": 41,
@@ -1826,7 +1827,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 685
       },
       {
-        "id": "blk-6-45",
+        "id": "sh-line-3-blk-14",
         "name": "중식",
         "type": "휴게",
         "startCol": 45,
@@ -1838,7 +1839,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 755
       },
       {
-        "id": "blk-6-96",
+        "id": "sh-line-3-blk-15",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -1850,7 +1851,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-6-100",
+        "id": "sh-line-3-blk-16",
         "name": "빅)내슈빌핫치킨버거",
         "type": "생산",
         "startCol": 100,
@@ -1862,7 +1863,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1010
       },
       {
-        "id": "blk-6-108",
+        "id": "sh-line-3-blk-17",
         "name": "청소",
         "type": "청소",
         "startCol": 108,
@@ -1874,7 +1875,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1020
       },
       {
-        "id": "blk-6-110",
+        "id": "sh-line-3-blk-18",
         "name": "베이컨치즈버거",
         "type": "생산",
         "startCol": 110,
@@ -1886,7 +1887,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-6-114",
+        "id": "sh-line-3-blk-19",
         "name": "청소",
         "type": "청소",
         "startCol": 114,
@@ -1898,7 +1899,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1050
       },
       {
-        "id": "blk-6-116",
+        "id": "sh-line-3-blk-20",
         "name": "치즈버거",
         "type": "생산",
         "startCol": 116,
@@ -1910,7 +1911,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1065
       },
       {
-        "id": "blk-6-119",
+        "id": "sh-line-3-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 119,
@@ -1922,7 +1923,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-6-121",
+        "id": "sh-line-3-blk-22",
         "name": "마일드통다리살치킨버거",
         "type": "생산",
         "startCol": 121,
@@ -1934,7 +1935,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1095
       },
       {
-        "id": "blk-6-125",
+        "id": "sh-line-3-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 125,
@@ -1946,7 +1947,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1105
       },
       {
-        "id": "blk-6-127",
+        "id": "sh-line-3-blk-24",
         "name": "하와이안버거",
         "type": "생산",
         "startCol": 127,
@@ -1958,7 +1959,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1115
       },
       {
-        "id": "blk-6-129",
+        "id": "sh-line-3-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 129,
@@ -1970,7 +1971,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1125
       },
       {
-        "id": "blk-6-131",
+        "id": "sh-line-3-blk-26",
         "name": "데리버거",
         "type": "생산",
         "startCol": 131,
@@ -1982,7 +1983,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1135
       },
       {
-        "id": "blk-6-133",
+        "id": "sh-line-3-blk-27",
         "name": "청소",
         "type": "청소",
         "startCol": 133,
@@ -1994,7 +1995,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1145
       },
       {
-        "id": "blk-6-135",
+        "id": "sh-line-3-blk-28",
         "name": "밥바)김자반무스비",
         "type": "생산",
         "startCol": 135,
@@ -2006,7 +2007,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1155
       },
       {
-        "id": "blk-6-137",
+        "id": "sh-line-3-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 137,
@@ -2018,7 +2019,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1165
       },
       {
-        "id": "blk-6-180",
+        "id": "sh-line-3-blk-30",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 180,
@@ -2029,16 +2030,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1370,
         "endMin": 1390
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-7",
+    "id": "sh-line-4",
     "name": "샌드위치",
+    "category": "성형",
     "totalBlocks": 39,
     "blocks": [
       {
-        "id": "blk-7-4",
+        "id": "sh-line-4-blk-0",
         "name": "K계란샌드",
         "type": "생산",
         "startCol": 4,
@@ -2050,7 +2051,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 515
       },
       {
-        "id": "blk-7-9",
+        "id": "sh-line-4-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 9,
@@ -2062,7 +2063,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 520
       },
       {
-        "id": "blk-7-19",
+        "id": "sh-line-4-blk-1",
         "name": "케이준치킨샐러드샌드",
         "type": "생산",
         "startCol": 19,
@@ -2074,7 +2075,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 595
       },
       {
-        "id": "blk-7-25",
+        "id": "sh-line-4-blk-24",
         "name": "청소",
         "type": "청소",
         "startCol": 25,
@@ -2086,7 +2087,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 600
       },
       {
-        "id": "blk-7-26",
+        "id": "sh-line-4-blk-2",
         "name": "크랜베리치킨샌드",
         "type": "생산",
         "startCol": 26,
@@ -2098,7 +2099,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-7-32",
+        "id": "sh-line-4-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 32,
@@ -2110,7 +2111,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 635
       },
       {
-        "id": "blk-7-33",
+        "id": "sh-line-4-blk-3",
         "name": "3입)트리플후레쉬샌드",
         "type": "생산",
         "startCol": 33,
@@ -2122,7 +2123,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 695
       },
       {
-        "id": "blk-7-45",
+        "id": "sh-line-4-blk-26",
         "name": "청소",
         "type": "청소",
         "startCol": 45,
@@ -2134,7 +2135,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 700
       },
       {
-        "id": "blk-7-46",
+        "id": "sh-line-4-blk-4",
         "name": "3입)버라이어티샌드",
         "type": "생산",
         "startCol": 46,
@@ -2146,7 +2147,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 710
       },
       {
-        "id": "blk-7-48",
+        "id": "sh-line-4-blk-27",
         "name": "청소",
         "type": "청소",
         "startCol": 48,
@@ -2158,7 +2159,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 715
       },
       {
-        "id": "blk-7-49",
+        "id": "sh-line-4-blk-5",
         "name": "3단참치샌드",
         "type": "생산",
         "startCol": 49,
@@ -2170,7 +2171,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-7-51",
+        "id": "sh-line-4-blk-28",
         "name": "청소",
         "type": "청소",
         "startCol": 51,
@@ -2182,7 +2183,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-7-52",
+        "id": "sh-line-4-blk-6",
         "name": "TG)참치마요샌드",
         "type": "생산",
         "startCol": 52,
@@ -2194,7 +2195,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 740
       },
       {
-        "id": "blk-7-54",
+        "id": "sh-line-4-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 54,
@@ -2206,7 +2207,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 745
       },
       {
-        "id": "blk-7-55",
+        "id": "sh-line-4-blk-7",
         "name": "중식",
         "type": "휴게",
         "startCol": 55,
@@ -2218,7 +2219,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-7-69",
+        "id": "sh-line-4-blk-8",
         "name": "아삭오이크림치즈샌드",
         "type": "생산",
         "startCol": 69,
@@ -2230,7 +2231,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 825
       },
       {
-        "id": "blk-7-71",
+        "id": "sh-line-4-blk-30",
         "name": "청소",
         "type": "청소",
         "startCol": 71,
@@ -2242,7 +2243,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 830
       },
       {
-        "id": "blk-7-72",
+        "id": "sh-line-4-blk-9",
         "name": "알찬한끼세트",
         "type": "생산",
         "startCol": 72,
@@ -2254,7 +2255,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 855
       },
       {
-        "id": "blk-7-77",
+        "id": "sh-line-4-blk-10",
         "name": "청소",
         "type": "청소",
         "startCol": 77,
@@ -2266,7 +2267,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-7-96",
+        "id": "sh-line-4-blk-11",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -2278,7 +2279,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-7-148",
+        "id": "sh-line-4-blk-12",
         "name": "K계란샌드",
         "type": "생산",
         "startCol": 148,
@@ -2290,7 +2291,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1235
       },
       {
-        "id": "blk-7-153",
+        "id": "sh-line-4-blk-31",
         "name": "청소",
         "type": "청소",
         "startCol": 153,
@@ -2302,7 +2303,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1240
       },
       {
-        "id": "blk-7-154",
+        "id": "sh-line-4-blk-13",
         "name": "케이준치킨샐러드샌드",
         "type": "생산",
         "startCol": 154,
@@ -2314,7 +2315,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1270
       },
       {
-        "id": "blk-7-160",
+        "id": "sh-line-4-blk-32",
         "name": "청소",
         "type": "청소",
         "startCol": 160,
@@ -2326,7 +2327,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1275
       },
       {
-        "id": "blk-7-161",
+        "id": "sh-line-4-blk-14",
         "name": "크랜베리치킨샌드",
         "type": "생산",
         "startCol": 161,
@@ -2338,7 +2339,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1305
       },
       {
-        "id": "blk-7-167",
+        "id": "sh-line-4-blk-33",
         "name": "청소",
         "type": "청소",
         "startCol": 167,
@@ -2350,7 +2351,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1310
       },
       {
-        "id": "blk-7-168",
+        "id": "sh-line-4-blk-15",
         "name": "3입)트리플후레쉬샌드",
         "type": "생산",
         "startCol": 168,
@@ -2362,7 +2363,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1370
       },
       {
-        "id": "blk-7-180",
+        "id": "sh-line-4-blk-34",
         "name": "청소",
         "type": "청소",
         "startCol": 180,
@@ -2374,7 +2375,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1375
       },
       {
-        "id": "blk-7-181",
+        "id": "sh-line-4-blk-16",
         "name": "3입)버라이어티샌드",
         "type": "생산",
         "startCol": 181,
@@ -2386,7 +2387,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1385
       },
       {
-        "id": "blk-7-183",
+        "id": "sh-line-4-blk-35",
         "name": "청소",
         "type": "청소",
         "startCol": 183,
@@ -2398,7 +2399,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1390
       },
       {
-        "id": "blk-7-184",
+        "id": "sh-line-4-blk-17",
         "name": "3단참치샌드",
         "type": "생산",
         "startCol": 184,
@@ -2410,7 +2411,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1400
       },
       {
-        "id": "blk-7-186",
+        "id": "sh-line-4-blk-36",
         "name": "청소",
         "type": "청소",
         "startCol": 186,
@@ -2422,7 +2423,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1405
       },
       {
-        "id": "blk-7-187",
+        "id": "sh-line-4-blk-18",
         "name": "TG)참치마요샌드",
         "type": "생산",
         "startCol": 187,
@@ -2434,7 +2435,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1415
       },
       {
-        "id": "blk-7-189",
+        "id": "sh-line-4-blk-37",
         "name": "청소",
         "type": "청소",
         "startCol": 189,
@@ -2446,7 +2447,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1420
       },
       {
-        "id": "blk-7-190",
+        "id": "sh-line-4-blk-19",
         "name": "아삭오이크림치즈샌드",
         "type": "생산",
         "startCol": 190,
@@ -2458,7 +2459,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1430
       },
       {
-        "id": "blk-7-192",
+        "id": "sh-line-4-blk-38",
         "name": "청소",
         "type": "청소",
         "startCol": 192,
@@ -2470,7 +2471,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1435
       },
       {
-        "id": "blk-7-193",
+        "id": "sh-line-4-blk-20",
         "name": "알찬한끼세트",
         "type": "생산",
         "startCol": 193,
@@ -2482,7 +2483,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1460
       },
       {
-        "id": "blk-7-198",
+        "id": "sh-line-4-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 198,
@@ -2494,7 +2495,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1470
       },
       {
-        "id": "blk-7-202",
+        "id": "sh-line-4-blk-22",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 202,
@@ -2505,16 +2506,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1480,
         "endMin": 1500
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-8",
+    "id": "sh-line-5",
     "name": "커플 포장기",
+    "category": "성형",
     "totalBlocks": 4,
     "blocks": [
       {
-        "id": "blk-8-67",
+        "id": "sh-line-5-blk-0",
         "name": "혜자)제육&김치볶음밥",
         "type": "생산",
         "startCol": 67,
@@ -2526,7 +2527,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-8-96",
+        "id": "sh-line-5-blk-1",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -2538,7 +2539,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-8-163",
+        "id": "sh-line-5-blk-2",
         "name": "혜자)제육&김치볶음밥",
         "type": "생산",
         "startCol": 163,
@@ -2550,7 +2551,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1345
       },
       {
-        "id": "blk-8-192",
+        "id": "sh-line-5-blk-3",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 192,
@@ -2561,16 +2562,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1430,
         "endMin": 1450
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-9",
+    "id": "sh-line-6",
     "name": "삼각김밥 1호기",
+    "category": "성형",
     "totalBlocks": 27,
     "blocks": [
       {
-        "id": "blk-9-4",
+        "id": "sh-line-6-blk-0",
         "name": "삼각)소고기볶음고추장",
         "type": "생산",
         "startCol": 4,
@@ -2582,7 +2583,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-9-11",
+        "id": "sh-line-6-blk-1",
         "name": "청소",
         "type": "청소",
         "startCol": 11,
@@ -2594,7 +2595,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 540
       },
       {
-        "id": "blk-9-31",
+        "id": "sh-line-6-blk-2",
         "name": "완전햄김치마요주먹밥",
         "type": "생산",
         "startCol": 31,
@@ -2606,7 +2607,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 640
       },
       {
-        "id": "blk-9-34",
+        "id": "sh-line-6-blk-3",
         "name": "청소",
         "type": "청소",
         "startCol": 34,
@@ -2618,7 +2619,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-9-37",
+        "id": "sh-line-6-blk-4",
         "name": "혜자)김치볶음밥",
         "type": "생산",
         "startCol": 37,
@@ -2630,7 +2631,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-9-44",
+        "id": "sh-line-6-blk-5",
         "name": "청소",
         "type": "청소",
         "startCol": 44,
@@ -2642,7 +2643,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-9-50",
+        "id": "sh-line-6-blk-6",
         "name": "중식",
         "type": "휴게",
         "startCol": 50,
@@ -2654,7 +2655,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 780
       },
       {
-        "id": "blk-9-63",
+        "id": "sh-line-6-blk-7",
         "name": "팔도)우삼겹주먹밥",
         "type": "생산",
         "startCol": 63,
@@ -2666,7 +2667,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 795
       },
       {
-        "id": "blk-9-65",
+        "id": "sh-line-6-blk-8",
         "name": "청소",
         "type": "청소",
         "startCol": 65,
@@ -2678,7 +2679,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-9-69",
+        "id": "sh-line-6-blk-9",
         "name": "삼각)참치김치볶음밥",
         "type": "생산",
         "startCol": 69,
@@ -2690,7 +2691,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 830
       },
       {
-        "id": "blk-9-72",
+        "id": "sh-line-6-blk-10",
         "name": "청소",
         "type": "청소",
         "startCol": 72,
@@ -2702,7 +2703,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-9-75",
+        "id": "sh-line-6-blk-11",
         "name": "삼각)新전주비빔",
         "type": "생산",
         "startCol": 75,
@@ -2714,7 +2715,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-9-87",
+        "id": "sh-line-6-blk-12",
         "name": "청소",
         "type": "청소",
         "startCol": 87,
@@ -2726,7 +2727,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 920
       },
       {
-        "id": "blk-9-96",
+        "id": "sh-line-6-blk-13",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -2738,7 +2739,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-9-100",
+        "id": "sh-line-6-blk-14",
         "name": "팔도)우삼겹주먹밥",
         "type": "생산",
         "startCol": 100,
@@ -2750,7 +2751,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 980
       },
       {
-        "id": "blk-9-102",
+        "id": "sh-line-6-blk-15",
         "name": "청소",
         "type": "청소",
         "startCol": 102,
@@ -2762,7 +2763,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 995
       },
       {
-        "id": "blk-9-106",
+        "id": "sh-line-6-blk-16",
         "name": "삼각)참치김치볶음밥",
         "type": "생산",
         "startCol": 106,
@@ -2774,7 +2775,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-9-109",
+        "id": "sh-line-6-blk-17",
         "name": "청소",
         "type": "청소",
         "startCol": 109,
@@ -2786,7 +2787,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1030
       },
       {
-        "id": "blk-9-112",
+        "id": "sh-line-6-blk-18",
         "name": "완전햄김치마요주먹밥",
         "type": "생산",
         "startCol": 112,
@@ -2798,7 +2799,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1045
       },
       {
-        "id": "blk-9-115",
+        "id": "sh-line-6-blk-19",
         "name": "청소",
         "type": "청소",
         "startCol": 115,
@@ -2810,7 +2811,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1060
       },
       {
-        "id": "blk-9-148",
+        "id": "sh-line-6-blk-20",
         "name": "삼각)소고기볶음고추장",
         "type": "생산",
         "startCol": 148,
@@ -2822,7 +2823,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1245
       },
       {
-        "id": "blk-9-155",
+        "id": "sh-line-6-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 155,
@@ -2834,7 +2835,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1260
       },
       {
-        "id": "blk-9-158",
+        "id": "sh-line-6-blk-22",
         "name": "혜자)김치볶음밥",
         "type": "생산",
         "startCol": 158,
@@ -2846,7 +2847,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1295
       },
       {
-        "id": "blk-9-165",
+        "id": "sh-line-6-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 165,
@@ -2858,7 +2859,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1310
       },
       {
-        "id": "blk-9-168",
+        "id": "sh-line-6-blk-24",
         "name": "삼각)新전주비빔",
         "type": "생산",
         "startCol": 168,
@@ -2870,7 +2871,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1370
       },
       {
-        "id": "blk-9-180",
+        "id": "sh-line-6-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 180,
@@ -2882,7 +2883,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1385
       },
       {
-        "id": "blk-9-189",
+        "id": "sh-line-6-blk-26",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 189,
@@ -2893,16 +2894,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1415,
         "endMin": 1435
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-10",
+    "id": "sh-line-7",
     "name": "삼각김밥 2호기",
+    "category": "성형",
     "totalBlocks": 33,
     "blocks": [
       {
-        "id": "blk-10-4",
+        "id": "sh-line-7-blk-0",
         "name": "TG)참치마요",
         "type": "생산",
         "startCol": 4,
@@ -2914,7 +2915,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 545
       },
       {
-        "id": "blk-10-15",
+        "id": "sh-line-7-blk-1",
         "name": "청소",
         "type": "청소",
         "startCol": 15,
@@ -2926,7 +2927,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-10-19",
+        "id": "sh-line-7-blk-2",
         "name": "삼각)청양참치마요",
         "type": "생산",
         "startCol": 19,
@@ -2938,7 +2939,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 600
       },
       {
-        "id": "blk-10-26",
+        "id": "sh-line-7-blk-3",
         "name": "청소",
         "type": "청소",
         "startCol": 26,
@@ -2950,7 +2951,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 615
       },
       {
-        "id": "blk-10-29",
+        "id": "sh-line-7-blk-4",
         "name": "완전간장계란주먹밥",
         "type": "생산",
         "startCol": 29,
@@ -2962,7 +2963,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-10-32",
+        "id": "sh-line-7-blk-5",
         "name": "청소",
         "type": "청소",
         "startCol": 32,
@@ -2974,7 +2975,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 645
       },
       {
-        "id": "blk-10-35",
+        "id": "sh-line-7-blk-6",
         "name": "삼각)NEW스팸계란볶음밥",
         "type": "생산",
         "startCol": 35,
@@ -2986,7 +2987,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 670
       },
       {
-        "id": "blk-10-40",
+        "id": "sh-line-7-blk-7",
         "name": "청소",
         "type": "청소",
         "startCol": 40,
@@ -2998,7 +2999,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 685
       },
       {
-        "id": "blk-10-43",
+        "id": "sh-line-7-blk-31",
         "name": "신유빈)명란마요",
         "type": "생산",
         "startCol": 43,
@@ -3010,7 +3011,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-10-44",
+        "id": "sh-line-7-blk-8",
         "name": "청소",
         "type": "청소",
         "startCol": 44,
@@ -3022,7 +3023,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-10-50",
+        "id": "sh-line-7-blk-9",
         "name": "중식",
         "type": "휴게",
         "startCol": 50,
@@ -3034,7 +3035,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 780
       },
       {
-        "id": "blk-10-63",
+        "id": "sh-line-7-blk-10",
         "name": "삼각)NEW비빔참치",
         "type": "생산",
         "startCol": 63,
@@ -3046,7 +3047,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 820
       },
       {
-        "id": "blk-10-70",
+        "id": "sh-line-7-blk-11",
         "name": "청소",
         "type": "청소",
         "startCol": 70,
@@ -3058,7 +3059,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 835
       },
       {
-        "id": "blk-10-73",
+        "id": "sh-line-7-blk-12",
         "name": "한돈)간장불고기",
         "type": "생산",
         "startCol": 73,
@@ -3070,7 +3071,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 850
       },
       {
-        "id": "blk-10-76",
+        "id": "sh-line-7-blk-13",
         "name": "청소",
         "type": "청소",
         "startCol": 76,
@@ -3082,7 +3083,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-10-79",
+        "id": "sh-line-7-blk-14",
         "name": "AI)데리야끼치킨에그마요",
         "type": "생산",
         "startCol": 79,
@@ -3094,7 +3095,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 920
       },
       {
-        "id": "blk-10-96",
+        "id": "sh-line-7-blk-15",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 96,
@@ -3106,7 +3107,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 970
       },
       {
-        "id": "blk-10-100",
+        "id": "sh-line-7-blk-16",
         "name": "TG)참치마요",
         "type": "생산",
         "startCol": 100,
@@ -3118,7 +3119,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1025
       },
       {
-        "id": "blk-10-111",
+        "id": "sh-line-7-blk-17",
         "name": "청소",
         "type": "청소",
         "startCol": 111,
@@ -3130,7 +3131,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-10-114",
+        "id": "sh-line-7-blk-18",
         "name": "삼각)청양참치마요",
         "type": "생산",
         "startCol": 114,
@@ -3142,7 +3143,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-10-121",
+        "id": "sh-line-7-blk-19",
         "name": "청소",
         "type": "청소",
         "startCol": 121,
@@ -3154,7 +3155,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1090
       },
       {
-        "id": "blk-10-124",
+        "id": "sh-line-7-blk-32",
         "name": "신유빈)명란마요",
         "type": "생산",
         "startCol": 124,
@@ -3166,7 +3167,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1095
       },
       {
-        "id": "blk-10-125",
+        "id": "sh-line-7-blk-20",
         "name": "청소",
         "type": "청소",
         "startCol": 125,
@@ -3178,7 +3179,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1110
       },
       {
-        "id": "blk-10-148",
+        "id": "sh-line-7-blk-21",
         "name": "완전간장계란주먹밥",
         "type": "생산",
         "startCol": 148,
@@ -3190,7 +3191,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1225
       },
       {
-        "id": "blk-10-151",
+        "id": "sh-line-7-blk-22",
         "name": "청소",
         "type": "청소",
         "startCol": 151,
@@ -3202,7 +3203,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1240
       },
       {
-        "id": "blk-10-154",
+        "id": "sh-line-7-blk-23",
         "name": "삼각)NEW스팸계란볶음밥",
         "type": "생산",
         "startCol": 154,
@@ -3214,7 +3215,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1265
       },
       {
-        "id": "blk-10-159",
+        "id": "sh-line-7-blk-24",
         "name": "청소",
         "type": "청소",
         "startCol": 159,
@@ -3226,7 +3227,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1280
       },
       {
-        "id": "blk-10-162",
+        "id": "sh-line-7-blk-25",
         "name": "삼각)NEW비빔참치",
         "type": "생산",
         "startCol": 162,
@@ -3238,7 +3239,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1315
       },
       {
-        "id": "blk-10-169",
+        "id": "sh-line-7-blk-26",
         "name": "청소",
         "type": "청소",
         "startCol": 169,
@@ -3250,7 +3251,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1330
       },
       {
-        "id": "blk-10-172",
+        "id": "sh-line-7-blk-27",
         "name": "한돈)간장불고기",
         "type": "생산",
         "startCol": 172,
@@ -3262,7 +3263,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1345
       },
       {
-        "id": "blk-10-175",
+        "id": "sh-line-7-blk-28",
         "name": "청소",
         "type": "청소",
         "startCol": 175,
@@ -3274,7 +3275,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1360
       },
       {
-        "id": "blk-10-178",
+        "id": "sh-line-7-blk-29",
         "name": "AI)데리야끼치킨에그마요",
         "type": "생산",
         "startCol": 178,
@@ -3286,7 +3287,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1415
       },
       {
-        "id": "blk-10-189",
+        "id": "sh-line-7-blk-30",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 189,
@@ -3297,16 +3298,16 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1415,
         "endMin": 1435
       }
-    ],
-    "category": "성형"
+    ]
   },
   {
-    "id": "line-11",
+    "id": "sh-line-8",
     "name": "삼각김밥(더큰)",
+    "category": "성형",
     "totalBlocks": 40,
     "blocks": [
       {
-        "id": "blk-11-4",
+        "id": "sh-line-8-blk-0",
         "name": "풀)新참치마요",
         "type": "생산",
         "startCol": 4,
@@ -3318,7 +3319,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 515
       },
       {
-        "id": "blk-11-9",
+        "id": "sh-line-8-blk-1",
         "name": "청소",
         "type": "청소",
         "startCol": 9,
@@ -3330,7 +3331,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-11-12",
+        "id": "sh-line-8-blk-2",
         "name": "풀)新베이컨참치마요",
         "type": "생산",
         "startCol": 12,
@@ -3342,7 +3343,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 545
       },
       {
-        "id": "blk-11-15",
+        "id": "sh-line-8-blk-3",
         "name": "청소",
         "type": "청소",
         "startCol": 15,
@@ -3354,7 +3355,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-11-18",
+        "id": "sh-line-8-blk-4",
         "name": "풀)리챔참치마요",
         "type": "생산",
         "startCol": 18,
@@ -3366,7 +3367,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 615
       },
       {
-        "id": "blk-11-29",
+        "id": "sh-line-8-blk-5",
         "name": "청소",
         "type": "청소",
         "startCol": 29,
@@ -3378,7 +3379,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-11-32",
+        "id": "sh-line-8-blk-6",
         "name": "풀)스팸마요계란볶음밥",
         "type": "생산",
         "startCol": 32,
@@ -3390,7 +3391,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 665
       },
       {
-        "id": "blk-11-39",
+        "id": "sh-line-8-blk-7",
         "name": "청소",
         "type": "청소",
         "startCol": 39,
@@ -3402,7 +3403,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 680
       },
       {
-        "id": "blk-11-42",
+        "id": "sh-line-8-blk-8",
         "name": "풀)비빔참치",
         "type": "생산",
         "startCol": 42,
@@ -3414,7 +3415,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 715
       },
       {
-        "id": "blk-11-49",
+        "id": "sh-line-8-blk-9",
         "name": "청소",
         "type": "청소",
         "startCol": 49,
@@ -3426,7 +3427,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-11-52",
+        "id": "sh-line-8-blk-10",
         "name": "혜자)제육",
         "type": "생산",
         "startCol": 52,
@@ -3438,7 +3439,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 770
       },
       {
-        "id": "blk-11-60",
+        "id": "sh-line-8-blk-11",
         "name": "청소",
         "type": "청소",
         "startCol": 60,
@@ -3450,7 +3451,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 785
       },
       {
-        "id": "blk-11-63",
+        "id": "sh-line-8-blk-12",
         "name": "용기삼각 성형",
         "type": "생산",
         "startCol": 63,
@@ -3462,7 +3463,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-11-67",
+        "id": "sh-line-8-blk-13",
         "name": "청소",
         "type": "청소",
         "startCol": 67,
@@ -3474,7 +3475,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 820
       },
       {
-        "id": "blk-11-70",
+        "id": "sh-line-8-blk-14",
         "name": "풀)新전주비빔",
         "type": "생산",
         "startCol": 70,
@@ -3486,7 +3487,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 835
       },
       {
-        "id": "blk-11-73",
+        "id": "sh-line-8-blk-15",
         "name": "청소",
         "type": "청소",
         "startCol": 73,
@@ -3498,7 +3499,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 850
       },
       {
-        "id": "blk-11-76",
+        "id": "sh-line-8-blk-16",
         "name": "편스)찬또감자탕볶음밥",
         "type": "생산",
         "startCol": 76,
@@ -3510,7 +3511,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 885
       },
       {
-        "id": "blk-11-83",
+        "id": "sh-line-8-blk-17",
         "name": "청소",
         "type": "청소",
         "startCol": 83,
@@ -3522,7 +3523,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 900
       },
       {
-        "id": "blk-11-86",
+        "id": "sh-line-8-blk-18",
         "name": "풀)스팸김치볶음밥",
         "type": "생산",
         "startCol": 86,
@@ -3534,7 +3535,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 960
       },
       {
-        "id": "blk-11-98",
+        "id": "sh-line-8-blk-19",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 98,
@@ -3546,7 +3547,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 980
       },
       {
-        "id": "blk-11-103",
+        "id": "sh-line-8-blk-20",
         "name": "풀)新참치마요",
         "type": "생산",
         "startCol": 103,
@@ -3558,7 +3559,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1010
       },
       {
-        "id": "blk-11-108",
+        "id": "sh-line-8-blk-21",
         "name": "청소",
         "type": "청소",
         "startCol": 108,
@@ -3570,7 +3571,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1025
       },
       {
-        "id": "blk-11-111",
+        "id": "sh-line-8-blk-22",
         "name": "풀)新베이컨참치마요",
         "type": "생산",
         "startCol": 111,
@@ -3582,7 +3583,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-11-114",
+        "id": "sh-line-8-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 114,
@@ -3594,7 +3595,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1055
       },
       {
-        "id": "blk-11-117",
+        "id": "sh-line-8-blk-24",
         "name": "풀)리챔참치마요",
         "type": "생산",
         "startCol": 117,
@@ -3606,7 +3607,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1110
       },
       {
-        "id": "blk-11-128",
+        "id": "sh-line-8-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 128,
@@ -3618,7 +3619,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1125
       },
       {
-        "id": "blk-11-131",
+        "id": "sh-line-8-blk-26",
         "name": "풀)스팸마요계란볶음밥",
         "type": "생산",
         "startCol": 131,
@@ -3630,7 +3631,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1160
       },
       {
-        "id": "blk-11-138",
+        "id": "sh-line-8-blk-27",
         "name": "청소",
         "type": "청소",
         "startCol": 138,
@@ -3642,7 +3643,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1175
       },
       {
-        "id": "blk-11-141",
+        "id": "sh-line-8-blk-28",
         "name": "풀)비빔참치",
         "type": "생산",
         "startCol": 141,
@@ -3654,7 +3655,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1210
       },
       {
-        "id": "blk-11-148",
+        "id": "sh-line-8-blk-29",
         "name": "청소",
         "type": "청소",
         "startCol": 148,
@@ -3666,7 +3667,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1225
       },
       {
-        "id": "blk-11-151",
+        "id": "sh-line-8-blk-30",
         "name": "혜자)제육",
         "type": "생산",
         "startCol": 151,
@@ -3678,7 +3679,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1265
       },
       {
-        "id": "blk-11-159",
+        "id": "sh-line-8-blk-31",
         "name": "청소",
         "type": "청소",
         "startCol": 159,
@@ -3690,7 +3691,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1280
       },
       {
-        "id": "blk-11-162",
+        "id": "sh-line-8-blk-32",
         "name": "용기삼각 성형",
         "type": "생산",
         "startCol": 162,
@@ -3702,7 +3703,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1300
       },
       {
-        "id": "blk-11-166",
+        "id": "sh-line-8-blk-33",
         "name": "청소",
         "type": "청소",
         "startCol": 166,
@@ -3714,7 +3715,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1315
       },
       {
-        "id": "blk-11-169",
+        "id": "sh-line-8-blk-34",
         "name": "풀)新전주비빔",
         "type": "생산",
         "startCol": 169,
@@ -3726,7 +3727,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1330
       },
       {
-        "id": "blk-11-172",
+        "id": "sh-line-8-blk-35",
         "name": "청소",
         "type": "청소",
         "startCol": 172,
@@ -3738,7 +3739,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1345
       },
       {
-        "id": "blk-11-175",
+        "id": "sh-line-8-blk-36",
         "name": "편스)찬또감자탕볶음밥",
         "type": "생산",
         "startCol": 175,
@@ -3750,7 +3751,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1380
       },
       {
-        "id": "blk-11-182",
+        "id": "sh-line-8-blk-37",
         "name": "청소",
         "type": "청소",
         "startCol": 182,
@@ -3762,7 +3763,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1395
       },
       {
-        "id": "blk-11-185",
+        "id": "sh-line-8-blk-38",
         "name": "풀)스팸김치볶음밥",
         "type": "생산",
         "startCol": 185,
@@ -3774,7 +3775,7 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "endMin": 1455
       },
       {
-        "id": "blk-11-197",
+        "id": "sh-line-8-blk-39",
         "name": "정리정돈/청소",
         "type": "청소",
         "startCol": 197,
@@ -3785,19 +3786,19 @@ export const GANTT_SEONGHYEONG_LINES: GanttLine[] = [
         "startMin": 1455,
         "endMin": 1475
       }
-    ],
-    "category": "성형"
+    ]
   }
 ];
 
 export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
   {
-    "id": "line-3",
+    "id": "jc-line-0",
     "name": "취반실",
+    "category": "전처리",
     "totalBlocks": 26,
     "blocks": [
       {
-        "id": "blk-3-37",
+        "id": "jc-line-0-blk-0",
         "name": "도시락밥",
         "type": "생산",
         "startCol": 37,
@@ -3809,7 +3810,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 455
       },
       {
-        "id": "blk-3-45",
+        "id": "jc-line-0-blk-1",
         "name": "삼각조미밥",
         "type": "생산",
         "startCol": 45,
@@ -3821,7 +3822,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 480
       },
       {
-        "id": "blk-3-50",
+        "id": "jc-line-0-blk-2",
         "name": "김밥조미밥",
         "type": "생산",
         "startCol": 50,
@@ -3833,7 +3834,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-3-59",
+        "id": "jc-line-0-blk-3",
         "name": "비삼각밥",
         "type": "생산",
         "startCol": 59,
@@ -3845,7 +3846,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-3-65",
+        "id": "jc-line-0-blk-4",
         "name": "김밥밥",
         "type": "생산",
         "startCol": 65,
@@ -3857,7 +3858,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 565
       },
       {
-        "id": "blk-3-67",
+        "id": "jc-line-0-blk-5",
         "name": "청소",
         "type": "청소",
         "startCol": 67,
@@ -3869,7 +3870,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-3-71",
+        "id": "jc-line-0-blk-6",
         "name": "파프리카밥",
         "type": "생산",
         "startCol": 71,
@@ -3881,7 +3882,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 605
       },
       {
-        "id": "blk-3-75",
+        "id": "jc-line-0-blk-7",
         "name": "청소",
         "type": "청소",
         "startCol": 75,
@@ -3893,7 +3894,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-3-79",
+        "id": "jc-line-0-blk-8",
         "name": "흑미밥",
         "type": "생산",
         "startCol": 79,
@@ -3905,7 +3906,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-3-85",
+        "id": "jc-line-0-blk-9",
         "name": "흑미밥(삼각)",
         "type": "생산",
         "startCol": 85,
@@ -3917,7 +3918,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 670
       },
       {
-        "id": "blk-3-88",
+        "id": "jc-line-0-blk-10",
         "name": "청소",
         "type": "청소",
         "startCol": 88,
@@ -3929,7 +3930,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 685
       },
       {
-        "id": "blk-3-91",
+        "id": "jc-line-0-blk-11",
         "name": "옥수수밥",
         "type": "생산",
         "startCol": 91,
@@ -3941,7 +3942,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 710
       },
       {
-        "id": "blk-3-96",
+        "id": "jc-line-0-blk-12",
         "name": "청소",
         "type": "청소",
         "startCol": 96,
@@ -3953,7 +3954,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-3-109",
+        "id": "jc-line-0-blk-13",
         "name": "도시락밥",
         "type": "생산",
         "startCol": 109,
@@ -3965,7 +3966,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 815
       },
       {
-        "id": "blk-3-117",
+        "id": "jc-line-0-blk-14",
         "name": "삼각조미밥",
         "type": "생산",
         "startCol": 117,
@@ -3977,7 +3978,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 840
       },
       {
-        "id": "blk-3-122",
+        "id": "jc-line-0-blk-15",
         "name": "김밥조미밥",
         "type": "생산",
         "startCol": 122,
@@ -3989,7 +3990,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 885
       },
       {
-        "id": "blk-3-131",
+        "id": "jc-line-0-blk-16",
         "name": "비삼각밥",
         "type": "생산",
         "startCol": 131,
@@ -4001,7 +4002,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-3-137",
+        "id": "jc-line-0-blk-17",
         "name": "김밥밥",
         "type": "생산",
         "startCol": 137,
@@ -4013,7 +4014,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 925
       },
       {
-        "id": "blk-3-139",
+        "id": "jc-line-0-blk-18",
         "name": "청소",
         "type": "청소",
         "startCol": 139,
@@ -4025,7 +4026,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 945
       },
       {
-        "id": "blk-3-143",
+        "id": "jc-line-0-blk-19",
         "name": "파프리카밥",
         "type": "생산",
         "startCol": 143,
@@ -4037,7 +4038,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 965
       },
       {
-        "id": "blk-3-147",
+        "id": "jc-line-0-blk-20",
         "name": "청소",
         "type": "청소",
         "startCol": 147,
@@ -4049,7 +4050,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-3-151",
+        "id": "jc-line-0-blk-21",
         "name": "흑미밥",
         "type": "생산",
         "startCol": 151,
@@ -4061,7 +4062,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-3-157",
+        "id": "jc-line-0-blk-22",
         "name": "흑미밥(삼각)",
         "type": "생산",
         "startCol": 157,
@@ -4073,7 +4074,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1030
       },
       {
-        "id": "blk-3-160",
+        "id": "jc-line-0-blk-23",
         "name": "청소",
         "type": "청소",
         "startCol": 160,
@@ -4085,7 +4086,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1045
       },
       {
-        "id": "blk-3-163",
+        "id": "jc-line-0-blk-24",
         "name": "옥수수밥",
         "type": "생산",
         "startCol": 163,
@@ -4097,7 +4098,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1070
       },
       {
-        "id": "blk-3-168",
+        "id": "jc-line-0-blk-25",
         "name": "청소",
         "type": "청소",
         "startCol": 168,
@@ -4108,16 +4109,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1070,
         "endMin": 1085
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-4",
+    "id": "jc-line-1",
     "name": "취반실(로터리 1호)",
+    "category": "전처리",
     "totalBlocks": 20,
     "blocks": [
       {
-        "id": "blk-4-40",
+        "id": "jc-line-1-blk-0",
         "name": "닭강정 믹싱",
         "type": "생산",
         "startCol": 40,
@@ -4129,7 +4130,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 450
       },
       {
-        "id": "blk-4-45",
+        "id": "jc-line-1-blk-1",
         "name": "칼집비엔나 무침",
         "type": "생산",
         "startCol": 45,
@@ -4141,7 +4142,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 475
       },
       {
-        "id": "blk-4-50",
+        "id": "jc-line-1-blk-2",
         "name": "떡갈비구이 믹싱",
         "type": "생산",
         "startCol": 50,
@@ -4153,7 +4154,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 500
       },
       {
-        "id": "blk-4-55",
+        "id": "jc-line-1-blk-3",
         "name": "양송이떡갈비무침",
         "type": "생산",
         "startCol": 55,
@@ -4165,7 +4166,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-4-60",
+        "id": "jc-line-1-blk-4",
         "name": "완전햄김치볶음밥",
         "type": "생산",
         "startCol": 60,
@@ -4177,7 +4178,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 545
       },
       {
-        "id": "blk-4-64",
+        "id": "jc-line-1-blk-5",
         "name": "비빔참치밥",
         "type": "생산",
         "startCol": 64,
@@ -4189,7 +4190,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 570
       },
       {
-        "id": "blk-4-69",
+        "id": "jc-line-1-blk-6",
         "name": "김자반밥",
         "type": "생산",
         "startCol": 69,
@@ -4201,7 +4202,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 590
       },
       {
-        "id": "blk-4-74",
+        "id": "jc-line-1-blk-7",
         "name": "전주비빔밥",
         "type": "생산",
         "startCol": 74,
@@ -4213,7 +4214,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-4-81",
+        "id": "jc-line-1-blk-8",
         "name": "감자탕볶음밥",
         "type": "생산",
         "startCol": 81,
@@ -4225,7 +4226,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-4-86",
+        "id": "jc-line-1-blk-9",
         "name": "가라아게 무침",
         "type": "생산",
         "startCol": 86,
@@ -4237,7 +4238,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 700
       },
       {
-        "id": "blk-4-121",
+        "id": "jc-line-1-blk-10",
         "name": "닭강정 믹싱",
         "type": "생산",
         "startCol": 121,
@@ -4249,7 +4250,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 855
       },
       {
-        "id": "blk-4-126",
+        "id": "jc-line-1-blk-11",
         "name": "칼집비엔나 무침",
         "type": "생산",
         "startCol": 126,
@@ -4261,7 +4262,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-4-131",
+        "id": "jc-line-1-blk-12",
         "name": "떡갈비구이 믹싱",
         "type": "생산",
         "startCol": 131,
@@ -4273,7 +4274,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-4-136",
+        "id": "jc-line-1-blk-13",
         "name": "양송이떡갈비무침",
         "type": "생산",
         "startCol": 136,
@@ -4285,7 +4286,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 930
       },
       {
-        "id": "blk-4-141",
+        "id": "jc-line-1-blk-14",
         "name": "완전햄김치볶음밥",
         "type": "생산",
         "startCol": 141,
@@ -4297,7 +4298,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-4-145",
+        "id": "jc-line-1-blk-15",
         "name": "비빔참치밥",
         "type": "생산",
         "startCol": 145,
@@ -4309,7 +4310,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-4-150",
+        "id": "jc-line-1-blk-16",
         "name": "김자반밥",
         "type": "생산",
         "startCol": 150,
@@ -4321,7 +4322,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 995
       },
       {
-        "id": "blk-4-155",
+        "id": "jc-line-1-blk-17",
         "name": "전주비빔밥",
         "type": "생산",
         "startCol": 155,
@@ -4333,7 +4334,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1035
       },
       {
-        "id": "blk-4-162",
+        "id": "jc-line-1-blk-18",
         "name": "감자탕볶음밥",
         "type": "생산",
         "startCol": 162,
@@ -4345,7 +4346,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1060
       },
       {
-        "id": "blk-4-167",
+        "id": "jc-line-1-blk-19",
         "name": "가라아게 무침",
         "type": "생산",
         "startCol": 167,
@@ -4356,16 +4357,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1065,
         "endMin": 1105
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-5",
+    "id": "jc-line-2",
     "name": "취반실(로터리 2호)",
+    "category": "전처리",
     "totalBlocks": 22,
     "blocks": [
       {
-        "id": "blk-5-40",
+        "id": "jc-line-2-blk-0",
         "name": "매콤닭강정",
         "type": "생산",
         "startCol": 40,
@@ -4377,7 +4378,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 450
       },
       {
-        "id": "blk-5-45",
+        "id": "jc-line-2-blk-1",
         "name": "미니 너비아니 무침",
         "type": "생산",
         "startCol": 45,
@@ -4389,7 +4390,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 475
       },
       {
-        "id": "blk-5-50",
+        "id": "jc-line-2-blk-2",
         "name": "맘모스함박스테이크70 무침",
         "type": "생산",
         "startCol": 50,
@@ -4401,7 +4402,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 500
       },
       {
-        "id": "blk-5-55",
+        "id": "jc-line-2-blk-3",
         "name": "고추장불고기 혼합",
         "type": "생산",
         "startCol": 55,
@@ -4413,7 +4414,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-5-60",
+        "id": "jc-line-2-blk-4",
         "name": "완전간장계란볶음밥",
         "type": "생산",
         "startCol": 60,
@@ -4425,7 +4426,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 545
       },
       {
-        "id": "blk-5-64",
+        "id": "jc-line-2-blk-5",
         "name": "계란볶음밥",
         "type": "생산",
         "startCol": 64,
@@ -4437,7 +4438,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 570
       },
       {
-        "id": "blk-5-69",
+        "id": "jc-line-2-blk-6",
         "name": "계란볶음밥(풀)",
         "type": "생산",
         "startCol": 69,
@@ -4449,7 +4450,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 590
       },
       {
-        "id": "blk-5-74",
+        "id": "jc-line-2-blk-7",
         "name": "NEW김치볶음밥",
         "type": "생산",
         "startCol": 74,
@@ -4461,7 +4462,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 610
       },
       {
-        "id": "blk-5-77",
+        "id": "jc-line-2-blk-8",
         "name": "팔도비빔밥",
         "type": "생산",
         "startCol": 77,
@@ -4473,7 +4474,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-5-80",
+        "id": "jc-line-2-blk-9",
         "name": "종가)김치볶음밥",
         "type": "생산",
         "startCol": 80,
@@ -4485,7 +4486,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 665
       },
       {
-        "id": "blk-5-88",
+        "id": "jc-line-2-blk-10",
         "name": "함박스테이크 무침",
         "type": "생산",
         "startCol": 88,
@@ -4497,7 +4498,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 685
       },
       {
-        "id": "blk-5-121",
+        "id": "jc-line-2-blk-11",
         "name": "매콤닭강정",
         "type": "생산",
         "startCol": 121,
@@ -4509,7 +4510,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 855
       },
       {
-        "id": "blk-5-126",
+        "id": "jc-line-2-blk-12",
         "name": "미니 너비아니 무침",
         "type": "생산",
         "startCol": 126,
@@ -4521,7 +4522,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-5-131",
+        "id": "jc-line-2-blk-13",
         "name": "맘모스함박스테이크70 무침",
         "type": "생산",
         "startCol": 131,
@@ -4533,7 +4534,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-5-136",
+        "id": "jc-line-2-blk-14",
         "name": "고추장불고기 혼합",
         "type": "생산",
         "startCol": 136,
@@ -4545,7 +4546,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 930
       },
       {
-        "id": "blk-5-141",
+        "id": "jc-line-2-blk-15",
         "name": "완전간장계란볶음밥",
         "type": "생산",
         "startCol": 141,
@@ -4557,7 +4558,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-5-145",
+        "id": "jc-line-2-blk-16",
         "name": "계란볶음밥",
         "type": "생산",
         "startCol": 145,
@@ -4569,7 +4570,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-5-150",
+        "id": "jc-line-2-blk-17",
         "name": "계란볶음밥(풀)",
         "type": "생산",
         "startCol": 150,
@@ -4581,7 +4582,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 995
       },
       {
-        "id": "blk-5-155",
+        "id": "jc-line-2-blk-18",
         "name": "NEW김치볶음밥",
         "type": "생산",
         "startCol": 155,
@@ -4593,7 +4594,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-5-158",
+        "id": "jc-line-2-blk-19",
         "name": "팔도비빔밥",
         "type": "생산",
         "startCol": 158,
@@ -4605,7 +4606,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1030
       },
       {
-        "id": "blk-5-161",
+        "id": "jc-line-2-blk-20",
         "name": "종가)김치볶음밥",
         "type": "생산",
         "startCol": 161,
@@ -4617,7 +4618,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1070
       },
       {
-        "id": "blk-5-169",
+        "id": "jc-line-2-blk-21",
         "name": "함박스테이크 무침",
         "type": "생산",
         "startCol": 169,
@@ -4628,16 +4629,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1075,
         "endMin": 1090
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-6",
+    "id": "jc-line-3",
     "name": "스팀솥 1번",
+    "category": "전처리",
     "totalBlocks": 24,
     "blocks": [
       {
-        "id": "blk-6-30",
+        "id": "jc-line-3-blk-0",
         "name": "냉동혼합야채4종",
         "type": "생산",
         "startCol": 30,
@@ -4649,7 +4650,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 390
       },
       {
-        "id": "blk-6-33",
+        "id": "jc-line-3-blk-1",
         "name": "크랜베리 데침",
         "type": "생산",
         "startCol": 33,
@@ -4661,7 +4662,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 405
       },
       {
-        "id": "blk-6-36",
+        "id": "jc-line-3-blk-2",
         "name": "냉동찐감자다이스",
         "type": "생산",
         "startCol": 36,
@@ -4673,7 +4674,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 420
       },
       {
-        "id": "blk-6-39",
+        "id": "jc-line-3-blk-3",
         "name": "비엔나소시지데침",
         "type": "생산",
         "startCol": 39,
@@ -4685,7 +4686,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 435
       },
       {
-        "id": "blk-6-42",
+        "id": "jc-line-3-blk-4",
         "name": "양파 찹핑 데침",
         "type": "생산",
         "startCol": 42,
@@ -4697,7 +4698,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 455
       },
       {
-        "id": "blk-6-46",
+        "id": "jc-line-3-blk-5",
         "name": "당근 찹핑 데침",
         "type": "생산",
         "startCol": 46,
@@ -4709,7 +4710,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 475
       },
       {
-        "id": "blk-6-50",
+        "id": "jc-line-3-blk-6",
         "name": "당근채 데침",
         "type": "생산",
         "startCol": 50,
@@ -4721,7 +4722,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 500
       },
       {
-        "id": "blk-6-55",
+        "id": "jc-line-3-blk-7",
         "name": "냉동브로콜리 데침",
         "type": "생산",
         "startCol": 55,
@@ -4733,7 +4734,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-6-60",
+        "id": "jc-line-3-blk-8",
         "name": "양배추슬라이스 데침",
         "type": "생산",
         "startCol": 60,
@@ -4745,7 +4746,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 550
       },
       {
-        "id": "blk-6-65",
+        "id": "jc-line-3-blk-9",
         "name": "양배추 데침",
         "type": "생산",
         "startCol": 65,
@@ -4757,7 +4758,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 570
       },
       {
-        "id": "blk-6-69",
+        "id": "jc-line-3-blk-10",
         "name": "당면 데침",
         "type": "생산",
         "startCol": 69,
@@ -4769,7 +4770,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 605
       },
       {
-        "id": "blk-6-76",
+        "id": "jc-line-3-blk-11",
         "name": "마늘종 데침",
         "type": "생산",
         "startCol": 76,
@@ -4781,7 +4782,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-6-112",
+        "id": "jc-line-3-blk-12",
         "name": "냉동혼합야채4종",
         "type": "생산",
         "startCol": 112,
@@ -4793,7 +4794,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 800
       },
       {
-        "id": "blk-6-115",
+        "id": "jc-line-3-blk-13",
         "name": "크랜베리 데침",
         "type": "생산",
         "startCol": 115,
@@ -4805,7 +4806,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 815
       },
       {
-        "id": "blk-6-118",
+        "id": "jc-line-3-blk-14",
         "name": "냉동찐감자다이스",
         "type": "생산",
         "startCol": 118,
@@ -4817,7 +4818,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 830
       },
       {
-        "id": "blk-6-121",
+        "id": "jc-line-3-blk-15",
         "name": "비엔나소시지데침",
         "type": "생산",
         "startCol": 121,
@@ -4829,7 +4830,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-6-124",
+        "id": "jc-line-3-blk-16",
         "name": "양파 찹핑 데침",
         "type": "생산",
         "startCol": 124,
@@ -4841,7 +4842,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-6-128",
+        "id": "jc-line-3-blk-17",
         "name": "당근 찹핑 데침",
         "type": "생산",
         "startCol": 128,
@@ -4853,7 +4854,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 885
       },
       {
-        "id": "blk-6-132",
+        "id": "jc-line-3-blk-18",
         "name": "당근채 데침",
         "type": "생산",
         "startCol": 132,
@@ -4865,7 +4866,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 910
       },
       {
-        "id": "blk-6-137",
+        "id": "jc-line-3-blk-19",
         "name": "냉동브로콜리 데침",
         "type": "생산",
         "startCol": 137,
@@ -4877,7 +4878,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 935
       },
       {
-        "id": "blk-6-142",
+        "id": "jc-line-3-blk-20",
         "name": "양배추슬라이스 데침",
         "type": "생산",
         "startCol": 142,
@@ -4889,7 +4890,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 960
       },
       {
-        "id": "blk-6-147",
+        "id": "jc-line-3-blk-21",
         "name": "양배추 데침",
         "type": "생산",
         "startCol": 147,
@@ -4901,7 +4902,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 980
       },
       {
-        "id": "blk-6-151",
+        "id": "jc-line-3-blk-22",
         "name": "당면 데침",
         "type": "생산",
         "startCol": 151,
@@ -4913,7 +4914,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-6-158",
+        "id": "jc-line-3-blk-23",
         "name": "마늘종 데침",
         "type": "생산",
         "startCol": 158,
@@ -4924,16 +4925,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1020,
         "endMin": 1035
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-7",
+    "id": "jc-line-4",
     "name": "스팀솥 2번",
+    "category": "전처리",
     "totalBlocks": 26,
     "blocks": [
       {
-        "id": "blk-7-30",
+        "id": "jc-line-4-blk-0",
         "name": "청양고추볶음",
         "type": "생산",
         "startCol": 30,
@@ -4945,7 +4946,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 390
       },
       {
-        "id": "blk-7-33",
+        "id": "jc-line-4-blk-1",
         "name": "명란볶음",
         "type": "생산",
         "startCol": 33,
@@ -4957,7 +4958,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 405
       },
       {
-        "id": "blk-7-36",
+        "id": "jc-line-4-blk-2",
         "name": "비프 불고기 토핑 볶음",
         "type": "생산",
         "startCol": 36,
@@ -4969,7 +4970,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 425
       },
       {
-        "id": "blk-7-40",
+        "id": "jc-line-4-blk-3",
         "name": "비엔나소세지 데침",
         "type": "생산",
         "startCol": 40,
@@ -4981,7 +4982,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 445
       },
       {
-        "id": "blk-7-44",
+        "id": "jc-line-4-blk-4",
         "name": "채소볶음",
         "type": "생산",
         "startCol": 44,
@@ -4993,7 +4994,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 465
       },
       {
-        "id": "blk-7-48",
+        "id": "jc-line-4-blk-5",
         "name": "베이컨야채볶음",
         "type": "생산",
         "startCol": 48,
@@ -5005,7 +5006,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 485
       },
       {
-        "id": "blk-7-52",
+        "id": "jc-line-4-blk-6",
         "name": "완전햄김치볶음",
         "type": "생산",
         "startCol": 52,
@@ -5017,7 +5018,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-7-56",
+        "id": "jc-line-4-blk-7",
         "name": "완전간장계란볶음",
         "type": "생산",
         "startCol": 56,
@@ -5029,7 +5030,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-7-60",
+        "id": "jc-line-4-blk-8",
         "name": "칼집비엔나 데침",
         "type": "생산",
         "startCol": 60,
@@ -5041,7 +5042,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 550
       },
       {
-        "id": "blk-7-65",
+        "id": "jc-line-4-blk-9",
         "name": "종가)맛김치볶음",
         "type": "생산",
         "startCol": 65,
@@ -5053,7 +5054,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-7-70",
+        "id": "jc-line-4-blk-10",
         "name": "애호박새우젓볶음",
         "type": "생산",
         "startCol": 70,
@@ -5065,7 +5066,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 595
       },
       {
-        "id": "blk-7-74",
+        "id": "jc-line-4-blk-11",
         "name": "우동면 삶기",
         "type": "생산",
         "startCol": 74,
@@ -5077,7 +5078,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-7-81",
+        "id": "jc-line-4-blk-12",
         "name": "NEW맛김치볶음",
         "type": "생산",
         "startCol": 81,
@@ -5089,7 +5090,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-7-112",
+        "id": "jc-line-4-blk-13",
         "name": "청양고추볶음",
         "type": "생산",
         "startCol": 112,
@@ -5101,7 +5102,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 800
       },
       {
-        "id": "blk-7-115",
+        "id": "jc-line-4-blk-14",
         "name": "명란볶음",
         "type": "생산",
         "startCol": 115,
@@ -5113,7 +5114,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 815
       },
       {
-        "id": "blk-7-118",
+        "id": "jc-line-4-blk-15",
         "name": "비프 불고기 토핑 볶음",
         "type": "생산",
         "startCol": 118,
@@ -5125,7 +5126,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 835
       },
       {
-        "id": "blk-7-122",
+        "id": "jc-line-4-blk-16",
         "name": "비엔나소세지 데침",
         "type": "생산",
         "startCol": 122,
@@ -5137,7 +5138,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 855
       },
       {
-        "id": "blk-7-126",
+        "id": "jc-line-4-blk-17",
         "name": "채소볶음",
         "type": "생산",
         "startCol": 126,
@@ -5149,7 +5150,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 875
       },
       {
-        "id": "blk-7-130",
+        "id": "jc-line-4-blk-18",
         "name": "베이컨야채볶음",
         "type": "생산",
         "startCol": 130,
@@ -5161,7 +5162,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 895
       },
       {
-        "id": "blk-7-134",
+        "id": "jc-line-4-blk-19",
         "name": "완전햄김치볶음",
         "type": "생산",
         "startCol": 134,
@@ -5173,7 +5174,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-7-138",
+        "id": "jc-line-4-blk-20",
         "name": "완전간장계란볶음",
         "type": "생산",
         "startCol": 138,
@@ -5185,7 +5186,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 935
       },
       {
-        "id": "blk-7-142",
+        "id": "jc-line-4-blk-21",
         "name": "칼집비엔나 데침",
         "type": "생산",
         "startCol": 142,
@@ -5197,7 +5198,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 960
       },
       {
-        "id": "blk-7-147",
+        "id": "jc-line-4-blk-22",
         "name": "종가)맛김치볶음",
         "type": "생산",
         "startCol": 147,
@@ -5209,7 +5210,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-7-152",
+        "id": "jc-line-4-blk-23",
         "name": "애호박새우젓볶음",
         "type": "생산",
         "startCol": 152,
@@ -5221,7 +5222,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1005
       },
       {
-        "id": "blk-7-156",
+        "id": "jc-line-4-blk-24",
         "name": "우동면 삶기",
         "type": "생산",
         "startCol": 156,
@@ -5233,7 +5234,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-7-163",
+        "id": "jc-line-4-blk-25",
         "name": "NEW맛김치볶음",
         "type": "생산",
         "startCol": 163,
@@ -5244,16 +5245,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1045,
         "endMin": 1065
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-8",
+    "id": "jc-line-5",
     "name": "자동스팀솥 1호기",
+    "category": "전처리",
     "totalBlocks": 18,
     "blocks": [
       {
-        "id": "blk-8-30",
+        "id": "jc-line-5-blk-0",
         "name": "파스타 면 삶기",
         "type": "생산",
         "startCol": 30,
@@ -5265,7 +5266,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 400
       },
       {
-        "id": "blk-8-35",
+        "id": "jc-line-5-blk-1",
         "name": "동원그릴비엔나볶음",
         "type": "생산",
         "startCol": 35,
@@ -5277,7 +5278,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 435
       },
       {
-        "id": "blk-8-42",
+        "id": "jc-line-5-blk-2",
         "name": "제육볶음",
         "type": "생산",
         "startCol": 42,
@@ -5289,7 +5290,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 470
       },
       {
-        "id": "blk-8-49",
+        "id": "jc-line-5-blk-3",
         "name": "바싹불고기볶음",
         "type": "생산",
         "startCol": 49,
@@ -5301,7 +5302,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-8-56",
+        "id": "jc-line-5-blk-4",
         "name": "볼어묵 볶음",
         "type": "생산",
         "startCol": 56,
@@ -5313,7 +5314,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-8-61",
+        "id": "jc-line-5-blk-5",
         "name": "한돈간장돼지불고기볶음",
         "type": "생산",
         "startCol": 61,
@@ -5325,7 +5326,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 565
       },
       {
-        "id": "blk-8-68",
+        "id": "jc-line-5-blk-6",
         "name": "야채볶음",
         "type": "생산",
         "startCol": 68,
@@ -5337,7 +5338,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 590
       },
       {
-        "id": "blk-8-73",
+        "id": "jc-line-5-blk-7",
         "name": "채어묵볶음",
         "type": "생산",
         "startCol": 73,
@@ -5349,7 +5350,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 625
       },
       {
-        "id": "blk-8-80",
+        "id": "jc-line-5-blk-8",
         "name": "간장돼지불고기볶음",
         "type": "생산",
         "startCol": 80,
@@ -5361,7 +5362,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 650
       },
       {
-        "id": "blk-8-112",
+        "id": "jc-line-5-blk-9",
         "name": "파스타 면 삶기",
         "type": "생산",
         "startCol": 112,
@@ -5373,7 +5374,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-8-117",
+        "id": "jc-line-5-blk-10",
         "name": "동원그릴비엔나볶음",
         "type": "생산",
         "startCol": 117,
@@ -5385,7 +5386,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-8-124",
+        "id": "jc-line-5-blk-11",
         "name": "제육볶음",
         "type": "생산",
         "startCol": 124,
@@ -5397,7 +5398,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-8-131",
+        "id": "jc-line-5-blk-12",
         "name": "바싹불고기볶음",
         "type": "생산",
         "startCol": 131,
@@ -5409,7 +5410,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-8-138",
+        "id": "jc-line-5-blk-13",
         "name": "볼어묵 볶음",
         "type": "생산",
         "startCol": 138,
@@ -5421,7 +5422,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 940
       },
       {
-        "id": "blk-8-143",
+        "id": "jc-line-5-blk-14",
         "name": "한돈간장돼지불고기볶음",
         "type": "생산",
         "startCol": 143,
@@ -5433,7 +5434,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-8-150",
+        "id": "jc-line-5-blk-15",
         "name": "야채볶음",
         "type": "생산",
         "startCol": 150,
@@ -5445,7 +5446,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1000
       },
       {
-        "id": "blk-8-155",
+        "id": "jc-line-5-blk-16",
         "name": "채어묵볶음",
         "type": "생산",
         "startCol": 155,
@@ -5457,7 +5458,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1035
       },
       {
-        "id": "blk-8-162",
+        "id": "jc-line-5-blk-17",
         "name": "간장돼지불고기볶음",
         "type": "생산",
         "startCol": 162,
@@ -5468,16 +5469,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1040,
         "endMin": 1060
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-9",
+    "id": "jc-line-6",
     "name": "자동스팀솥 2호기",
+    "category": "전처리",
     "totalBlocks": 20,
     "blocks": [
       {
-        "id": "blk-9-30",
+        "id": "jc-line-6-blk-0",
         "name": "파스타 면 삶기",
         "type": "생산",
         "startCol": 30,
@@ -5489,7 +5490,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 400
       },
       {
-        "id": "blk-9-35",
+        "id": "jc-line-6-blk-1",
         "name": "소불고기 볶음",
         "type": "생산",
         "startCol": 35,
@@ -5501,7 +5502,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 435
       },
       {
-        "id": "blk-9-42",
+        "id": "jc-line-6-blk-2",
         "name": "닭갈비볶음",
         "type": "생산",
         "startCol": 42,
@@ -5513,7 +5514,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 470
       },
       {
-        "id": "blk-9-49",
+        "id": "jc-line-6-blk-3",
         "name": "직화맛불고기볶음",
         "type": "생산",
         "startCol": 49,
@@ -5525,7 +5526,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-9-56",
+        "id": "jc-line-6-blk-4",
         "name": "고추장불고기",
         "type": "생산",
         "startCol": 56,
@@ -5537,7 +5538,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 540
       },
       {
-        "id": "blk-9-63",
+        "id": "jc-line-6-blk-5",
         "name": "한돈제육볶음토핑",
         "type": "생산",
         "startCol": 63,
@@ -5549,7 +5550,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-9-70",
+        "id": "jc-line-6-blk-6",
         "name": "김치제육볶음",
         "type": "생산",
         "startCol": 70,
@@ -5561,7 +5562,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 610
       },
       {
-        "id": "blk-9-77",
+        "id": "jc-line-6-blk-7",
         "name": "우삼겹불고기볶음",
         "type": "생산",
         "startCol": 77,
@@ -5573,7 +5574,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 635
       },
       {
-        "id": "blk-9-82",
+        "id": "jc-line-6-blk-8",
         "name": "간장돼지불고기볶음",
         "type": "생산",
         "startCol": 82,
@@ -5585,7 +5586,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 665
       },
       {
-        "id": "blk-9-88",
+        "id": "jc-line-6-blk-9",
         "name": "매콤흑당돼지갈비",
         "type": "생산",
         "startCol": 88,
@@ -5597,7 +5598,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-9-112",
+        "id": "jc-line-6-blk-10",
         "name": "파스타 면 삶기",
         "type": "생산",
         "startCol": 112,
@@ -5609,7 +5610,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-9-117",
+        "id": "jc-line-6-blk-11",
         "name": "소불고기 볶음",
         "type": "생산",
         "startCol": 117,
@@ -5621,7 +5622,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-9-124",
+        "id": "jc-line-6-blk-12",
         "name": "닭갈비볶음",
         "type": "생산",
         "startCol": 124,
@@ -5633,7 +5634,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-9-131",
+        "id": "jc-line-6-blk-13",
         "name": "직화맛불고기볶음",
         "type": "생산",
         "startCol": 131,
@@ -5645,7 +5646,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-9-138",
+        "id": "jc-line-6-blk-14",
         "name": "고추장불고기",
         "type": "생산",
         "startCol": 138,
@@ -5657,7 +5658,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-9-145",
+        "id": "jc-line-6-blk-15",
         "name": "한돈제육볶음토핑",
         "type": "생산",
         "startCol": 145,
@@ -5669,7 +5670,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-9-152",
+        "id": "jc-line-6-blk-16",
         "name": "김치제육볶음",
         "type": "생산",
         "startCol": 152,
@@ -5681,7 +5682,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1020
       },
       {
-        "id": "blk-9-159",
+        "id": "jc-line-6-blk-17",
         "name": "우삼겹불고기볶음",
         "type": "생산",
         "startCol": 159,
@@ -5693,7 +5694,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1045
       },
       {
-        "id": "blk-9-164",
+        "id": "jc-line-6-blk-18",
         "name": "간장돼지불고기볶음",
         "type": "생산",
         "startCol": 164,
@@ -5705,7 +5706,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-9-170",
+        "id": "jc-line-6-blk-19",
         "name": "매콤흑당돼지갈비",
         "type": "생산",
         "startCol": 170,
@@ -5716,16 +5717,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1080,
         "endMin": 1100
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-10",
+    "id": "jc-line-7",
     "name": "오토후라이어1",
+    "category": "전처리",
     "totalBlocks": 22,
     "blocks": [
       {
-        "id": "blk-10-28",
+        "id": "jc-line-7-blk-0",
         "name": "순살치킨",
         "type": "생산",
         "startCol": 28,
@@ -5737,7 +5738,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 390
       },
       {
-        "id": "blk-10-33",
+        "id": "jc-line-7-blk-1",
         "name": "저염\r\n가라아게",
         "type": "생산",
         "startCol": 33,
@@ -5749,7 +5750,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 415
       },
       {
-        "id": "blk-10-38",
+        "id": "jc-line-7-blk-2",
         "name": "고추 바삭 가라아게",
         "type": "생산",
         "startCol": 38,
@@ -5761,7 +5762,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 440
       },
       {
-        "id": "blk-10-43",
+        "id": "jc-line-7-blk-3",
         "name": "치킨텐더튀김",
         "type": "생산",
         "startCol": 43,
@@ -5773,7 +5774,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 460
       },
       {
-        "id": "blk-10-47",
+        "id": "jc-line-7-blk-4",
         "name": "미니등심돈까스 70",
         "type": "생산",
         "startCol": 47,
@@ -5785,7 +5786,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 485
       },
       {
-        "id": "blk-10-52",
+        "id": "jc-line-7-blk-5",
         "name": "순살 등심 돈까스",
         "type": "생산",
         "startCol": 52,
@@ -5797,7 +5798,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 510
       },
       {
-        "id": "blk-10-57",
+        "id": "jc-line-7-blk-6",
         "name": "스파이시 치킨 패티",
         "type": "생산",
         "startCol": 57,
@@ -5809,7 +5810,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 535
       },
       {
-        "id": "blk-10-62",
+        "id": "jc-line-7-blk-7",
         "name": "완숙 계란 후라이",
         "type": "생산",
         "startCol": 62,
@@ -5821,7 +5822,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-10-66",
+        "id": "jc-line-7-blk-8",
         "name": "YES생선가스튀김",
         "type": "생산",
         "startCol": 66,
@@ -5833,7 +5834,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-10-70",
+        "id": "jc-line-7-blk-9",
         "name": "YES리얼통살새우까스튀김",
         "type": "생산",
         "startCol": 70,
@@ -5845,7 +5846,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 595
       },
       {
-        "id": "blk-10-74",
+        "id": "jc-line-7-blk-10",
         "name": "한돈돈카츠튀김",
         "type": "생산",
         "startCol": 74,
@@ -5857,7 +5858,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 645
       },
       {
-        "id": "blk-10-112",
+        "id": "jc-line-7-blk-11",
         "name": "순살치킨",
         "type": "생산",
         "startCol": 112,
@@ -5869,7 +5870,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-10-117",
+        "id": "jc-line-7-blk-12",
         "name": "저염\r\n가라아게",
         "type": "생산",
         "startCol": 117,
@@ -5881,7 +5882,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 835
       },
       {
-        "id": "blk-10-122",
+        "id": "jc-line-7-blk-13",
         "name": "고추 바삭 가라아게",
         "type": "생산",
         "startCol": 122,
@@ -5893,7 +5894,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 860
       },
       {
-        "id": "blk-10-127",
+        "id": "jc-line-7-blk-14",
         "name": "치킨텐더튀김",
         "type": "생산",
         "startCol": 127,
@@ -5905,7 +5906,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-10-131",
+        "id": "jc-line-7-blk-15",
         "name": "미니등심돈까스 70",
         "type": "생산",
         "startCol": 131,
@@ -5917,7 +5918,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-10-136",
+        "id": "jc-line-7-blk-16",
         "name": "순살 등심 돈까스",
         "type": "생산",
         "startCol": 136,
@@ -5929,7 +5930,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 930
       },
       {
-        "id": "blk-10-141",
+        "id": "jc-line-7-blk-17",
         "name": "스파이시 치킨 패티",
         "type": "생산",
         "startCol": 141,
@@ -5941,7 +5942,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 955
       },
       {
-        "id": "blk-10-146",
+        "id": "jc-line-7-blk-18",
         "name": "완숙 계란 후라이",
         "type": "생산",
         "startCol": 146,
@@ -5953,7 +5954,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-10-150",
+        "id": "jc-line-7-blk-19",
         "name": "YES생선가스튀김",
         "type": "생산",
         "startCol": 150,
@@ -5965,7 +5966,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 995
       },
       {
-        "id": "blk-10-154",
+        "id": "jc-line-7-blk-20",
         "name": "YES리얼통살새우까스튀김",
         "type": "생산",
         "startCol": 154,
@@ -5977,7 +5978,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1015
       },
       {
-        "id": "blk-10-158",
+        "id": "jc-line-7-blk-21",
         "name": "한돈돈카츠튀김",
         "type": "생산",
         "startCol": 158,
@@ -5988,16 +5989,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1020,
         "endMin": 1065
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-11",
+    "id": "jc-line-8",
     "name": "오토후라이어2",
+    "category": "전처리",
     "totalBlocks": 16,
     "blocks": [
       {
-        "id": "blk-11-28",
+        "id": "jc-line-8-blk-0",
         "name": "실속만두튀김",
         "type": "생산",
         "startCol": 28,
@@ -6009,7 +6010,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 390
       },
       {
-        "id": "blk-11-33",
+        "id": "jc-line-8-blk-1",
         "name": "야채고로케",
         "type": "생산",
         "startCol": 33,
@@ -6021,7 +6022,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 415
       },
       {
-        "id": "blk-11-38",
+        "id": "jc-line-8-blk-2",
         "name": "반숙 계란 후라이",
         "type": "생산",
         "startCol": 38,
@@ -6033,7 +6034,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 445
       },
       {
-        "id": "blk-11-44",
+        "id": "jc-line-8-blk-3",
         "name": "새우튀김",
         "type": "생산",
         "startCol": 44,
@@ -6045,7 +6046,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 470
       },
       {
-        "id": "blk-11-49",
+        "id": "jc-line-8-blk-4",
         "name": "알찬소시지전",
         "type": "생산",
         "startCol": 49,
@@ -6057,7 +6058,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 495
       },
       {
-        "id": "blk-11-54",
+        "id": "jc-line-8-blk-5",
         "name": "더바삭 순살 가라아게",
         "type": "생산",
         "startCol": 54,
@@ -6069,7 +6070,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-11-61",
+        "id": "jc-line-8-blk-6",
         "name": "타코야키 튀김",
         "type": "생산",
         "startCol": 61,
@@ -6081,7 +6082,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-11-66",
+        "id": "jc-line-8-blk-7",
         "name": "마일드치킨패티",
         "type": "생산",
         "startCol": 66,
@@ -6093,7 +6094,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-11-112",
+        "id": "jc-line-8-blk-8",
         "name": "실속만두튀김",
         "type": "생산",
         "startCol": 112,
@@ -6105,7 +6106,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-11-117",
+        "id": "jc-line-8-blk-9",
         "name": "야채고로케",
         "type": "생산",
         "startCol": 117,
@@ -6117,7 +6118,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 835
       },
       {
-        "id": "blk-11-122",
+        "id": "jc-line-8-blk-10",
         "name": "반숙 계란 후라이",
         "type": "생산",
         "startCol": 122,
@@ -6129,7 +6130,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-11-128",
+        "id": "jc-line-8-blk-11",
         "name": "새우튀김",
         "type": "생산",
         "startCol": 128,
@@ -6141,7 +6142,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 890
       },
       {
-        "id": "blk-11-133",
+        "id": "jc-line-8-blk-12",
         "name": "알찬소시지전",
         "type": "생산",
         "startCol": 133,
@@ -6153,7 +6154,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-11-138",
+        "id": "jc-line-8-blk-13",
         "name": "더바삭 순살 가라아게",
         "type": "생산",
         "startCol": 138,
@@ -6165,7 +6166,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-11-145",
+        "id": "jc-line-8-blk-14",
         "name": "타코야키 튀김",
         "type": "생산",
         "startCol": 145,
@@ -6177,7 +6178,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-11-150",
+        "id": "jc-line-8-blk-15",
         "name": "마일드치킨패티",
         "type": "생산",
         "startCol": 150,
@@ -6188,16 +6189,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 980,
         "endMin": 1005
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-12",
+    "id": "jc-line-9",
     "name": "제트오븐",
+    "category": "전처리",
     "totalBlocks": 30,
     "blocks": [
       {
-        "id": "blk-12-28",
+        "id": "jc-line-9-blk-0",
         "name": "찹핑양파",
         "type": "생산",
         "startCol": 28,
@@ -6209,7 +6210,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 385
       },
       {
-        "id": "blk-12-32",
+        "id": "jc-line-9-blk-1",
         "name": "스팸스틱구이",
         "type": "생산",
         "startCol": 32,
@@ -6221,7 +6222,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 410
       },
       {
-        "id": "blk-12-36",
+        "id": "jc-line-9-blk-2",
         "name": "스팸큐브",
         "type": "생산",
         "startCol": 36,
@@ -6233,7 +6234,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 430
       },
       {
-        "id": "blk-12-40",
+        "id": "jc-line-9-blk-3",
         "name": "고미트햄슬라이스",
         "type": "생산",
         "startCol": 40,
@@ -6245,7 +6246,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 445
       },
       {
-        "id": "blk-12-43",
+        "id": "jc-line-9-blk-4",
         "name": "리챔슬라이스",
         "type": "생산",
         "startCol": 43,
@@ -6257,7 +6258,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 465
       },
       {
-        "id": "blk-12-48",
+        "id": "jc-line-9-blk-5",
         "name": "목우촌소시지",
         "type": "생산",
         "startCol": 48,
@@ -6269,7 +6270,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 495
       },
       {
-        "id": "blk-12-54",
+        "id": "jc-line-9-blk-6",
         "name": "양파슬라이스구이",
         "type": "생산",
         "startCol": 54,
@@ -6281,7 +6282,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 515
       },
       {
-        "id": "blk-12-58",
+        "id": "jc-line-9-blk-7",
         "name": "파인애플 구이",
         "type": "생산",
         "startCol": 58,
@@ -6293,7 +6294,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 540
       },
       {
-        "id": "blk-12-63",
+        "id": "jc-line-9-blk-8",
         "name": "송정식 한입떡갈비",
         "type": "생산",
         "startCol": 63,
@@ -6305,7 +6306,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 565
       },
       {
-        "id": "blk-12-68",
+        "id": "jc-line-9-blk-9",
         "name": "꽈리고추",
         "type": "생산",
         "startCol": 68,
@@ -6317,7 +6318,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-12-72",
+        "id": "jc-line-9-blk-10",
         "name": "고추장불고기",
         "type": "생산",
         "startCol": 72,
@@ -6329,7 +6330,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 610
       },
       {
-        "id": "blk-12-77",
+        "id": "jc-line-9-blk-11",
         "name": "토스트소세지",
         "type": "생산",
         "startCol": 77,
@@ -6341,7 +6342,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-12-81",
+        "id": "jc-line-9-blk-12",
         "name": "숯불돼지고기",
         "type": "생산",
         "startCol": 81,
@@ -6353,7 +6354,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 670
       },
       {
-        "id": "blk-12-89",
+        "id": "jc-line-9-blk-13",
         "name": "견과류구이",
         "type": "생산",
         "startCol": 89,
@@ -6365,7 +6366,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 690
       },
       {
-        "id": "blk-12-92",
+        "id": "jc-line-9-blk-14",
         "name": "견과믹스",
         "type": "생산",
         "startCol": 92,
@@ -6377,7 +6378,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-12-112",
+        "id": "jc-line-9-blk-15",
         "name": "찹핑양파",
         "type": "생산",
         "startCol": 112,
@@ -6389,7 +6390,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-12-116",
+        "id": "jc-line-9-blk-16",
         "name": "스팸스틱구이",
         "type": "생산",
         "startCol": 116,
@@ -6401,7 +6402,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 830
       },
       {
-        "id": "blk-12-120",
+        "id": "jc-line-9-blk-17",
         "name": "스팸큐브",
         "type": "생산",
         "startCol": 120,
@@ -6413,7 +6414,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 850
       },
       {
-        "id": "blk-12-124",
+        "id": "jc-line-9-blk-18",
         "name": "고미트햄슬라이스",
         "type": "생산",
         "startCol": 124,
@@ -6425,7 +6426,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-12-127",
+        "id": "jc-line-9-blk-19",
         "name": "리챔슬라이스",
         "type": "생산",
         "startCol": 127,
@@ -6437,7 +6438,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 885
       },
       {
-        "id": "blk-12-132",
+        "id": "jc-line-9-blk-20",
         "name": "목우촌소시지",
         "type": "생산",
         "startCol": 132,
@@ -6449,7 +6450,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 915
       },
       {
-        "id": "blk-12-138",
+        "id": "jc-line-9-blk-21",
         "name": "양파슬라이스구이",
         "type": "생산",
         "startCol": 138,
@@ -6461,7 +6462,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 935
       },
       {
-        "id": "blk-12-142",
+        "id": "jc-line-9-blk-22",
         "name": "파인애플 구이",
         "type": "생산",
         "startCol": 142,
@@ -6473,7 +6474,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 960
       },
       {
-        "id": "blk-12-147",
+        "id": "jc-line-9-blk-23",
         "name": "송정식 한입떡갈비",
         "type": "생산",
         "startCol": 147,
@@ -6485,7 +6486,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-12-152",
+        "id": "jc-line-9-blk-24",
         "name": "꽈리고추",
         "type": "생산",
         "startCol": 152,
@@ -6497,7 +6498,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1005
       },
       {
-        "id": "blk-12-156",
+        "id": "jc-line-9-blk-25",
         "name": "고추장불고기",
         "type": "생산",
         "startCol": 156,
@@ -6509,7 +6510,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1030
       },
       {
-        "id": "blk-12-161",
+        "id": "jc-line-9-blk-26",
         "name": "토스트소세지",
         "type": "생산",
         "startCol": 161,
@@ -6521,7 +6522,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1050
       },
       {
-        "id": "blk-12-165",
+        "id": "jc-line-9-blk-27",
         "name": "숯불돼지고기",
         "type": "생산",
         "startCol": 165,
@@ -6533,7 +6534,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1090
       },
       {
-        "id": "blk-12-173",
+        "id": "jc-line-9-blk-28",
         "name": "견과류구이",
         "type": "생산",
         "startCol": 173,
@@ -6545,7 +6546,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1110
       },
       {
-        "id": "blk-12-176",
+        "id": "jc-line-9-blk-29",
         "name": "견과믹스",
         "type": "생산",
         "startCol": 176,
@@ -6556,16 +6557,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1110,
         "endMin": 1125
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-13",
+    "id": "jc-line-10",
     "name": "콤비오븐",
+    "category": "전처리",
     "totalBlocks": 28,
     "blocks": [
       {
-        "id": "blk-13-28",
+        "id": "jc-line-10-blk-0",
         "name": "남도식떡갈비",
         "type": "생산",
         "startCol": 28,
@@ -6577,7 +6578,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 390
       },
       {
-        "id": "blk-13-33",
+        "id": "jc-line-10-blk-1",
         "name": "스크램블에그",
         "type": "생산",
         "startCol": 33,
@@ -6589,7 +6590,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 420
       },
       {
-        "id": "blk-13-39",
+        "id": "jc-line-10-blk-2",
         "name": "GS리얼포크패티",
         "type": "생산",
         "startCol": 39,
@@ -6601,7 +6602,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 450
       },
       {
-        "id": "blk-13-45",
+        "id": "jc-line-10-blk-3",
         "name": "전지베이컨",
         "type": "생산",
         "startCol": 45,
@@ -6613,7 +6614,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 475
       },
       {
-        "id": "blk-13-51",
+        "id": "jc-line-10-blk-4",
         "name": "미니너비아니",
         "type": "생산",
         "startCol": 51,
@@ -6625,7 +6626,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-13-56",
+        "id": "jc-line-10-blk-5",
         "name": "함박스테이크105",
         "type": "생산",
         "startCol": 56,
@@ -6637,7 +6638,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-13-61",
+        "id": "jc-line-10-blk-6",
         "name": "GS혜자너비아니",
         "type": "생산",
         "startCol": 61,
@@ -6649,7 +6650,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-13-66",
+        "id": "jc-line-10-blk-7",
         "name": "조각닭갈비구이",
         "type": "생산",
         "startCol": 66,
@@ -6661,7 +6662,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 580
       },
       {
-        "id": "blk-13-71",
+        "id": "jc-line-10-blk-8",
         "name": "흑당갈비야채구이",
         "type": "생산",
         "startCol": 71,
@@ -6673,7 +6674,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 605
       },
       {
-        "id": "blk-13-76",
+        "id": "jc-line-10-blk-9",
         "name": "GS25한서방떡갈비",
         "type": "생산",
         "startCol": 76,
@@ -6685,7 +6686,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-13-81",
+        "id": "jc-line-10-blk-10",
         "name": "함박스테이크 80",
         "type": "생산",
         "startCol": 81,
@@ -6697,7 +6698,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-13-86",
+        "id": "jc-line-10-blk-11",
         "name": "큐브찹스테이크",
         "type": "생산",
         "startCol": 86,
@@ -6709,7 +6710,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 680
       },
       {
-        "id": "blk-13-91",
+        "id": "jc-line-10-blk-12",
         "name": "간장바싹불고기",
         "type": "생산",
         "startCol": 91,
@@ -6721,7 +6722,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-13-96",
+        "id": "jc-line-10-blk-13",
         "name": "데리야끼치킨구이",
         "type": "생산",
         "startCol": 96,
@@ -6733,7 +6734,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-13-112",
+        "id": "jc-line-10-blk-14",
         "name": "남도식떡갈비",
         "type": "생산",
         "startCol": 112,
@@ -6745,7 +6746,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 810
       },
       {
-        "id": "blk-13-117",
+        "id": "jc-line-10-blk-15",
         "name": "스크램블에그",
         "type": "생산",
         "startCol": 117,
@@ -6757,7 +6758,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 840
       },
       {
-        "id": "blk-13-123",
+        "id": "jc-line-10-blk-16",
         "name": "GS리얼포크패티",
         "type": "생산",
         "startCol": 123,
@@ -6769,7 +6770,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 870
       },
       {
-        "id": "blk-13-129",
+        "id": "jc-line-10-blk-17",
         "name": "전지베이컨",
         "type": "생산",
         "startCol": 129,
@@ -6781,7 +6782,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 895
       },
       {
-        "id": "blk-13-135",
+        "id": "jc-line-10-blk-18",
         "name": "미니너비아니",
         "type": "생산",
         "startCol": 135,
@@ -6793,7 +6794,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 925
       },
       {
-        "id": "blk-13-140",
+        "id": "jc-line-10-blk-19",
         "name": "함박스테이크105",
         "type": "생산",
         "startCol": 140,
@@ -6805,7 +6806,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 950
       },
       {
-        "id": "blk-13-145",
+        "id": "jc-line-10-blk-20",
         "name": "GS혜자너비아니",
         "type": "생산",
         "startCol": 145,
@@ -6817,7 +6818,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 975
       },
       {
-        "id": "blk-13-150",
+        "id": "jc-line-10-blk-21",
         "name": "조각닭갈비구이",
         "type": "생산",
         "startCol": 150,
@@ -6829,7 +6830,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1000
       },
       {
-        "id": "blk-13-155",
+        "id": "jc-line-10-blk-22",
         "name": "흑당갈비야채구이",
         "type": "생산",
         "startCol": 155,
@@ -6841,7 +6842,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1025
       },
       {
-        "id": "blk-13-160",
+        "id": "jc-line-10-blk-23",
         "name": "GS25한서방떡갈비",
         "type": "생산",
         "startCol": 160,
@@ -6853,7 +6854,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1050
       },
       {
-        "id": "blk-13-165",
+        "id": "jc-line-10-blk-24",
         "name": "함박스테이크 80",
         "type": "생산",
         "startCol": 165,
@@ -6865,7 +6866,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-13-170",
+        "id": "jc-line-10-blk-25",
         "name": "큐브찹스테이크",
         "type": "생산",
         "startCol": 170,
@@ -6877,7 +6878,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1100
       },
       {
-        "id": "blk-13-175",
+        "id": "jc-line-10-blk-26",
         "name": "간장바싹불고기",
         "type": "생산",
         "startCol": 175,
@@ -6889,7 +6890,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1125
       },
       {
-        "id": "blk-13-180",
+        "id": "jc-line-10-blk-27",
         "name": "데리야끼치킨구이",
         "type": "생산",
         "startCol": 180,
@@ -6900,16 +6901,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1130,
         "endMin": 1150
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-14",
+    "id": "jc-line-11",
     "name": "샐러드실(믹서1)",
+    "category": "전처리",
     "totalBlocks": 32,
     "blocks": [
       {
-        "id": "blk-14-28",
+        "id": "jc-line-11-blk-0",
         "name": "포테이토샐러드A",
         "type": "생산",
         "startCol": 28,
@@ -6921,7 +6922,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 385
       },
       {
-        "id": "blk-14-32",
+        "id": "jc-line-11-blk-1",
         "name": "콘버터샐러드",
         "type": "생산",
         "startCol": 32,
@@ -6933,7 +6934,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 405
       },
       {
-        "id": "blk-14-36",
+        "id": "jc-line-11-blk-2",
         "name": "청양참치마요샐러드",
         "type": "생산",
         "startCol": 36,
@@ -6945,7 +6946,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 425
       },
       {
-        "id": "blk-14-40",
+        "id": "jc-line-11-blk-3",
         "name": "비빔참치샐러드(로터리)",
         "type": "생산",
         "startCol": 40,
@@ -6957,7 +6958,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 450
       },
       {
-        "id": "blk-14-45",
+        "id": "jc-line-11-blk-4",
         "name": "비빔참치샐러드(토핑)",
         "type": "생산",
         "startCol": 45,
@@ -6969,7 +6970,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 480
       },
       {
-        "id": "blk-14-51",
+        "id": "jc-line-11-blk-5",
         "name": "스팸마요샐러드",
         "type": "생산",
         "startCol": 51,
@@ -6981,7 +6982,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 515
       },
       {
-        "id": "blk-14-58",
+        "id": "jc-line-11-blk-6",
         "name": "햄참치샐러드",
         "type": "생산",
         "startCol": 58,
@@ -6993,7 +6994,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 535
       },
       {
-        "id": "blk-14-62",
+        "id": "jc-line-11-blk-7",
         "name": "참치햄샐러드",
         "type": "생산",
         "startCol": 62,
@@ -7005,7 +7006,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-14-67",
+        "id": "jc-line-11-blk-8",
         "name": "크랜베리치킨샐러드",
         "type": "생산",
         "startCol": 67,
@@ -7017,7 +7018,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-14-72",
+        "id": "jc-line-11-blk-9",
         "name": "케이준치킨샐러드",
         "type": "생산",
         "startCol": 72,
@@ -7029,7 +7030,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 610
       },
       {
-        "id": "blk-14-77",
+        "id": "jc-line-11-blk-10",
         "name": "볶음우동면",
         "type": "생산",
         "startCol": 77,
@@ -7041,7 +7042,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 630
       },
       {
-        "id": "blk-14-81",
+        "id": "jc-line-11-blk-11",
         "name": "참깨돈까스양배추샐러드",
         "type": "생산",
         "startCol": 81,
@@ -7053,7 +7054,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 655
       },
       {
-        "id": "blk-14-86",
+        "id": "jc-line-11-blk-12",
         "name": "오이양파절임무침",
         "type": "생산",
         "startCol": 86,
@@ -7065,7 +7066,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 680
       },
       {
-        "id": "blk-14-91",
+        "id": "jc-line-11-blk-13",
         "name": "양배추샐러드",
         "type": "생산",
         "startCol": 91,
@@ -7077,7 +7078,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-14-96",
+        "id": "jc-line-11-blk-14",
         "name": "데리야끼치킨구이믹싱",
         "type": "생산",
         "startCol": 96,
@@ -7089,7 +7090,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-14-100",
+        "id": "jc-line-11-blk-15",
         "name": "미라이참치샐러드",
         "type": "생산",
         "startCol": 100,
@@ -7101,7 +7102,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 745
       },
       {
-        "id": "blk-14-112",
+        "id": "jc-line-11-blk-16",
         "name": "포테이토샐러드A",
         "type": "생산",
         "startCol": 112,
@@ -7113,7 +7114,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-14-116",
+        "id": "jc-line-11-blk-17",
         "name": "콘버터샐러드",
         "type": "생산",
         "startCol": 116,
@@ -7125,7 +7126,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 825
       },
       {
-        "id": "blk-14-120",
+        "id": "jc-line-11-blk-18",
         "name": "청양참치마요샐러드",
         "type": "생산",
         "startCol": 120,
@@ -7137,7 +7138,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-14-124",
+        "id": "jc-line-11-blk-19",
         "name": "비빔참치샐러드(로터리)",
         "type": "생산",
         "startCol": 124,
@@ -7149,7 +7150,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 870
       },
       {
-        "id": "blk-14-129",
+        "id": "jc-line-11-blk-20",
         "name": "비빔참치샐러드(토핑)",
         "type": "생산",
         "startCol": 129,
@@ -7161,7 +7162,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 900
       },
       {
-        "id": "blk-14-135",
+        "id": "jc-line-11-blk-21",
         "name": "스팸마요샐러드",
         "type": "생산",
         "startCol": 135,
@@ -7173,7 +7174,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 935
       },
       {
-        "id": "blk-14-142",
+        "id": "jc-line-11-blk-22",
         "name": "햄참치샐러드",
         "type": "생산",
         "startCol": 142,
@@ -7185,7 +7186,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 955
       },
       {
-        "id": "blk-14-146",
+        "id": "jc-line-11-blk-23",
         "name": "참치햄샐러드",
         "type": "생산",
         "startCol": 146,
@@ -7197,7 +7198,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 980
       },
       {
-        "id": "blk-14-151",
+        "id": "jc-line-11-blk-24",
         "name": "크랜베리치킨샐러드",
         "type": "생산",
         "startCol": 151,
@@ -7209,7 +7210,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1005
       },
       {
-        "id": "blk-14-156",
+        "id": "jc-line-11-blk-25",
         "name": "케이준치킨샐러드",
         "type": "생산",
         "startCol": 156,
@@ -7221,7 +7222,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1030
       },
       {
-        "id": "blk-14-161",
+        "id": "jc-line-11-blk-26",
         "name": "볶음우동면",
         "type": "생산",
         "startCol": 161,
@@ -7233,7 +7234,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1050
       },
       {
-        "id": "blk-14-165",
+        "id": "jc-line-11-blk-27",
         "name": "참깨돈까스양배추샐러드",
         "type": "생산",
         "startCol": 165,
@@ -7245,7 +7246,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1075
       },
       {
-        "id": "blk-14-170",
+        "id": "jc-line-11-blk-28",
         "name": "오이양파절임무침",
         "type": "생산",
         "startCol": 170,
@@ -7257,7 +7258,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1100
       },
       {
-        "id": "blk-14-175",
+        "id": "jc-line-11-blk-29",
         "name": "양배추샐러드",
         "type": "생산",
         "startCol": 175,
@@ -7269,7 +7270,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1125
       },
       {
-        "id": "blk-14-180",
+        "id": "jc-line-11-blk-30",
         "name": "데리야끼치킨구이믹싱",
         "type": "생산",
         "startCol": 180,
@@ -7281,7 +7282,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1145
       },
       {
-        "id": "blk-14-184",
+        "id": "jc-line-11-blk-31",
         "name": "미라이참치샐러드",
         "type": "생산",
         "startCol": 184,
@@ -7292,16 +7293,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1150,
         "endMin": 1165
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-15",
+    "id": "jc-line-12",
     "name": "샐러드실(믹서2)",
+    "category": "전처리",
     "totalBlocks": 38,
     "blocks": [
       {
-        "id": "blk-15-28",
+        "id": "jc-line-12-blk-0",
         "name": "햄마카로니샐러드",
         "type": "생산",
         "startCol": 28,
@@ -7313,7 +7314,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 385
       },
       {
-        "id": "blk-15-32",
+        "id": "jc-line-12-blk-1",
         "name": "계란샐러드",
         "type": "생산",
         "startCol": 32,
@@ -7325,7 +7326,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 405
       },
       {
-        "id": "blk-15-36",
+        "id": "jc-line-12-blk-2",
         "name": "투게터참치마요샐러드",
         "type": "생산",
         "startCol": 36,
@@ -7337,7 +7338,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 425
       },
       {
-        "id": "blk-15-40",
+        "id": "jc-line-12-blk-3",
         "name": "참치마요샐러드",
         "type": "생산",
         "startCol": 40,
@@ -7349,7 +7350,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 445
       },
       {
-        "id": "blk-15-44",
+        "id": "jc-line-12-blk-4",
         "name": "고추장비프샐러드",
         "type": "생산",
         "startCol": 44,
@@ -7361,7 +7362,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 465
       },
       {
-        "id": "blk-15-48",
+        "id": "jc-line-12-blk-5",
         "name": "고추장후추샐러드",
         "type": "생산",
         "startCol": 48,
@@ -7373,7 +7374,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 485
       },
       {
-        "id": "blk-15-52",
+        "id": "jc-line-12-blk-6",
         "name": "스크램블에그믹싱",
         "type": "생산",
         "startCol": 52,
@@ -7385,7 +7386,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 505
       },
       {
-        "id": "blk-15-56",
+        "id": "jc-line-12-blk-7",
         "name": "덮밥용당면",
         "type": "생산",
         "startCol": 56,
@@ -7397,7 +7398,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 525
       },
       {
-        "id": "blk-15-60",
+        "id": "jc-line-12-blk-8",
         "name": "베이컨참치마요샐러드",
         "type": "생산",
         "startCol": 60,
@@ -7409,7 +7410,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 545
       },
       {
-        "id": "blk-15-64",
+        "id": "jc-line-12-blk-9",
         "name": "묵은지샐러드",
         "type": "생산",
         "startCol": 64,
@@ -7421,7 +7422,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 565
       },
       {
-        "id": "blk-15-68",
+        "id": "jc-line-12-blk-10",
         "name": "참치샐러드",
         "type": "생산",
         "startCol": 68,
@@ -7433,7 +7434,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 585
       },
       {
-        "id": "blk-15-72",
+        "id": "jc-line-12-blk-11",
         "name": "꼬들단무지마요네즈샐러드",
         "type": "생산",
         "startCol": 72,
@@ -7445,7 +7446,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 605
       },
       {
-        "id": "blk-15-76",
+        "id": "jc-line-12-blk-12",
         "name": "명란마요콘샐러드",
         "type": "생산",
         "startCol": 76,
@@ -7457,7 +7458,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 620
       },
       {
-        "id": "blk-15-79",
+        "id": "jc-line-12-blk-13",
         "name": "카오팟무쌉용고기",
         "type": "생산",
         "startCol": 79,
@@ -7469,7 +7470,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 645
       },
       {
-        "id": "blk-15-84",
+        "id": "jc-line-12-blk-14",
         "name": "햄야채샐러드",
         "type": "생산",
         "startCol": 84,
@@ -7481,7 +7482,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 665
       },
       {
-        "id": "blk-15-88",
+        "id": "jc-line-12-blk-15",
         "name": "명란마요샐러드",
         "type": "생산",
         "startCol": 88,
@@ -7493,7 +7494,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 680
       },
       {
-        "id": "blk-15-91",
+        "id": "jc-line-12-blk-16",
         "name": "포테이토에그샐러드",
         "type": "생산",
         "startCol": 91,
@@ -7505,7 +7506,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 700
       },
       {
-        "id": "blk-15-95",
+        "id": "jc-line-12-blk-17",
         "name": "맛살샐러드",
         "type": "생산",
         "startCol": 95,
@@ -7517,7 +7518,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-15-100",
+        "id": "jc-line-12-blk-18",
         "name": "에그마요샐러드",
         "type": "생산",
         "startCol": 100,
@@ -7529,7 +7530,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 745
       },
       {
-        "id": "blk-15-112",
+        "id": "jc-line-12-blk-19",
         "name": "햄마카로니샐러드",
         "type": "생산",
         "startCol": 112,
@@ -7541,7 +7542,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-15-116",
+        "id": "jc-line-12-blk-20",
         "name": "계란샐러드",
         "type": "생산",
         "startCol": 116,
@@ -7553,7 +7554,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 825
       },
       {
-        "id": "blk-15-120",
+        "id": "jc-line-12-blk-21",
         "name": "투게터참치마요샐러드",
         "type": "생산",
         "startCol": 120,
@@ -7565,7 +7566,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 845
       },
       {
-        "id": "blk-15-124",
+        "id": "jc-line-12-blk-22",
         "name": "참치마요샐러드",
         "type": "생산",
         "startCol": 124,
@@ -7577,7 +7578,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 865
       },
       {
-        "id": "blk-15-128",
+        "id": "jc-line-12-blk-23",
         "name": "고추장비프샐러드",
         "type": "생산",
         "startCol": 128,
@@ -7589,7 +7590,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 885
       },
       {
-        "id": "blk-15-132",
+        "id": "jc-line-12-blk-24",
         "name": "고추장후추샐러드",
         "type": "생산",
         "startCol": 132,
@@ -7601,7 +7602,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 905
       },
       {
-        "id": "blk-15-136",
+        "id": "jc-line-12-blk-25",
         "name": "스크램블에그믹싱",
         "type": "생산",
         "startCol": 136,
@@ -7613,7 +7614,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 925
       },
       {
-        "id": "blk-15-140",
+        "id": "jc-line-12-blk-26",
         "name": "덮밥용당면",
         "type": "생산",
         "startCol": 140,
@@ -7625,7 +7626,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 945
       },
       {
-        "id": "blk-15-144",
+        "id": "jc-line-12-blk-27",
         "name": "베이컨참치마요샐러드",
         "type": "생산",
         "startCol": 144,
@@ -7637,7 +7638,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 965
       },
       {
-        "id": "blk-15-148",
+        "id": "jc-line-12-blk-28",
         "name": "묵은지샐러드",
         "type": "생산",
         "startCol": 148,
@@ -7649,7 +7650,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 985
       },
       {
-        "id": "blk-15-152",
+        "id": "jc-line-12-blk-29",
         "name": "참치샐러드",
         "type": "생산",
         "startCol": 152,
@@ -7661,7 +7662,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1005
       },
       {
-        "id": "blk-15-156",
+        "id": "jc-line-12-blk-30",
         "name": "꼬들단무지마요네즈샐러드",
         "type": "생산",
         "startCol": 156,
@@ -7673,7 +7674,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1025
       },
       {
-        "id": "blk-15-160",
+        "id": "jc-line-12-blk-31",
         "name": "명란마요콘샐러드",
         "type": "생산",
         "startCol": 160,
@@ -7685,7 +7686,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1040
       },
       {
-        "id": "blk-15-163",
+        "id": "jc-line-12-blk-32",
         "name": "카오팟무쌉용고기",
         "type": "생산",
         "startCol": 163,
@@ -7697,7 +7698,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1065
       },
       {
-        "id": "blk-15-168",
+        "id": "jc-line-12-blk-33",
         "name": "햄야채샐러드",
         "type": "생산",
         "startCol": 168,
@@ -7709,7 +7710,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1085
       },
       {
-        "id": "blk-15-172",
+        "id": "jc-line-12-blk-34",
         "name": "명란마요샐러드",
         "type": "생산",
         "startCol": 172,
@@ -7721,7 +7722,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1100
       },
       {
-        "id": "blk-15-175",
+        "id": "jc-line-12-blk-35",
         "name": "포테이토에그샐러드",
         "type": "생산",
         "startCol": 175,
@@ -7733,7 +7734,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1120
       },
       {
-        "id": "blk-15-179",
+        "id": "jc-line-12-blk-36",
         "name": "맛살샐러드",
         "type": "생산",
         "startCol": 179,
@@ -7745,7 +7746,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 1145
       },
       {
-        "id": "blk-15-184",
+        "id": "jc-line-12-blk-37",
         "name": "에그마요샐러드",
         "type": "생산",
         "startCol": 184,
@@ -7756,16 +7757,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 1150,
         "endMin": 1165
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-16",
+    "id": "jc-line-13",
     "name": "커팅실(후드)",
+    "category": "전처리",
     "totalBlocks": 6,
     "blocks": [
       {
-        "id": "blk-16-42",
+        "id": "jc-line-13-blk-0",
         "name": "스크램블에그 찹핑",
         "type": "생산",
         "startCol": 42,
@@ -7777,7 +7778,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 460
       },
       {
-        "id": "blk-16-48",
+        "id": "jc-line-13-blk-1",
         "name": "케이준치킨 찹핑",
         "type": "생산",
         "startCol": 48,
@@ -7789,7 +7790,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 510
       },
       {
-        "id": "blk-16-59",
+        "id": "jc-line-13-blk-2",
         "name": "베이컨 찹핑",
         "type": "생산",
         "startCol": 59,
@@ -7801,7 +7802,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 560
       },
       {
-        "id": "blk-16-126",
+        "id": "jc-line-13-blk-3",
         "name": "스크램블에그 찹핑",
         "type": "생산",
         "startCol": 126,
@@ -7813,7 +7814,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 880
       },
       {
-        "id": "blk-16-132",
+        "id": "jc-line-13-blk-4",
         "name": "케이준치킨 찹핑",
         "type": "생산",
         "startCol": 132,
@@ -7825,7 +7826,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 930
       },
       {
-        "id": "blk-16-143",
+        "id": "jc-line-13-blk-5",
         "name": "베이컨 찹핑",
         "type": "생산",
         "startCol": 143,
@@ -7836,16 +7837,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 945,
         "endMin": 980
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-17",
+    "id": "jc-line-14",
     "name": "커팅실(푸드커터)",
+    "category": "전처리",
     "totalBlocks": 2,
     "blocks": [
       {
-        "id": "blk-17-42",
+        "id": "jc-line-14-blk-0",
         "name": "잼잼이 햄 커팅",
         "type": "생산",
         "startCol": 42,
@@ -7857,7 +7858,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 530
       },
       {
-        "id": "blk-17-126",
+        "id": "jc-line-14-blk-1",
         "name": "잼잼이 햄 커팅",
         "type": "생산",
         "startCol": 126,
@@ -7868,16 +7869,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 860,
         "endMin": 950
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-18",
+    "id": "jc-line-15",
     "name": "채소작업실(슬라이스)",
+    "category": "전처리",
     "totalBlocks": 8,
     "blocks": [
       {
-        "id": "blk-18-35",
+        "id": "jc-line-15-blk-0",
         "name": "양파슬라이스(5mm)",
         "type": "생산",
         "startCol": 35,
@@ -7889,7 +7890,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 435
       },
       {
-        "id": "blk-18-42",
+        "id": "jc-line-15-blk-1",
         "name": "양파슬라이스(3mm)",
         "type": "생산",
         "startCol": 42,
@@ -7901,7 +7902,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 465
       },
       {
-        "id": "blk-18-48",
+        "id": "jc-line-15-blk-2",
         "name": "양배추 슬라이스(3mm)",
         "type": "생산",
         "startCol": 48,
@@ -7913,7 +7914,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 510
       },
       {
-        "id": "blk-18-57",
+        "id": "jc-line-15-blk-3",
         "name": "오이채(2.5mm)",
         "type": "생산",
         "startCol": 57,
@@ -7925,7 +7926,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 550
       },
       {
-        "id": "blk-18-89",
+        "id": "jc-line-15-blk-4",
         "name": "양파슬라이스(5mm)",
         "type": "생산",
         "startCol": 89,
@@ -7937,7 +7938,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 705
       },
       {
-        "id": "blk-18-96",
+        "id": "jc-line-15-blk-5",
         "name": "양파슬라이스(3mm)",
         "type": "생산",
         "startCol": 96,
@@ -7949,7 +7950,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 735
       },
       {
-        "id": "blk-18-102",
+        "id": "jc-line-15-blk-6",
         "name": "양배추 슬라이스(3mm)",
         "type": "생산",
         "startCol": 102,
@@ -7961,7 +7962,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 780
       },
       {
-        "id": "blk-18-111",
+        "id": "jc-line-15-blk-7",
         "name": "오이채(2.5mm)",
         "type": "생산",
         "startCol": 111,
@@ -7972,16 +7973,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 785,
         "endMin": 820
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-19",
+    "id": "jc-line-16",
     "name": "채소작업실(후드)",
+    "category": "전처리",
     "totalBlocks": 14,
     "blocks": [
       {
-        "id": "blk-19-42",
+        "id": "jc-line-16-blk-0",
         "name": "양파찹핑",
         "type": "생산",
         "startCol": 42,
@@ -7993,7 +7994,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 455
       },
       {
-        "id": "blk-19-46",
+        "id": "jc-line-16-blk-1",
         "name": "깻잎찹핑",
         "type": "생산",
         "startCol": 46,
@@ -8005,7 +8006,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 475
       },
       {
-        "id": "blk-19-50",
+        "id": "jc-line-16-blk-2",
         "name": "콩나물찹핑",
         "type": "생산",
         "startCol": 50,
@@ -8017,7 +8018,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 495
       },
       {
-        "id": "blk-19-54",
+        "id": "jc-line-16-blk-3",
         "name": "깍두기찹핑",
         "type": "생산",
         "startCol": 54,
@@ -8029,7 +8030,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 515
       },
       {
-        "id": "blk-19-58",
+        "id": "jc-line-16-blk-4",
         "name": "도라지찹핑",
         "type": "생산",
         "startCol": 58,
@@ -8041,7 +8042,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 535
       },
       {
-        "id": "blk-19-62",
+        "id": "jc-line-16-blk-5",
         "name": "시금치찹핑",
         "type": "생산",
         "startCol": 62,
@@ -8053,7 +8054,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 555
       },
       {
-        "id": "blk-19-66",
+        "id": "jc-line-16-blk-6",
         "name": "당근찹핑",
         "type": "생산",
         "startCol": 66,
@@ -8065,7 +8066,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 575
       },
       {
-        "id": "blk-19-96",
+        "id": "jc-line-16-blk-7",
         "name": "양파찹핑",
         "type": "생산",
         "startCol": 96,
@@ -8077,7 +8078,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 725
       },
       {
-        "id": "blk-19-100",
+        "id": "jc-line-16-blk-8",
         "name": "깻잎찹핑",
         "type": "생산",
         "startCol": 100,
@@ -8089,7 +8090,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 745
       },
       {
-        "id": "blk-19-104",
+        "id": "jc-line-16-blk-9",
         "name": "콩나물찹핑",
         "type": "생산",
         "startCol": 104,
@@ -8101,7 +8102,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 765
       },
       {
-        "id": "blk-19-108",
+        "id": "jc-line-16-blk-10",
         "name": "깍두기찹핑",
         "type": "생산",
         "startCol": 108,
@@ -8113,7 +8114,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 785
       },
       {
-        "id": "blk-19-112",
+        "id": "jc-line-16-blk-11",
         "name": "도라지찹핑",
         "type": "생산",
         "startCol": 112,
@@ -8125,7 +8126,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 805
       },
       {
-        "id": "blk-19-116",
+        "id": "jc-line-16-blk-12",
         "name": "시금치찹핑",
         "type": "생산",
         "startCol": 116,
@@ -8137,7 +8138,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 825
       },
       {
-        "id": "blk-19-120",
+        "id": "jc-line-16-blk-13",
         "name": "당근찹핑",
         "type": "생산",
         "startCol": 120,
@@ -8148,16 +8149,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 830,
         "endMin": 845
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-20",
+    "id": "jc-line-17",
     "name": "계량실(계량)",
+    "category": "전처리",
     "totalBlocks": 2,
     "blocks": [
       {
-        "id": "blk-20-40",
+        "id": "jc-line-17-blk-0",
         "name": "2편 식재 계량",
         "type": "생산",
         "startCol": 40,
@@ -8169,7 +8170,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-20-112",
+        "id": "jc-line-17-blk-1",
         "name": "1편 식재 계량",
         "type": "생산",
         "startCol": 112,
@@ -8180,16 +8181,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 790,
         "endMin": 1090
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-21",
+    "id": "jc-line-18",
     "name": "계량실(냉동)",
+    "category": "전처리",
     "totalBlocks": 2,
     "blocks": [
       {
-        "id": "blk-21-40",
+        "id": "jc-line-18-blk-0",
         "name": "해동작업",
         "type": "생산",
         "startCol": 40,
@@ -8201,7 +8202,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 730
       },
       {
-        "id": "blk-21-112",
+        "id": "jc-line-18-blk-1",
         "name": "해동작업",
         "type": "생산",
         "startCol": 112,
@@ -8212,16 +8213,16 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 790,
         "endMin": 1090
       }
-    ],
-    "category": "전처리"
+    ]
   },
   {
-    "id": "line-22",
+    "id": "jc-line-19",
     "name": "빵슬라이스실(슬라이서)",
+    "category": "전처리",
     "totalBlocks": 4,
     "blocks": [
       {
-        "id": "blk-22-40",
+        "id": "jc-line-19-blk-0",
         "name": "소프트식빵 13mm 커팅",
         "type": "생산",
         "startCol": 40,
@@ -8233,7 +8234,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 495
       },
       {
-        "id": "blk-22-54",
+        "id": "jc-line-19-blk-1",
         "name": "소프트식빵 11mm 커팅",
         "type": "생산",
         "startCol": 54,
@@ -8245,7 +8246,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 565
       },
       {
-        "id": "blk-22-112",
+        "id": "jc-line-19-blk-2",
         "name": "소프트식빵 13mm 커팅",
         "type": "생산",
         "startCol": 112,
@@ -8257,7 +8258,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "endMin": 855
       },
       {
-        "id": "blk-22-126",
+        "id": "jc-line-19-blk-3",
         "name": "소프트식빵 11mm 커팅",
         "type": "생산",
         "startCol": 126,
@@ -8268,15 +8269,7 @@ export const GANTT_JEONCHEORI_LINES: GanttLine[] = [
         "startMin": 860,
         "endMin": 925
       }
-    ],
-    "category": "전처리"
-  },
-  {
-    "id": "line-23",
-    "name": "빵슬라이스실",
-    "totalBlocks": 0,
-    "blocks": [],
-    "category": "전처리"
+    ]
   }
 ];
 
