@@ -59,6 +59,8 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
   const mats: BomMaterial[] = [];
   let cur: BomMaterial | null = null;
+  let currentSupplier = '';
+
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
     if (!r) continue;
@@ -70,54 +72,49 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
     const isSupplierHeader =
       aStr.length > 1 && (typeof b === 'string' || b == null) && (c == null || cStr === '' || cStr === 'null');
     if (isSupplierHeader) {
+      currentSupplier = aStr;
       cur = null;
       continue;
     }
-    if (cStr !== '' && cStr !== 'null' && (a == null || aStr === '')) {
-      cur = {
-        name: cStr,
-        norm: normName(cStr),
-        supplierHeader: '',
-        packUnit: num(r[4]),
-        bagPrice: num(r[16]),
-        days: num(r[6]),
-        dailyUsage: num(r[7]),
-        menus: [],
-      };
-      // 직전 공급사 헤더는 별도 추적 없이 supplierHeader 비움 (import에서 정본 vendor 사용)
-      mats.push(cur);
-      continue;
+
+    const packUnit = num(r[4]);
+    const days = num(r[6]);
+    const dailyUsage = num(r[7]);
+    const boxes = r[3];
+    const hasBoxNum = typeof boxes === 'number' && !isNaN(boxes);
+
+    // 자재행 여부 판단:
+    // C열이 비어있지 않고, 숫자가 아니어야 함 (C열이 숫자인 경우는 하위 메뉴행의 개당 소요량)
+    if (cStr !== '' && cStr !== 'null' && isNaN(Number(cStr))) {
+      // 비자재 메모/안내 행 필터링
+      if (packUnit === 0 && days === 0 && dailyUsage === 0 && !hasBoxNum) {
+        continue;
+      }
+      // A열이 비어있거나, A열에 비고 메모가 적혀있어도 자재 속성(packUnit, days, dailyUsage, boxes)을 가진 경우 유효 자재행으로 수용
+      const isMaterial = aStr === '' || packUnit > 0 || days > 0 || dailyUsage > 0 || hasBoxNum;
+      if (isMaterial) {
+        cur = {
+          name: cStr,
+          norm: normName(cStr),
+          supplierHeader: currentSupplier,
+          packUnit,
+          bagPrice: num(r[16]),
+          days,
+          dailyUsage,
+          menus: [],
+        };
+        mats.push(cur);
+        continue;
+      }
     }
-    if (cur && num(r[4]) === 0 && aStr !== '') {
+
+    // 하위 메뉴행 (packUnit이 0이고 A열에 완제품 메뉴명이 있는 경우)
+    if (cur && packUnit === 0 && aStr !== '') {
       cur.menus.push({ menu: aStr, normMenu: normName(aStr), qty: num(b), perUnit: num(c) });
     }
   }
-  // supplierHeader 복원: 위에서 아래로 전파
-  let lastSupplier = '';
-  const withSupplier: BomMaterial[] = [];
-  let mi = 0;
-  for (let i = 2; i < rows.length; i++) {
-    const r = rows[i];
-    if (!r) continue;
-    const a = r[0];
-    const b = r[1];
-    const c = r[2];
-    const aStr = a != null ? String(a).trim() : '';
-    const cStr = c != null ? String(c).trim() : '';
-    const isSupplierHeader =
-      aStr.length > 1 && (typeof b === 'string' || b == null) && (c == null || cStr === '' || cStr === 'null');
-    if (isSupplierHeader) {
-      lastSupplier = aStr;
-      continue;
-    }
-    if (cStr !== '' && cStr !== 'null' && (a == null || aStr === '')) {
-      if (mi < mats.length) {
-        withSupplier.push({ ...mats[mi], supplierHeader: lastSupplier });
-        mi += 1;
-      }
-    }
-  }
-  return withSupplier.length === mats.length ? withSupplier : mats;
+
+  return mats;
 }
 
 /** GFS식 개수품목 판별 (app.js isPieceOrCountItem 미러) */
@@ -264,27 +261,43 @@ export function parseOrderSheet(wb: XLSX.WorkBook): { items: OrderSheetItem[]; s
       suppliers.add(header);
       continue;
     }
-    // 자재행: C 품명 있음 + A 비어있음 (메뉴행 제외)
-    if (cStr === '' || cStr === 'null' || aStr !== '') continue;
-    const name = cStr;
+
+    // 자재행 판단 조건:
+    // 1. C가 비어있지 않음
+    // 2. C가 숫자가 아님 (하위 메뉴행의 C는 개당소요량 숫자임)
+    if (cStr === '' || cStr === 'null' || !isNaN(Number(cStr))) continue;
+
+    const packUnit = Number(r[4]) || 0;
+    const days = Number(r[6]) || 0;
+    const dailyUsage = Number(r[7]) || 0;
     const boxes = r[3];
-    {
-      const nRaw = r[13];
-      const nVal = nRaw == null || (typeof nRaw === 'string' && nRaw.trim() === '') ? NaN : Number(nRaw);
-      items.push({
-        name: String(name).trim(),
-        norm: normName(name),
-        supplierHeader: header,
-        boxes: typeof boxes === 'number' ? boxes : 0,
-        packUnit: Number(r[4]) || 0,
-        days: Number(r[6]) || 0,
-        dailyUsage: Number(r[7]) || 0,
-        incoming: Number(r[8]) || 0,
-        currentStock: Number(r[9]) || 0,
-        bagPrice: Number(r[16]) || 0,
-        stockDays: isNaN(nVal) ? null : nVal,
-      });
+    const hasBoxNum = typeof boxes === 'number' && !isNaN(boxes);
+
+    // 단순 메모/연락처 행 필터링 (입수, 일수, 사용량, 발주수량 모두 없는 비자재 행)
+    if (packUnit === 0 && days === 0 && dailyUsage === 0 && !hasBoxNum) {
+      continue;
     }
+
+    // A열이 비어있거나, A열에 비고 메모가 적혀있어도 자재 속성(packUnit/days/dailyUsage/boxes)을 가진 유효 자재행 수용
+    const isMaterial = aStr === '' || packUnit > 0 || days > 0 || dailyUsage > 0 || hasBoxNum;
+    if (!isMaterial) continue;
+
+    const name = cStr;
+    const nRaw = r[13];
+    const nVal = nRaw == null || (typeof nRaw === 'string' && nRaw.trim() === '') ? NaN : Number(nRaw);
+    items.push({
+      name: String(name).trim(),
+      norm: normName(name),
+      supplierHeader: header,
+      boxes: typeof boxes === 'number' ? boxes : 0,
+      packUnit,
+      days,
+      dailyUsage,
+      incoming: Number(r[8]) || 0,
+      currentStock: Number(r[9]) || 0,
+      bagPrice: Number(r[16]) || 0,
+      stockDays: isNaN(nVal) ? null : nVal,
+    });
   }
   return { items, suppliers: [...suppliers] };
 }
