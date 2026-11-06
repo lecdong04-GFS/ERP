@@ -32,14 +32,15 @@ function parseNumber(val: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-/** 엑셀 시리얼(46297) 또는 문자열 → YYYY-MM-DD */
+/** 엑셀 시리얼(46297) 또는 문자열 → YYYY-MM-DD (KST +9시간 보정) */
 export function excelDateToISO(val: unknown): string | null {
   if (typeof val === 'number' && val > 20000 && val < 80000) {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+    const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 9 * 3600 * 1000);
     return d.toISOString().slice(0, 10);
   }
   if (val instanceof Date && !isNaN(val.getTime())) {
-    return val.toISOString().slice(0, 10);
+    const kst = new Date(val.getTime() + 9 * 3600 * 1000);
+    return kst.toISOString().slice(0, 10);
   }
   const s = String(val ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
@@ -48,8 +49,36 @@ export function excelDateToISO(val: unknown): string | null {
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   const n = parseNumber(s);
   if (n > 20000 && n < 80000) {
-    const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+    const d = new Date(Math.round((n - 25569) * 86400 * 1000) + 9 * 3600 * 1000);
     return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+/** 파일명에서 날짜 추출 (예: '11월4일 본발주.xlsx' -> 2026-11-04, '1027.xlsx' -> 2026-10-27) */
+export function extractDateFromFilename(filename?: string): string | null {
+  if (!filename) return null;
+  const s = filename.normalize('NFC').trim();
+  // 1. 2026-11-04, 20261104
+  const mFull = s.match(/(20\d{2})[-_.]?(\d{1,2})[-_.]?(\d{1,2})/);
+  if (mFull) {
+    return `${mFull[1]}-${mFull[2].padStart(2, '0')}-${mFull[3].padStart(2, '0')}`;
+  }
+  // 2. 11월4일, 11월 4일
+  const mKo = s.match(/(\d{1,2})월\s*(\d{1,2})일?/);
+  if (mKo) {
+    const year = 2026;
+    return `${year}-${mKo[1].padStart(2, '0')}-${mKo[2].padStart(2, '0')}`;
+  }
+  // 3. 1027, 1030 (4자리 월일)
+  const mShort = s.match(/(?:슈퍼|주문|본발주|미출)?(\d{2})(\d{2})/);
+  if (mShort) {
+    const mm = parseInt(mShort[1], 10);
+    const dd = parseInt(mShort[2], 10);
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const year = 2026;
+      return `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    }
   }
   return null;
 }
@@ -61,7 +90,7 @@ export function isBonbaljuHeaderRow(row: any[]): boolean {
 }
 
 /** 단일 시트 rows(header:1) 파싱 → null이면 본발주 아님 */
-export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
+export function parseBonbaljuRows(rows: any[][], filename?: string): BonbaljuParseResult | null {
   let headerIdx = -1;
   for (let r = 0; r < Math.min(8, rows.length); r++) {
     if (isBonbaljuHeaderRow(rows[r] || [])) {
@@ -87,8 +116,9 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
   const iPrice = col(['발주단가']);
   const iAmt = col(['발주금액']);
   const iSup = col(['공급자']);
-  // 수주일자 = 발주일자(수주받은 날짜). 납품일자 아님에 유의
-  const iOrdDt = col(['발주일자']);
+  // 공장 실무 기준: 파일명 -> 납품일자/입고일/배달일시 -> 발주일자 순으로 기준일자 탐색
+  const iDelDt = col(['납품일자', '입고일', '배달일시']);
+  const iOrdDt = col(['발주일자', '발주일']);
   const iType = col(['발주타입']);
   const iDelTo = col(['납품처']);
   const iOrderer = col(['주문자']);
@@ -100,10 +130,11 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
   const byCode = new Map<string, BonbaljuItem>();
   const centers = new Set<string>();
   const docs = new Set<string>();
-  let orderDate: string | null = null;
+  const fileDate = extractDateFromFilename(filename);
+  let orderDate: string | null = fileDate;
   let rowCount = 0;
-  let hasSuper = false;
-  let hasAdd = false;
+  let hasSuper = filename ? filename.includes('슈퍼') : false;
+  let hasAdd = filename ? (filename.includes('추가') || filename.includes('주문') || filename.includes('1편')) : false;
 
   for (let r = headerIdx + 1; r < rows.length; r++) {
     const row = rows[r];
@@ -133,8 +164,12 @@ export function parseBonbaljuRows(rows: any[][]): BonbaljuParseResult | null {
     const isShift2 = sup.includes('2편');
     const category = sup ? sup.replace(/\s+/g, ' ').trim().slice(0, 40) : '본발주';
 
-    if (!orderDate && iOrdDt !== -1) {
-      orderDate = excelDateToISO(row[iOrdDt]);
+    if (!orderDate) {
+      if (iDelDt !== -1 && row[iDelDt] != null) {
+        orderDate = excelDateToISO(row[iDelDt]);
+      } else if (iOrdDt !== -1 && row[iOrdDt] != null) {
+        orderDate = excelDateToISO(row[iOrdDt]);
+      }
     }
     if (iDelTo !== -1 && row[iDelTo]) centers.add(String(row[iDelTo]).trim());
 

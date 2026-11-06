@@ -16,6 +16,10 @@ function kstDaysAgo(n: number): string {
   return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
+function kstDaysLater(n: number): string {
+  return new Date(Date.now() + 9 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
+}
+
 interface OrderHeaderRow {
   id: number;
   checked: boolean;
@@ -57,7 +61,7 @@ const STATUS_META: Record<string, string> = {
 
 export const OrderStatusCancelView: React.FC = () => {
   const [startDate, setStartDate] = useState(() => kstDaysAgo(29));
-  const [endDate, setEndDate] = useState(() => kstToday());
+  const [endDate, setEndDate] = useState(() => kstDaysLater(7));
   const [includeCanceled, setIncludeCanceled] = useState(false);
   const [headers, setHeaders] = useState<OrderHeaderRow[]>([]);
   const [selectedHeaderId, setSelectedHeaderId] = useState<number | null>(null);
@@ -121,6 +125,9 @@ export const OrderStatusCancelView: React.FC = () => {
             remark: it.remark || '',
           };
         });
+        const clientLabel = so.remark?.startsWith('DOC:')
+          ? (so.orderType === '슈퍼' ? 'GS슈퍼' : 'GS25 편의점')
+          : (so.centerCode ? (so.remark ? `${so.centerCode} (${so.remark})` : so.centerCode) : (so.remark || 'GS25'));
         newHeaders.push({
           id: hId,
           checked: false,
@@ -128,7 +135,7 @@ export const OrderStatusCancelView: React.FC = () => {
           orderId: so.orderNo,
           regType: so.uploadMethod || '-',
           orderKind: so.orderType || '정규',
-          clientName: so.centerCode ? (so.remark ? `${so.centerCode} (${so.remark})` : so.centerCode) : (so.remark || '-'),
+          clientName: clientLabel,
           shift: so.shift || '-',
           status: so.status || '접수',
           orderQty: Number(so.totalQty) || 0,
@@ -304,7 +311,7 @@ export const OrderStatusCancelView: React.FC = () => {
 
   const handleReset = () => {
     const s = kstDaysAgo(29);
-    const t = kstToday();
+    const t = kstDaysLater(7);
     setStartDate(s);
     setEndDate(t);
     setIncludeCanceled(false);

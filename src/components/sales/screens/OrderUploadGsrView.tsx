@@ -251,7 +251,7 @@ export const OrderUploadGsrView: React.FC = () => {
       if (!ws) continue;
       const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
       // 1) 본발주(B2B EDI) 우선 — 종류 자동판별 (정규/추가/슈퍼)
-      const bon: BonbaljuParseResult | null = parseBonbaljuRows(rows);
+      const bon: BonbaljuParseResult | null = parseBonbaljuRows(rows, file.name);
       if (bon && bon.items.length > 0) {
         return {
           source: '본발주',
@@ -381,7 +381,7 @@ export const OrderUploadGsrView: React.FC = () => {
               const ws = wb.Sheets[n];
               if (!ws) continue;
               const rws: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-              const bon = parseBonbaljuRows(rws);
+              const bon = parseBonbaljuRows(rws, file.name);
               if (bon) return bon.orderDate;
             }
           } catch { /* ignore */ }

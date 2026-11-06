@@ -21,7 +21,7 @@ import {
   parseGsRetailText,
   ParsedExcelResult,
 } from '@/services/excel/gsRetailExcelService';
-import { parseBonbaljuRows } from '@/lib/gfs/bonbaljuIntake';
+import { parseBonbaljuRows, extractDateFromFilename } from '@/lib/gfs/bonbaljuIntake';
 import { parseMichulRows, MichulParseResult } from '@/lib/gfs/michulIntake';
 import * as XLSX from 'xlsx';
 import { usePipeline } from '@/context/PipelineContext';
@@ -73,7 +73,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
         }
 
         // (2) 본발주(B2B EDI ordview) 감지: 정규, 추가(1편), 슈퍼
-        const bon = parseBonbaljuRows(rows);
+        const bon = parseBonbaljuRows(rows, file.name);
         if (bon && bon.items.length > 0) {
           setParsedSource('본발주');
           setParsedOrderDate(bon.orderDate);
@@ -116,9 +116,9 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
 
       // 2. 점포별 GS 표준 발주서 분석
       const result = parseGsRetailExcelBuffer(buffer);
-      const hasQty = result.totalQty > 0 && result.orders.length > 0;
+      const detectedDate = extractDateFromFilename(file.name);
       setParsedSource('GS표준');
-      setParsedOrderDate(null);
+      setParsedOrderDate(detectedDate);
       setParsedKind('정규');
       setParsedDocKeys([]);
       setParsedData(result);
@@ -208,9 +208,16 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
 
         let json = await postBon(false);
         if (json?.success && json.data?.alreadyRegistered) {
-          onClose();
-          alert(`${parsedOrderDate} [${parsedKind}] 이미 등록된 파일입니다. (변경 없음)`);
-          return;
+          if (
+            window.confirm(
+              `${parsedOrderDate} [${parsedKind}] 동일한 내용의 수주 파일이 이미 등록되어 있습니다.\n\n기존 데이터를 최신 내용으로 덮어쓸까요?`
+            )
+          ) {
+            json = await postBon(true);
+          } else {
+            onClose();
+            return;
+          }
         }
         if (!json?.success && json?.code === 'DUPLICATE_ORDER') {
           if (!window.confirm(`${json.error}\n\n기존 수주를 삭제하고 새로 등록할까요?\n(기존 데이터는 완전 삭제됩니다)`)) {
@@ -226,25 +233,35 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
         }
         savedOk = true;
       } else {
-        const res = await fetch('/api/sales/order', {
+        // 일반 GS표준 또는 클립보드 붙여넣기도 품목 자동생성/정합성 매칭이 있는 /api/sales/intake 로 일원화
+        const res = await fetch('/api/sales/intake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             orderDate: orderDateLabel,
             centerCode: 'GSR-001',
-            shift: '1편',
-            orderType: '정규',
+            orderType: parsedKind || '정규',
             uploadMethod: '엑셀업로드',
-            items: parsedData.orders.map((o) => ({
+            source: 'GS표준',
+            replaceByDate: true,
+            items: parsedData.orders.map((o: any) => ({
+              menuName: o.orderItemName,
               productCode: o.orderItemCode,
-              orderQty1: o.orderQty1,
-              orderQty2: o.orderQty2,
+              qty1: o.orderQty1,
+              qty2: o.orderQty2,
+              total: o.totalOrderQty,
               unitPrice: o.deliveryPrice,
+              amount: o.amount || (o.totalOrderQty * (o.deliveryPrice || 0)),
             })),
           }),
         });
         const json = await res.json().catch(() => null);
-        savedOk = !!(json?.success);
+        if (!json?.success) {
+          alert('수주 등록 실패: ' + (json?.error || '알 수 없는 오류'));
+          setIsProcessing(false);
+          return;
+        }
+        savedOk = true;
       }
 
       // 파이프라인 엔진 백그라운드 연동

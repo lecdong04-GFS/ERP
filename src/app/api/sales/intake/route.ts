@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
       orderBy: { id: 'desc' },
       select: { orderNo: true, totalAmount: true, remark: true, _count: { select: { details: true } } },
     });
-    // 같은 파일이면 등록 없이 스킵 (상자 중복 쌓기 방지)
-    if (docMarker && existingOrders.some((o) => (o.remark || '').includes(docMarker))) {
+    // 같은 파일이면 등록 없이 스킵 (상자 중복 쌓기 방지) — 단, 덮어쓰기(replaceByDate) 시에는 덮어쓰기 허용
+    if (!replaceByDate && docMarker && existingOrders.some((o) => (o.remark || '').includes(docMarker))) {
       const dup = existingOrders.find((o) => (o.remark || '').includes(docMarker));
       return NextResponse.json({
         success: true,
