@@ -781,10 +781,13 @@ export const StockLookupView: React.FC = () => {
             const norm = normName(name);
             seen.add(norm);
             const o = norm ? orderByNorm.get(norm) : undefined;
-            // 스마트발주 최신 발주서 마스터(o) 최우선 반영
-            const inQty = (o && o.incoming != null && !isNaN(Number(o.incoming)))
-              ? Number(o.incoming)
-              : (Number(inv.inQty) || 0);
+            // 스마트발주 최신 발주서 마스터(o) 반영:
+            // 확정 스냅샷 모드(isSnap)에서는 과거 실사 당일의 inv.inQty만 사용하고 발주서 시트의 o.incoming 개입 차단
+            const inQty = isSnap
+              ? (Number(inv.inQty) || 0)
+              : (o && o.incoming != null && !isNaN(Number(o.incoming))
+                  ? Number(o.incoming)
+                  : (Number(inv.inQty) || 0));
 
             // 현재고: LIVE 모드에서는 최신 발주서 o.currentStock 최우선, 스냅샷 모드에서는 스냅샷 실사값 유지
             const current = isSnap
@@ -797,8 +800,8 @@ export const StockLookupView: React.FC = () => {
 
             // 스마트발주 최신 발주서 마스터(o) 우선: 입수량 및 일사용량 일원화
             const pack =
-              (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
               (isSnap && Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
+              (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
               inv.product?.boxQty ||
               1;
             const box = isSnap && inv.boxQty !== undefined && Number(inv.boxQty) > 0
@@ -807,12 +810,14 @@ export const StockLookupView: React.FC = () => {
             const piece = isSnap && inv.pieceQty !== undefined && Number(inv.pieceQty) > 0
               ? Number(inv.pieceQty)
               : Math.round((current % pack) * 10) / 10;
-            const uprice = (o && Number(o.bagPrice) > 0)
-              ? Number(o.bagPrice)
-              : (Number(inv.unitPrice) > 0 ? Number(inv.unitPrice) : price);
-            const rawDailyU = (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage)))
-              ? Number(o.dailyUsage)
-              : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0);
+            const uprice = isSnap && Number(inv.unitPrice) > 0
+              ? Number(inv.unitPrice)
+              : (o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : (Number(inv.unitPrice) > 0 ? Number(inv.unitPrice) : price));
+            const rawDailyU = isSnap
+              ? (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage)) ? Number(o.dailyUsage) : 0))
+              : (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage))
+                  ? Number(o.dailyUsage)
+                  : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0));
             const dailyU = Math.round(rawDailyU * 100) / 100;
             const estEntry = lookupEst(wh, norm);
             const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
@@ -998,14 +1003,15 @@ export const StockLookupView: React.FC = () => {
           setSnapshotMode(isSnap);
           const prevLabel = prevSnapDate ? `전일(${prevSnapDate.slice(5)}) 대비 ` : '';
           setMergeInfo(
-            (isSnap && snapDate ? `${snapDate.slice(5)} 확정분 ${loaded.length}건 · ` : '') +
-            (orderByNorm.size > 0
-              ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
-              : orderJson?.data?.errors?.length
-              ? `정본 실패: ${orderJson.data.errors[0]}`
-              : orderJson && !orderJson.success
-              ? `정본 실패: ${orderJson.error || '알 수 없음'}`
-              : `${prevLabel}당일 실사용량 자동 산출`)
+            isSnap
+              ? `${snapDate ? snapDate.slice(5) : ''} 확정 실사 ${loaded.length}건 · ${prevLabel}실사 기반 당일 실사용량 자동 산출`
+              : (orderByNorm.size > 0
+                  ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
+                  : orderJson?.data?.errors?.length
+                  ? `정본 실패: ${orderJson.data.errors[0]}`
+                  : orderJson && !orderJson.success
+                  ? `정본 실패: ${orderJson.error || '알 수 없음'}`
+                  : `${prevLabel}당일 실사용량 자동 산출`)
           );
         }
       })
@@ -1041,9 +1047,10 @@ export const StockLookupView: React.FC = () => {
   };
 
   useEffect(() => {
-    // 진입 시 최신 발주서 기준 현재고 LIVE로 즉시 로드 (날짜 선택 시 해당 일자 스냅샷 로드)
-    setTargetDate(kstToday());
-    loadStockData();
+    // 진입 시 당일 스냅샷이 있으면 확정 실사 로드, 없으면 최신 발주서 기준 LIVE 로드
+    const today = kstToday();
+    setTargetDate(today);
+    void loadByDate(today);
     void loadAvailableSnapDates();
   }, []);
 
