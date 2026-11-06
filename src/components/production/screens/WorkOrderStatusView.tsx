@@ -34,6 +34,8 @@ import {
   ScheduleTask,
   MaterialRequirement,
 } from '@/lib/production/workOrderTimetable';
+import { GanttTimelineView } from '@/components/production/GanttTimelineView';
+import { SpeedSimulatorView } from '@/components/production/SpeedSimulatorView';
 import { kstToday } from '@/lib/kst';
 
 export const WorkOrderStatusView: React.FC = () => {
@@ -46,7 +48,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);
   const lineDropdownRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'TIMETABLE' | 'MATERIALS'>('TIMETABLE');
+  const [activeTab, setActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('GANTT');
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
 
   // 현재 라인 정본 정의
@@ -690,23 +692,44 @@ export const WorkOrderStatusView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. 듀얼 탭 네비게이션 (타임테이블 스케줄 vs 소요 원부자재 불출표) */}
-      <div className="px-6 pt-3 shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* 탭 1: 타임테이블 스케줄 */}
+      {/* 3. 4대 멀티 탭 네비게이션 (타임테이블 간트 vs 작업지시서 vs 소요 원부자재 vs 속도 시뮬레이터) */}
+      <div className="px-6 pt-3 shrink-0 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 탭 1: 10분 단위 타임테이블 간트 (신규) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('GANTT')}
+            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+              activeTab === 'GANTT'
+                ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
+                : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+            }`}
+          >
+            <Clock size={16} className={activeTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
+            <span>🕒 타임테이블 간트 (10분 그리드)</span>
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'GANTT' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
+              }`}
+            >
+              30라인/설비
+            </span>
+          </button>
+
+          {/* 탭 2: 일일 작업지시서 스케줄 */}
           <button
             type="button"
             onClick={() => setActiveTab('TIMETABLE')}
-            className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'TIMETABLE'
                 ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Clock size={16} className={activeTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
-            <span>⏱️ 공정 타임테이블 스케줄</span>
+            <FileText size={16} className={activeTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
+            <span>📋 일일 작업지시서 (세로 상세표 & 드래그)</span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                 activeTab === 'TIMETABLE' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -714,29 +737,50 @@ export const WorkOrderStatusView: React.FC = () => {
             </span>
           </button>
 
-          {/* 탭 2: 소요 원부자재 불출/계량표 */}
+          {/* 탭 3: 소요 원부자재 불출/계량표 */}
           <button
             type="button"
             onClick={() => setActiveTab('MATERIALS')}
-            className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'MATERIALS'
                 ? 'bg-white text-indigo-900 border-indigo-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
             <Layers size={16} className={activeTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
-            <span>📦 소요 원부자재 불출·계량표 (BOM)</span>
+            <span>📦 소요 원부자재 (BOM 배합·불출)</span>
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                 activeTab === 'MATERIALS' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
               {materials.length}종
             </span>
           </button>
+
+          {/* 탭 4: 생산속도 시뮬레이터 (신규) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('SIMULATOR')}
+            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+              activeTab === 'SIMULATOR'
+                ? 'bg-white text-purple-900 border-purple-600 shadow-xs'
+                : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+            }`}
+          >
+            <Gauge size={16} className={activeTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
+            <span>⚡ 수주량 연동 속도 시뮬레이터</span>
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'SIMULATOR' ? 'bg-purple-100 text-purple-800' : 'bg-slate-300 text-slate-700'
+              }`}
+            >
+              71품목 UPH
+            </span>
+          </button>
         </div>
 
-        {/* 탭 2일 때 창고별 필터 버튼 */}
+        {/* 탭 3일 때 창고별 필터 버튼 */}
         {activeTab === 'MATERIALS' && (
           <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-slate-300 text-xs font-bold">
             <span className="text-slate-500">창고:</span>
@@ -754,7 +798,7 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         )}
 
-        {/* 탭 1일 때 완료 카운트 표시 */}
+        {/* 탭 2일 때 완료 카운트 표시 */}
         {activeTab === 'TIMETABLE' && (
           <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
             <span className="inline-flex items-center gap-1.5">
@@ -776,6 +820,24 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 4. 메인 콘텐츠 영역 (선택된 탭에 따라 렌더링) */}
       <div className="flex-1 min-h-0 px-6 pb-5 pt-0 overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0 bg-white border border-slate-300 rounded-b-2xl rounded-tr-2xl shadow-sm overflow-hidden flex flex-col">
+          {/* TAB 1: 10분 단위 타임테이블 간트차트 뷰 */}
+          {activeTab === 'GANTT' && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
+              <GanttTimelineView
+                onSelectLine={(lineName) => {
+                  setSelectedLine(lineName);
+                  setActiveTab('TIMETABLE');
+                }}
+              />
+            </div>
+          )}
+
+          {/* TAB 4: 수주량 연동 속도 시뮬레이터 뷰 */}
+          {activeTab === 'SIMULATOR' && (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
+              <SpeedSimulatorView />
+            </div>
+          )}
           {/* TAB 1: 타임테이블 스케줄 테이블 */}
           {activeTab === 'TIMETABLE' && (
             <div className="flex-1 min-h-0 overflow-y-auto">
