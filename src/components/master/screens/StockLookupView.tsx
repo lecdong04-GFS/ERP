@@ -44,6 +44,9 @@ interface StockItem {
   expiryDate: string; // 유통기한
   orderDay: string; // 발주일
   dailyUsage: number; // 일사용량 (현재고 기준 봉/낱개/롤 단위)
+  actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
+  hasPrevStock?: boolean; // 전일 재고 실사 존재 여부
+  prevSnapDate?: string; // 비교 기준 전일 실사 일자 (YYYY-MM-DD)
   estDailyUsage?: number; // 추정일사용량 (1개월 재고조사표 실소진량 기반, 현재고 기준 봉/낱개/롤 단위)
   estSampleCount?: number; // 소진 관측 구간 수
   packUnit: number; // 입수량
@@ -705,7 +708,7 @@ export const StockLookupView: React.FC = () => {
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch('/api/inventory/estimated-usage').then((res) => res.json()).catch(() => null),
-      fetch(`/api/inventory/snapshot?date=${yesterdayStr}`).then((res) => res.json()).catch(() => null),
+      fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
       .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson]) => {
         if (estJson?.success && estJson.data) {
@@ -721,6 +724,8 @@ export const StockLookupView: React.FC = () => {
 
         // 전일 재고 스냅샷 맵 구축 (품목명/창고 기준)
         const yesterdayMap = new Map<string, number>();
+        const prevKnownSet = new Set<string>();
+        const prevSnapDate = yesterdaySnapJson?.data?.date || '';
         if (yesterdaySnapJson?.success && Array.isArray(yesterdaySnapJson.data?.rows)) {
           yesterdaySnapJson.data.rows.forEach((r: any) => {
             const nm = normName(r.productName || r.product?.name || '');
@@ -728,7 +733,11 @@ export const StockLookupView: React.FC = () => {
             const qty = Number(r.currentQty) || (Number(r.boxQty) * Number(r.packUnit || 1) + Number(r.pieceQty || 0));
             if (nm) {
               yesterdayMap.set(`${wh}|${nm}`, qty);
-              if (!yesterdayMap.has(nm)) yesterdayMap.set(nm, qty);
+              prevKnownSet.add(`${wh}|${nm}`);
+              if (!yesterdayMap.has(nm)) {
+                yesterdayMap.set(nm, qty);
+                prevKnownSet.add(nm);
+              }
             }
           });
         }
@@ -832,13 +841,18 @@ export const StockLookupView: React.FC = () => {
             const nDays = calcStockDays(current, effectiveDaily, fallbackDays, inQty);
             if (o) merged += 1;
 
-            const yQty = yesterdayMap.get(`${wh}|${norm}`) ?? yesterdayMap.get(norm);
+            const yKeyWh = `${wh}|${norm}`;
+            const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
+            const yQty = yesterdayMap.get(yKeyWh) ?? yesterdayMap.get(norm);
+            const hasPrevStock = hasY || (inv.prevStock != null && !isNaN(Number(inv.prevStock)));
             const prevStockVal = yQty != null
               ? yQty
               : (inv.prevStock != null && !isNaN(Number(inv.prevStock))
                 ? Number(inv.prevStock)
                 : current);
             const diffStockVal = Math.round((current - prevStockVal) * 10) / 10;
+            const rawUsage = (prevStockVal + inQty) - current;
+            const actualUsageVal = hasPrevStock && rawUsage > 0 ? Math.round(rawUsage * 100) / 100 : 0;
 
             loaded.push({
               id: inv.id || idx + 1,
@@ -859,6 +873,9 @@ export const StockLookupView: React.FC = () => {
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
               dailyUsage: dailyU,
+              actualDailyUsage: actualUsageVal,
+              hasPrevStock,
+              prevSnapDate,
               estDailyUsage: estDaily,
               estSampleCount: estSamples,
               packUnit: pack,
@@ -909,13 +926,18 @@ export const StockLookupView: React.FC = () => {
                 ? Math.round(Number(o.stockDays) * 10) / 10
                 : calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays, inQty);
 
-              const yQty = yesterdayMap.get(`${wh}|${norm}`) ?? yesterdayMap.get(norm);
+              const yKeyWh = `${wh}|${norm}`;
+              const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
+              const yQty = yesterdayMap.get(yKeyWh) ?? yesterdayMap.get(norm);
+              const hasPrevStock = hasY || (o.prevStock != null && !isNaN(Number(o.prevStock)));
               const prevStockVal = yQty != null
                 ? yQty
                 : (o.prevStock != null && !isNaN(Number(o.prevStock))
                   ? Number(o.prevStock)
                   : current);
               const diffStockVal = Math.round((current - prevStockVal) * 10) / 10;
+              const rawUsage = (prevStockVal + inQty) - current;
+              const actualUsageVal = hasPrevStock && rawUsage > 0 ? Math.round(rawUsage * 100) / 100 : 0;
 
               const row: StockItem = {
                 id: tempId--,
@@ -935,6 +957,9 @@ export const StockLookupView: React.FC = () => {
                 expiryDate: '',
                 orderDay: '',
                 dailyUsage: daily,
+                actualDailyUsage: actualUsageVal,
+                hasPrevStock,
+                prevSnapDate,
                 estDailyUsage: estDaily,
                 estSampleCount: estSamples,
                 packUnit: pack,
@@ -965,15 +990,16 @@ export const StockLookupView: React.FC = () => {
           setDirtyRowIds(new Set());
           setNewRowIds(freshIds);
           setSnapshotMode(isSnap);
+          const prevLabel = prevSnapDate ? `전일(${prevSnapDate.slice(5)}) 대비 ` : '';
           setMergeInfo(
             (isSnap && snapDate ? `${snapDate.slice(5)} 확정분 ${loaded.length}건 · ` : '') +
             (orderByNorm.size > 0
-              ? `정본 병합: ${merged}건 반영 · 추정일사용량 ${estMatched}건${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
+              ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
               : orderJson?.data?.errors?.length
               ? `정본 실패: ${orderJson.data.errors[0]}`
               : orderJson && !orderJson.success
               ? `정본 실패: ${orderJson.error || '알 수 없음'}`
-              : `추정일사용량 ${estMatched}건`)
+              : `${prevLabel}당일 실사용량 자동 산출`)
           );
         }
       })
@@ -1069,7 +1095,11 @@ export const StockLookupView: React.FC = () => {
         }
 
         const currentStock = Number(updated.currentStock) || 0;
-        updated.diffStock = Math.round((currentStock - (Number(updated.prevStock) || 0)) * 10) / 10;
+        const curPrev = Number(updated.prevStock) || 0;
+        const curInQ = Number(updated.inQty) || 0;
+        updated.diffStock = Math.round((currentStock - curPrev) * 10) / 10;
+        const netConsumed = curPrev + curInQ - currentStock;
+        updated.actualDailyUsage = updated.hasPrevStock !== false && netConsumed > 0 ? Math.round(netConsumed * 100) / 100 : 0;
         const unitPrice = Number(updated.unitPrice) || 0;
         const dailyUsage = Number(updated.dailyUsage) || 0;
         const estDaily = Number(updated.estDailyUsage) || 0;
@@ -1278,6 +1308,11 @@ export const StockLookupView: React.FC = () => {
             exist.boxQty = box;
             exist.pieceQty = piece;
             exist.currentStock = current;
+            exist.prevStock = oldStock;
+            exist.diffStock = Math.round((current - oldStock) * 10) / 10;
+            const netUse = (oldStock + (exist.inQty || 0)) - current;
+            exist.actualDailyUsage = netUse > 0 ? Math.round(netUse * 100) / 100 : 0;
+            exist.hasPrevStock = true;
             if (price > 0) exist.unitPrice = price;
             exist.totalAmount = current * exist.unitPrice;
             exist.safetyStock = newSafety;
@@ -1324,6 +1359,8 @@ export const StockLookupView: React.FC = () => {
               expiryDate: expiry,
               orderDay: '',
               dailyUsage: orderDaily,
+              actualDailyUsage: 0,
+              hasPrevStock: false,
               estDailyUsage: estDaily,
               estSampleCount: estSamples,
               packUnit: pack,
@@ -1736,31 +1773,57 @@ export const StockLookupView: React.FC = () => {
       },
     },
     {
-      key: 'estDailyUsage',
-      label: '추정일사용량',
-      width: '5.4%',
-      minWidth: '74px',
+      key: 'actualDailyUsage',
+      label: '당일 실사용량',
+      width: '5.5%',
+      minWidth: '80px',
       align: 'right',
       format: 'number',
       sortable: true,
       editable: false,
       render: (v, row) => {
-        const num = Number(v);
-        if (!(num > 0)) return <span className="text-gray-400">-</span>;
+        if (row.hasPrevStock === false || row.prevStock === undefined || row.prevStock === null) {
+          return <span className="text-gray-400 font-mono text-xs" title="비교할 전일 실사 재고 없음">-</span>;
+        }
+
+        const prev = Number(row.prevStock) || 0;
+        const inQ = Number(row.inQty) || 0;
+        const cur = Number(row.currentStock) || 0;
         const pack = Number(row.packUnit) || 1;
-        const disp = Number(num.toFixed(2)).toLocaleString();
-        const boxTxt = pack > 1 ? `(${Number((num / pack).toFixed(1))}박)` : '';
-        return (
-          <span
-            className="font-mono font-bold text-indigo-700 whitespace-nowrap"
-            title={`1개월(10/1~11/2) 재고조사표 실소진 역산 추정: 일평균 ${disp}${
-              pack > 1 ? ` (약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})` : ''
-            } · 소진관측 ${row.estSampleCount || 0}회`}
-          >
-            {disp}
-            {boxTxt && <span className="ml-0.5 text-[10px] text-indigo-500 font-normal font-sans">{boxTxt}</span>}
-          </span>
-        );
+        const netConsumed = prev + inQ - cur;
+        const usage = Number(v) > 0 ? Number(v) : (netConsumed > 0 ? Math.round(netConsumed * 100) / 100 : 0);
+        const prevLabel = row.prevSnapDate ? `${row.prevSnapDate.slice(5)} 대비 ` : '전일 대비 ';
+
+        if (usage > 0) {
+          const disp = Number(usage.toFixed(2)).toLocaleString();
+          const boxVal = pack > 1 ? Number((usage / pack).toFixed(1)) : 0;
+          const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
+          return (
+            <span
+              className="font-mono font-bold text-emerald-700 whitespace-nowrap"
+              title={`${prevLabel}실사용량: ${disp} (전일 ${prev.toLocaleString()} + 입고 ${inQ.toLocaleString()} - 현재 ${cur.toLocaleString()})${
+                pack > 1 ? ` · 약 ${(usage / pack).toFixed(2)}박스 (입수량 ${pack})` : ''
+              }`}
+            >
+              {disp}
+              {boxTxt && <span className="ml-0.5 text-[10px] text-emerald-600 font-normal font-sans">{boxTxt}</span>}
+            </span>
+          );
+        }
+
+        if (cur > prev + inQ) {
+          const increase = Math.round((cur - (prev + inQ)) * 10) / 10;
+          return (
+            <span
+              className="font-mono text-blue-600 font-semibold text-xs whitespace-nowrap"
+              title={`${prevLabel}재고 증가 (+${increase.toLocaleString()}): 전일 ${prev.toLocaleString()} → 현재 ${cur.toLocaleString()} (신규 입고 반영)`}
+            >
+              0 <span className="text-[10px] text-blue-500 font-sans">(+입고)</span>
+            </span>
+          );
+        }
+
+        return <span className="text-gray-400 font-mono text-xs" title={`${prevLabel}재고 변동 없음 (사용량 0)`}>0</span>;
       },
     },
     {

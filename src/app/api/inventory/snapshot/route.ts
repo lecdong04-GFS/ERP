@@ -32,6 +32,40 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json({ success: true, data: { date: latest?.snapshotDate ?? null } });
     }
+    const prevTo = searchParams.get('prevTo') || '';
+    if (prevTo) {
+      if (!DATE_RE.test(prevTo)) {
+        return NextResponse.json({ success: false, error: 'prevTo 파라미터가 올바르지 않습니다. (YYYY-MM-DD)' }, { status: 400 });
+      }
+      const prevDateRow = await prisma.inventorySnapshot.findFirst({
+        where: { snapshotDate: { lt: prevTo } },
+        orderBy: { snapshotDate: 'desc' },
+        select: { snapshotDate: true },
+      });
+      if (prevDateRow?.snapshotDate) {
+        const rows = await prisma.inventorySnapshot.findMany({
+          where: { snapshotDate: prevDateRow.snapshotDate },
+          include: { product: { include: { partner: true } } },
+          orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
+        });
+        return NextResponse.json({
+          success: true,
+          data: {
+            date: prevDateRow.snapshotDate,
+            exists: rows.length > 0,
+            rows,
+          },
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          date: null,
+          exists: false,
+          rows: [],
+        },
+      });
+    }
     const date = searchParams.get('date') || '';
     if (!DATE_RE.test(date)) {
       return NextResponse.json({ success: false, error: 'date 파라미터가 필요합니다. (YYYY-MM-DD)' }, { status: 400 });

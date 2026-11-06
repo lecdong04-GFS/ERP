@@ -57,7 +57,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
       const buffer = await file.arrayBuffer();
 
       // 1. 미출(미납) 엑셀 및 본발주 시트 우선 탐지
-      const wb = XLSX.read(buffer, { type: 'array' });
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
       for (const sn of wb.SheetNames) {
         const ws = wb.Sheets[sn];
         if (!ws) continue;
@@ -340,14 +340,14 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-[14px] text-white">
-                  GS리테일(GSR) 점포 발주 엑셀 업로드 & 파이프라인 연동
+                  GS리테일(GSR) 발주 및 미출(미납) 엑셀 통합 처리기
                 </h3>
                 <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold rounded border border-emerald-500/30">
-                  실시간 연쇄 연산
+                  수주·미출 자동 판별
                 </span>
               </div>
               <p className="text-[11px] text-gray-300 mt-0.5">
-                GS25 본사 발주 파일(.xlsx, .csv)을 등록하면 1편/2편 자동 분리 및 BOM 역산 파이프라인이 즉시 가동됩니다.
+                GS25 본발주(ordview) · 점포 발주서 · 미출고(미납정보) 엑셀을 업로드하면 서식을 자동 감지하여 즉시 처리합니다.
               </p>
             </div>
           </div>
@@ -451,7 +451,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                   ) : (
                     <div>
                       <p className="font-bold text-gray-700 text-sm">
-                        GS리테일 발주 엑셀 파일을 이곳에 끌어다 놓으세요
+                        GS리테일 발주(ordview) 또는 미출고(미납정보) 엑셀을 이곳에 끌어다 놓으세요
                       </p>
                       <p className="text-gray-500 text-[11px] mt-1">
                         지원 형식: <span className="font-mono font-semibold">.xlsx, .xls, .csv</span> | 클릭하여 파일 선택
