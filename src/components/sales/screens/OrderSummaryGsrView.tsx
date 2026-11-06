@@ -248,6 +248,21 @@ export const OrderSummaryGsrView: React.FC = () => {
     { itemCount: 0, totalQty: 0, totalAmt: 0, reg1Qty: 0, reg1Amt: 0, ext1Qty: 0, ext1Amt: 0, reg2Qty: 0, reg2Amt: 0, ext2Qty: 0, ext2Amt: 0 }
   ), [kindSummary]);
 
+  const centerTotals = useMemo(() => centerSummary.reduce(
+    (acc, c) => ({
+      itemCount: acc.itemCount + c.itemCount,
+      totalQty: acc.totalQty + c.totalQty,
+      totalAmt: acc.totalAmt + c.totalAmt,
+      sub1Qty: acc.sub1Qty + c.sub1Qty,
+      sub1Amt: acc.sub1Amt + c.sub1Amt,
+      sub2Qty: acc.sub2Qty + c.sub2Qty,
+      sub2Amt: acc.sub2Amt + c.sub2Amt,
+    }),
+    { itemCount: 0, totalQty: 0, totalAmt: 0, sub1Qty: 0, sub1Amt: 0, sub2Qty: 0, sub2Amt: 0 }
+  ), [centerSummary]);
+
+  const centerItemsTotalQty = useMemo(() => centerItems.reduce((acc, it) => acc + it.qty, 0), [centerItems]);
+
   const rangeLabel = appliedRange.start === appliedRange.end
     ? appliedRange.start
     : `${appliedRange.start} ~ ${appliedRange.end}`;
@@ -263,10 +278,10 @@ export const OrderSummaryGsrView: React.FC = () => {
     return { text: `${sign}${Math.abs(pct).toFixed(1)}%`, up: pct > 0, title: `직전 ${prev.toLocaleString('ko-KR')} ea → ${qty.toLocaleString('ko-KR')} ea` };
   }
 
-  const cellCls = 'whitespace-nowrap py-1 px-1 text-right border-r border-gray-200';
+  const cellCls = 'whitespace-nowrap py-1.5 px-2 text-right border-r border-gray-200 text-[13.5px] font-mono';
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
+    <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[13px]">
       <SalesActionBar
         title="주문집계현황"
         buttons={[
@@ -277,82 +292,84 @@ export const OrderSummaryGsrView: React.FC = () => {
       />
 
       {/* 조건 바 */}
-      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-3 py-1 flex items-center justify-between shadow-inner">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-700">주문일자:</span>
+      <div className="bg-[#efefef] border-b border-[#c0c0c0] px-4 py-1.5 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <span className="font-bold text-[13px] text-gray-800">주문일자:</span>
           <input
             type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-            className="bg-white border border-gray-400 px-1.5 py-0.5 text-[11px] font-mono rounded-xs h-6"
+            className="bg-white border border-gray-400 px-2.5 py-1 text-[13px] font-mono font-bold rounded h-7 text-gray-900 shadow-2xs focus:border-blue-500 focus:outline-hidden"
           />
-          <span className="text-gray-500">~</span>
+          <span className="text-gray-500 font-bold">~</span>
           <input
             type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-            className="bg-white border border-gray-400 px-1.5 py-0.5 text-[11px] font-mono rounded-xs h-6"
+            className="bg-white border border-gray-400 px-2.5 py-1 text-[13px] font-mono font-bold rounded h-7 text-gray-900 shadow-2xs focus:border-blue-500 focus:outline-hidden"
           />
-          <span className="text-[11px] text-gray-500">집계 기준: {rangeLabel}</span>
+          <span className="text-[12px] font-bold text-gray-600 bg-gray-200/80 px-2 py-0.5 rounded-sm ml-1">
+            집계 기준: {rangeLabel}
+          </span>
         </div>
 
         <button
           onClick={() => void loadOrders(appliedRange.start, appliedRange.end)}
-          className="p-1 hover:bg-gray-200 rounded text-gray-600 cursor-pointer"
+          className="p-1.5 hover:bg-gray-200 rounded text-gray-600 cursor-pointer transition-colors"
           title="새로고침"
         >
-          <RotateCw className="w-3.5 h-3.5" />
+          <RotateCw className="w-4 h-4" />
         </button>
       </div>
 
       {/* 본문 */}
-      <div className="flex-1 flex flex-col min-h-0 p-1 gap-1 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 p-1.5 gap-1.5 overflow-hidden">
         {loading ? (
-          <div className="flex-1 flex items-center justify-center bg-white text-gray-400">불러오는 중...</div>
+          <div className="flex-1 flex items-center justify-center bg-white text-gray-500 font-bold text-[14px]">불러오는 중...</div>
         ) : error ? (
-          <div className="flex-1 flex items-center justify-center bg-white text-rose-600">{error}</div>
+          <div className="flex-1 flex items-center justify-center bg-white text-rose-600 font-bold text-[14px]">{error}</div>
         ) : orders.length === 0 ? (
           <div className="flex-1 flex items-center justify-center bg-white text-gray-400">
             <div className="text-center">
-              <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <div>{rangeLabel} 기간에 등록된 수주가 없습니다.</div>
-              <div className="mt-1 text-[11px]">주문등록GSR 또는 추가주문등록에서 먼저 수주를 등록하세요.</div>
+              <Search className="w-10 h-10 mx-auto mb-2.5 opacity-40 text-gray-500" />
+              <div className="text-[14.5px] font-bold text-gray-700">{rangeLabel} 기간에 등록된 수주가 없습니다.</div>
+              <div className="mt-1 text-[12px] text-gray-500">주문등록GSR 또는 추가주문등록에서 먼저 수주를 등록하세요.</div>
             </div>
           </div>
         ) : (
           <>
             {/* 상단: 품목별 요약 그리드 */}
-            <div className="h-[48%] flex flex-col bg-white border border-gray-400 shadow-2xs overflow-hidden">
-              <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300 flex items-center justify-between gap-2">
+            <div className="h-[48%] flex flex-col bg-white border border-gray-400 shadow-xs overflow-hidden rounded-xs">
+              <div className="bg-[#e2e8f0] px-3 py-1 font-black text-gray-800 text-[13px] border-b border-gray-300 flex items-center justify-between gap-2">
                 <span className="shrink-0">요약 (품목별 1편/2편 집계 · 정기/추가 구분)</span>
-                <span className="text-[10.5px] font-normal text-gray-500 truncate">
+                <span className="text-[11.5px] font-semibold text-gray-600 truncate">
                   정기=발주현황 업로드분 · 추가=추가주문등록분 · 기준 {rangeLabel} · 수주 {orderCount}건{aggAt ? ` · ${aggAt} 집계` : ''}
                 </span>
-                <span className="text-[11.5px] text-gray-500 shrink-0">단위: EA, 원</span>
+                <span className="text-[12px] font-bold text-gray-600 shrink-0">단위: EA, 원</span>
               </div>
 
               <div className="flex-1 overflow-auto">
-                <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
+                <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[13.5px] border-collapse font-sans">
                   <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                     <tr className="border-b border-[#dbe3ee]">
-                      <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-20">품목</th>
-                      <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품목수</th>
-                      <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
-                      <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#b5baf0]">1편</th>
-                      <th colSpan={6} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">2편</th>
-                      <th rowSpan={2} className="whitespace-nowrap py-1 px-1 w-16" title="직전 동일 기간 대비">전일비</th>
+                      <th rowSpan={2} className="whitespace-nowrap py-2 px-2.5 border-r border-[#dbe3ee] min-w-[70px]">품목</th>
+                      <th rowSpan={2} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] min-w-[55px]">품목수</th>
+                      <th colSpan={2} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
+                      <th colSpan={6} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] bg-[#b5baf0]">1편</th>
+                      <th colSpan={6} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] bg-[#e8edf4]">2편</th>
+                      <th rowSpan={2} className="whitespace-nowrap py-2 px-2 min-w-[65px]" title="직전 동일 기간 대비">전일비</th>
                     </tr>
-                    <tr className="border-b border-[#dbe3ee] text-[11.5px]">
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">정기수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">정기금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18 bg-[#b2b7ec]">소계금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">정기수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-18">정기금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-14">추가수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16">추가금액</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-16 bg-[#b2b7ec]">소계수량</th>
-                      <th className="whitespace-nowrap py-0.5 px-1 bg-[#b2b7ec] w-18">소계금액</th>
+                    <tr className="border-b border-[#dbe3ee] text-[12.5px]">
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[75px]">수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[95px]">금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[75px]">정기수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[85px]">정기금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[70px]">추가수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[80px]">추가금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[80px] bg-[#b2b7ec]">소계수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[90px] bg-[#b2b7ec]">소계금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[75px]">정기수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[85px]">정기금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[70px]">추가수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[80px]">추가금액</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[80px] bg-[#b2b7ec]">소계수량</th>
+                      <th className="whitespace-nowrap py-1.5 px-2 bg-[#b2b7ec] min-w-[90px]">소계금액</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 font-mono">
@@ -362,27 +379,27 @@ export const OrderSummaryGsrView: React.FC = () => {
                       <tr
                         key={row.kind}
                         onClick={() => setDrillKind(row.kind)}
-                        className="hover:bg-blue-50/50 cursor-pointer"
+                        className="hover:bg-blue-50/70 cursor-pointer transition-colors"
                         title="클릭하면 구성 수주 목록 표시"
                       >
-                        <td className="whitespace-nowrap py-1 px-2 font-sans font-bold text-center border-r border-gray-200">{row.kind}</td>
-                        <td className="whitespace-nowrap py-1 px-1 text-center border-r border-gray-200">{row.itemCount}</td>
-                        <td className={`${cellCls} font-bold text-blue-900`}>{fmt(row.totalQty)}</td>
-                        <td className={`${cellCls} font-bold text-gray-900`}>{fmt(row.totalAmt)}</td>
+                        <td className="whitespace-nowrap py-2 px-2.5 font-sans font-black text-center text-[14px] text-gray-900 border-r border-gray-200 bg-slate-50/50">{row.kind}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-center text-[13.5px] text-gray-700 border-r border-gray-200">{row.itemCount}</td>
+                        <td className={`${cellCls} font-black text-[14.5px] text-blue-900 bg-blue-50/40`}>{fmt(row.totalQty)}</td>
+                        <td className={`${cellCls} font-black text-[14px] text-gray-900 bg-blue-50/20`}>{fmt(row.totalAmt)}</td>
                         <td className={cellCls}>{fmt(row.reg1Qty)}</td>
                         <td className={cellCls}>{fmt(row.reg1Amt)}</td>
-                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext1Qty)}</td>
-                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext1Amt)}</td>
-                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{fmt(row.reg1Qty + row.ext1Qty)}</td>
-                        <td className={`${cellCls} font-bold text-emerald-800 bg-emerald-50/30`}>{fmt(row.reg1Amt + row.ext1Amt)}</td>
+                        <td className={`${cellCls} text-amber-800 font-semibold`}>{fmt(row.ext1Qty)}</td>
+                        <td className={`${cellCls} text-amber-800 font-semibold`}>{fmt(row.ext1Amt)}</td>
+                        <td className={`${cellCls} font-black text-[14px] text-emerald-900 bg-emerald-100/40`}>{fmt(row.reg1Qty + row.ext1Qty)}</td>
+                        <td className={`${cellCls} font-black text-[13.5px] text-emerald-900 bg-emerald-100/40`}>{fmt(row.reg1Amt + row.ext1Amt)}</td>
                         <td className={cellCls}>{fmt(row.reg2Qty)}</td>
                         <td className={cellCls}>{fmt(row.reg2Amt)}</td>
-                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext2Qty)}</td>
-                        <td className={`${cellCls} text-amber-700`}>{fmt(row.ext2Amt)}</td>
-                        <td className={`${cellCls} font-bold text-indigo-800 bg-indigo-50/30`}>{fmt(row.reg2Qty + row.ext2Qty)}</td>
-                        <td className="whitespace-nowrap py-1 px-1 text-right font-bold text-indigo-800 bg-indigo-50/30 border-r border-gray-200">{fmt(row.reg2Amt + row.ext2Amt)}</td>
+                        <td className={`${cellCls} text-amber-800 font-semibold`}>{fmt(row.ext2Qty)}</td>
+                        <td className={`${cellCls} text-amber-800 font-semibold`}>{fmt(row.ext2Amt)}</td>
+                        <td className={`${cellCls} font-black text-[14px] text-indigo-900 bg-indigo-100/40`}>{fmt(row.reg2Qty + row.ext2Qty)}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-right font-black text-[13.5px] text-indigo-900 bg-indigo-100/40 border-r border-gray-200">{fmt(row.reg2Amt + row.ext2Amt)}</td>
                         <td
-                          className={`whitespace-nowrap py-1 px-1 text-center text-[11px] font-bold ${
+                          className={`whitespace-nowrap py-2 px-2 text-center text-[12.5px] font-black ${
                             dod.up === true ? 'text-rose-600' : dod.up === false ? 'text-blue-600' : 'text-gray-400'
                           }`}
                           title={dod.title}
@@ -393,25 +410,25 @@ export const OrderSummaryGsrView: React.FC = () => {
                       );
                     })}
                   </tbody>
-                  <tfoot className="bg-[#fdfde0] font-mono font-bold text-gray-900 border-t-2 border-[#dbe3ee] sticky bottom-0">
+                  <tfoot className="bg-[#fef9c3] font-mono font-bold text-gray-900 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-sm">
                     <tr>
-                      <td className="whitespace-nowrap py-1 px-2 text-center border-r border-gray-300">합계</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-center border-r border-gray-300">{kindTotals.itemCount}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-blue-900 border-r border-gray-300">{fmt(kindTotals.totalQty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.totalAmt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg1Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg1Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext1Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext1Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{fmt(kindTotals.reg1Qty + kindTotals.ext1Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-900 border-r border-gray-300">{fmt(kindTotals.reg1Amt + kindTotals.ext1Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg2Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right border-r border-gray-300">{fmt(kindTotals.reg2Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext2Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-amber-700 border-r border-gray-300">{fmt(kindTotals.ext2Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900 border-r border-gray-300">{fmt(kindTotals.reg2Qty + kindTotals.ext2Qty)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-900 border-r border-gray-300">{fmt(kindTotals.reg2Amt + kindTotals.ext2Amt)}</td>
-                      <td className="whitespace-nowrap py-1 px-1 text-center text-gray-400">-</td>
+                      <td className="whitespace-nowrap py-2 px-2.5 font-sans font-black text-center text-[14.5px] border-r border-gray-300">합계</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-center text-[13.5px] font-bold border-r border-gray-300">{kindTotals.itemCount}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[15.5px] font-black text-blue-950 border-r border-gray-300">{fmt(kindTotals.totalQty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[14.5px] font-black text-gray-950 border-r border-gray-300">{fmt(kindTotals.totalAmt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] border-r border-gray-300">{fmt(kindTotals.reg1Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] border-r border-gray-300">{fmt(kindTotals.reg1Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] text-amber-800 font-bold border-r border-gray-300">{fmt(kindTotals.ext1Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] text-amber-800 font-bold border-r border-gray-300">{fmt(kindTotals.ext1Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[14.5px] font-black text-emerald-950 border-r border-gray-300">{fmt(kindTotals.reg1Qty + kindTotals.ext1Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-emerald-950 border-r border-gray-300">{fmt(kindTotals.reg1Amt + kindTotals.ext1Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] border-r border-gray-300">{fmt(kindTotals.reg2Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] border-r border-gray-300">{fmt(kindTotals.reg2Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] text-amber-800 font-bold border-r border-gray-300">{fmt(kindTotals.ext2Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[13.5px] text-amber-800 font-bold border-r border-gray-300">{fmt(kindTotals.ext2Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[14.5px] font-black text-indigo-950 border-r border-gray-300">{fmt(kindTotals.reg2Qty + kindTotals.ext2Qty)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-indigo-950 border-r border-gray-300">{fmt(kindTotals.reg2Amt + kindTotals.ext2Amt)}</td>
+                      <td className="whitespace-nowrap py-2 px-2 text-center text-gray-400 font-normal">-</td>
                     </tr>
                   </tfoot>
                 </table></EditableTableWrapper>
@@ -419,29 +436,30 @@ export const OrderSummaryGsrView: React.FC = () => {
             </div>
 
             {/* 하단 2분할 */}
-            <div className="h-[52%] flex gap-1 min-h-0 overflow-hidden">
-              <div className="w-[70%] flex flex-col bg-white border border-gray-400 shadow-2xs overflow-hidden">
-                <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300">
-                  세부내용 (납품 센터별)
+            <div className="h-[52%] flex gap-1.5 min-h-0 overflow-hidden">
+              <div className="w-[70%] flex flex-col bg-white border border-gray-400 shadow-xs overflow-hidden rounded-xs">
+                <div className="bg-[#e2e8f0] px-3 py-1 font-black text-gray-800 text-[13px] border-b border-gray-300 flex items-center justify-between">
+                  <span>세부내용 (납품 센터별)</span>
+                  <span className="text-[12px] font-bold text-gray-600">총 {centerSummary.length}개 센터</span>
                 </div>
 
                 <div className="flex-1 overflow-auto">
-                  <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
+                  <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[13.5px] border-collapse font-sans">
                     <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                       <tr className="border-b border-[#dbe3ee]">
-                        <th rowSpan={2} className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee] w-28">센터명</th>
-                        <th rowSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-14">품목수</th>
-                        <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
-                        <th colSpan={2} className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] bg-[#b5baf0]">1편 소계</th>
-                        <th colSpan={2} className="whitespace-nowrap py-1 px-1 bg-[#e8edf4]">2편 소계</th>
+                        <th rowSpan={2} className="whitespace-nowrap py-2 px-3 border-r border-[#dbe3ee] min-w-[120px]">센터명</th>
+                        <th rowSpan={2} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] min-w-[60px]">품목수</th>
+                        <th colSpan={2} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] bg-[#e8edf4]">합계</th>
+                        <th colSpan={2} className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] bg-[#b5baf0]">1편 소계</th>
+                        <th colSpan={2} className="whitespace-nowrap py-2 px-2 bg-[#e8edf4]">2편 소계</th>
                       </tr>
-                      <tr className="border-b border-[#dbe3ee] text-[11.5px]">
-                        <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
-                        <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">금액</th>
-                        <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
-                        <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-24">금액</th>
-                        <th className="whitespace-nowrap py-0.5 px-1 border-r border-[#dbe3ee] w-20">수량</th>
-                        <th className="whitespace-nowrap py-0.5 px-1 w-24">금액</th>
+                      <tr className="border-b border-[#dbe3ee] text-[12.5px]">
+                        <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[85px]">수량</th>
+                        <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[105px]">금액</th>
+                        <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[85px]">수량</th>
+                        <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[105px]">금액</th>
+                        <th className="whitespace-nowrap py-1.5 px-2 border-r border-[#dbe3ee] min-w-[85px]">수량</th>
+                        <th className="whitespace-nowrap py-1.5 px-2 min-w-[105px]">금액</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 font-mono">
@@ -450,53 +468,77 @@ export const OrderSummaryGsrView: React.FC = () => {
                           key={c.centerName}
                           onClick={() => setSelectedCenter(c.centerName)}
                           className={`cursor-pointer transition-colors ${
-                            selectedCenter === c.centerName ? 'bg-blue-100/70 font-semibold' : 'hover:bg-blue-50/40'
+                            selectedCenter === c.centerName ? 'bg-blue-100/80 font-semibold' : 'hover:bg-blue-50/50'
                           }`}
                         >
-                          <td className="whitespace-nowrap py-1 px-2 font-sans text-left border-r border-gray-200">{c.centerName}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-center border-r border-gray-200">{c.itemCount}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right font-bold text-blue-900 border-r border-gray-200">{c.totalQty.toLocaleString()}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right text-gray-900 border-r border-gray-200">{c.totalAmt.toLocaleString()}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-800 border-r border-gray-200">{c.sub1Qty.toLocaleString()}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right text-emerald-800 border-r border-gray-200">{c.sub1Amt.toLocaleString()}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-800 border-r border-gray-200">{c.sub2Qty.toLocaleString()}</td>
-                          <td className="whitespace-nowrap py-1 px-1 text-right text-indigo-800">{c.sub2Amt.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-3 font-sans font-bold text-left text-[14px] text-gray-900 border-r border-gray-200">{c.centerName}</td>
+                          <td className="whitespace-nowrap py-2 px-2 text-center text-[13.5px] border-r border-gray-200 text-gray-700">{c.itemCount}</td>
+                          <td className="whitespace-nowrap py-2 px-2.5 text-right font-black text-[14.5px] text-blue-900 border-r border-gray-200 bg-blue-50/30">{c.totalQty.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-2.5 text-right font-black text-[14px] text-gray-900 border-r border-gray-200">{c.totalAmt.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-2 text-right font-bold text-[13.5px] text-emerald-900 border-r border-gray-200 bg-emerald-50/30">{c.sub1Qty.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-2 text-right font-bold text-[13.5px] text-emerald-900 border-r border-gray-200 bg-emerald-50/30">{c.sub1Amt.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-2 text-right font-bold text-[13.5px] text-indigo-900 border-r border-gray-200 bg-indigo-50/30">{c.sub2Qty.toLocaleString()}</td>
+                          <td className="whitespace-nowrap py-2 px-2 text-right font-bold text-[13.5px] text-indigo-900 bg-indigo-50/30">{c.sub2Amt.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot className="bg-[#fef9c3] font-mono font-bold text-gray-900 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-sm">
+                      <tr>
+                        <td className="whitespace-nowrap py-2 px-3 font-sans font-black text-center text-[14.5px] border-r border-gray-300">합계</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-center text-[13.5px] font-bold border-r border-gray-300">{centerTotals.itemCount}</td>
+                        <td className="whitespace-nowrap py-2 px-2.5 text-right text-[15.5px] font-black text-blue-950 border-r border-gray-300">{centerTotals.totalQty.toLocaleString()}</td>
+                        <td className="whitespace-nowrap py-2 px-2.5 text-right text-[14.5px] font-black text-gray-950 border-r border-gray-300">{centerTotals.totalAmt.toLocaleString()}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-emerald-950 border-r border-gray-300">{centerTotals.sub1Qty.toLocaleString()}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-emerald-950 border-r border-gray-300">{centerTotals.sub1Amt.toLocaleString()}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-indigo-950 border-r border-gray-300">{centerTotals.sub2Qty.toLocaleString()}</td>
+                        <td className="whitespace-nowrap py-2 px-2 text-right text-[14px] font-black text-indigo-950">{centerTotals.sub2Amt.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
                   </table></EditableTableWrapper>
                 </div>
               </div>
 
               {/* 우하단: 선택 센터 품목별 실明細 */}
-              <div className="w-[30%] flex flex-col bg-white border border-gray-400 shadow-2xs overflow-hidden">
-                <div className="bg-[#e2e8f0] px-2 py-0.5 font-bold text-gray-800 text-[11px] border-b border-gray-300 flex items-center justify-between">
+              <div className="w-[30%] flex flex-col bg-white border border-gray-400 shadow-xs overflow-hidden rounded-xs">
+                <div className="bg-[#e2e8f0] px-3 py-1 font-black text-gray-800 text-[13px] border-b border-gray-300 flex items-center justify-between">
                   <span>품목 [{selectedCenter || '-'}]</span>
-                  <span className="text-[11.5px] text-blue-700 font-mono">총 {centerItems.length}건</span>
+                  <span className="text-[12px] font-black text-blue-800 font-mono bg-blue-100 px-2 py-0.5 rounded">총 {centerItems.length}건</span>
                 </div>
 
                 <div className="flex-1 overflow-auto">
-                  <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[12.5px] border-collapse font-sans">
+                  <EditableTableWrapper readOnly enableColumnResize={false}><table className="w-full min-w-full text-[13.5px] border-collapse font-sans">
                     <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] z-10 text-center font-bold whitespace-nowrap">
                       <tr>
-                        <th className="whitespace-nowrap py-1 px-1 border-r border-[#dbe3ee] w-24">품번</th>
-                        <th className="whitespace-nowrap py-1 px-2 border-r border-[#dbe3ee]">품명</th>
-                        <th className="whitespace-nowrap py-1 px-2 text-right w-16">수량</th>
+                        <th className="whitespace-nowrap py-2 px-2 border-r border-[#dbe3ee] min-w-[85px]">품번</th>
+                        <th className="whitespace-nowrap py-2 px-3 border-r border-[#dbe3ee]">품명</th>
+                        <th className="whitespace-nowrap py-2 px-2.5 text-right min-w-[80px]">수량</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 font-mono">
                       {centerItems.length === 0 ? (
-                        <tr><td colSpan={3} className="py-6 text-center text-gray-400 font-sans">품목이 없습니다</td></tr>
+                        <tr><td colSpan={3} className="py-8 text-center text-gray-400 font-sans text-[13px]">품목이 없습니다</td></tr>
                       ) : (
                         centerItems.map((it, idx) => (
-                          <tr key={`${it.partNo}-${idx}`} className="hover:bg-blue-50/50">
-                            <td className="whitespace-nowrap py-1 px-1 text-center text-gray-700 border-r border-gray-200">{it.partNo}</td>
-                            <td className="whitespace-nowrap py-1 px-2 font-sans text-left font-medium text-gray-900 truncate border-r border-gray-200">{it.partName}</td>
-                            <td className="whitespace-nowrap py-1 px-2 text-right font-bold text-blue-900">{it.qty.toLocaleString()}</td>
+                          <tr key={`${it.partNo}-${idx}`} className="hover:bg-blue-50/60 transition-colors">
+                            <td className="whitespace-nowrap py-2 px-2 text-center text-gray-700 font-mono text-[13px] border-r border-gray-200">{it.partNo}</td>
+                            <td className="whitespace-nowrap py-2 px-3 font-sans text-left font-bold text-[13.5px] text-gray-900 truncate border-r border-gray-200">{it.partName}</td>
+                            <td className="whitespace-nowrap py-2 px-2.5 text-right font-black text-[14.5px] text-blue-900">{it.qty.toLocaleString()}</td>
                           </tr>
                         ))
                       )}
                     </tbody>
+                    {centerItems.length > 0 && (
+                      <tfoot className="bg-[#fef9c3] font-mono font-bold text-gray-900 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-sm">
+                        <tr>
+                          <td colSpan={2} className="whitespace-nowrap py-2 px-3 font-sans font-black text-center text-[13.5px] border-r border-gray-300">
+                            센터 품목 합계 ({centerItems.length}건)
+                          </td>
+                          <td className="whitespace-nowrap py-2 px-2.5 text-right font-black text-[15px] text-blue-950">
+                            {centerItemsTotalQty.toLocaleString()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table></EditableTableWrapper>
                 </div>
               </div>
@@ -508,47 +550,47 @@ export const OrderSummaryGsrView: React.FC = () => {
       {/* 드릴다운: 품목 구성 수주 목록 */}
       {drillKind !== null && (
         <div className="fixed inset-0 z-[300] bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-[560px] max-w-full max-h-[80vh] flex flex-col">
-            <div className="px-4 py-2.5 border-b border-gray-300 flex items-center justify-between">
-              <span className="font-bold text-[13px]">
+          <div className="bg-white rounded-lg shadow-xl w-[640px] max-w-full max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-4 py-3 bg-[#e2e8f0] border-b border-gray-300 flex items-center justify-between">
+              <span className="font-black text-[15px] text-gray-900">
                 [{drillKind}] 구성 수주 ({drillRows.length}건)
               </span>
               <button
                 type="button" onClick={() => setDrillKind(null)}
-                className="px-2 py-0.5 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold"
+                className="px-3 py-1 border border-gray-400 rounded bg-white hover:bg-gray-100 font-bold text-[13px] text-gray-800 shadow-2xs cursor-pointer transition-colors"
               >
                 닫기
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">
-              <table className="w-full text-[12px] border-collapse">
+              <table className="w-full text-[13px] border-collapse">
                 <thead className="bg-[#eef2f7] text-gray-900 sticky top-0 border-b border-[#dbe3ee] text-center font-bold whitespace-nowrap">
                   <tr>
-                    <th className="py-1 px-2 border-r border-[#dbe3ee]">주문번호</th>
-                    <th className="py-1 px-1 border-r border-[#dbe3ee]">일자</th>
-                    <th className="py-1 px-2 border-r border-[#dbe3ee] text-left">거래처</th>
-                    <th className="py-1 px-1 border-r border-[#dbe3ee] text-right">수량</th>
-                    <th className="py-1 px-1 text-right">금액</th>
+                    <th className="py-2 px-3 border-r border-[#dbe3ee]">주문번호</th>
+                    <th className="py-2 px-2 border-r border-[#dbe3ee]">일자</th>
+                    <th className="py-2 px-3 border-r border-[#dbe3ee] text-left">거래처</th>
+                    <th className="py-2 px-2.5 border-r border-[#dbe3ee] text-right">수량</th>
+                    <th className="py-2 px-2.5 text-right">금액</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 font-mono">
                   {drillRows.map((r, i) => (
-                    <tr key={`${r.orderNo}-${i}`} className="hover:bg-blue-50/50">
-                      <td className="py-1 px-2 border-r border-gray-200">{r.orderNo}</td>
-                      <td className="py-1 px-1 text-center border-r border-gray-200">{r.orderDate}</td>
-                      <td className="py-1 px-2 font-sans text-left border-r border-gray-200">{r.centerCode}</td>
-                      <td className="py-1 px-1 text-right font-bold text-blue-900 border-r border-gray-200">{r.qty.toLocaleString('ko-KR')}</td>
-                      <td className="py-1 px-1 text-right">{r.amt.toLocaleString('ko-KR')}</td>
+                    <tr key={`${r.orderNo}-${i}`} className="hover:bg-blue-50/60 transition-colors">
+                      <td className="py-2 px-3 border-r border-gray-200 text-gray-700">{r.orderNo}</td>
+                      <td className="py-2 px-2 text-center border-r border-gray-200">{r.orderDate}</td>
+                      <td className="py-2 px-3 font-sans font-bold text-left border-r border-gray-200 text-gray-900">{r.centerCode}</td>
+                      <td className="py-2 px-2.5 text-right font-black text-[14px] text-blue-900 border-r border-gray-200">{r.qty.toLocaleString('ko-KR')}</td>
+                      <td className="py-2 px-2.5 text-right font-bold text-gray-900">{r.amt.toLocaleString('ko-KR')}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-[#fdfde0] font-mono font-bold border-t-2 border-[#dbe3ee] sticky bottom-0">
+                <tfoot className="bg-[#fef9c3] font-mono font-bold border-t-2 border-slate-300 sticky bottom-0">
                   <tr>
-                    <td colSpan={3} className="py-1 px-2 text-center border-r border-gray-300">합계</td>
-                    <td className="py-1 px-1 text-right text-blue-900 border-r border-gray-300">
+                    <td colSpan={3} className="py-2.5 px-3 font-sans font-black text-center text-[14px] border-r border-gray-300">합계</td>
+                    <td className="py-2.5 px-2.5 text-right text-[15px] font-black text-blue-950 border-r border-gray-300">
                       {drillRows.reduce((s, r) => s + r.qty, 0).toLocaleString('ko-KR')}
                     </td>
-                    <td className="py-1 px-1 text-right">
+                    <td className="py-2.5 px-2.5 text-right text-[14.5px] font-black text-gray-950">
                       {drillRows.reduce((s, r) => s + r.amt, 0).toLocaleString('ko-KR')}
                     </td>
                   </tr>
