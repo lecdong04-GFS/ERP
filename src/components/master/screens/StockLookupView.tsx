@@ -43,7 +43,7 @@ interface StockItem {
   inboundDate: string; // 입고일 (D+2 등)
   expiryDate: string; // 유통기한
   orderDay: string; // 발주일
-  dailyUsage: number; // Bom 일사용량 (현재고 기준 봉/낱개/롤 단위)
+  dailyUsage: number; // BOM 일사용량 (현재고 기준 봉/낱개/롤 단위)
   actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
   avg20DailyUsage?: number; // 실사용 평균(20일) (최근 20일간의 실제 일평균 소진량)
   avg7DailyUsage?: number; // 하위 호환
@@ -1757,7 +1757,7 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'dailyUsage',
-      label: locked ? 'Bom 일사용량 🔒' : 'Bom 일사용량',
+      label: locked ? 'BOM 일사용량 🔒' : 'BOM 일사용량',
       width: '5.1%',
       minWidth: '76px',
       align: 'right',
@@ -1775,8 +1775,8 @@ export const StockLookupView: React.FC = () => {
             className="font-mono text-gray-800 whitespace-nowrap"
             title={
               pack > 1
-                ? `Bom 일사용량: ${disp} (기준 발주 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
-                : `Bom 일사용량: ${disp} (기준 발주 단위)`
+                ? `BOM 일사용량: ${disp} (기준 발주 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
+                : `BOM 일사용량: ${disp} (기준 발주 단위)`
             }
           >
             {disp}
