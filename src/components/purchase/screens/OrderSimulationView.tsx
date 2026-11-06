@@ -36,6 +36,9 @@ interface FinishedProductItem {
   category: string;
   spec: string;
   unit: string;
+  statAvgQty: number;
+  statOrderCount: number;
+  recentQty: number;
   baseQty: number;
   simulQty: number;
   ingredients: Array<{
@@ -189,6 +192,7 @@ export const OrderSimulationView: React.FC = () => {
       safetyStock: number;
       netShortage: number;
       suggestBoxes: number;
+      suggestQty: number;
       suggestAmt: number;
       stockDays: number;
       status: 'SHORTAGE' | 'WARNING' | 'TARGET' | 'OK';
@@ -199,6 +203,7 @@ export const OrderSimulationView: React.FC = () => {
     let totalShortageItems = 0;
     let totalEstimatedBudget = 0;
     let totalRequiredBoxes = 0;
+    let totalSuggestQty = 0;
     let bottleneckItem: { name: string; maxCapacity: number } | null = null;
     let minCapacityFound = Infinity;
 
@@ -229,9 +234,10 @@ export const OrderSimulationView: React.FC = () => {
       const totalReq = Math.round(reqInfo.totalReq * 100) / 100;
       const netShortage = Math.max(0, Math.round((totalReq + safetyStock - totalAvailStock) * 100) / 100);
 
-      // 박스 단위 올림 계산 (신입사원 코칭)
+      // 박스 단위 올림 계산 및 시스템 예상발주량(낱개 수량) 산출
       const suggestBoxes = netShortage > 0 ? Math.ceil(netShortage / boxQty) : 0;
-      const suggestAmt = suggestBoxes * boxQty * unitPrice;
+      const suggestQty = boxQty > 1 ? suggestBoxes * boxQty : netShortage;
+      const suggestAmt = suggestQty * unitPrice;
 
       // 재고 버팀일수
       const dailyUse = meta?.dailyUsage && meta.dailyUsage > 0 ? meta.dailyUsage : totalReq > 0 ? totalReq : 1;
@@ -249,6 +255,7 @@ export const OrderSimulationView: React.FC = () => {
 
       totalEstimatedBudget += suggestAmt;
       totalRequiredBoxes += suggestBoxes;
+      totalSuggestQty += suggestQty;
 
       // 선택 완제품에 쓰이는 자재라면 병목 자재 분석
       if (selectedProd) {
@@ -278,6 +285,7 @@ export const OrderSimulationView: React.FC = () => {
         safetyStock,
         netShortage,
         suggestBoxes,
+        suggestQty,
         suggestAmt,
         stockDays,
         status,
@@ -294,6 +302,7 @@ export const OrderSimulationView: React.FC = () => {
       totalShortageItems,
       totalEstimatedBudget,
       totalRequiredBoxes,
+      totalSuggestQty,
       bottleneckItem: bottleneckItem as { name: string; maxCapacity: number } | null,
       minCapacityFound: minCapacityFound === Infinity ? 0 : minCapacityFound,
     };
@@ -336,10 +345,11 @@ export const OrderSimulationView: React.FC = () => {
         stock: acc.stock + r.currentStock,
         incoming: acc.incoming + r.effectiveIncoming,
         shortage: acc.shortage + r.netShortage,
+        suggestQty: acc.suggestQty + r.suggestQty,
         boxes: acc.boxes + r.suggestBoxes,
         amt: acc.amt + r.suggestAmt,
       }),
-      { req: 0, stock: 0, incoming: 0, shortage: 0, boxes: 0, amt: 0 }
+      { req: 0, stock: 0, incoming: 0, shortage: 0, suggestQty: 0, boxes: 0, amt: 0 }
     );
   }, [filteredMaterialRows]);
 
@@ -364,8 +374,9 @@ export const OrderSimulationView: React.FC = () => {
         { key: 'effectiveIncoming', label: '입고예정량', format: 'number' },
         { key: 'safetyStock', label: '안전재고', format: 'number' },
         { key: 'netShortage', label: '순부족량(결품위험)', format: 'number' },
+        { key: 'suggestQty', label: '시스템예상발주량(수량)', format: 'number' },
         { key: 'boxQty', label: '박스내입수', format: 'number' },
-        { key: 'suggestBoxes', label: '권장발주박스', format: 'number' },
+        { key: 'suggestBoxes', label: '예상발주박스(Box)', format: 'number' },
         { key: 'unitPrice', label: '발주단가', format: 'currency' },
         { key: 'suggestAmt', label: '예상매입금액', format: 'currency' },
         { key: 'stockDays', label: '유지가능일수' },
@@ -473,7 +484,7 @@ export const OrderSimulationView: React.FC = () => {
             </div>
           </div>
 
-          {/* 권장 발주 박스 */}
+          {/* 시스템 총 예상발주량 */}
           <div
             onClick={() => setMatFilterTab(matFilterTab === 'TARGET' ? 'ALL' : 'TARGET')}
             className={`border rounded-xs px-3 py-1.5 flex items-center gap-2.5 cursor-pointer transition-all shadow-2xs ${
@@ -484,9 +495,12 @@ export const OrderSimulationView: React.FC = () => {
           >
             <Boxes size={16} className="text-blue-600" />
             <div>
-              <div className="text-[11px] font-bold text-blue-900">권장 발주 박스 (Box올림)</div>
+              <div className="text-[11px] font-bold text-blue-900">시스템 총 예상발주량</div>
               <div className="text-[15px] font-black text-blue-950 font-mono leading-none">
-                {simulationResults.totalRequiredBoxes.toLocaleString()} Box
+                {simulationResults.totalSuggestQty.toLocaleString()} ea{' '}
+                <span className="text-[12px] text-blue-800 font-bold">
+                  ({simulationResults.totalRequiredBoxes.toLocaleString()} Box)
+                </span>
               </div>
             </div>
           </div>
@@ -504,10 +518,10 @@ export const OrderSimulationView: React.FC = () => {
         </div>
 
         {/* 신입사원 코칭 배너 */}
-        <div className="bg-slate-100 border border-slate-300 px-3 py-1 rounded text-[11.5px] text-slate-700 flex items-center gap-2 max-w-[380px]">
+        <div className="bg-blue-50/80 border border-blue-200 px-3 py-1 rounded text-[11.5px] text-slate-800 flex items-center gap-2 max-w-[440px]">
           <Info size={14} className="text-blue-600 shrink-0" />
           <span>
-            <strong>💡 신입사원 코칭:</strong> 가상 수량을 조절하여 어떤 자재가 먼저 바닥나는지 모의 진단해보세요. 실제 발주서(PO)는 발행되지 않으니 안심하셔도 됩니다.
+            <strong>💡 시스템 자동 산출 안내:</strong> 과거 GS25 실제 수주 통계(2,500+건)와 실시간 재고를 기반으로 <strong>시스템 예상 발주량(ea / Box)</strong>을 100% 자동 추출합니다.
           </span>
         </div>
       </div>
@@ -545,10 +559,11 @@ export const OrderSimulationView: React.FC = () => {
               type="button"
               onClick={() => applySurgePreset(0)}
               className={`px-2 py-0.5 rounded text-[11.5px] font-bold border transition-colors cursor-pointer ${
-                surgePercent === 0 ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-300'
+                surgePercent === 0 ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
               }`}
+              title="과거 GS25 실제 평균 수주량으로 복원"
             >
-              기본(0%)
+              GS25통계기본(0%)
             </button>
             <button
               type="button"
@@ -566,7 +581,7 @@ export const OrderSimulationView: React.FC = () => {
                 surgePercent === 50 ? 'bg-rose-600 text-white border-rose-700' : 'bg-white text-rose-800 border-slate-300 hover:bg-rose-50'
               }`}
             >
-              +50% 행사폭증
+              +50% 편의점행사
             </button>
             <button
               type="button"
@@ -575,7 +590,7 @@ export const OrderSimulationView: React.FC = () => {
                 surgePercent === 100 ? 'bg-purple-700 text-white border-purple-800' : 'bg-white text-purple-900 border-slate-300 hover:bg-purple-50'
               }`}
             >
-              2배(+100%)
+              2배(+100%) 비상수주
             </button>
           </div>
         </div>
@@ -644,12 +659,20 @@ export const OrderSimulationView: React.FC = () => {
       <div className="flex-1 flex p-1.5 gap-1.5 min-h-0 overflow-hidden">
         {/* 좌측 패널 (32% 너비) - [완성품 생산계획 모의 설정] */}
         <div className="w-[32%] flex flex-col min-h-0 bg-white border border-slate-300 shadow-2xs rounded-xs overflow-hidden">
-          <div className="px-3 py-1.5 bg-[#e2e8f0] border-b border-slate-300 font-bold text-slate-800 text-[12px] flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
+          <div className="px-2.5 py-1.5 bg-[#e2e8f0] border-b border-slate-300 font-bold text-slate-800 text-[12px] flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-black text-slate-900">
               <span className="w-2 h-2 bg-blue-600 rounded-full inline-block" />
-              완성품 생산계획 모의 설정 ({finishedProds.length}개)
+              완성품 생산계획 ({finishedProds.length}종)
             </span>
-            <span className="text-slate-500 font-normal text-[11px]">클릭 시 우측 BOM 연동</span>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="flex items-center gap-1 px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-bold shadow-2xs cursor-pointer transition-colors"
+              title="과거 GS25 실제 수주 통계 평균수량으로 자동 입력합니다."
+            >
+              <Sparkles size={11} className="text-amber-300" />
+              통계예상량 자동추출
+            </button>
           </div>
 
           {/* 완제품 검색바 */}
@@ -674,10 +697,12 @@ export const OrderSimulationView: React.FC = () => {
                 <table className="w-full min-w-full border-collapse text-[12.5px] font-sans">
                   <thead className="sticky top-0 bg-[#eef2f7] text-slate-900 font-bold border-b border-slate-300 text-center z-10">
                     <tr className="h-[32px]">
-                      <th className="border-r border-slate-300 px-1 py-1 w-[32px]">No</th>
+                      <th className="border-r border-slate-300 px-1 py-1 w-[30px]">No</th>
                       <th className="border-r border-slate-300 px-2 py-1 text-left">품명</th>
-                      <th className="border-r border-slate-300 px-1.5 py-1 w-[70px] text-right">기본수량</th>
-                      <th className="px-1.5 py-1 w-[90px] text-right bg-amber-100 text-amber-950 font-black">
+                      <th className="border-r border-slate-300 px-1.5 py-1 w-[80px] text-right" title="과거 GS25 수주 실적 기반 시스템 자동 추출 평균치">
+                        GS25통계평균
+                      </th>
+                      <th className="px-1.5 py-1 w-[85px] text-right bg-amber-100 text-amber-950 font-black">
                         시뮬수량(✏️)
                       </th>
                     </tr>
@@ -700,8 +725,16 @@ export const OrderSimulationView: React.FC = () => {
                             {isSelected && <span className="text-blue-600 mr-1">▶</span>}
                             {prod.name}
                           </td>
-                          <td className="px-1.5 py-1 text-right font-mono text-slate-600 border-r border-slate-200">
-                            {prod.baseQty.toLocaleString()}
+                          <td className="px-1.5 py-1 text-right font-mono text-slate-700 border-r border-slate-200 text-[12px]">
+                            {prod.statAvgQty > 0 ? (
+                              <span className="font-bold text-blue-900" title={`과거 ${prod.statOrderCount}건 수주 실적 평균치`}>
+                                {prod.statAvgQty.toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[11px]" title="신규품목 (표준배치 수량 적용)">
+                                {prod.baseQty.toLocaleString()}
+                              </span>
+                            )}
                           </td>
                           <td
                             className="px-1 py-0.5 text-right bg-amber-50/70 font-mono font-black text-blue-950"
@@ -824,8 +857,11 @@ export const OrderSimulationView: React.FC = () => {
                       <th className="border-r border-slate-300 px-2.5 py-1 text-right w-[95px] bg-rose-100/90 text-rose-950 font-black">
                         순부족량🚨
                       </th>
-                      <th className="border-r border-slate-300 px-2 py-1 text-right w-[85px] bg-amber-100/90 text-blue-950 font-black">
-                        권장박스📦
+                      <th className="border-r border-slate-300 px-2.5 py-1 text-right w-[100px] bg-blue-100/90 text-blue-950 font-black">
+                        시스템 예상발주량(ea)
+                      </th>
+                      <th className="border-r border-slate-300 px-2 py-1 text-right w-[85px] bg-amber-100/90 text-amber-950 font-black">
+                        예상 발주박스📦
                       </th>
                       <th className="border-r border-slate-300 px-2 py-1 text-right w-[80px]">단가</th>
                       <th className="border-r border-slate-300 px-2.5 py-1 text-right w-[100px] font-black">예상금액</th>
@@ -881,7 +917,10 @@ export const OrderSimulationView: React.FC = () => {
                         >
                           {row.netShortage > 0 ? row.netShortage.toLocaleString() : '-'}
                         </td>
-                        <td className="px-2 py-1 text-right font-mono font-black text-blue-950 bg-amber-50/80 border-r border-slate-200 text-[13.5px]">
+                        <td className="px-2.5 py-1 text-right font-mono font-black text-blue-950 bg-blue-50/80 border-r border-slate-200 text-[13px]">
+                          {row.suggestQty > 0 ? `${row.suggestQty.toLocaleString()} ${row.unit}` : '-'}
+                        </td>
+                        <td className="px-2 py-1 text-right font-mono font-black text-amber-950 bg-amber-50/80 border-r border-slate-200 text-[13px]">
                           {row.suggestBoxes > 0 ? `${row.suggestBoxes} Box` : '-'}
                         </td>
                         <td className="px-2 py-1 text-right font-mono text-slate-700 border-r border-slate-200 text-[12px]">
@@ -943,12 +982,15 @@ export const OrderSimulationView: React.FC = () => {
                       <td className="border-r border-slate-300 px-2.5 py-1 text-right text-[15px] font-black text-rose-700 bg-rose-100/60">
                         {totals.shortage.toLocaleString()}
                       </td>
-                      <td className="border-r border-slate-300 px-2 py-1 text-right text-[15px] font-black text-blue-950 bg-amber-100/60">
+                      <td className="border-r border-slate-300 px-2.5 py-1 text-right text-[15px] font-black text-blue-950 bg-blue-100/60">
+                        {totals.suggestQty.toLocaleString()}
+                      </td>
+                      <td className="border-r border-slate-300 px-2 py-1 text-right text-[15px] font-black text-amber-950 bg-amber-100/60">
                         {totals.boxes.toLocaleString()} Box
                       </td>
                       <td className="border-r border-slate-300 px-2 py-1"></td>
                       <td className="border-r border-slate-300 px-2.5 py-1 text-right text-[14.5px] font-black text-slate-950">
-                        {totals.amt.toLocaleString()}
+                        ₩{totals.amt.toLocaleString()}
                       </td>
                       <td colSpan={2} className="px-2 py-1"></td>
                     </tr>

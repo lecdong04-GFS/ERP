@@ -28,7 +28,33 @@ export async function GET(req: NextRequest) {
       orderBy: { id: 'asc' },
     });
 
-    // 2. 완제품별 최근 수주량 조회 (salesOrder)
+    // 2. 완제품별 GS25 과거 수주 통계 집계 (실제 2,500+건 수주 실적 기반)
+    const allOrderDetails = await prisma.salesOrderDetail.findMany({
+      where: {
+        salesOrder: {
+          status: { not: '취소' },
+        },
+      },
+      select: {
+        totalQty: true,
+        product: { select: { productCode: true } },
+      },
+    });
+
+    const statMap = new Map<string, { count: number; totalQty: number; avgQty: number }>();
+    for (const od of allOrderDetails) {
+      const code = od.product?.productCode;
+      if (!code) continue;
+      const cur = statMap.get(code) || { count: 0, totalQty: 0, avgQty: 0 };
+      cur.count += 1;
+      cur.totalQty += Number(od.totalQty) || 0;
+      statMap.set(code, cur);
+    }
+    statMap.forEach((v) => {
+      v.avgQty = v.count > 0 ? Math.round(v.totalQty / v.count) : 0;
+    });
+
+    // 2-1. 최근 수주량 조회 (기준일자 이전 가장 최근 수주)
     const recentOrders = await prisma.salesOrderDetail.findMany({
       where: {
         salesOrder: {
@@ -45,7 +71,7 @@ export async function GET(req: NextRequest) {
     for (const od of recentOrders) {
       const code = od.product?.productCode;
       if (code && !recentOrderQtyMap.has(code)) {
-        recentOrderQtyMap.set(code, Number(od.totalQty) || 1000);
+        recentOrderQtyMap.set(code, Number(od.totalQty) || 0);
       }
     }
 
@@ -54,7 +80,12 @@ export async function GET(req: NextRequest) {
       .filter((bh) => bh.parentProduct)
       .map((bh) => {
         const p = bh.parentProduct!;
-        const baseQty = recentOrderQtyMap.get(p.productCode) || 1000;
+        const stat = statMap.get(p.productCode);
+        const avgQty = stat?.avgQty && stat.avgQty > 0 ? stat.avgQty : 0;
+        const recentQty = recentOrderQtyMap.get(p.productCode) || 0;
+        // 시스템 추천 기준수량: 과거 통계 평균 > 최근 수주량 > 기본 1,000
+        const baseQty = avgQty > 0 ? avgQty : recentQty > 0 ? recentQty : 1000;
+
         return {
           id: p.id,
           bomId: bh.id,
@@ -63,6 +94,9 @@ export async function GET(req: NextRequest) {
           category: p.category || '완성품',
           spec: p.spec || '',
           unit: p.unit || 'ea',
+          statAvgQty: avgQty,
+          statOrderCount: stat?.count || 0,
+          recentQty,
           baseQty,
           simulQty: baseQty,
           ingredients: bh.details.map((d) => {
