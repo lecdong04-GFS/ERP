@@ -1710,16 +1710,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemType',
       label: '구분',
-      width: '3.2%',
-      minWidth: '44px',
-      align: 'center',
-      sortable: true,
-      editable: false,
-    },
-    {
-      key: 'category',
-      label: '품종',
-      width: '3.7%',
+      width: '4.0%',
       minWidth: '50px',
       align: 'center',
       sortable: true,
