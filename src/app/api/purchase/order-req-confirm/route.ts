@@ -6,6 +6,8 @@ import {
   REPR_MAPPINGS,
 } from '@/services/pipeline/ProductionCostPipeline';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/purchase/order-req-confirm?date=2026-10-30&supplier=ALL&search=
 export async function GET(req: NextRequest) {
   try {

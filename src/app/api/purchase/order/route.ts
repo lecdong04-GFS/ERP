@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/purchase/order?orderDate=2026-10-30&status=미입고
 // GET /api/purchase/order?startDate=2026-10-01&endDate=2026-10-31 (기간 조회)
 export async function GET(req: NextRequest) {

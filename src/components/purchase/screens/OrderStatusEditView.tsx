@@ -361,12 +361,9 @@ export const OrderStatusEditView: React.FC = () => {
       return;
     }
 
-    const ok = await erpConfirm(
-      `수정된 ${modified.length}개 품목의 발주수량 및 단가를 데이터베이스에 영구 저장하시겠습니까?`,
-      '발주 수정 저장',
-      'warning'
-    );
-    if (!ok) return;
+    if (!window.confirm(`수정된 ${modified.length}개 품목의 발주수량 및 단가를 데이터베이스에 영구 저장하시겠습니까?`)) {
+      return;
+    }
 
     setIsSaving(true);
     setStatusMsg(`수정 내역 ${modified.length}건 저장 중...`);
@@ -424,20 +421,35 @@ export const OrderStatusEditView: React.FC = () => {
         return;
       }
 
-      const ok = await erpConfirm(
+      const ok = window.confirm(
         `선택하신 ${checkedDetails.length}개 발주 품목을 완전히 영구 삭제하시겠습니까?\n\n` +
           `• 대상 품목: ${checkedDetails.map((x) => x.productName).slice(0, 4).join(', ')}${
             checkedDetails.length > 4 ? ` 외 ${checkedDetails.length - 4}건` : ''
           }\n` +
           `• 삭제 총액: 약 ₩${Math.round(checkedDetails.reduce((sum, x) => sum + x.amount, 0)).toLocaleString()}원\n\n` +
-          `⚠️ 발주서 내 마지막 품목이 삭제되는 경우 해당 발주서도 함께 정리됩니다.`,
-        '발주 품목 영구 삭제',
-        'danger'
+          `⚠️ 발주서 내 마지막 품목이 삭제되는 경우 해당 발주서도 함께 정리됩니다.`
       );
       if (!ok) return;
 
       const detailIdsToDelete = checkedDetails.map((x) => x.id);
       const detailIdSet = new Set(detailIdsToDelete);
+
+      // 즉시 로컬 상태에서 제거 (즉각 반영 0ms)
+      setFlatItems((prev) => prev.filter((x) => !detailIdSet.has(x.id)));
+      setMasterList((prev) =>
+        prev
+          .map((m) => {
+            const remainingDetails = m.details.filter((d) => !detailIdSet.has(d.id));
+            const newAmt = remainingDetails.reduce((sum, d) => sum + d.amount, 0);
+            return {
+              ...m,
+              itemCount: remainingDetails.length,
+              orderAmt: newAmt,
+              details: remainingDetails,
+            };
+          })
+          .filter((m) => m.itemCount > 0)
+      );
 
       try {
         const res = await fetch('/api/purchase/order', {
@@ -450,29 +462,14 @@ export const OrderStatusEditView: React.FC = () => {
         });
         const json = await res.json().catch(() => null);
         if (json?.success) {
-          // 1. 즉시 로컬 상태에서 제거 (즉각 반영)
-          setFlatItems((prev) => prev.filter((x) => !detailIdSet.has(x.id)));
-          setMasterList((prev) =>
-            prev
-              .map((m) => {
-                const remainingDetails = m.details.filter((d) => !detailIdSet.has(d.id));
-                const newAmt = remainingDetails.reduce((sum, d) => sum + d.amount, 0);
-                return {
-                  ...m,
-                  itemCount: remainingDetails.length,
-                  orderAmt: newAmt,
-                  details: remainingDetails,
-                };
-              })
-              .filter((m) => m.itemCount > 0)
-          );
           alert(`✅ ${json.message || '선택한 품목이 성공적으로 삭제되었습니다.'}`);
-          loadData(startDate, endDate, true);
         } else {
           alert('삭제 실패: ' + (json?.error || '오류 발생'));
+          loadData(startDate, endDate, true);
         }
       } catch (err: any) {
         alert('삭제 통신 오류: ' + (err?.message || err));
+        loadData(startDate, endDate, true);
       }
     } else {
       // 발주서(마스터) 단위 삭제
@@ -488,19 +485,20 @@ export const OrderStatusEditView: React.FC = () => {
         return;
       }
 
-      const ok = await erpConfirm(
+      const ok = window.confirm(
         `선택한 ${checkedMasters.length}건의 발주서를 데이터베이스에서 완전히 영구 삭제하시겠습니까?\n\n` +
           `• 대상 발주번호: ${checkedMasters.map((x) => x.orderNo).slice(0, 4).join(', ')}${
             checkedMasters.length > 4 ? ` 외 ${checkedMasters.length - 4}건` : ''
           }\n` +
-          `• 총 금액: ₩${Math.round(checkedMasters.reduce((acc, x) => acc + x.orderAmt, 0)).toLocaleString()}원`,
-        '발주서 영구 삭제',
-        'danger'
+          `• 총 금액: ₩${Math.round(checkedMasters.reduce((acc, x) => acc + x.orderAmt, 0)).toLocaleString()}원`
       );
       if (!ok) return;
 
       const masterIdsToDelete = checkedMasters.map((m) => m.id);
       const masterIdSet = new Set(masterIdsToDelete);
+
+      setMasterList((prev) => prev.filter((m) => !masterIdSet.has(m.id)));
+      setFlatItems((prev) => prev.filter((x) => !masterIdSet.has(x.orderId)));
 
       try {
         const res = await fetch('/api/purchase/order', {
@@ -513,15 +511,14 @@ export const OrderStatusEditView: React.FC = () => {
         });
         const json = await res.json().catch(() => null);
         if (json?.success) {
-          setMasterList((prev) => prev.filter((m) => !masterIdSet.has(m.id)));
-          setFlatItems((prev) => prev.filter((x) => !masterIdSet.has(x.orderId)));
           alert(`✅ ${json.message || '선택한 발주서가 성공적으로 삭제되었습니다.'}`);
-          loadData(startDate, endDate, true);
         } else {
           alert('발주서 삭제 실패: ' + (json?.error || '오류'));
+          loadData(startDate, endDate, true);
         }
       } catch (err: any) {
         alert('삭제 통신 오류: ' + (err?.message || err));
+        loadData(startDate, endDate, true);
       }
     }
   };
@@ -533,12 +530,26 @@ export const OrderStatusEditView: React.FC = () => {
       return;
     }
 
-    const ok = await erpConfirm(
-      `품목 [${item.productName}] (${item.orderQty}box, ₩${item.amount.toLocaleString()}원)을(를) 발주서에서 삭제하시겠습니까?`,
-      '단일 발주 품목 삭제',
-      'danger'
+    const ok = window.confirm(
+      `품목 [${item.productName}] (${item.orderQty}box, ₩${item.amount.toLocaleString()}원)을(를) 발주서에서 삭제하시겠습니까?`
     );
     if (!ok) return;
+
+    setFlatItems((prev) => prev.filter((x) => x.id !== item.id));
+    setMasterList((prev) =>
+      prev
+        .map((m) => {
+          if (m.id !== item.orderId) return m;
+          const remainingDetails = m.details.filter((d) => d.id !== item.id);
+          return {
+            ...m,
+            itemCount: remainingDetails.length,
+            orderAmt: remainingDetails.reduce((sum, d) => sum + d.amount, 0),
+            details: remainingDetails,
+          };
+        })
+        .filter((m) => m.itemCount > 0)
+    );
 
     try {
       const res = await fetch('/api/purchase/order', {
@@ -551,28 +562,14 @@ export const OrderStatusEditView: React.FC = () => {
       });
       const json = await res.json().catch(() => null);
       if (json?.success) {
-        setFlatItems((prev) => prev.filter((x) => x.id !== item.id));
-        setMasterList((prev) =>
-          prev
-            .map((m) => {
-              if (m.id !== item.orderId) return m;
-              const remainingDetails = m.details.filter((d) => d.id !== item.id);
-              return {
-                ...m,
-                itemCount: remainingDetails.length,
-                orderAmt: remainingDetails.reduce((sum, d) => sum + d.amount, 0),
-                details: remainingDetails,
-              };
-            })
-            .filter((m) => m.itemCount > 0)
-        );
         alert(`✅ ${json.message || '품목이 삭제되었습니다.'}`);
-        loadData(startDate, endDate, true);
       } else {
         alert('삭제 실패: ' + (json?.error || '오류'));
+        loadData(startDate, endDate, true);
       }
     } catch (e: any) {
       alert('오류: ' + (e?.message || e));
+      loadData(startDate, endDate, true);
     }
   };
 
@@ -654,9 +651,9 @@ export const OrderStatusEditView: React.FC = () => {
     }
   };
 
-  // 10) 스마트발주 화면 즉시 이동
-  const handleGoToGfs = () => {
-    const item = getMenuItemById('pur-gfs-smart-order');
+  // 10) 자체발주(요일별) 화면 즉시 이동
+  const handleGoToOrder = () => {
+    const item = getMenuItemById('pur-mat-order-day');
     if (item) openTab(item);
   };
 
@@ -688,24 +685,24 @@ export const OrderStatusEditView: React.FC = () => {
                   발주 현황 및 수정 관제
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200">
-                  스마트발주 100% 동기화
+                  자체발주 실시간 100% 동기화
                 </span>
               </div>
               <p className="text-[12.5px] font-medium text-slate-500 mt-1">
-                스마트발주(GFS)에서 확정한 박스 수량과 금액이 그대로 연동되며, 인라인 수정 및 삭제가 가능합니다.
+                자체발주(요일별)에서 확정한 거래처별 박스 수량과 금액이 실시간 연동되며, 인라인 수정 및 삭제가 가능합니다.
               </p>
             </div>
           </div>
 
-          {/* 우측 빠른 액션: 스마트발주 바로가기 & 데이터 새로고침 */}
+          {/* 우측 빠른 액션: 자체발주 바로가기 & 데이터 새로고침 */}
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleGoToGfs}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[13px] font-extrabold shadow-sm transition cursor-pointer"
+              onClick={handleGoToOrder}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[13px] font-extrabold shadow-sm transition cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>스마트발주(GFS) 열기</span>
+              <span>자체발주(요일별) 이동</span>
             </button>
             <button
               type="button"
@@ -1061,7 +1058,7 @@ export const OrderStatusEditView: React.FC = () => {
                             선택하신 기간({startDate} ~ {endDate})에 등록된 발주 내역이 없습니다.
                           </div>
                           <p className="text-[13px] text-slate-500">
-                            스마트발주(GFS)에서 발주 확정 시 저장된 날짜가 다르거나, 아직 오늘자 발주 확정을 진행하지 않았을 수 있습니다.
+                            [자체발주(요일별)]에서 발주를 확정하시면 해당 내역이 이곳에 실시간으로 표시됩니다.
                           </p>
                           <div className="flex items-center gap-2 mt-2">
                             <button
