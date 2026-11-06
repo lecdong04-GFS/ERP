@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getEstimatedDailyUsageWithDb, getRollingUsage7DaysWithDb } from '@/lib/gfs/estimatedUsage';
+import { getEstimatedDailyUsageWithDb, getRollingUsageWindowWithDb } from '@/lib/gfs/estimatedUsage';
 
 export async function GET(req: NextRequest) {
   try {
@@ -8,8 +8,9 @@ export async function GET(req: NextRequest) {
     const days = req.nextUrl.searchParams.get('days');
     const targetDate = req.nextUrl.searchParams.get('targetDate') || undefined;
 
-    if (days === '7') {
-      const data = await getRollingUsage7DaysWithDb(prisma, targetDate, force);
+    if (days) {
+      const windowDays = parseInt(days, 10) || 20;
+      const data = await getRollingUsageWindowWithDb(prisma, targetDate, windowDays, force);
       return NextResponse.json({ success: true, data });
     }
 

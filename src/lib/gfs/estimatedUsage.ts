@@ -368,12 +368,13 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
 }
 
 /**
- * 최근 7일(약 1주일 이동평균) 기준 실사용 평균 산출
- * targetDate 기준 이전 8일 이내의 스냅샷 데이터만 추출하여 일평균 소진량을 계산
+ * 최근 지정 일수(기본 20일 이동평균) 기준 실사용 평균 산출
+ * targetDate 기준 이전 windowDays 이내의 스냅샷 데이터를 추출하여 일평균 소진량을 계산
  */
-export async function getRollingUsage7DaysWithDb(
+export async function getRollingUsageWindowWithDb(
   prisma: any,
   targetDate?: string,
+  windowDays = 20,
   _forceRefresh = false,
 ): Promise<EstimatedUsageResult> {
   try {
@@ -391,7 +392,7 @@ export async function getRollingUsage7DaysWithDb(
     const windowDates = dateList
       .filter((d) => {
         const diff = (tDateObj.getTime() - new Date(d + 'T00:00:00Z').getTime()) / 86400000;
-        return diff >= 0 && diff <= 8; // 최근 7~8일 구간
+        return diff >= 0 && diff <= (windowDays + 1); // 20일 구간 (앞뒤 포함)
       })
       .sort();
 
@@ -487,3 +488,6 @@ export async function getRollingUsage7DaysWithDb(
     return { byWhAndKey: {}, byKeyOnly: {}, fileCount: 0, dateRange: ['', ''] };
   }
 }
+
+export const getRollingUsage7DaysWithDb = (prisma: any, targetDate?: string, forceRefresh = false) =>
+  getRollingUsageWindowWithDb(prisma, targetDate, 7, forceRefresh);

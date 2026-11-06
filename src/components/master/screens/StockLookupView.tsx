@@ -45,7 +45,8 @@ interface StockItem {
   orderDay: string; // 발주일
   dailyUsage: number; // 예측 일사용량 (현재고 기준 봉/낱개/롤 단위)
   actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
-  avg7DailyUsage?: number; // 실사용 평균(7일) (최근 7일간의 실제 일평균 소진량)
+  avg20DailyUsage?: number; // 실사용 평균(20일) (최근 20일간의 실제 일평균 소진량)
+  avg7DailyUsage?: number; // 하위 호환
   hasPrevStock?: boolean; // 전일 재고 실사 존재 여부
   prevSnapDate?: string; // 비교 기준 전일 실사 일자 (YYYY-MM-DD)
   estDailyUsage?: number; // 추정일사용량 (1개월 재고조사표 실소진량 기반, 현재고 기준 봉/낱개/롤 단위)
@@ -708,7 +709,7 @@ export const StockLookupView: React.FC = () => {
         : fetch('/api/inventory/stock').then((res) => res.json()),
       fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
-      fetch(`/api/inventory/estimated-usage?days=7&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
+      fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
       .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson]) => {
@@ -875,6 +876,7 @@ export const StockLookupView: React.FC = () => {
               orderDay: inv.product?.partner?.orderDay || '',
               dailyUsage: dailyU,
               actualDailyUsage: actualUsageVal,
+              avg20DailyUsage: estDaily > 0 ? estDaily : 0,
               avg7DailyUsage: estDaily > 0 ? estDaily : 0,
               hasPrevStock,
               prevSnapDate,
@@ -960,6 +962,7 @@ export const StockLookupView: React.FC = () => {
                 orderDay: '',
                 dailyUsage: daily,
                 actualDailyUsage: actualUsageVal,
+                avg20DailyUsage: estDaily > 0 ? estDaily : 0,
                 avg7DailyUsage: estDaily > 0 ? estDaily : 0,
                 hasPrevStock,
                 prevSnapDate,
@@ -1830,8 +1833,8 @@ export const StockLookupView: React.FC = () => {
       },
     },
     {
-      key: 'avg7DailyUsage',
-      label: '실사용 평균(7일)',
+      key: 'avg20DailyUsage',
+      label: '실사용 평균(20일)',
       width: '5.3%',
       minWidth: '82px',
       align: 'right',
@@ -1849,7 +1852,7 @@ export const StockLookupView: React.FC = () => {
         return (
           <span
             className="font-mono font-bold text-violet-700 whitespace-nowrap"
-            title={`최근 7일 실사용 평균: ${Number(num.toFixed(2)).toLocaleString()} (일평균 실소진량 · 관측 ${samples}회)${
+            title={`최근 20일 실사용 평균: ${Number(num.toFixed(2)).toLocaleString()} (일평균 실소진량 · 관측 ${samples}회)${
               pack > 1 ? ` · 약 ${(num / pack).toFixed(2)}박스/일 (입수량 ${pack})` : ''
             }`}
           >
