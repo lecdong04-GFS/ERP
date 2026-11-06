@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
             },
           });
 
-          // 납품 상세 createMany 일괄 삽입 (단건 루프 create로 인한 트랜잭션 타임아웃 100% 방지)
+          // 납품 상세 createMany 일괄 삽입 (500개씩 청킹하여 파라미터 한도 및 트랜잭션 타임아웃 100% 방지)
           if (grp.items.length > 0) {
             const detailData = grp.items.map((it) => {
               const productCode = String(it.productCode || 'ITEM-UNKNOWN').trim();
@@ -146,9 +146,12 @@ export async function POST(req: NextRequest) {
               };
             });
 
-            await tx.deliveryDetail.createMany({
-              data: detailData,
-            });
+            for (let i = 0; i < detailData.length; i += 500) {
+              const chunk = detailData.slice(i, i + 500);
+              await tx.deliveryDetail.createMany({
+                data: chunk,
+              });
+            }
           }
 
           provStatusList.push({
@@ -161,14 +164,17 @@ export async function POST(req: NextRequest) {
         }
 
         if (provStatusList.length > 0) {
-          await tx.provisionalSalesStatus.createMany({
-            data: provStatusList,
-          });
+          for (let i = 0; i < provStatusList.length; i += 500) {
+            const chunk = provStatusList.slice(i, i + 500);
+            await tx.provisionalSalesStatus.createMany({
+              data: chunk,
+            });
+          }
         }
       },
       {
-        maxWait: 15000,
-        timeout: 60000,
+        maxWait: 20000,
+        timeout: 90000,
       }
     );
 

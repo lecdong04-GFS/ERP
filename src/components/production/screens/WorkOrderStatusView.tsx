@@ -695,20 +695,20 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 3. 4대 멀티 탭 네비게이션 (타임테이블 간트 vs 작업지시서 vs 소요 원부자재 vs 속도 시뮬레이터) */}
       <div className="px-6 pt-3 shrink-0 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* 탭 1: 10분 단위 타임테이블 간트 (신규) */}
+          {/* 탭 1: 10분 단위 타임테이블 간트 */}
           <button
             type="button"
             onClick={() => setActiveTab('GANTT')}
-            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'GANTT'
                 ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Clock size={16} className={activeTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
+            <Clock size={17} className={activeTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
             <span>🕒 타임테이블 간트 (10분 그리드)</span>
             <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              className={`text-xs px-2 py-0.5 rounded-full font-black ${
                 activeTab === 'GANTT' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -720,16 +720,16 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('TIMETABLE')}
-            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'TIMETABLE'
                 ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <FileText size={16} className={activeTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
+            <FileText size={17} className={activeTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
             <span>📋 일일 작업지시서 (세로 상세표 & 드래그)</span>
             <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              className={`text-xs px-2 py-0.5 rounded-full font-black ${
                 activeTab === 'TIMETABLE' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -741,16 +741,16 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('MATERIALS')}
-            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'MATERIALS'
                 ? 'bg-white text-indigo-900 border-indigo-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Layers size={16} className={activeTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
+            <Layers size={17} className={activeTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
             <span>📦 소요 원부자재 (BOM 배합·불출)</span>
             <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              className={`text-xs px-2 py-0.5 rounded-full font-black ${
                 activeTab === 'MATERIALS' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -758,20 +758,20 @@ export const WorkOrderStatusView: React.FC = () => {
             </span>
           </button>
 
-          {/* 탭 4: 생산속도 시뮬레이터 (신규) */}
+          {/* 탭 4: 생산속도 시뮬레이터 */}
           <button
             type="button"
             onClick={() => setActiveTab('SIMULATOR')}
-            className={`px-4 py-2 rounded-t-xl font-black text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'SIMULATOR'
                 ? 'bg-white text-purple-900 border-purple-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Gauge size={16} className={activeTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
+            <Gauge size={17} className={activeTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
             <span>⚡ 수주량 연동 속도 시뮬레이터</span>
             <span
-              className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              className={`text-xs px-2 py-0.5 rounded-full font-black ${
                 activeTab === 'SIMULATOR' ? 'bg-purple-100 text-purple-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -838,24 +838,24 @@ export const WorkOrderStatusView: React.FC = () => {
               <SpeedSimulatorView />
             </div>
           )}
-          {/* TAB 1: 타임테이블 스케줄 테이블 */}
+          {/* TAB 1: 타임테이블 스케줄 테이블 (일일 작업지시서) */}
           {activeTab === 'TIMETABLE' && (
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center">
+              <table className="w-full text-left border-collapse text-sm sm:text-base">
+                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
                   <tr>
-                    <th className="py-3 px-2 w-28 text-center">순서</th>
-                    <th className="py-3 px-2 w-24 text-center">구분</th>
-                    <th className="py-3 px-3 w-36 text-center">작업시간</th>
-                    <th className="py-3 px-2 w-20 text-center">유형</th>
-                    <th className="py-3 px-4 text-left">지시 제품명</th>
-                    <th className="py-3 px-3 w-32 text-right">지시수량</th>
-                    <th className="py-3 px-2 w-24 text-center">소요시간</th>
-                    <th className="py-3 px-2 w-20 text-center">인원</th>
-                    <th className="py-3 px-4 text-left">주요 원부자재 배합 기준 (BOM)</th>
-                    <th className="py-3 px-4 w-44 text-left">HACCP & CCP 핵심 관리기준</th>
-                    <th className="py-3 px-3 w-28 text-center">진행상태</th>
-                    <th className="py-3 px-3 w-28 text-center">담당자</th>
+                    <th className="py-3.5 px-2.5 w-24 text-center font-black">순서</th>
+                    <th className="py-3.5 px-2.5 w-28 text-center font-black">구분</th>
+                    <th className="py-3.5 px-3 w-40 text-center font-black">작업시간</th>
+                    <th className="py-3.5 px-2.5 w-24 text-center font-black">유형</th>
+                    <th className="py-3.5 px-4 text-left font-black">지시 제품명</th>
+                    <th className="py-3.5 px-4 w-36 text-right font-black">지시수량</th>
+                    <th className="py-3.5 px-3 w-28 text-center font-black">소요시간</th>
+                    <th className="py-3.5 px-2.5 w-24 text-center font-black">인원</th>
+                    <th className="py-3.5 px-4 text-left font-black">주요 원부자재 배합 기준 (BOM)</th>
+                    <th className="py-3.5 px-4 w-52 text-left font-black">HACCP & CCP 핵심 관리기준</th>
+                    <th className="py-3.5 px-3 w-32 text-center font-black">진행상태</th>
+                    <th className="py-3.5 px-3 w-32 text-center font-black">담당자</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -868,10 +868,10 @@ export const WorkOrderStatusView: React.FC = () => {
 
                     // 시프트 뱃지 색상
                     let shiftBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
-                    if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
-                    else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-bold';
-                    else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-bold';
-                    else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+                    if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-black';
+                    else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-black';
+                    else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-black';
+                    else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
 
                     return (
                       <tr
@@ -899,15 +899,15 @@ export const WorkOrderStatusView: React.FC = () => {
                         }`}
                       >
                         {/* 1. 순서 핸들러 & 순번 */}
-                        <td className="py-3 px-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                        <td className="py-3.5 px-2.5 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
                             <span
                               className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-200/60"
                               title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
                             >
-                              <GripVertical size={16} />
+                              <GripVertical size={18} />
                             </span>
-                            <span className="font-mono font-black text-slate-900 text-sm w-6">
+                            <span className="font-mono font-black text-slate-900 text-base sm:text-lg w-7">
                               {task.seq}
                             </span>
                             <div className="flex flex-col gap-0.5">
@@ -918,7 +918,7 @@ export const WorkOrderStatusView: React.FC = () => {
                                 title="위로 순서 올리기"
                                 className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
                               >
-                                <ArrowUp size={13} />
+                                <ArrowUp size={14} />
                               </button>
                               <button
                                 type="button"
@@ -927,77 +927,77 @@ export const WorkOrderStatusView: React.FC = () => {
                                 title="아래로 순서 내리기"
                                 className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
                               >
-                                <ArrowDown size={13} />
+                                <ArrowDown size={14} />
                               </button>
                             </div>
                           </div>
                         </td>
 
                         {/* 2. 구분 (시프트 뱃지) */}
-                        <td className="py-3 px-2 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] border ${shiftBadgeClass}`}>
+                        <td className="py-3.5 px-2.5 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-lg text-xs sm:text-sm font-black border ${shiftBadgeClass}`}>
                             {task.shift}
                           </span>
                         </td>
 
                         {/* 3. 작업시간 */}
-                        <td className="py-3 px-3 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
+                        <td className="py-3.5 px-3 text-center font-mono font-black text-slate-900 text-sm sm:text-base whitespace-nowrap">
                           {task.time}
                         </td>
 
                         {/* 4. 유형 */}
-                        <td className="py-3 px-2 text-center font-bold text-xs">
+                        <td className="py-3.5 px-2.5 text-center">
                           <span
-                            className={`px-1.5 py-0.5 rounded ${
+                            className={`inline-block px-2.5 py-1 rounded-md text-xs sm:text-sm font-black ${
                               task.type === '생산'
                                 ? 'bg-blue-100 text-blue-900 font-black'
                                 : task.type === '청소'
-                                ? 'bg-amber-100 text-amber-900'
+                                ? 'bg-amber-100 text-amber-900 font-black'
                                 : task.type === '지원'
-                                ? 'bg-indigo-100 text-indigo-900'
-                                : 'bg-slate-200 text-slate-700'
+                                ? 'bg-indigo-100 text-indigo-900 font-black'
+                                : 'bg-slate-200 text-slate-700 font-bold'
                             }`}
                           >
                             {task.type}
                           </span>
                         </td>
 
-                        {/* 5. 제품명 */}
-                        <td className="py-3 px-4 font-black text-slate-900">
+                        {/* 5. 지시 제품명 */}
+                        <td className="py-3.5 px-4 font-black text-slate-950 text-base sm:text-lg tracking-tight">
                           {task.item}
                         </td>
 
                         {/* 6. 지시수량 */}
-                        <td className="py-3 px-3 text-right font-mono font-black text-indigo-950 whitespace-nowrap">
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-indigo-950 text-base sm:text-lg whitespace-nowrap">
                           {typeof task.qty === 'number' ? task.qty.toLocaleString() + ' ea' : task.qty}
                         </td>
 
                         {/* 7. 소요시간 */}
-                        <td className="py-3 px-2 text-center font-mono text-slate-700">
+                        <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-800 text-sm sm:text-base">
                           {task.duration}
                         </td>
 
                         {/* 8. 인원 */}
-                        <td className="py-3 px-2 text-center font-bold text-slate-800">
+                        <td className="py-3.5 px-2.5 text-center font-black text-slate-900 text-sm sm:text-base">
                           {task.workers}
                         </td>
 
                         {/* 9. 주요 원부자재 배합 기준 (BOM) */}
-                        <td className="py-3 px-4 text-xs text-slate-700 leading-relaxed font-normal">
+                        <td className="py-3.5 px-4 text-sm sm:text-base text-slate-800 leading-relaxed font-medium">
                           {task.bom}
                         </td>
 
                         {/* 10. HACCP & CCP 핵심 관리기준 */}
-                        <td className="py-3 px-4 text-xs font-bold text-red-700 leading-tight">
+                        <td className="py-3.5 px-4 text-sm sm:text-base font-black text-red-700 leading-snug">
                           {task.ccp}
                         </td>
 
                         {/* 11. 진행상태 버튼 토글 */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <button
                             type="button"
                             onClick={() => toggleStatus(task.id)}
-                            className={`px-3 py-1 rounded-xl font-bold text-xs shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
+                            className={`px-3.5 py-1.5 rounded-xl font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto ${
                               isDone
                                 ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                                 : isProgress
@@ -1007,12 +1007,12 @@ export const WorkOrderStatusView: React.FC = () => {
                           >
                             {isDone ? (
                               <>
-                                <CheckCircle2 size={13} />
+                                <CheckCircle2 size={15} />
                                 <span>완료</span>
                               </>
                             ) : isProgress ? (
                               <>
-                                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
                                 <span>진행중</span>
                               </>
                             ) : (
@@ -1022,13 +1022,13 @@ export const WorkOrderStatusView: React.FC = () => {
                         </td>
 
                         {/* 12. 담당자 인풋 */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <input
                             type="text"
                             value={task.assignee}
                             onChange={(e) => updateAssignee(task.id, e.target.value)}
                             placeholder="담당자"
-                            className="w-20 text-center font-bold text-xs bg-slate-50 border border-slate-300 rounded-lg px-1.5 py-1 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="w-24 text-center font-black text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </td>
                       </tr>
@@ -1042,17 +1042,17 @@ export const WorkOrderStatusView: React.FC = () => {
           {/* TAB 2: 소요 원부자재 불출·계량표 */}
           {activeTab === 'MATERIALS' && (
             <div className="flex-1 min-h-0 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center">
+              <table className="w-full text-left border-collapse text-sm sm:text-base">
+                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
                   <tr>
-                    <th className="py-3 px-3 w-16 text-center">불출확인</th>
-                    <th className="py-3 px-4 text-left">원부자재 품명</th>
-                    <th className="py-3 px-3 w-36 text-center">규격/포장단위</th>
-                    <th className="py-3 px-4 w-36 text-right">소요 요구량</th>
-                    <th className="py-3 px-3 w-28 text-center">단위</th>
-                    <th className="py-3 px-3 w-32 text-center">보관창고</th>
-                    <th className="py-3 px-4 w-36 text-right">현재 창고재고</th>
-                    <th className="py-3 px-3 w-32 text-center">재고상태</th>
+                    <th className="py-3.5 px-3 w-20 text-center">불출확인</th>
+                    <th className="py-3.5 px-4 text-left">원부자재 품명</th>
+                    <th className="py-3.5 px-3 w-40 text-center">규격/포장단위</th>
+                    <th className="py-3.5 px-4 w-40 text-right">소요 요구량</th>
+                    <th className="py-3.5 px-3 w-28 text-center">단위</th>
+                    <th className="py-3.5 px-3 w-36 text-center">보관창고</th>
+                    <th className="py-3.5 px-4 w-40 text-right">현재 창고재고</th>
+                    <th className="py-3.5 px-3 w-32 text-center">재고상태</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1075,62 +1075,62 @@ export const WorkOrderStatusView: React.FC = () => {
                         }`}
                       >
                         {/* 1. 체크박스 */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <input
                             type="checkbox"
                             checked={m.checked}
                             onChange={() => toggleMaterialCheck(m.id)}
-                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                            className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                           />
                         </td>
 
                         {/* 2. 품명 */}
-                        <td className="py-3 px-4 font-black text-slate-900 flex items-center gap-2">
+                        <td className="py-3.5 px-4 font-black text-slate-900 text-base sm:text-lg flex items-center gap-2">
                           <span>{m.name}</span>
                           {m.checked && (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                            <span className="text-xs bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded">
                               계량완료
                             </span>
                           )}
                         </td>
 
                         {/* 3. 규격 */}
-                        <td className="py-3 px-3 text-center text-slate-600 font-mono">
+                        <td className="py-3.5 px-3 text-center text-slate-700 font-mono text-sm sm:text-base font-bold">
                           {m.spec}
                         </td>
 
                         {/* 4. 소요량 */}
-                        <td className="py-3 px-4 text-right font-mono font-black text-indigo-950 text-base">
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-indigo-950 text-base sm:text-lg">
                           {m.requiredQty.toLocaleString()}
                         </td>
 
                         {/* 5. 단위 */}
-                        <td className="py-3 px-3 text-center font-bold text-slate-700">
+                        <td className="py-3.5 px-3 text-center font-black text-slate-800 text-sm sm:text-base">
                           {m.unit}
                         </td>
 
                         {/* 6. 창고 뱃지 */}
-                        <td className="py-3 px-3 text-center">
-                          <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-black border ${whBadge}`}>
+                        <td className="py-3.5 px-3 text-center">
+                          <span className={`inline-block px-3 py-1 rounded-lg text-xs sm:text-sm font-black border ${whBadge}`}>
                             {m.warehouse}
                           </span>
                         </td>
 
                         {/* 7. 현재고 */}
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                        <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 text-sm sm:text-base">
                           {m.currentStock.toLocaleString()} {m.unit}
                         </td>
 
                         {/* 8. 재고 상태 */}
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           {isSufficient ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 size={14} />
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-black text-xs sm:text-sm">
+                              <CheckCircle2 size={16} />
                               <span>충분</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-red-600 font-bold text-xs">
-                              <AlertCircle size={14} />
+                            <span className="inline-flex items-center gap-1 text-red-600 font-black text-xs sm:text-sm">
+                              <AlertCircle size={16} />
                               <span>부족</span>
                             </span>
                           )}
