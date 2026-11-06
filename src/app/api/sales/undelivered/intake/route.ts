@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { MichulItem } from '@/lib/gfs/michulIntake';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/sales/undelivered/intake
 // 미출(미납) 엑셀 파싱 데이터 DB 일괄 저장 및 확정매출 동기화
 export async function POST(req: NextRequest) {
@@ -44,8 +46,8 @@ export async function POST(req: NextRequest) {
       let grp = byCenter.get(centerKey);
       if (!grp) {
         grp = {
-          storeCode: it.storeCode,
-          storeName: it.storeName,
+          storeCode: it.storeCode || '',
+          storeName: it.storeName || '미지정 센터',
           provQty: 0,
           provAmt: 0,
           delivQty: 0,
@@ -56,22 +58,27 @@ export async function POST(req: NextRequest) {
         };
         byCenter.set(centerKey, grp);
       }
-      grp.provQty += it.orderQty;
-      grp.provAmt += it.orderAmt;
-      grp.delivQty += it.delivQty;
-      grp.delivAmt += it.delivAmt;
-      grp.undelivQty += it.undelivQty;
-      grp.undelivAmt += it.undelivAmt;
+      grp.provQty += Math.max(0, Number(it.orderQty) || 0);
+      grp.provAmt += Math.max(0, Number(it.orderAmt) || 0);
+      grp.delivQty += Math.max(0, Number(it.delivQty) || 0);
+      grp.delivAmt += Math.max(0, Number(it.delivAmt) || 0);
+      grp.undelivQty += Math.max(0, Number(it.undelivQty) || 0);
+      grp.undelivAmt += Math.max(0, Number(it.undelivAmt) || 0);
       grp.items.push(it);
     }
+
+    const dateKey = tradeDate.replace(/-/g, '');
+    const batchTag = Date.now().toString().slice(-4);
 
     // 2. 트랜잭션으로 Delivery 및 ProvisionalSalesStatus 동기화 저장
     await prisma.$transaction(async (tx) => {
       // (1) 기존 해당 일자 미출분 납품/가매출 레코드 삭제(덮어쓰기 정합성 유지)
       const oldDeliveries = await tx.delivery.findMany({
         where: {
-          deliveryDate: tradeDate,
-          remark: { startsWith: '[미출엑셀]' },
+          OR: [
+            { deliveryDate: tradeDate, remark: { startsWith: '[미출엑셀]' } },
+            { deliveryNo: { startsWith: `DELIV-MICHUL-${dateKey}` } },
+          ],
         },
         select: { id: true },
       });
@@ -88,7 +95,7 @@ export async function POST(req: NextRequest) {
       // (2) 센터별 납품 및 가매출 확정 등록
       let seq = 1;
       for (const [centerKey, grp] of byCenter.entries()) {
-        const deliveryNo = `DELIV-MICHUL-${tradeDate.replace(/-/g, '')}-${String(seq).padStart(3, '0')}`;
+        const deliveryNo = `DELIV-MICHUL-${dateKey}-${batchTag}-${String(seq).padStart(3, '0')}`;
         seq++;
 
         const delivery = await tx.delivery.create({
@@ -98,8 +105,8 @@ export async function POST(req: NextRequest) {
             centerCode: grp.storeCode || 'GSR-001',
             shift: '1편',
             status: '완료',
-            totalQty: grp.delivQty,
-            totalAmount: grp.delivAmt,
+            totalQty: Math.round(grp.delivQty),
+            totalAmount: Math.round(grp.delivAmt),
             remark: `[미출엑셀] ${grp.storeName} (미출 ${grp.undelivQty}개)`,
             createdBy: userName,
           },
@@ -107,17 +114,26 @@ export async function POST(req: NextRequest) {
 
         // 납품 상세 등록
         for (const it of grp.items) {
-          const unitPrice = it.orderQty > 0 ? Math.round(it.orderAmt / it.orderQty) : 0;
+          const productCode = String(it.productCode || 'ITEM-UNKNOWN').trim();
+          const productName = String(it.productName || it.productCode || '품목명 없음').trim();
+          const delivQty = Math.max(0, Math.round(Number(it.delivQty) || 0));
+          const orderQty = Math.max(0, Math.round(Number(it.orderQty) || 0));
+          const orderAmt = Math.max(0, Math.round(Number(it.orderAmt) || 0));
+          const delivAmt = Math.max(0, Math.round(Number(it.delivAmt) || 0));
+          const undelivQty = Math.max(0, Math.round(Number(it.undelivQty) || 0));
+          const undelivAmt = Math.max(0, Math.round(Number(it.undelivAmt) || 0));
+          const unitPrice = orderQty > 0 ? Math.round(orderAmt / orderQty) : 0;
+
           await tx.deliveryDetail.create({
             data: {
               deliveryId: delivery.id,
-              productCode: it.productCode,
-              productName: it.productName,
-              deliveryQty: it.delivQty,
+              productCode,
+              productName,
+              deliveryQty: delivQty,
               unitPrice,
-              amount: it.delivAmt,
-              boxQty: Math.ceil(it.delivQty / 10),
-              remark: it.undelivQty > 0 ? `미출 ${it.undelivQty}개 (${it.undelivAmt.toLocaleString()}원)` : '정상납품',
+              amount: delivAmt,
+              boxQty: Math.ceil(delivQty / 10),
+              remark: undelivQty > 0 ? `미출 ${undelivQty}개 (${undelivAmt.toLocaleString()}원)` : '정상납품',
             },
           });
         }
@@ -126,19 +142,19 @@ export async function POST(req: NextRequest) {
         await tx.provisionalSalesStatus.create({
           data: {
             statusDate: tradeDate,
-            provisionalSales: grp.provAmt,
-            undeliveredAmount: grp.undelivAmt,
-            confirmedAmount: grp.delivAmt,
+            provisionalSales: Math.round(grp.provAmt),
+            undeliveredAmount: Math.round(grp.undelivAmt),
+            confirmedAmount: Math.round(grp.delivAmt),
             remark: grp.storeName,
           },
         });
       }
     });
 
-    const totalUndelivQty = items.reduce((s, it) => s + it.undelivQty, 0);
-    const totalUndelivAmt = items.reduce((s, it) => s + it.undelivAmt, 0);
-    const totalDelivQty = items.reduce((s, it) => s + it.delivQty, 0);
-    const totalDelivAmt = items.reduce((s, it) => s + it.delivAmt, 0);
+    const totalUndelivQty = items.reduce((s, it) => s + (Number(it.undelivQty) || 0), 0);
+    const totalUndelivAmt = items.reduce((s, it) => s + (Number(it.undelivAmt) || 0), 0);
+    const totalDelivQty = items.reduce((s, it) => s + (Number(it.delivQty) || 0), 0);
+    const totalDelivAmt = items.reduce((s, it) => s + (Number(it.delivAmt) || 0), 0);
 
     return NextResponse.json({
       success: true,
@@ -155,9 +171,8 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Failed to intake michul data:', error);
     return NextResponse.json(
-      { success: false, error: error.message || '미출 데이터 등록 실패' },
+      { success: false, error: error?.message || '미출 데이터 등록 실패' },
       { status: 500 }
     );
   }
 }
-

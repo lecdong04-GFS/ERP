@@ -64,7 +64,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
         // (1) 미출고/미납정보 엑셀 감지
-        const michul = parseMichulRows(rows);
+        const michul = parseMichulRows(rows, file.name);
         if (michul && michul.items.length > 0) {
           setParsedSource('미출');
           setParsedMichul(michul);
@@ -104,6 +104,16 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
         }
       }
 
+      // 파일명이 미출 관련인데 위에서 파싱되지 못한 경우 경고 안내
+      const isMichulFileName = file.name.includes('미출') || file.name.includes('미납') || file.name.includes('결품');
+      if (isMichulFileName) {
+        alert(
+          '선택하신 파일명에 [미출/미납]이 포함되어 있으나 내용에서 미출 데이터를 감지하지 못했습니다.\n' +
+            '파일 시트 및 서식을 확인해 주세요.'
+        );
+        return;
+      }
+
       // 2. 점포별 GS 표준 발주서 분석
       const result = parseGsRetailExcelBuffer(buffer);
       const hasQty = result.totalQty > 0 && result.orders.length > 0;
@@ -135,6 +145,18 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
     }
     setIsProcessing(true);
     try {
+      // 1. 미출 엑셀 복사본인지 확인 (탭 구분)
+      const tsvRows = pasteText.trim().split('\n').map((l) => l.split('\t'));
+      const michul = parseMichulRows(tsvRows, '클립보드_붙여넣기_미출.tsv');
+      if (michul && michul.items.length > 0) {
+        setParsedSource('미출');
+        setParsedMichul(michul);
+        setParsedData(null);
+        setFileName('클립보드_붙여넣기_미출.tsv');
+        return;
+      }
+
+      // 2. 표준 점포 발주 텍스트
       const result = parseGsRetailText(pasteText);
       setParsedData(result);
       setFileName('클립보드_붙여넣기_데이터.tsv');
@@ -271,15 +293,15 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
           items: parsedMichul.items,
         }),
       });
-      const json = await res.json();
-      if (!json?.success) {
-        alert('미출 내역 반영 실패: ' + (json?.error || '알 수 없는 오류'));
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        alert('미출 내역 반영 실패: ' + (json?.error || `서버 응답 오류 (상태 코드: ${res.status})`));
         return;
       }
       alert(
         `✓ ${parsedMichul.tradeDate} 미출 내역서 반영 완료!\n\n` +
           `• 대상 센터: ${parsedMichul.storeCount}개 조리/물류센터\n` +
-          `• 미출 품목: ${parsedMichul.productCount}개 품목 (총 ${parsedMichul.totalUndelivQty}개 결품)\n` +
+          `• 미출 품목: ${parsedMichul.productCount}개 품목 (총 ${parsedMichul.totalUndelivQty.toLocaleString()}개 결품)\n` +
           `• 미출 차감액: ₩${parsedMichul.totalUndelivAmt.toLocaleString()}원\n\n` +
           `[미출현황] 및 [가매출/미출/확정금액현황] 메뉴에 실시간 반영되었습니다.`
       );
@@ -287,9 +309,9 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
       if (typeof window !== 'undefined') {
         window.location.reload();
       }
-    } catch (err) {
-      console.error(err);
-      alert('미출 데이터를 서버에 저장하는 중 오류가 발생했습니다.');
+    } catch (err: any) {
+      console.error('Failed to intake michul data:', err);
+      alert('미출 데이터를 서버에 저장하는 중 오류가 발생했습니다: ' + (err?.message || err));
     } finally {
       setIsProcessing(false);
     }
@@ -479,7 +501,19 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
                   </span>
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
                     <span>기준 납품일자:</span>
-                    <span className="text-rose-700 font-mono font-black">{parsedMichul.tradeDate}</span>
+                    <input
+                      type="date"
+                      value={parsedMichul.tradeDate}
+                      onChange={(e) => {
+                        const newDate = e.target.value;
+                        setParsedMichul({
+                          ...parsedMichul,
+                          tradeDate: newDate,
+                          items: parsedMichul.items.map((it) => ({ ...it, tradeDate: newDate })),
+                        });
+                      }}
+                      className="bg-white border border-rose-300 rounded px-1.5 py-0.5 text-rose-700 font-mono font-black text-xs focus:ring-1 focus:ring-rose-500"
+                    />
                   </div>
                 </div>
                 <button

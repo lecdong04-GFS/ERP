@@ -1,6 +1,6 @@
 // GS리테일 미출고(미납정보) 엑셀 파서
-// 대상: 제작관련 데이터/2026년 10월 ERP/미출/*.xlsx 및 11월 ERP/미출/*.xlsx
-// 시트 헤더: [ 납품정보-미납정보-점포별/제품별 미납정보 ]
+// 대상: GS리테일 포털 발주/납품/미납정보 엑셀 (.xlsx, .xls)
+// 시트 헤더: [ 납품정보-미납정보-점포별/제품별 미납정보 ] 또는 헤더 생략본
 
 export interface MichulItem {
   storeCode: string;
@@ -29,52 +29,130 @@ export interface MichulParseResult {
   productCount: number;
 }
 
-function excelDateToISO(val: unknown): string | null {
+export function excelDateToISO(val: unknown): string | null {
+  if (val instanceof Date) {
+    return val.toISOString().slice(0, 10);
+  }
   if (typeof val === 'number' && val > 20000 && val < 80000) {
     const d = new Date(Math.round((val - 25569) * 86400 * 1000));
     return d.toISOString().slice(0, 10);
   }
   const s = String(val ?? '').trim();
-  const m = s.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const m1 = s.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
+  if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+  const m2 = s.match(/(\d{4})(\d{2})(\d{2})/);
+  if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
   return null;
 }
 
 /** 미출고(미납정보) 엑셀 시트인지 판별 */
-export function isMichulSheet(rows: any[][]): boolean {
+export function isMichulSheet(rows: any[][], fileName?: string): boolean {
+  if (fileName) {
+    const fn = fileName.toLowerCase();
+    if (fn.includes('미출') || fn.includes('미납') || fn.includes('결품')) return true;
+  }
   if (!rows || rows.length < 5) return false;
-  return rows.slice(0, 6).some((r) =>
+  return rows.slice(0, 15).some((r) =>
     (r || []).some((c) => {
       const s = String(c ?? '').replace(/\s+/g, '');
-      return s.includes('납품정보') || s.includes('미납정보') || s.includes('점포별/제품별미납');
+      return (
+        s.includes('납품정보') ||
+        s.includes('미납정보') ||
+        s.includes('미출정보') ||
+        s.includes('점포별/제품별미납') ||
+        s.includes('미납수량') ||
+        s.includes('미출수량') ||
+        s.includes('미납금액') ||
+        s.includes('미출금액') ||
+        s.includes('결품')
+      );
     })
   );
 }
 
-/** 단일 시트 rows 파싱 */
-export function parseMichulRows(rows: any[][]): MichulParseResult | null {
-  if (!isMichulSheet(rows)) return null;
+/** 단일 시트 rows 파싱 (헤더 유무 및 2행/1행 구조 자동 대응) */
+export function parseMichulRows(rows: any[][], fileName?: string): MichulParseResult | null {
+  if (!isMichulSheet(rows, fileName)) return null;
 
   // 1. 헤더에서 조회기간(거래일자) 추출
   let headerDate: string | null = null;
-  for (let r = 0; r < Math.min(8, rows.length); r++) {
+  for (let r = 0; r < Math.min(15, rows.length); r++) {
     const line = (rows[r] || []).map((c) => String(c ?? '')).join(' ');
-    const m = line.match(/(\d{4}-\d{2}-\d{2})\s*~/);
+    const m = line.match(/(\d{4}[-./]\d{2}[-./]\d{2})\s*~/);
     if (m) {
-      headerDate = m[1];
+      headerDate = m[1].replace(/[./]/g, '-');
       break;
     }
   }
 
-  // 2. 테이블 헤더행('미납수량' 또는 '미납금액') 찾기
+  // 파일명에서 날짜 추출 백업 (예: "11월4일 미출.xlsx", "미출1031.xlsx")
+  if (!headerDate && fileName) {
+    const mFn = fileName.match(/(\d{1,2})월\s*(\d{1,2})일/);
+    if (mFn) {
+      const month = String(mFn[1]).padStart(2, '0');
+      const day = String(mFn[2]).padStart(2, '0');
+      const year = new Date().getFullYear();
+      headerDate = `${year}-${month}-${day}`;
+    } else {
+      const mCompact = fileName.match(/(?:미출|미납|결품)(\d{2})(\d{2})/);
+      if (mCompact) {
+        const month = mCompact[1];
+        const day = mCompact[2];
+        const year = new Date().getFullYear();
+        headerDate = `${year}-${month}-${day}`;
+      }
+    }
+  }
+
+  // 2. 테이블 데이터 시작 위치 탐색
   let dataStart = -1;
-  for (let r = 0; r < Math.min(15, rows.length); r++) {
+
+  // (1) 명시적 헤더 행('미납수량' 또는 '발주수량') 찾기
+  for (let r = 0; r < Math.min(20, rows.length); r++) {
     const line = (rows[r] || []).map((c) => String(c ?? '')).join(' ');
-    if (line.includes('미납수량') || line.includes('미납금액')) {
-      dataStart = r + 2; // 2줄 헤더 아래부터 데이터 시작
+    if (
+      line.includes('미납수량') ||
+      line.includes('미납금액') ||
+      (line.includes('발주수량') && line.includes('납품수량'))
+    ) {
+      const nextLine = (rows[r + 1] || []).map((c) => String(c ?? '')).join(' ');
+      if (
+        nextLine.includes('상품명') ||
+        nextLine.includes('미납금액') ||
+        nextLine.includes('발주금액')
+      ) {
+        dataStart = r + 2; // 2줄 헤더 아래부터 데이터 시작
+      } else {
+        dataStart = r + 1; // 1줄 헤더
+      }
       break;
     }
   }
+
+  // (2) 헤더 행이 생략된 경우 (GS리테일 직접 엑셀 뷰 등): 첫 데이터/합계 행 직접 탐색
+  if (dataStart === -1) {
+    for (let r = 4; r < Math.min(25, rows.length); r++) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+      const c0 = String(row[0] ?? '').trim();
+      const c3 = String(row[3] ?? '').trim();
+      const hasQty =
+        typeof row[4] === 'number' ||
+        typeof row[5] === 'number' ||
+        typeof row[6] === 'number' ||
+        !isNaN(Number(row[4]));
+
+      if (c0.includes('합 계') || c0.includes('합계')) {
+        dataStart = r;
+        break;
+      }
+      if ((c0 || c3) && hasQty && row.length >= 6) {
+        dataStart = r;
+        break;
+      }
+    }
+  }
+
   if (dataStart === -1) return null;
 
   const items: MichulItem[] = [];
@@ -106,18 +184,29 @@ export function parseMichulRows(rows: any[][]): MichulParseResult | null {
       const undelivQty = Number(row[6]) || 0;
 
       const nextRow = rows[r + 1] || [];
-      const productName = String(nextRow[3] ?? '').trim();
-      const orderAmt = Number(nextRow[4]) || 0;
-      const delivAmt = Number(nextRow[5]) || 0;
-      const undelivAmt = Number(nextRow[6]) || 0;
+      const nextC0 = String(nextRow[0] ?? '').trim();
+      const nextC1 = String(nextRow[1] ?? '').trim();
+      const isTwoLinePair = !nextC0 && !nextC1;
 
-      if (productCode && (orderQty > 0 || undelivQty > 0 || undelivAmt > 0)) {
+      let productName = '';
+      let orderAmt = 0;
+      let delivAmt = 0;
+      let undelivAmt = 0;
+
+      if (isTwoLinePair) {
+        productName = String(nextRow[3] ?? '').trim();
+        orderAmt = Number(nextRow[4]) || 0;
+        delivAmt = Number(nextRow[5]) || 0;
+        undelivAmt = Number(nextRow[6]) || 0;
+      }
+
+      if (productCode && (orderQty > 0 || delivQty > 0 || undelivQty > 0 || undelivAmt > 0)) {
         items.push({
           storeCode: currentStoreCode,
           storeName: currentStoreName,
           tradeDate: currentDate || headerDate || new Date().toISOString().slice(0, 10),
           productCode,
-          productName,
+          productName: productName || productCode,
           orderQty,
           delivQty,
           undelivQty,
@@ -125,7 +214,9 @@ export function parseMichulRows(rows: any[][]): MichulParseResult | null {
           delivAmt,
           undelivAmt,
         });
-        r++; // 2줄 1쌍이므로 다음 줄 건너뜀
+        if (isTwoLinePair) {
+          r++; // 2줄 1쌍일 때만 다음 행 건너뜀
+        }
       }
     } else if (c3) {
       // 상품 정보가 먼저 나오는 엑셀 레이아웃 처리
@@ -144,13 +235,13 @@ export function parseMichulRows(rows: any[][]): MichulParseResult | null {
       const delivQty = Number(nextRow[5]) || 0;
       const undelivQty = Number(nextRow[6]) || 0;
 
-      if (productCode && (orderQty > 0 || undelivQty > 0 || undelivAmt > 0)) {
+      if (productCode && (orderQty > 0 || delivQty > 0 || undelivQty > 0 || undelivAmt > 0)) {
         items.push({
           storeCode: storeCode || currentStoreCode,
           storeName: storeName || currentStoreName,
           tradeDate: currentDate || headerDate || new Date().toISOString().slice(0, 10),
           productCode,
-          productName,
+          productName: productName || productCode,
           orderQty,
           delivQty,
           undelivQty,
@@ -185,4 +276,3 @@ export function parseMichulRows(rows: any[][]): MichulParseResult | null {
     productCount: new Set(items.map((it) => it.productCode)).size,
   };
 }
-

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { ALL_MENU_ITEMS, MENU_CATEGORIES } from '@/config/menuConfig';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/admin/permission?userId=123 (또는 ?loginId=admin)
 export async function GET(req: NextRequest) {
   try {
