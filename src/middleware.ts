@@ -37,7 +37,7 @@ export const config = {
      * - /_next (Next.js 정적 리소스)
      * - /favicon.ico, /icon, /images 등 정적 파일
      */
-    '/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon|images|pic|logo).*)',
+    '/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon|images|pic|logo|_not-found).*)',
   ],
 };
 

@@ -31,6 +31,7 @@ import { usePipeline } from '@/context/PipelineContext';
 import { useSession } from 'next-auth/react';
 import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
+import { DeliveryStatementPrint } from './DeliveryStatementPrint';
 
 interface StandardTemplateCenterProps {
   onClose?: () => void;
@@ -1048,6 +1049,8 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
                     <LotLabelPrint />
                   ) : activeDocType === 'DELIVERY_BOX_LABEL' ? (
                     <DeliveryBoxLabel items={boxPayload || undefined} />
+                  ) : activeDocType === 'DELIVERY_STATEMENT' ? (
+                    <DeliveryStatementPrint payload={printPayload || undefined} />
                   ) : (
                     <div className="text-center py-16 text-slate-400 text-xs">
                       선택하신 서식의 데이터가 로드되었습니다. 상단의 [A4 표준 서식 인쇄]를 누르시면 공인 규격으로 즉시 출력됩니다.
