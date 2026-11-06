@@ -70,86 +70,107 @@ export async function POST(req: NextRequest) {
     const dateKey = tradeDate.replace(/-/g, '');
     const batchTag = Date.now().toString().slice(-4);
 
-    // 2. 트랜잭션으로 Delivery 및 ProvisionalSalesStatus 동기화 저장
-    await prisma.$transaction(async (tx) => {
-      // (1) 기존 해당 일자 미출분 납품/가매출 레코드 삭제(덮어쓰기 정합성 유지)
-      const oldDeliveries = await tx.delivery.findMany({
-        where: {
-          OR: [
-            { deliveryDate: tradeDate, remark: { startsWith: '[미출엑셀]' } },
-            { deliveryNo: { startsWith: `DELIV-MICHUL-${dateKey}` } },
-          ],
-        },
-        select: { id: true },
-      });
-      if (oldDeliveries.length > 0) {
-        const oldIds = oldDeliveries.map((d) => d.id);
-        await tx.deliveryDetail.deleteMany({ where: { deliveryId: { in: oldIds } } });
-        await tx.delivery.deleteMany({ where: { id: { in: oldIds } } });
-      }
-
-      await tx.provisionalSalesStatus.deleteMany({
-        where: { statusDate: tradeDate },
-      });
-
-      // (2) 센터별 납품 및 가매출 확정 등록
-      let seq = 1;
-      for (const [centerKey, grp] of byCenter.entries()) {
-        const deliveryNo = `DELIV-MICHUL-${dateKey}-${batchTag}-${String(seq).padStart(3, '0')}`;
-        seq++;
-
-        const delivery = await tx.delivery.create({
-          data: {
-            deliveryNo,
-            deliveryDate: tradeDate,
-            centerCode: grp.storeCode || 'GSR-001',
-            shift: '1편',
-            status: '완료',
-            totalQty: Math.round(grp.delivQty),
-            totalAmount: Math.round(grp.delivAmt),
-            remark: `[미출엑셀] ${grp.storeName} (미출 ${grp.undelivQty}개)`,
-            createdBy: userName,
+    // 2. 대량 데이터 일괄 처리를 위해 트랜잭션 타임아웃 60초 확보 및 createMany 일괄 삽입 적용
+    await prisma.$transaction(
+      async (tx) => {
+        // (1) 기존 해당 일자 미출분 납품/가매출 레코드 삭제(덮어쓰기 정합성 유지)
+        const oldDeliveries = await tx.delivery.findMany({
+          where: {
+            OR: [
+              { deliveryDate: tradeDate, remark: { startsWith: '[미출엑셀]' } },
+              { deliveryNo: { startsWith: `DELIV-MICHUL-${dateKey}` } },
+            ],
           },
+          select: { id: true },
         });
-
-        // 납품 상세 등록
-        for (const it of grp.items) {
-          const productCode = String(it.productCode || 'ITEM-UNKNOWN').trim();
-          const productName = String(it.productName || it.productCode || '품목명 없음').trim();
-          const delivQty = Math.max(0, Math.round(Number(it.delivQty) || 0));
-          const orderQty = Math.max(0, Math.round(Number(it.orderQty) || 0));
-          const orderAmt = Math.max(0, Math.round(Number(it.orderAmt) || 0));
-          const delivAmt = Math.max(0, Math.round(Number(it.delivAmt) || 0));
-          const undelivQty = Math.max(0, Math.round(Number(it.undelivQty) || 0));
-          const undelivAmt = Math.max(0, Math.round(Number(it.undelivAmt) || 0));
-          const unitPrice = orderQty > 0 ? Math.round(orderAmt / orderQty) : 0;
-
-          await tx.deliveryDetail.create({
-            data: {
-              deliveryId: delivery.id,
-              productCode,
-              productName,
-              deliveryQty: delivQty,
-              unitPrice,
-              amount: delivAmt,
-              boxQty: Math.ceil(delivQty / 10),
-              remark: undelivQty > 0 ? `미출 ${undelivQty}개 (${undelivAmt.toLocaleString()}원)` : '정상납품',
-            },
-          });
+        if (oldDeliveries.length > 0) {
+          const oldIds = oldDeliveries.map((d) => d.id);
+          await tx.deliveryDetail.deleteMany({ where: { deliveryId: { in: oldIds } } });
+          await tx.delivery.deleteMany({ where: { id: { in: oldIds } } });
         }
 
-        // 가매출/미출/확정금액 현황 레코드 등록
-        await tx.provisionalSalesStatus.create({
-          data: {
+        await tx.provisionalSalesStatus.deleteMany({
+          where: { statusDate: tradeDate },
+        });
+
+        // (2) 센터별 납품 및 납품 상세, 가매출 일괄 등록
+        const provStatusList: Array<{
+          statusDate: string;
+          provisionalSales: number;
+          undeliveredAmount: number;
+          confirmedAmount: number;
+          remark: string;
+        }> = [];
+
+        let seq = 1;
+        for (const [centerKey, grp] of byCenter.entries()) {
+          const deliveryNo = `DELIV-MICHUL-${dateKey}-${batchTag}-${String(seq).padStart(3, '0')}`;
+          seq++;
+
+          const delivery = await tx.delivery.create({
+            data: {
+              deliveryNo,
+              deliveryDate: tradeDate,
+              centerCode: grp.storeCode || 'GSR-001',
+              shift: '1편',
+              status: '완료',
+              totalQty: Math.round(grp.delivQty),
+              totalAmount: Math.round(grp.delivAmt),
+              remark: `[미출엑셀] ${grp.storeName} (미출 ${grp.undelivQty}개)`,
+              createdBy: userName,
+            },
+          });
+
+          // 납품 상세 createMany 일괄 삽입 (단건 루프 create로 인한 트랜잭션 타임아웃 100% 방지)
+          if (grp.items.length > 0) {
+            const detailData = grp.items.map((it) => {
+              const productCode = String(it.productCode || 'ITEM-UNKNOWN').trim();
+              const productName = String(it.productName || it.productCode || '품목명 없음').trim();
+              const delivQty = Math.max(0, Math.round(Number(it.delivQty) || 0));
+              const orderQty = Math.max(0, Math.round(Number(it.orderQty) || 0));
+              const orderAmt = Math.max(0, Math.round(Number(it.orderAmt) || 0));
+              const delivAmt = Math.max(0, Math.round(Number(it.delivAmt) || 0));
+              const undelivQty = Math.max(0, Math.round(Number(it.undelivQty) || 0));
+              const undelivAmt = Math.max(0, Math.round(Number(it.undelivAmt) || 0));
+              const unitPrice = orderQty > 0 ? Math.round(orderAmt / orderQty) : 0;
+
+              return {
+                deliveryId: delivery.id,
+                productCode,
+                productName,
+                deliveryQty: delivQty,
+                unitPrice,
+                amount: delivAmt,
+                boxQty: Math.ceil(delivQty / 10),
+                remark: undelivQty > 0 ? `미출 ${undelivQty}개 (${undelivAmt.toLocaleString()}원)` : '정상납품',
+              };
+            });
+
+            await tx.deliveryDetail.createMany({
+              data: detailData,
+            });
+          }
+
+          provStatusList.push({
             statusDate: tradeDate,
             provisionalSales: Math.round(grp.provAmt),
             undeliveredAmount: Math.round(grp.undelivAmt),
             confirmedAmount: Math.round(grp.delivAmt),
             remark: grp.storeName,
-          },
-        });
+          });
+        }
+
+        if (provStatusList.length > 0) {
+          await tx.provisionalSalesStatus.createMany({
+            data: provStatusList,
+          });
+        }
+      },
+      {
+        maxWait: 15000,
+        timeout: 60000,
       }
-    });
+    );
 
     const totalUndelivQty = items.reduce((s, it) => s + (Number(it.undelivQty) || 0), 0);
     const totalUndelivAmt = items.reduce((s, it) => s + (Number(it.undelivAmt) || 0), 0);
