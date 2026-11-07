@@ -97,8 +97,8 @@ export const HelpView: React.FC = () => {
       badge: '품질안전 검수',
       color: 'from-cyan-600 to-blue-600',
       icon: PackageCheck,
-      targetId: 'pur-receiving-reg',
-      btnText: '입고등록(GSR) 바로가기',
+      targetId: 'pur-receiving-status-edit',
+      btnText: '입고 현황 및 검수 바로가기',
       desc: '도착한 자재의 차량 온도, 외관/표시 HACCP 검수를 진행하고 실도착 수량을 입력하여 재고에 즉시 입고 반영합니다.',
       keyActions: [
         '차량 번호, 운송 온도, HACCP 합격/불합격 판정',
