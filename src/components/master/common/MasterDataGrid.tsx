@@ -35,6 +35,7 @@ interface MasterDataGridProps {
   emptyMessage?: string;
   enablePagination?: boolean;
   pageSize?: number;
+  density?: 'compact' | 'normal' | 'spacious' | 'large';
 }
 
 export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
@@ -51,10 +52,69 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   emptyMessage = '조회된 내역이 없습니다.',
   enablePagination = false,
   pageSize = 100,
+  density = 'compact',
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [gridData, setGridData] = useState(data);
   const { columnWidths, startResizing, getColWidth } = useColumnResize();
+
+  const densityStyles = useMemo(() => {
+    switch (density) {
+      case 'large':
+        return {
+          container: 'text-[15px]',
+          headerRow: 'h-[48px]',
+          headerCell: 'px-3 py-2 text-[14px] font-black',
+          headerIndex: 'text-[13px] min-w-[42px]',
+          bodyRow: 'min-h-[50px]',
+          bodyCell: 'px-3.5 py-2.5 text-[15px]',
+          bodyIndex: 'text-[13px] min-w-[42px]',
+          editInput: 'text-[15px] min-h-[44px] px-3 py-1.5',
+          summaryRow: 'h-[44px]',
+          summaryCell: 'text-[14px]',
+        };
+      case 'spacious':
+        return {
+          container: 'text-[14px]',
+          headerRow: 'h-[42px]',
+          headerCell: 'px-2.5 py-2 text-[13px] font-black',
+          headerIndex: 'text-[12px] min-w-[38px]',
+          bodyRow: 'min-h-[44px]',
+          bodyCell: 'px-3 py-2 text-[14px]',
+          bodyIndex: 'text-[12px] min-w-[38px]',
+          editInput: 'text-[14px] min-h-[38px] px-2.5 py-1',
+          summaryRow: 'h-[40px]',
+          summaryCell: 'text-[13.5px]',
+        };
+      case 'normal':
+        return {
+          container: 'text-[13px]',
+          headerRow: 'h-[36px]',
+          headerCell: 'px-2 py-1.5 text-[12.5px] font-bold',
+          headerIndex: 'text-[11.5px] min-w-[36px]',
+          bodyRow: 'h-[36px]',
+          bodyCell: 'px-2 py-1 text-[13px]',
+          bodyIndex: 'text-[11.5px] min-w-[36px]',
+          editInput: 'text-[13px] min-h-[32px] px-2 py-0.5',
+          summaryRow: 'h-[34px]',
+          summaryCell: 'text-[12.5px]',
+        };
+      case 'compact':
+      default:
+        return {
+          container: 'text-[12.5px]',
+          headerRow: 'h-[30px]',
+          headerCell: 'px-1 py-1 text-[11.5px] font-bold',
+          headerIndex: 'text-[11px] min-w-[34px]',
+          bodyRow: 'h-[28px]',
+          bodyCell: 'px-1.5 py-0.5 text-[12px]',
+          bodyIndex: 'text-[11px] min-w-[34px]',
+          editInput: 'text-[12.5px] min-h-[26px] px-1.5 py-0.5',
+          summaryRow: 'h-[30px]',
+          summaryCell: 'text-[12px]',
+        };
+    }
+  }, [density]);
 
   useEffect(() => {
     setGridData(data);
@@ -163,7 +223,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
               setEditingCell(null);
             }
           }}
-          className="w-full h-full min-h-[26px] bg-white text-gray-900 border-2 border-blue-600 rounded-none px-1.5 py-0.5 text-[12.5px] outline-none shadow-inner"
+          className={`w-full h-full bg-white text-gray-900 border-2 border-blue-600 rounded-none outline-none shadow-inner ${densityStyles.editInput}`}
           onClick={(e) => e.stopPropagation()}
           onFocus={(e) => e.target.select()}
         />
@@ -249,18 +309,18 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
   return (
     <div
-      className="w-full h-full flex flex-col overflow-auto bg-white border border-[#a0a0a0] text-[12.5px] select-none"
+      className={`w-full h-full flex flex-col overflow-auto bg-white border border-[#a0a0a0] select-none ${densityStyles.container}`}
       style={{ maxHeight }}
     >
       <div className="flex-1 overflow-auto">
         <table className="w-full min-w-full border-collapse table-fixed text-gray-800">
           {/* Table Header */}
           <thead className="sticky top-0 z-20 bg-[#c0c7ea] border-b border-[#9ca3af] shadow-xs">
-            <tr className="h-[30px]">
+            <tr className={densityStyles.headerRow}>
               {showRowIndex && (
                 <th
-                  style={{ width: '2.2%', minWidth: '34px' }}
-                  className="bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 text-[11px]"
+                  style={{ width: '2.2%', minWidth: density === 'large' ? '42px' : density === 'spacious' ? '38px' : '34px' }}
+                  className={`bg-[#b5bde6] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-700 ${densityStyles.headerIndex}`}
                 >
                   순번
                 </th>
@@ -275,7 +335,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       minWidth: columnWidths[col.key] ? `${columnWidths[col.key]}px` : col.minWidth,
                     }}
                     onClick={() => handleHeaderSort(col)}
-                    className={`relative bg-[#c2c9ee] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-800 px-1 py-1 text-[11.5px] whitespace-nowrap select-none ${
+                    className={`relative bg-[#c2c9ee] border-r border-b border-[#a0a0a0] text-center font-bold text-gray-800 whitespace-nowrap select-none ${densityStyles.headerCell} ${
                       col.sortable !== false ? 'cursor-pointer hover:bg-[#b4bCE6]' : ''
                     }`}
                   >
@@ -314,7 +374,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   <tr
                     key={row.id ?? rIdx}
                     onClick={() => onRowClick?.(row, rIdx)}
-                    className={`h-[28px] cursor-pointer border-b border-[#d1d5db] transition-colors ${
+                    className={`cursor-pointer border-b border-[#d1d5db] transition-colors ${densityStyles.bodyRow} ${
                       isSelected
                         ? 'bg-[#dbeafe] font-semibold text-blue-900 border-l-2 border-l-blue-600 outline-1 outline-blue-500'
                         : rIdx % 2 === 1
@@ -324,8 +384,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   >
                     {showRowIndex && (
                       <td
-                        style={{ width: '2.2%', minWidth: '34px' }}
-                        className="border-r border-[#e5e7eb] text-center text-gray-500 bg-[#f8fafc] text-[11px] font-mono"
+                        style={{ width: '2.2%', minWidth: density === 'large' ? '42px' : density === 'spacious' ? '38px' : '34px' }}
+                        className={`border-r border-[#e5e7eb] text-center text-gray-500 bg-[#f8fafc] font-mono ${densityStyles.bodyIndex}`}
                       >
                         {row.no !== undefined ? row.no : actualIndex}
                       </td>
@@ -354,7 +414,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                             }
                           }}
                           className={`border-r border-[#e5e7eb] ${
-                            isEditing ? 'p-0' : 'px-1.5 py-0.5 text-[12px]'
+                            isEditing ? 'p-0' : densityStyles.bodyCell
                           } truncate whitespace-nowrap ${
                             !isReadOnly
                               ? 'cursor-text hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 transition-colors'
@@ -380,9 +440,9 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           {/* Summary Row */}
           {summaryRow && (
             <tfoot className="sticky bottom-0 z-10 bg-[#ffffcc] border-t-2 border-[#b0b080] text-gray-900 font-bold shadow-xs">
-              <tr className="h-[30px]">
+              <tr className={densityStyles.summaryRow}>
                 {showRowIndex && (
-                  <td className="border-r border-[#d4d4aa] text-center text-[11px] bg-[#f5f5be]">
+                  <td className={`border-r border-[#d4d4aa] text-center bg-[#f5f5be] ${densityStyles.summaryCell}`}>
                     계
                   </td>
                 )}
@@ -394,7 +454,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                     return (
                       <td
                         key={cIdx}
-                        className={`border-r border-[#d4d4aa] px-2 text-right font-mono text-[12px] ${
+                        className={`border-r border-[#d4d4aa] px-2 text-right font-mono ${densityStyles.summaryCell} ${
                           isNeg ? 'text-red-600 font-bold' : 'text-gray-900'
                         }`}
                       >
@@ -407,7 +467,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                     return (
                       <td
                         key={cIdx}
-                        className="border-r border-[#d4d4aa] px-2 text-center text-[12px] text-gray-800"
+                        className={`border-r border-[#d4d4aa] px-2 text-center text-gray-800 ${densityStyles.summaryCell}`}
                       >
                         {summaryRowTitle}
                       </td>
