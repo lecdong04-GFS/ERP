@@ -67,6 +67,24 @@ function getMondayOfWeek(dateStr: string): Date {
 
 export type StrategyMode = 'tight' | 'standard' | 'safety';
 
+// 단종 예정 완제품의 전용 원부자재 불용 방지 경보 맵
+const DISCONTINUED_CAUTION_MAP: Record<string, string> = {
+  '[상온]바릴라스파게티면(종이BOX) 5KG*3EA': '11/10 등심돈까스 단종 전용',
+  '[냉장] 경양식돈까스소스H(소포장)(50g*240ea)': '11/10 등심돈까스 단종 전용',
+  '[냉장]조청닭강정소스(2kg*10ea)': '11/10 등심돈까스 단종 전용',
+  '[냉동] 등심돈까스140((140g*10ea)8ea)': '11/10 등심돈까스 단종 전용',
+  '[냉동] 미트볼골드(1kg*10ea)': '11/10 등심돈까스 단종 전용',
+  '[상온] 검은깨(1kg*10ea)': '11/10 등심돈까스 단종 전용',
+  '[냉장]토마토파스타소스(2kg*6ea)': '11/10 등심돈까스 단종 전용',
+  '골드)GFS]간지 9*9 1,000매*1봉': '11/10 등심돈까스 단종 전용',
+  '혜자)돌아온등심돈까스 (1500)': '11/10 등심돈까스 단종 전용',
+  '아이투알)혜자)등심돈까스 뚜껑 100EA*6PK [PP]': '11/10 등심돈까스 단종 전용',
+  '두레)바란小(1곽-1000장)/74*57mm 1,000개입*60줄': '11/10 등심돈까스 단종 전용',
+  '혜자)등심돈까스용기 (150ea*4pk/box)': '11/10 등심돈까스 단종 전용',
+  '[냉동] 맥적구이용양념육(종이BOX) 2KG*7팩': '11/17 맥적구이 단종 전용',
+  '더큰)오징어&제육깻잎쌈밥': '11/17 깻잎쌈밥 단종 전용',
+};
+
 interface SheetRow extends SheetRowInput {}
 
 // 오늘 창고 입고 검수용 아이템 타입
@@ -1546,7 +1564,14 @@ export const MatOrderDayView: React.FC = () => {
 
                           {/* 품목명 */}
                           <td className="py-2.5 px-4 font-black text-slate-900 text-[15px] whitespace-nowrap">
-                            <span title={r.name}>{r.name}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span title={r.name}>{r.name}</span>
+                              {DISCONTINUED_CAUTION_MAP[r.name] && (
+                                <span className="inline-flex items-center gap-0.5 text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap shadow-xs">
+                                  🚨 {DISCONTINUED_CAUTION_MAP[r.name]}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* 납품패턴 */}
