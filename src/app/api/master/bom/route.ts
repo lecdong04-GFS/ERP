@@ -15,7 +15,12 @@ export async function GET(req: NextRequest) {
     const bomHeaders = await prisma.bomHeader.findMany({
       where: Object.keys(whereParent).length > 0 ? { parentProduct: whereParent } : {},
       include: {
-        parentProduct: true,
+        parentProduct: {
+          include: {
+            prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+            gye: true,
+          },
+        },
         details: {
           include: {
             childProduct: {
@@ -29,6 +34,7 @@ export async function GET(req: NextRequest) {
           orderBy: { sortOrder: 'asc' },
         },
       },
+      orderBy: { parentProductId: 'asc' },
     });
 
     return NextResponse.json({ success: true, data: bomHeaders });
@@ -113,4 +119,35 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// DELETE /api/master/bom?id=123 (BOM 헤더 및 상세 삭제)
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id') || searchParams.get('bomHeaderId');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'BOM 헤더 ID(id)가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const bomHeaderId = Number(id);
+    await prisma.bomDetail.deleteMany({
+      where: { bomHeaderId },
+    });
+    await prisma.bomHeader.delete({
+      where: { id: bomHeaderId },
+    });
+
+    return NextResponse.json({ success: true, message: 'BOM이 성공적으로 삭제되었습니다.' });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to delete BOM' },
+      { status: 500 }
+    );
+  }
+}
+
 
