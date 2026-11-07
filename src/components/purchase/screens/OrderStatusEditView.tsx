@@ -682,7 +682,7 @@ export const OrderStatusEditView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight leading-none">
-                  발주 현황 및 수정 관제
+                  발주 현황 및 수정
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200">
                   자재발주 실시간 100% 동기화

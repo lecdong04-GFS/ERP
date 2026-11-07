@@ -510,7 +510,7 @@ export const OrderUploadGsrView: React.FC = () => {
       )}
 
       <SalesActionBar
-        title="주문등록GSR(upload)"
+        title="수주 엑셀 업로드"
         buttons={[
           { key: 'download', label: '엑셀다운로드', icon: 'excel', variant: 'secondary', onClick: () => exportGridToExcel({ filename: '주문등록_GSR_출하내역', sheetName: '수주내역', columns: COLUMNS, data: filteredData }) },
           { key: 'upload', label: '엑셀업로드', icon: 'excel', variant: 'secondary', onClick: openExcelOrderModal },

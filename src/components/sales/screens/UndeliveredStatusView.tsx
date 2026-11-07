@@ -240,7 +240,7 @@ export const UndeliveredStatusView: React.FC = () => {
   return (
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[13px]">
       <SalesActionBar
-        title="미출현황"
+        title="미출 현황 및 결품 대조"
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'primary', onClick: () => void loadData(startDate, endDate) },
           { key: 'excel', label: '엑셀다운로드', icon: 'excel', variant: 'success', onClick: handleExportExcel },

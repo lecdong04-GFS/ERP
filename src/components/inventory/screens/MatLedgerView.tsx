@@ -218,7 +218,7 @@ export const MatLedgerView: React.FC = () => {
                 재고 수불 장부
               </span>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                자재수불부 <span className="text-indigo-600 font-extrabold">(입출고 거래통장)</span>
+                일일 자재수불부 <span className="text-indigo-600 font-extrabold">(입출고 거래통장)</span>
               </h1>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs">
                 <CheckCircle2 className="w-3.5 h-3.5" />

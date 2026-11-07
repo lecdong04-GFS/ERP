@@ -261,7 +261,7 @@ export const DiscontinuedStatusView: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">제품단종현황</h1>
+                <h1 className="text-xl font-black text-slate-900 tracking-tight">단종제품 지정현황</h1>
                 <span className="text-xs font-mono font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                   총 {stats.total}건 관리
                 </span>

@@ -195,9 +195,9 @@ export const RawMatStocktakeView: React.FC = () => {
           <span className="w-2 h-4 bg-emerald-500 rounded-2xs inline-block" />
           <div>
             <h1 className="text-[14px] font-black tracking-tight text-white flex items-center gap-2">
-              일일 재고조사표
+              원부재료 재고실사
               <span className="text-[11px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-600/60 px-2 py-0.5 rounded">
-                새 양식 (10월 29일 기준 실데이터)
+                새 양식 (실데이터 연동)
               </span>
             </h1>
           </div>

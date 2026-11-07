@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import {
   HelpCircle,
   Search,
@@ -40,6 +41,8 @@ export const MasterActionBar: React.FC<MasterActionBarProps> = ({
   helpContent,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
+  const { activeTab } = useTabs();
+  const displayTitle = activeTab && activeTab.id !== DASHBOARD_TAB_ID && activeTab.title ? activeTab.title : title;
 
   const renderIcon = (icon?: string) => {
     switch (icon) {
@@ -73,7 +76,7 @@ export const MasterActionBar: React.FC<MasterActionBarProps> = ({
       {/* Title + optional extra button (e.g. [test] in BOM) */}
       <div className="flex items-center gap-2.5">
         <span className="w-2.5 h-4 bg-[#60a5fa] rounded-2xs shadow-xs inline-block" />
-        <h1 className="text-[15px] font-black tracking-tight text-white">{title}</h1>
+        <h1 className="text-[15px] font-black tracking-tight text-white">{displayTitle}</h1>
         {titleExtraButton && (
           <button
             type="button"
@@ -123,7 +126,7 @@ export const MasterActionBar: React.FC<MasterActionBarProps> = ({
           <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
             <span className="font-bold text-[12px] text-gray-900 flex items-center gap-1.5">
               <HelpCircle size={14} className="text-[#6c8ebf]" />
-              {title} 도움말
+              {displayTitle} 도움말
             </span>
             <button
               onClick={() => setShowHelp(false)}

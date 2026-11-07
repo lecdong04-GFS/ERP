@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import { HelpCircle, Check, RotateCcw, Search, Save, FileText, Layers, ListOrdered, Printer } from 'lucide-react';
 
 export interface ProductionActionButton {
@@ -23,6 +24,8 @@ export const ProductionActionBar: React.FC<ProductionActionBarProps> = ({
   helpContent,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
+  const { activeTab } = useTabs();
+  const displayTitle = activeTab && activeTab.id !== DASHBOARD_TAB_ID && activeTab.title ? activeTab.title : title;
 
   const renderIcon = (icon?: string) => {
     switch (icon) {
@@ -48,7 +51,7 @@ export const ProductionActionBar: React.FC<ProductionActionBarProps> = ({
       {/* Title */}
       <div className="flex items-center gap-2.5">
         <span className="w-2.5 h-4 bg-[#60a5fa] rounded-2xs shadow-xs inline-block" />
-        <h1 className="text-[15px] font-black tracking-tight text-white">{title}</h1>
+        <h1 className="text-[15px] font-black tracking-tight text-white">{displayTitle}</h1>
       </div>
 
       {/* Action Buttons */}
@@ -87,7 +90,7 @@ export const ProductionActionBar: React.FC<ProductionActionBarProps> = ({
           <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
             <span className="font-bold text-[12px] text-gray-900 flex items-center gap-1.5">
               <HelpCircle size={14} className="text-[#6c8ebf]" />
-              {title} 도움말
+              {displayTitle} 도움말
             </span>
             <button
               onClick={() => setShowHelp(false)}
@@ -98,7 +101,7 @@ export const ProductionActionBar: React.FC<ProductionActionBarProps> = ({
           </div>
           <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-line">
             {helpContent ||
-              `${title} 화면입니다. 상단 기능 버튼을 사용하여 실적 등록, 작업지시 확인 및 저장을 수행할 수 있습니다.`}
+              `${displayTitle} 화면입니다. 상단 기능 버튼을 사용하여 실적 등록, 작업지시 확인 및 저장을 수행할 수 있습니다.`}
           </p>
         </div>
       )}

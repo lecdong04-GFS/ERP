@@ -266,7 +266,7 @@ export const NoticeView: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b border-[var(--line)] bg-white shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-[3px] h-4 rounded-full bg-[#2b7de9]" />
-          <h2 className="text-[13.5px] font-bold text-[var(--ink-900)]">공지사항</h2>
+          <h2 className="text-[13.5px] font-bold text-[var(--ink-900)]">전사 공지사항</h2>
           <span className="chip bg-[#f8fafc] text-[var(--ink-600)] border border-[var(--line)] num">
             {total}
           </span>

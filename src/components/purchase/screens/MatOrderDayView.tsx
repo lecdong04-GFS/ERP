@@ -884,7 +884,7 @@ export const MatOrderDayView: React.FC = () => {
               자재 관제탑
             </span>
             <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-1.5 whitespace-nowrap">
-              자재발주 <span className="text-blue-600 font-extrabold">(요일별 & 일일입고)</span>
+              요일별 자재발주 <span className="text-blue-600 font-extrabold">(스마트 발주)</span>
             </h1>
           </div>
 

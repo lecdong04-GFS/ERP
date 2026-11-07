@@ -183,7 +183,7 @@ export const WorkRoleView: React.FC = () => {
       {/* 요약 바 */}
       <div className="bg-white border-b border-gray-300 px-3 py-1.5 flex flex-wrap items-center gap-2 shrink-0">
         <Users className="w-4 h-4 text-blue-600" />
-        <span className="font-bold text-gray-700">업무분장관리</span>
+        <span className="font-bold text-gray-700">업무분장 관리</span>
         <span className="text-gray-500">총 <b className="text-blue-700 num">{total}</b>건</span>
         <label className="flex items-center gap-1 text-gray-600 ml-1">
           <input type="checkbox" checked={usedOnly} onChange={(e) => { setUsedOnly(e.target.checked); setPage(1); }} />

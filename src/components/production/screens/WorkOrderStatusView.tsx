@@ -1124,6 +1124,17 @@ export const WorkOrderStatusView: React.FC = () => {
         </div>
       )}
 
+      {/* 0. 상단 마스터 헤더 바 (메뉴명 100% 일치) */}
+      <div className="h-[44px] bg-[#1e293b] text-white px-3.5 flex items-center justify-between border-b border-slate-900 select-none shrink-0 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2.5 h-4 bg-[#3b82f6] rounded-2xs shadow-xs" />
+          <h1 className="text-[15px] font-black tracking-tight text-white">작업지시서 & 취반 타임테이블</h1>
+          <span className="text-[11px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30 font-bold">
+            생산·제조 핵심
+          </span>
+        </div>
+      </div>
+
       {/* 1. 상단 공정 대분류 스위처 및 작업 조건 바 */}
       <div className="bg-white border-b border-slate-300 px-6 py-3 shadow-xs shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-4">

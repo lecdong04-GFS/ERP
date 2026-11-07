@@ -578,7 +578,7 @@ export const ReceivingStatusEditView: React.FC = () => {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                  입고현황 / 수정 <span className="text-sm font-semibold text-slate-500 font-mono">(RECEIVING STATUS & EDIT)</span>
+                  입고 현황 및 단가수정 <span className="text-sm font-semibold text-slate-500 font-mono">(RECEIVING STATUS & EDIT)</span>
                 </h1>
                 <span className="text-xs font-mono font-black px-3 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
                   전표 {stats.totalHeaders}건 · {stats.totalDetails}개 품목

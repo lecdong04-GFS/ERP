@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import {
   Search,
   RotateCcw,
@@ -36,6 +37,8 @@ export const SalesActionBar: React.FC<SalesActionBarProps> = ({
   helpContent = '해당 화면은 (주)GFS 식품 제조 및 유통의 매출관리 실무 전용 화면입니다.',
 }) => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const { activeTab } = useTabs();
+  const displayTitle = activeTab && activeTab.id !== DASHBOARD_TAB_ID && activeTab.title ? activeTab.title : title;
 
   const renderIcon = (iconName?: string) => {
     switch (iconName) {
@@ -82,7 +85,7 @@ export const SalesActionBar: React.FC<SalesActionBarProps> = ({
         {/* Left Title */}
         <div className="flex items-center gap-2.5">
           <div className="w-2.5 h-4 bg-[#3b82f6] rounded-2xs shadow-xs" />
-          <h1 className="text-[15px] font-black tracking-tight text-white">{title}</h1>
+          <h1 className="text-[15px] font-black tracking-tight text-white">{displayTitle}</h1>
         </div>
 
         {/* Right Action Buttons */}
@@ -119,7 +122,7 @@ export const SalesActionBar: React.FC<SalesActionBarProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white border-2 border-gray-600 shadow-2xl w-[480px] max-w-full text-xs animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-[#333333] text-white px-3 py-1.5 flex items-center justify-between font-bold text-[13px]">
-              <span>[도움말] {title} 안내</span>
+              <span>[도움말] {displayTitle} 안내</span>
               <button
                 type="button"
                 onClick={() => setIsHelpOpen(false)}

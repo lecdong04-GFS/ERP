@@ -396,7 +396,7 @@ export const OrderSimulationView: React.FC = () => {
         <div className="flex items-center gap-3">
           <span className="w-2.5 h-4 bg-gradient-to-b from-amber-400 to-orange-500 rounded-2xs inline-block" />
           <h1 className="text-[14px] font-black tracking-tight text-white flex items-center gap-2.5">
-            발주시뮬레이션
+            발주 시뮬레이션
             <span className="text-[11.5px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 flex items-center gap-1">
               <Sparkles size={12} className="text-amber-400" />
               What-If 모의 가상 훈련소 (위험도 0% 샌드박스)

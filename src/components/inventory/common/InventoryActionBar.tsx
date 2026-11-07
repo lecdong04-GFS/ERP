@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import { HelpCircle, Search, Save, RotateCcw, Plus, Trash2, Printer, FileSpreadsheet } from 'lucide-react';
 
 export interface InventoryActionButton {
@@ -23,6 +24,8 @@ export const InventoryActionBar: React.FC<InventoryActionBarProps> = ({
   helpContent,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
+  const { activeTab } = useTabs();
+  const displayTitle = activeTab && activeTab.id !== DASHBOARD_TAB_ID && activeTab.title ? activeTab.title : title;
 
   const renderIcon = (icon?: string) => {
     switch (icon) {
@@ -50,7 +53,7 @@ export const InventoryActionBar: React.FC<InventoryActionBarProps> = ({
       {/* Title */}
       <div className="flex items-center gap-2.5">
         <span className="w-2.5 h-4 bg-[#3b82f6] rounded-2xs inline-block shadow-xs" />
-        <h1 className="text-[15px] font-black tracking-tight text-white">{title}</h1>
+        <h1 className="text-[15px] font-black tracking-tight text-white">{displayTitle}</h1>
       </div>
 
       {/* Action Buttons */}
@@ -91,7 +94,7 @@ export const InventoryActionBar: React.FC<InventoryActionBarProps> = ({
           <div className="flex items-center justify-between border-b border-gray-300 pb-1.5 mb-2">
             <span className="font-bold text-[12px] text-gray-900 flex items-center gap-1.5">
               <HelpCircle size={14} className="text-[#6c8ebf]" />
-              {title} 도움말
+              {displayTitle} 도움말
             </span>
             <button
               onClick={() => setShowHelp(false)}
@@ -102,7 +105,7 @@ export const InventoryActionBar: React.FC<InventoryActionBarProps> = ({
           </div>
           <p className="text-[11px] text-gray-600 leading-relaxed whitespace-pre-line">
             {helpContent ||
-              `${title} 화면입니다. 재고 현황 조회, 입출고 수불 확인 및 반품/폐기 데이터를 관리할 수 있습니다.`}
+              `${displayTitle} 화면입니다. 재고 현황 조회, 입출고 수불 확인 및 반품/폐기 데이터를 관리할 수 있습니다.`}
           </p>
         </div>
       )}

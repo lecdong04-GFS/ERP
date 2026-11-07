@@ -397,7 +397,7 @@ export const OrderReqConfirmView: React.FC = () => {
         <div className="flex items-center gap-3">
           <span className="w-2 h-4 bg-[#10b981] rounded-2xs inline-block" />
           <h1 className="text-[14px] font-black tracking-tight text-white flex items-center gap-2.5">
-            발주소요량확정
+            발주 확정 승인
             {hasGfsOrders ? (
               <span className="text-[11.5px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 flex items-center gap-1">
                 <CheckCircle2 size={12} className="text-emerald-400" />

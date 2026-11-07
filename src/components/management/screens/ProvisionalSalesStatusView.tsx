@@ -95,7 +95,7 @@ export const ProvisionalSalesStatusView: React.FC = () => {
     <div className="flex flex-col h-full w-full bg-[#e2e8f0] select-none text-[12px]">
       {/* 1. 상단 액션 바 */}
       <SalesActionBar
-        title="가매출/미출/확정금액현황"
+        title="가매출·미출·확정금액 정산"
         buttons={[
           { key: 'search', label: '조회', icon: 'search', variant: 'secondary', onClick: () => loadData(date) },
           { key: 'upload', label: '미출/수주 엑셀 업로드', icon: 'excel', variant: 'primary', onClick: openExcelOrderModal },

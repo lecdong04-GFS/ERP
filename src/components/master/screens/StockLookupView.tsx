@@ -2082,7 +2082,7 @@ export const StockLookupView: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-50 text-[14px] select-none">
       {/* 1. Header Action Bar */}
       <MasterActionBar
-        title="재고조회"
+        title="통합 재고조회 (5시 실사 연동)"
         buttons={[
           {
             key: 'save',

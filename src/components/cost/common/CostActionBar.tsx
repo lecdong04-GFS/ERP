@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import {
   HelpCircle,
   Search,
@@ -31,6 +32,8 @@ export const CostActionBar: React.FC<CostActionBarProps> = ({
   helpContent,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
+  const { activeTab } = useTabs();
+  const displayTitle = activeTab && activeTab.id !== DASHBOARD_TAB_ID && activeTab.title ? activeTab.title : title;
 
   const renderIcon = (icon?: string) => {
     switch (icon) {
@@ -57,7 +60,7 @@ export const CostActionBar: React.FC<CostActionBarProps> = ({
         {/* Left Title */}
         <div className="flex items-center gap-2.5">
           <div className="w-2.5 h-4 bg-[#3b82f6] rounded-2xs shadow-xs" />
-          <h1 className="text-[15px] font-black tracking-tight text-white">{title}</h1>
+          <h1 className="text-[15px] font-black tracking-tight text-white">{displayTitle}</h1>
         </div>
 
         {/* Right Action Buttons */}
@@ -98,7 +101,7 @@ export const CostActionBar: React.FC<CostActionBarProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-md shadow-2xl border border-gray-400 w-[480px] text-gray-800 text-[12px] overflow-hidden">
             <div className="bg-[#333333] text-white px-3 py-2 flex items-center justify-between font-bold">
-              <span>[도움말] {title}</span>
+              <span>[도움말] {displayTitle}</span>
               <button
                 onClick={() => setShowHelp(false)}
                 className="text-gray-300 hover:text-white font-bold text-sm px-1"
