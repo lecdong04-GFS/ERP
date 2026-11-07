@@ -191,6 +191,19 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     }
   }
 
+  // 헤더 텍스트 행이 누락되었으나 GS리테일 2행 1쌍 포맷인 경우 자동 감지
+  if (headerRowIdx === -1) {
+    const topText = rows.slice(0, 10).map((r) => (r || []).join(' ')).join(' ');
+    if (
+      topText.includes('점포별/제품별') ||
+      topText.includes('납품정보') ||
+      topText.includes('조회기간') ||
+      (fileName && (fileName.includes('미출') || fileName.includes('미납')))
+    ) {
+      isTwoLineHeader = true;
+    }
+  }
+
   // 2. 동적 컬럼 위치 매핑
   const colMap = {
     storeCode: -1,
@@ -302,21 +315,35 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     }
   }
 
-  // 매핑 실패 시의 기본 위치 폴백
+  // 매핑 실패 시의 기본 위치 폴백 (GS리테일 B2B 표준 레이아웃)
   if (colMap.storeCode === -1) colMap.storeCode = 0;
-  if (colMap.storeName === -1) colMap.storeName = colMap.storeCode === 0 ? 1 : 0;
+  if (colMap.storeName === -1) colMap.storeName = 1;
+  if (colMap.date === -1) colMap.date = 2;
   if (colMap.productCode === -1) colMap.productCode = 3;
-  if (colMap.productName === -1) colMap.productName = isTwoLineHeader ? colMap.productCode : 4;
+  if (colMap.productName === -1) colMap.productName = 3;
   if (colMap.orderQty === -1) colMap.orderQty = 4;
   if (colMap.delivQty === -1) colMap.delivQty = 5;
   if (colMap.undelivQty === -1) colMap.undelivQty = 6;
   if (isTwoLineHeader) {
-    if (colMap.orderAmt === -1) colMap.orderAmt = colMap.orderQty;
-    if (colMap.delivAmt === -1) colMap.delivAmt = colMap.delivQty;
-    if (colMap.undelivAmt === -1) colMap.undelivAmt = colMap.undelivQty;
+    if (colMap.orderAmt === -1) colMap.orderAmt = 4;
+    if (colMap.delivAmt === -1) colMap.delivAmt = 5;
+    if (colMap.undelivAmt === -1) colMap.undelivAmt = 6;
   }
 
-  const dataStart = headerRowIdx !== -1 ? headerRowIdx + (isTwoLineHeader ? 2 : 1) : 4;
+  // 데이터 시작 행 탐색
+  let dataStart = 8;
+  if (headerRowIdx !== -1) {
+    dataStart = headerRowIdx + (isTwoLineHeader ? 2 : 1);
+  } else {
+    for (let r = 0; r < Math.min(20, rows.length); r++) {
+      const c0 = String(rows[r]?.[0] ?? '').trim();
+      const c3 = String(rows[r]?.[3] ?? '').trim();
+      if (c0.includes('합계') || c0.startsWith('CVV') || c0.startsWith('C6') || /^\d{13}/.test(c3)) {
+        dataStart = r;
+        break;
+      }
+    }
+  }
   const items: MichulItem[] = [];
 
   let currentStoreCode = '';
@@ -330,7 +357,26 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     // 합계/총계 행 필터링
     const firstFew = row.slice(0, 4).map((c) => String(c ?? '').replace(/\s+/g, '')).join(' ');
     if (firstFew.includes('전체합계') || firstFew.includes('총계') || firstFew.includes('총합계')) break;
-    if (firstFew.includes('합계') || firstFew.includes('소계') || firstFew.includes('합 계') || firstFew.includes('소 계')) continue;
+    if (firstFew.includes('합계') || firstFew.includes('소계')) {
+      if (isTwoLineHeader) {
+        r++; // 2줄 1쌍 구조 시 소계 금액 행까지 함께 건너뜀
+      }
+      continue;
+    }
+
+    // 헤더/메타 정보 행 건너뜀
+    const c0 = String(row[0] ?? '').replace(/\s+/g, '');
+    if (
+      c0.includes('점포코드') ||
+      c0.includes('미납수량') ||
+      c0.includes('납품정보') ||
+      c0.includes('상호명') ||
+      c0.includes('유통회사') ||
+      c0.includes('거래선코드') ||
+      c0.includes('조회기간')
+    ) {
+      continue;
+    }
 
     const rowStr = row.map((c) => String(c ?? '').trim()).join('');
     if (!rowStr) continue;
@@ -339,7 +385,11 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     const nextRow = rows[r + 1] || [];
     const nextFirstCell = String(nextRow[0] ?? '').trim();
     const nextRowStr = nextRow.map((c) => String(c ?? '').trim()).join('');
-    const isNextTotal = nextFirstCell.includes('합계') || nextFirstCell.includes('총계');
+    const isNextTotal =
+      nextFirstCell.includes('합계') ||
+      nextFirstCell.includes('소계') ||
+      nextFirstCell.includes('총계') ||
+      nextFirstCell.includes('전체합계');
 
     const isPair =
       isTwoLineHeader &&
@@ -351,8 +401,12 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     // 점포 및 일자 추출
     const rawStoreCode = colMap.storeCode !== -1 ? String(row[colMap.storeCode] ?? '').trim() : '';
     const rawStoreName = colMap.storeName !== -1 ? String(row[colMap.storeName] ?? '').trim() : '';
-    if (rawStoreCode) currentStoreCode = rawStoreCode;
-    if (rawStoreName) currentStoreName = rawStoreName;
+    if (rawStoreCode && !rawStoreCode.includes('합계') && !rawStoreCode.includes('소계') && rawStoreCode !== 'null' && rawStoreCode !== 'undefined') {
+      currentStoreCode = rawStoreCode;
+    }
+    if (rawStoreName && !rawStoreName.includes('합계') && !rawStoreName.includes('소계') && rawStoreName !== 'null' && rawStoreName !== 'undefined') {
+      currentStoreName = rawStoreName;
+    }
 
     if (colMap.date !== -1 && row[colMap.date]) {
       const d = excelDateToISO(row[colMap.date]);
@@ -361,6 +415,9 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
 
     // 상품코드 및 수량 추출 (쉼표 제거 안전 파싱)
     let productCode = colMap.productCode !== -1 ? String(row[colMap.productCode] ?? '').trim() : '';
+    if (productCode === 'null' || productCode === 'undefined' || productCode === '상품명' || productCode === '단품명') {
+      productCode = '';
+    }
     let productName = (!isTwoLineHeader && colMap.productName !== -1) ? String(row[colMap.productName] ?? '').trim() : '';
     let orderQty = colMap.orderQty !== -1 ? parseCleanNumber(row[colMap.orderQty]) : 0;
     let delivQty = colMap.delivQty !== -1 ? parseCleanNumber(row[colMap.delivQty]) : 0;
@@ -372,9 +429,9 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
 
     // 2줄 1쌍 구조일 경우 두 번째 줄에서 상품명 및 금액 추출
     if (isPair) {
-      if (colMap.productName !== -1 && nextRow[colMap.productName]) {
+      if (colMap.productName !== -1 && nextRow[colMap.productName] !== undefined && nextRow[colMap.productName] !== null) {
         productName = String(nextRow[colMap.productName] ?? '').trim();
-      } else if (colMap.productCode !== -1 && nextRow[colMap.productCode]) {
+      } else if (colMap.productCode !== -1 && nextRow[colMap.productCode] !== undefined && nextRow[colMap.productCode] !== null) {
         productName = String(nextRow[colMap.productCode] ?? '').trim();
       }
 
