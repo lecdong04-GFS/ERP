@@ -71,6 +71,13 @@ export const OrderSummaryGsrView: React.FC = () => {
     try {
       const params = new URLSearchParams({ startDate: s, endDate: e });
       const res = await fetch(`/api/sales/order?${params}`, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error(`서버 응답 오류 (HTTP ${res.status})`);
+      }
+      const cType = res.headers.get('content-type') || '';
+      if (!cType.includes('application/json')) {
+        throw new Error('응답 데이터가 올바른 JSON 형식이 아닙니다.');
+      }
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const list = json.data.filter((o: any) => o.status !== '취소');
@@ -92,9 +99,12 @@ export const OrderSummaryGsrView: React.FC = () => {
         const ps = shiftDays(s, -len);
         const pe = shiftDays(s, -1);
         const pParams = new URLSearchParams({ startDate: ps, endDate: pe });
-        const pRes = await fetch(`/api/sales/order?${pParams}`, { cache: 'no-store' }).then((r) => r.json());
+        const pResponse = await fetch(`/api/sales/order?${pParams}`, { cache: 'no-store' });
+        const pRes = pResponse.ok && (pResponse.headers.get('content-type') || '').includes('application/json')
+          ? await pResponse.json()
+          : null;
         const prevMap: Record<string, number> = {};
-        if (pRes.success && Array.isArray(pRes.data)) {
+        if (pRes && pRes.success && Array.isArray(pRes.data)) {
           pRes.data
             .filter((o: any) => o.status !== '취소')
             .forEach((o: any) => {
@@ -108,9 +118,9 @@ export const OrderSummaryGsrView: React.FC = () => {
       } catch {
         setPrevKindQty({});
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load order summaries', err);
-      setError('수주 데이터를 불러오지 못했습니다.');
+      setError(err?.message || '수주 데이터를 불러오지 못했습니다.');
       setOrders([]);
     } finally {
       setLoading(false);

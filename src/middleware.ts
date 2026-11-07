@@ -23,7 +23,14 @@ export default withAuth(
     },
     ...(secret ? { secret } : {}),
     callbacks: {
-      authorized: ({ token }) => !!token,
+      authorized: ({ req, token }) => {
+        // API 경로는 브라우저 fetch()가 307 리디렉션을 따라가 로그인 HTML(<!DOCTYPE)을 JSON으로 파싱하려다
+        // "Unexpected token '<'" 에러가 발생하는 것을 방지하기 위해 통과 처리
+        if (req.nextUrl.pathname.startsWith('/api/')) {
+          return true;
+        }
+        return !!token;
+      },
     },
   }
 );

@@ -15,10 +15,10 @@ import {
 } from 'recharts';
 import { ChartPoint } from './dashboardData';
 
-// React 19 + Recharts defaultProps 콘솔 경고 억제 (Next.js 오버레이 방지)
-if (typeof window !== 'undefined') {
+// React 19 + Recharts defaultProps 콘솔 경고 억제 (중복 래핑 방지)
+if (typeof window !== 'undefined' && !(console.error as any).__rechartsPatched) {
   const origError = console.error;
-  console.error = (...args: any[]) => {
+  const patched = (...args: any[]) => {
     if (
       typeof args[0] === 'string' &&
       (args[0].includes('defaultProps') || args[0].includes('Support for defaultProps'))
@@ -27,6 +27,8 @@ if (typeof window !== 'undefined') {
     }
     origError(...args);
   };
+  (patched as any).__rechartsPatched = true;
+  console.error = patched;
 }
 
 interface ErpChartPanelProps {
