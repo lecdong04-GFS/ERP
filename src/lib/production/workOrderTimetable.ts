@@ -600,7 +600,21 @@ export function getLineDef(lineId: string, dept: 'SEONGHYEONG' | 'JEONCHEORI' = 
   if (lineId === 'ALL_JEONCHEORI') return getDepartmentAllDef('JEONCHEORI');
   if (lineId === 'ALL') return getDepartmentAllDef(dept);
 
-  const found = TIMETABLE_LINES.find((l) => l.id === lineId || l.name === lineId);
+  const found = TIMETABLE_LINES.find(
+    (l) =>
+      l.id === lineId ||
+      l.name === lineId ||
+      (lineId.includes('도시락') && l.id.includes('도시락')) ||
+      (lineId.includes('김밥') && l.id.includes('김밥')) ||
+      (lineId.includes('더큰') && l.id.includes('더큰')) ||
+      (lineId.includes('삼각') && lineId.includes('1') && l.id.includes('삼각김밥 1')) ||
+      (lineId.includes('삼각') && lineId.includes('2') && l.id.includes('삼각김밥 2')) ||
+      (lineId.includes('삼각') && l.id.includes('삼각김밥 1')) ||
+      (lineId.includes('샌드위치') && l.id.includes('샌드위치')) ||
+      (lineId.includes('햄버거') && l.id.includes('햄버거')) ||
+      (lineId.includes('취반') && l.id.includes('취반')) ||
+      (lineId.includes('스팀') && l.id.includes('가열조리'))
+  );
   if (found) return found;
 
   const meta = GANTT_LINE_METAS[lineId];

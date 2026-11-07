@@ -35,9 +35,9 @@ export const config = {
      * - /login (로그인 페이지)
      * - /api/auth (NextAuth 인증 API)
      * - /_next (Next.js 정적 리소스)
-     * - /favicon.ico, /icon, /images 등 정적 파일
+     * - /favicon.ico, /icon, /images, /reports 등 정적 파일
      */
-    '/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon|images|pic|logo|_not-found).*)',
+    '/((?!login|api/auth|_next/static|_next/image|favicon\\.ico|icon|images|pic|logo|reports|_not-found).*)',
   ],
 };
 

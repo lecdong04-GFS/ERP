@@ -318,9 +318,160 @@ export const WorkOrderStatusView: React.FC = () => {
     }
   };
 
+  // 1. A4 가로 실시간 작업지시서 즉시 브라우저 인쇄 & PDF 저장 (실 수주량 반영)
+  const handlePrintLiveWorkOrder = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      // 팝업 차단된 경우 정본 PDF 열기
+      window.open(currentLine.pdfUrl || `/reports/work-orders/${encodeURIComponent(selectedLine)}.pdf`, '_blank');
+      return;
+    }
+
+    const rowsHtml = filteredSchedule
+      .map(
+        (t) => `
+      <tr class="${t.type === '청소' ? 'bg-clean' : t.type === '휴게' ? 'bg-meal' : ''}">
+        <td style="text-align:center; font-weight:900;">${t.seq}</td>
+        <td style="text-align:center;"><span class="badge ${t.shift.includes('2편') ? 'badge-s2' : 'badge-s1'}">${t.shift}</span></td>
+        <td style="text-align:center; font-family:monospace; font-weight:700;">${t.time}</td>
+        <td style="text-align:center; font-weight:700;">${t.type}</td>
+        <td style="font-weight:900; font-size:12px;">${t.item}</td>
+        <td style="text-align:right; font-family:monospace; font-weight:900; color:#1e1b4b;">${typeof t.qty === 'number' ? t.qty.toLocaleString() + ' ea' : t.qty}</td>
+        <td style="text-align:center; font-family:monospace;">${t.duration}</td>
+        <td style="text-align:center; font-weight:700;">${t.workers}</td>
+        <td style="font-size:10px; color:#334155;">${t.bom || '-'}</td>
+        <td style="font-size:10px; font-weight:700; color:#b91c1c;">${t.ccp || '-'}</td>
+        <td style="text-align:center; font-weight:700;">${t.status}</td>
+        <td style="text-align:center; font-weight:700;">${t.assignee || '담당자'}</td>
+      </tr>
+    `
+      )
+      .join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8">
+        <title>${selectedLine} 일일 작업지시서 (${workDate})</title>
+        <style>
+          @page { size: A4 landscape; margin: 8mm 10mm 8mm 10mm; }
+          * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; }
+          body { margin: 0; padding: 0; color: #0f172a; font-size: 11px; }
+          .header-box { border: 2px solid #0f172a; padding: 8px 12px; margin-bottom: 8px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+          .main-title { font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+          .approval-table { border-collapse: collapse; text-align: center; font-size: 10px; }
+          .approval-table th, .approval-table td { border: 1px solid #475569; padding: 2px 8px; }
+          .approval-table th { background: #f1f5f9; font-weight: 700; width: 55px; }
+          .approval-table td { height: 32px; vertical-align: middle; }
+          .kpi-row { display: flex; gap: 8px; margin-bottom: 8px; }
+          .kpi-card { flex: 1; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #ffffff; }
+          .kpi-label { font-size: 9px; color: #64748b; font-weight: 700; }
+          .kpi-val { font-size: 13px; font-weight: 900; color: #0f172a; font-family: monospace; margin-top: 2px; }
+          .work-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+          .work-table th, .work-table td { border: 1px solid #cbd5e1; padding: 4px 6px; }
+          .work-table th { background: #0f172a; color: #ffffff; font-weight: 700; text-align: center; font-size: 10px; }
+          .work-table tr:nth-child(even) { background-color: #f8fafc; }
+          .bg-clean { background-color: #fef3c7 !important; }
+          .bg-meal { background-color: #f1f5f9 !important; }
+          .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; }
+          .badge-s2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+          .badge-s1 { background: #fce7f3; color: #9d174d; border: 1px solid #fbcfe8; }
+          .footer-box { margin-top: 8px; border-top: 1px solid #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between; font-size: 9px; color: #64748b; }
+          .print-toolbar { background: #1e293b; color: #fff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-radius: 6px; }
+          @media print {
+            .no-print { display: none !important; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-toolbar no-print">
+          <span style="font-weight:bold; font-size:12px;">🖨️ A4 가로 인쇄 미리보기 (식약처 HACCP 공인 양식)</span>
+          <div style="display:flex; gap:8px;">
+            <button onclick="window.print()" style="padding:4px 12px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">지금 인쇄 (PDF 저장)</button>
+            <button onclick="window.close()" style="padding:4px 12px; background:#475569; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">창 닫기</button>
+          </div>
+        </div>
+
+        <div class="header-box">
+          <div>
+            <div style="font-size:11px; font-weight:800; color:#2563eb;">(주)지에프에스 스마트 생산관제 시스템</div>
+            <div class="main-title">${department === 'SEONGHYEONG' ? '성형장' : '전처리실'}: ${selectedLine} 일일 작업지시서 (HACCP 규격)</div>
+            <div style="font-size:10px; color:#64748b; margin-top:2px;">발행일시: ${workDate} | 관리시프트: ${shift} | 문서번호: GFS-WO-${workDate.replace(/-/g, '')}-${selectedLine}</div>
+          </div>
+          <table class="approval-table">
+            <tr><th rowspan="2" style="width:24px; background:#e2e8f0; font-size:9px;">결<br/>재</th><th>작 성</th><th>검 토</th><th>승 인</th></tr>
+            <tr><td></td><td></td><td></td></tr>
+          </table>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card" style="background:#eff6ff; border-color:#93c5fd;">
+            <div class="kpi-label">일일 생산계획</div>
+            <div class="kpi-val" style="color:#1e40af;">${realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">라인 가동시간</div>
+            <div class="kpi-val">${scheduleTasks.length > 0 ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}` : currentLine.totalTime}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">생산속도 (UPH)</div>
+            <div class="kpi-val" style="color:#059669;">${currentLine.speed}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">투입인원</div>
+            <div class="kpi-val" style="color:#d97706;">${currentLine.personnel}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">공정 책임자</div>
+            <div class="kpi-val" style="color:#4f46e5;">${currentLine.leadWorker}</div>
+          </div>
+        </div>
+
+        <table class="work-table">
+          <thead>
+            <tr>
+              <th style="width:35px;">순서</th>
+              <th style="width:45px;">구분</th>
+              <th style="width:90px;">작업시간</th>
+              <th style="width:40px;">유형</th>
+              <th>지시 제품명</th>
+              <th style="width:75px;">지시수량</th>
+              <th style="width:55px;">소요시간</th>
+              <th style="width:45px;">인원</th>
+              <th style="width:230px;">주요 원부자재 배합 (BOM)</th>
+              <th style="width:160px;">HACCP & CCP 핵심 관리기준</th>
+              <th style="width:50px;">상태</th>
+              <th style="width:55px;">담당자</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer-box">
+          <div>* 본 작업지시서는 식품위생법 제48조(해썹) 및 식약처 위해요소중점관리기준을 준수하여 작성되었습니다.</div>
+          <div>GFS 스마트 제조 통합 관제 본부 | 페이지 1 / 1</div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 400);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   // PDF 인쇄 (새 창 직접 열람 및 인쇄)
   const handleOpenPdf = (pdfUrl?: string) => {
-    const target = pdfUrl || currentLine.pdfUrl;
+    const target = pdfUrl || currentLine.pdfUrl || `/reports/work-orders/${encodeURIComponent(selectedLine)}.pdf`;
     window.open(target, '_blank');
   };
 
@@ -499,15 +650,27 @@ export const WorkOrderStatusView: React.FC = () => {
 
             {/* 인쇄 및 저장 버튼 그룹 */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
+              {/* 1. 라인 실시간 A4 인쇄 & PDF 저장 버튼 */}
+              <button
+                type="button"
+                onClick={handlePrintLiveWorkOrder}
+                title="현재 선택된 날짜와 시프트, 실 수주 수량이 반영된 A4 가로 작업지시서를 새 창으로 열어 즉시 인쇄 및 PDF로 저장합니다."
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Printer size={15} />
+                <span>라인 PDF 인쇄</span>
+                <ExternalLink size={12} className="opacity-75" />
+              </button>
+
+              {/* 2. 정본 PDF 파일 열기 */}
               <button
                 type="button"
                 onClick={() => handleOpenPdf()}
-                title="이 라인의 A4 가로 일일 작업지시서 PDF를 새 탭에서 열어 인쇄합니다."
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="이 라인의 공인 규격 PDF 문서를 새 창에서 엽니다."
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl font-black text-xs transition-all flex items-center gap-1 cursor-pointer"
               >
-                <FileText size={15} />
-                <span>라인 PDF</span>
-                <ExternalLink size={12} className="opacity-75" />
+                <FileText size={14} className="text-blue-600" />
+                <span>정본 PDF</span>
               </button>
 
               <button
