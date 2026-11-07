@@ -127,8 +127,8 @@ export const HelpView: React.FC = () => {
       badge: '최종 납품',
       color: 'from-emerald-700 to-green-800',
       icon: Truck,
-      targetId: 'sales-delivery-reg',
-      btnText: '납품등록 바로가기',
+      targetId: 'sales-statement-issue',
+      btnText: '거래명세서 바로가기',
       desc: '완제품 포장 및 파렛트 적재 후 GS리테일 각 센터로 출하 납품 등록하고 세금계산서/거래명세서를 발행합니다.',
       keyActions: [
         '납품 전표 및 박스 라벨 바코드 태그 인쇄',
