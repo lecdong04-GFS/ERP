@@ -962,10 +962,33 @@ export const ReceivingStatusEditView: React.FC = () => {
                 <p className="font-bold text-base text-slate-600">입고 내역 및 재고 데이터를 조회하고 있습니다...</p>
               </div>
             ) : filteredRows.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center py-20 text-slate-400">
-                <Truck className="w-12 h-12 text-slate-300 mb-3" />
-                <p className="font-bold text-base text-slate-600">선택하신 조건에 해당하는 입고 내역이 없습니다.</p>
-                <p className="text-xs text-slate-400 mt-1">입고일자 범위를 넓히거나 검색어를 변경해보세요.</p>
+              <div className="h-full flex flex-col items-center justify-center py-24 text-slate-400">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-4 shadow-inner">
+                  <Truck className="w-8 h-8 text-slate-400" />
+                </div>
+                <p className="font-black text-lg text-slate-700">등록된 실 입고 내역이 없습니다</p>
+                <p className="text-xs text-slate-500 mt-1.5 max-w-md text-center leading-relaxed">
+                  가상(샘플) 데이터가 모두 정리되었습니다. 실제 발주된 자재가 공장에 도착하면 
+                  <strong> [입고등록(GSR)]</strong> 메뉴를 통해 검수 및 실재고 입고 처리를 진행하실 수 있습니다.
+                </p>
+                <div className="mt-5 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openPipelineTab('pur-receiving-reg')}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>입고등록(GSR) 바로가기</span>
+                    <ExternalLink size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openPipelineTab('pur-mat-order-day')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>자재발주(요일별) 바로가기</span>
+                    <ExternalLink size={13} />
+                  </button>
+                </div>
               </div>
             ) : (
               <table className="w-full text-left border-collapse min-w-[1700px]">

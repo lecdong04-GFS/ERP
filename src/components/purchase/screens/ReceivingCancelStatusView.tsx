@@ -25,18 +25,13 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'cancelUser', label: '취소자', width: '80px', align: 'center' },
 ];
 
-const SAMPLE_DATA = [
-  { id: 1, cancelTime: '2026-10-30 08:15', orderId: 'pc25315', orderDate: '2026-10-29', recvDate: '2026-10-30', supplier: '[네트웍스]대림', type: '원재료', name: '[상온]삼각김밥김', spec: '100매*32ea', unit: 'box', orderPrice: 52000, orderQty: 4, cancelQty: 2, unitPrice: 52000, cancelAmt: 104000, remark: '공급사 재고 부족으로 취소', cancelUser: '전정우' },
-  { id: 2, cancelTime: '2026-10-30 08:30', orderId: 'pc25338', orderDate: '2026-10-29', recvDate: '2026-10-30', supplier: '[네트웍스]두레', type: '부재료', name: '두레)ET-30', spec: '50ea*2줄', unit: 'box', orderPrice: 38000, orderQty: 6, cancelQty: 2, unitPrice: 38000, cancelAmt: 76000, remark: '입고 불량 반품취소', cancelUser: '전정우' },
-  { id: 3, cancelTime: '2026-10-29 16:40', orderId: 'pc25322', orderDate: '2026-10-28', recvDate: '2026-10-29', supplier: '[네트웍스]한성', type: '원재료', name: '[냉장]다진맛살', spec: '10kg*2ea', unit: 'box', orderPrice: 52000, orderQty: 4, cancelQty: 1, unitPrice: 52000, cancelAmt: 52000, remark: '운송 중 파손 취소', cancelUser: '김품질' },
-  { id: 4, cancelTime: '2026-10-29 17:10', orderId: 'pc25326', orderDate: '2026-10-28', recvDate: '2026-10-29', supplier: '[네트웍스]CJ', type: '원재료', name: '[냉장]계란구이', spec: '1020g*12ea', unit: 'box', orderPrice: 78000, orderQty: 4, cancelQty: 1, unitPrice: 78000, cancelAmt: 78000, remark: '차량 온도 기준 초과 반품', cancelUser: '이검수' },
-];
+const SAMPLE_DATA: any[] = [];
 
 export const ReceivingCancelStatusView: React.FC = () => {
   const [startDate, setStartDate] = useState('2026-10-29');
   const [endDate, setEndDate] = useState('2026-10-30');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
-  const [data, setData] = useState(SAMPLE_DATA);
+  const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch('/api/purchase/receiving?status=취소')
