@@ -10,7 +10,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { id: 'sales-order-status-cancel', title: '일일 주문현황 / 취소', categoryId: 'sales', categoryName: '영업·출하' },
       { id: 'sales-order-summary-gsr', title: '센터별 주문 집계현황', categoryId: 'sales', categoryName: '영업·출하' },
       { id: 'sales-delivery-reg', title: '납품 전표 등록', categoryId: 'sales', categoryName: '영업·출하' },
-      { id: 'sales-delivery-status-edit', title: '납품 현황 및 전표수정', categoryId: 'sales', categoryName: '영업·출하' },
       { id: 'sales-undelivered-status', title: '미출 현황 및 결품 대조', categoryId: 'sales', categoryName: '영업·출하', badge: '핵심' },
       { id: 'sales-statement-issue', title: '거래명세서 발행', categoryId: 'sales', categoryName: '영업·출하' },
       { id: 'sales-tag-print', title: '파렛트 꼬리표 출력', categoryId: 'sales', categoryName: '영업·출하' },
@@ -99,7 +98,8 @@ export const MENU_CATEGORIES: MenuCategory[] = [
 // 구버전 또는 축약 메뉴 ID -> 현행 표준 메뉴 ID 매핑 (하위 호환성 100% 보장)
 const MENU_ALIASES: Record<string, string> = {
   // 영업 정예화 매핑
-  'sales-item-delivery-status': 'sales-delivery-status-edit',
+  'sales-delivery-status-edit': 'sales-delivery-reg',
+  'sales-item-delivery-status': 'sales-delivery-reg',
   'sales-extra-order-status': 'sales-order-extra-reg',
   'sales-order-cancel-status': 'sales-order-status-cancel',
 
