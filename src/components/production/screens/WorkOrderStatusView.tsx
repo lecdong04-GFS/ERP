@@ -327,122 +327,592 @@ export const WorkOrderStatusView: React.FC = () => {
       return;
     }
 
+    // 작업일자 한글 요일 서식 포맷 (예: 2026년 11월 04일 (수요일))
+    const dateParts = (workDate || '2026-11-04').split('-');
+    const year = dateParts[0] || '2026';
+    const month = dateParts[1] || '11';
+    const day = dateParts[2] || '04';
+    const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayOfWeek = isNaN(dateObj.getTime()) ? '수' : dayNames[dateObj.getDay()];
+    const formattedDateKo = `${year}년 ${Number(month)}월 ${Number(day)}일 (${dayOfWeek}요일)`;
+    const docNumber = `GFS-WO-${year}${month}${day}-${selectedLine.replace(/\s+/g, '')}`;
+
+    const shiftLabel =
+      shift === '전체'
+        ? '1편·2편 통합 전일 지시'
+        : shift === '2편'
+        ? '2편 주간 확정 (09:30 ~ 17:00)'
+        : '1편 야간 확정 (17:00 ~ 마감)';
+
+    // 타임테이블 행 렌더링
     const rowsHtml = filteredSchedule
-      .map(
-        (t) => `
-      <tr class="${t.type === '청소' ? 'bg-clean' : t.type === '휴게' ? 'bg-meal' : ''}">
-        <td style="text-align:center; font-weight:900;">${t.seq}</td>
-        <td style="text-align:center;"><span class="badge ${t.shift.includes('2편') ? 'badge-s2' : 'badge-s1'}">${t.shift}</span></td>
-        <td style="text-align:center; font-family:monospace; font-weight:700;">${t.time}</td>
-        <td style="text-align:center; font-weight:700;">${t.type}</td>
-        <td style="font-weight:900; font-size:12px;">${t.item}</td>
-        <td style="text-align:right; font-family:monospace; font-weight:900; color:#1e1b4b;">${typeof t.qty === 'number' ? t.qty.toLocaleString() + ' ea' : t.qty}</td>
-        <td style="text-align:center; font-family:monospace;">${t.duration}</td>
-        <td style="text-align:center; font-weight:700;">${t.workers}</td>
-        <td style="font-size:10px; color:#334155;">${t.bom || '-'}</td>
-        <td style="font-size:10px; font-weight:700; color:#b91c1c;">${t.ccp || '-'}</td>
-        <td style="text-align:center; font-weight:700;">${t.status}</td>
-        <td style="text-align:center; font-weight:700;">${t.assignee || '담당자'}</td>
-      </tr>
-    `
-      )
+      .map((t, idx) => {
+        const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP');
+        const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식');
+        const isSupport = t.type === '지원' || t.shift.includes('지원');
+        const rowClass = isClean ? 'row-clean' : isMeal ? 'row-meal' : isSupport ? 'row-support' : idx % 2 === 1 ? 'row-alt' : '';
+
+        const shiftBadgeClass = t.shift.includes('2편')
+          ? 'badge-s2'
+          : t.shift.includes('1편')
+          ? 'badge-s1'
+          : 'badge-other';
+
+        const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} ea` : t.qty || '-';
+
+        return `
+          <tr class="${rowClass}">
+            <td class="col-center col-seq">${idx + 1}</td>
+            <td class="col-center"><span class="badge ${shiftBadgeClass}">${t.shift}</span></td>
+            <td class="col-center col-time">${t.time}</td>
+            <td class="col-center"><span class="type-pill type-${t.type}">${t.type}</span></td>
+            <td class="col-item">${t.item}</td>
+            <td class="col-right col-qty">${formattedQty}</td>
+            <td class="col-center col-duration">${t.duration}</td>
+            <td class="col-center col-workers">${t.workers || '-'}</td>
+            <td class="col-bom">${t.bom || '-'}</td>
+            <td class="col-ccp">${t.ccp || '-'}</td>
+            <td class="col-center col-check"><div class="check-box"></div></td>
+            <td class="col-center col-assignee">${t.assignee || '미지정'}</td>
+          </tr>
+        `;
+      })
       .join('');
+
+    // 하단 소요 원부자재 불출 현황 행 렌더링
+    const materialRowsHtml =
+      materials && materials.length > 0
+        ? materials
+            .slice(0, 6)
+            .map((m, idx) => {
+              const isSufficient = m.currentStock >= m.requiredQty;
+              return `
+              <tr>
+                <td class="col-center" style="font-weight:700;">${idx + 1}</td>
+                <td class="col-center"><span class="wh-tag wh-${m.warehouse}">${m.warehouse}</span></td>
+                <td style="font-weight:700; color:#0f172a;">${m.name} <span style="font-weight:normal; font-size:9px; color:#64748b;">${m.spec ? `(${m.spec})` : ''}</span></td>
+                <td class="col-right" style="font-family:monospace; font-weight:800; color:#1e3a8a;">${m.requiredQty.toLocaleString()} ${m.unit}</td>
+                <td class="col-right" style="font-family:monospace; color:#475569;">${m.currentStock.toLocaleString()} ${m.unit}</td>
+                <td class="col-center" style="font-weight:800; color:${isSufficient ? '#15803d' : '#b91c1c'};">${isSufficient ? '적합' : '부족'}</td>
+                <td class="col-center"><div class="mini-sign">불출확인</div></td>
+              </tr>
+            `;
+            })
+            .join('')
+        : `<tr><td colspan="7" class="col-center" style="color:#94a3b8; padding:8px;">등록된 소요 원부자재 배합 정보가 없습니다.</td></tr>`;
 
     const html = `
       <!DOCTYPE html>
       <html lang="ko">
       <head>
         <meta charset="UTF-8">
-        <title>${selectedLine} 일일 작업지시서 (${workDate})</title>
+        <title>[GFS] ${selectedLine}_일일작업지시서_${workDate}_${shift}</title>
         <style>
-          @page { size: A4 landscape; margin: 8mm 10mm 8mm 10mm; }
-          * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif; }
-          body { margin: 0; padding: 0; color: #0f172a; font-size: 11px; }
-          .header-box { border: 2px solid #0f172a; padding: 8px 12px; margin-bottom: 8px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
-          .main-title { font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px; }
-          .approval-table { border-collapse: collapse; text-align: center; font-size: 10px; }
-          .approval-table th, .approval-table td { border: 1px solid #475569; padding: 2px 8px; }
-          .approval-table th { background: #f1f5f9; font-weight: 700; width: 55px; }
-          .approval-table td { height: 32px; vertical-align: middle; }
-          .kpi-row { display: flex; gap: 8px; margin-bottom: 8px; }
-          .kpi-card { flex: 1; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 10px; background: #ffffff; }
-          .kpi-label { font-size: 9px; color: #64748b; font-weight: 700; }
-          .kpi-val { font-size: 13px; font-weight: 900; color: #0f172a; font-family: monospace; margin-top: 2px; }
-          .work-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-          .work-table th, .work-table td { border: 1px solid #cbd5e1; padding: 4px 6px; }
-          .work-table th { background: #0f172a; color: #ffffff; font-weight: 700; text-align: center; font-size: 10px; }
-          .work-table tr:nth-child(even) { background-color: #f8fafc; }
-          .bg-clean { background-color: #fef3c7 !important; }
-          .bg-meal { background-color: #f1f5f9 !important; }
-          .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 800; }
+          @page {
+            size: A4 landscape;
+            margin: 6mm 8mm 6mm 8mm;
+          }
+          * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            color: #0f172a;
+            background: #ffffff;
+            font-size: 10px;
+            line-height: 1.25;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .header-container {
+            border: 2px solid #0f172a;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 7px;
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+          }
+          .header-left {
+            flex: 1;
+            min-width: 0;
+          }
+          .company-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 2px;
+          }
+          .company-logo {
+            font-size: 11px;
+            font-weight: 900;
+            background: #1e40af;
+            color: #ffffff;
+            padding: 1px 6px;
+            border-radius: 3px;
+            letter-spacing: -0.5px;
+          }
+          .company-name {
+            font-size: 11px;
+            font-weight: 800;
+            color: #1e3a8a;
+          }
+          .haccp-pill {
+            font-size: 9px;
+            font-weight: 800;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+            padding: 0 5px;
+            border-radius: 3px;
+          }
+          .main-title {
+            font-size: 16px;
+            font-weight: 900;
+            color: #0f172a;
+            margin: 2px 0 3px 0;
+            letter-spacing: -0.5px;
+          }
+          .doc-meta {
+            font-size: 9px;
+            color: #475569;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+          }
+          .doc-meta .sep {
+            color: #cbd5e1;
+          }
+
+          /* 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 */
+          .date-plaque {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 2px solid #d97706;
+            border-radius: 6px;
+            padding: 6px 14px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            color: #ffffff;
+            min-width: 260px;
+            flex-shrink: 0;
+          }
+          .date-plaque-label {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #fde047;
+            text-transform: uppercase;
+            margin-bottom: 1px;
+          }
+          .date-plaque-val {
+            font-size: 16px;
+            font-weight: 900;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+          }
+          .date-plaque-shift {
+            margin-top: 2px;
+          }
+          .shift-badge-pill {
+            display: inline-block;
+            background: rgba(56, 189, 248, 0.2);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            padding: 1px 8px;
+            border-radius: 9999px;
+            font-size: 9px;
+            font-weight: 800;
+          }
+
+          .header-right {
+            flex-shrink: 0;
+          }
+          .approval-table {
+            border-collapse: collapse;
+            text-align: center;
+            font-size: 9.5px;
+          }
+          .approval-table th, .approval-table td {
+            border: 1px solid #475569;
+            padding: 2px 6px;
+          }
+          .approval-table th {
+            background: #e2e8f0;
+            font-weight: 700;
+            color: #1e293b;
+            font-size: 9px;
+          }
+          .approval-table .appr-title {
+            width: 24px;
+            background: #cbd5e1;
+            font-size: 9px;
+            font-weight: 800;
+          }
+          .approval-table td {
+            height: 34px;
+            min-width: 44px;
+            vertical-align: middle;
+          }
+          .sign-space {
+            font-size: 8.5px;
+            color: #94a3b8;
+          }
+
+          /* KPI 카드 5분할 */
+          .kpi-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 7px;
+          }
+          .kpi-card {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            padding: 4px 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+          }
+          .kpi-card.highlight {
+            background: #eff6ff;
+            border-color: #93c5fd;
+            border-left: 3px solid #2563eb;
+          }
+          .kpi-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 1px;
+          }
+          .kpi-val {
+            font-size: 13px;
+            font-weight: 900;
+            color: #0f172a;
+            font-family: monospace;
+          }
+          .kpi-sub {
+            font-size: 8.5px;
+            color: #64748b;
+            margin-top: 1px;
+          }
+
+          /* 타임테이블 */
+          .work-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9.5px;
+            margin-bottom: 7px;
+          }
+          .work-table th, .work-table td {
+            border: 1px solid #cbd5e1;
+            padding: 3px 5px;
+            line-height: 1.25;
+          }
+          .work-table th {
+            background: #0f172a;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 9.5px;
+            text-align: center;
+            padding: 5px 4px;
+          }
+          .work-table tr.row-alt {
+            background: #f8fafc;
+          }
+          .work-table tr.row-clean {
+            background: #fef3c7 !important;
+            color: #92400e;
+            font-weight: 700;
+          }
+          .work-table tr.row-meal {
+            background: #f1f5f9 !important;
+            color: #475569;
+            font-weight: 700;
+          }
+          .work-table tr.row-support {
+            background: #ede9fe !important;
+            color: #5b21b6;
+            font-weight: 700;
+          }
+          .col-center { text-align: center; }
+          .col-right { text-align: right; }
+          .col-seq { font-family: monospace; font-weight: 800; width: 28px; }
+          .col-time { font-family: monospace; font-weight: 700; width: 85px; }
+          .col-item { font-weight: 800; color: #0f172a; font-size: 10px; }
+          .col-qty { font-family: monospace; font-weight: 900; color: #1e3a8a; width: 75px; }
+          .col-duration { font-family: monospace; font-weight: 600; width: 50px; }
+          .col-workers { font-weight: 700; width: 45px; }
+          .col-bom { font-size: 9px; color: #334155; line-height: 1.2; }
+          .col-ccp { font-size: 9px; color: #b91c1c; font-weight: 800; line-height: 1.2; width: 170px; }
+          .col-check { width: 34px; }
+          .col-assignee { font-weight: 700; width: 52px; font-size: 9px; }
+          .check-box {
+            width: 14px;
+            height: 14px;
+            border: 1.5px solid #94a3b8;
+            border-radius: 2px;
+            margin: auto;
+            background: #ffffff;
+          }
+
+          /* 뱃지 */
+          .badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 8.5px;
+            font-weight: 800;
+          }
           .badge-s2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
           .badge-s1 { background: #fce7f3; color: #9d174d; border: 1px solid #fbcfe8; }
-          .footer-box { margin-top: 8px; border-top: 1px solid #cbd5e1; padding-top: 6px; display: flex; justify-content: space-between; font-size: 9px; color: #64748b; }
-          .print-toolbar { background: #1e293b; color: #fff; padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-radius: 6px; }
+          .badge-other { background: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
+          .type-pill {
+            display: inline-block;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 8.5px;
+            font-weight: 700;
+          }
+          .type-생산 { background: #dcfce7; color: #166534; }
+          .type-청소 { background: #fef3c7; color: #92400e; }
+          .type-휴게 { background: #e2e8f0; color: #334155; }
+          .type-지원 { background: #ede9fe; color: #5b21b6; }
+
+          /* 하단 2열 그리드 */
+          .bottom-grid {
+            display: grid;
+            grid-template-columns: 58% 42%;
+            gap: 8px;
+            margin-bottom: 6px;
+          }
+          .bottom-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            background: #ffffff;
+            padding: 6px 8px;
+          }
+          .bottom-title {
+            font-size: 10px;
+            font-weight: 900;
+            color: #0f172a;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1.5px solid #0f172a;
+            padding-bottom: 3px;
+          }
+          .mat-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9px;
+          }
+          .mat-table th, .mat-table td {
+            border: 1px solid #e2e8f0;
+            padding: 2.5px 4px;
+          }
+          .mat-table th {
+            background: #f1f5f9;
+            font-weight: 700;
+            color: #334155;
+            text-align: center;
+          }
+          .wh-tag {
+            display: inline-block;
+            padding: 0.5px 4px;
+            border-radius: 2px;
+            font-size: 8px;
+            font-weight: 800;
+          }
+          .wh-상온 { background: #e2e8f0; color: #334155; }
+          .wh-냉장1, .wh-냉장2 { background: #cffafe; color: #155e75; }
+          .wh-냉동 { background: #dbeafe; color: #1e40af; }
+          .wh-부자재 { background: #fef3c7; color: #92400e; }
+          .mini-sign {
+            border: 1px dashed #94a3b8;
+            padding: 1px 4px;
+            font-size: 8px;
+            color: #64748b;
+            border-radius: 2px;
+          }
+          .haccp-rules-list {
+            font-size: 9px;
+            line-height: 1.45;
+            color: #1e293b;
+            margin: 0;
+            padding-left: 14px;
+          }
+          .haccp-rules-list li {
+            margin-bottom: 3px;
+          }
+          .haccp-rules-list strong {
+            color: #b91c1c;
+          }
+
+          /* 푸터 */
+          .footer-box {
+            border-top: 1px solid #cbd5e1;
+            padding-top: 5px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8.5px;
+            color: #64748b;
+          }
+
+          /* 인쇄 툴바 (화면 표시용) */
+          .print-toolbar {
+            background: #1e293b;
+            color: #ffffff;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            border-radius: 6px;
+          }
           @media print {
             .no-print { display: none !important; }
+            body { margin: 0; padding: 0; }
+            tr { page-break-inside: avoid; }
           }
         </style>
       </head>
       <body>
+        <!-- 인쇄 툴바 -->
         <div class="print-toolbar no-print">
-          <span style="font-weight:bold; font-size:12px;">🖨️ A4 가로 인쇄 미리보기 (식약처 HACCP 공인 양식)</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-weight:900; font-size:13px; color:#ffffff;">🖨️ A4 가로 인쇄 미리보기 (식약처 HACCP 공인 작업지시서)</span>
+            <span style="background:#0284c7; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:800;">
+              작업일자: ${formattedDateKo}
+            </span>
+            <span style="background:#334155; color:#cbd5e1; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">
+              라인: ${selectedLine} (${shift})
+            </span>
+          </div>
           <div style="display:flex; gap:8px;">
-            <button onclick="window.print()" style="padding:4px 12px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">지금 인쇄 (PDF 저장)</button>
-            <button onclick="window.close()" style="padding:4px 12px; background:#475569; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">창 닫기</button>
+            <button onclick="window.print()" style="padding:6px 16px; background:#2563eb; color:#fff; border:none; border-radius:5px; font-weight:900; font-size:12px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+              🖨️ 지금 인쇄 (PDF 저장)
+            </button>
+            <button onclick="window.close()" style="padding:6px 14px; background:#475569; color:#fff; border:none; border-radius:5px; font-weight:700; font-size:12px; cursor:pointer;">
+              창 닫기
+            </button>
           </div>
         </div>
 
-        <div class="header-box">
-          <div>
-            <div style="font-size:11px; font-weight:800; color:#2563eb;">(주)지에프에스 스마트 생산관제 시스템</div>
-            <div class="main-title">${department === 'SEONGHYEONG' ? '성형장' : '전처리실'}: ${selectedLine} 일일 작업지시서 (HACCP 규격)</div>
-            <div style="font-size:10px; color:#64748b; margin-top:2px;">발행일시: ${workDate} | 관리시프트: ${shift} | 문서번호: GFS-WO-${workDate.replace(/-/g, '')}-${selectedLine}</div>
+        <!-- 1. 헤더: 좌측 회사정보/문서명 + 🌟중앙 초강조 날짜 명판🌟 + 우측 결재란 -->
+        <div class="header-container">
+          <div class="header-left">
+            <div class="company-badge">
+              <span class="company-logo">GFS</span>
+              <span class="company-name">(주)지에프에스 스마트 ERP 생산관제 센터</span>
+              <span class="haccp-pill">식약처 HACCP 공인 생산전표</span>
+            </div>
+            <div class="main-title">${department === 'SEONGHYEONG' ? '🍱 성형장' : '🍳 전처리실'}: ${selectedLine} 일일 생산 작업지시서</div>
+            <div class="doc-meta">
+              <span><strong>문서번호:</strong> ${docNumber}</span>
+              <span class="sep">|</span>
+              <span><strong>공정:</strong> ${department === 'SEONGHYEONG' ? '성형가공' : '원료전처리'}</span>
+              <span class="sep">|</span>
+              <span><strong>실수주 연동:</strong> ${
+                realOrderMeta && realOrderMeta.hasRealOrders
+                  ? `✅ ${realOrderMeta.totalDayQty.toLocaleString()} ea 확정`
+                  : '표준 템플릿'
+              }</span>
+            </div>
           </div>
-          <table class="approval-table">
-            <tr><th rowspan="2" style="width:24px; background:#e2e8f0; font-size:9px;">결<br/>재</th><th>작 성</th><th>검 토</th><th>승 인</th></tr>
-            <tr><td></td><td></td><td></td></tr>
-          </table>
+
+          <!-- 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 -->
+          <div class="date-plaque">
+            <div class="date-plaque-label">📅 작업 지시일자 (PRODUCTION DATE)</div>
+            <div class="date-plaque-val">${formattedDateKo}</div>
+            <div class="date-plaque-shift">
+              <span class="shift-badge-pill">${shiftLabel}</span>
+            </div>
+          </div>
+
+          <!-- 우측 4단 결재란 -->
+          <div class="header-right">
+            <table class="approval-table">
+              <thead>
+                <tr>
+                  <th rowspan="2" class="appr-title">결<br/>재</th>
+                  <th style="width:48px;">작 성</th>
+                  <th style="width:48px;">검 토</th>
+                  <th style="width:52px;">승 인</th>
+                  <th style="width:56px;">공장장(전결)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="sign-space">담당</div></td>
+                  <td><div class="sign-space">반장</div></td>
+                  <td><div class="sign-space">팀장</div></td>
+                  <td><div class="sign-space">전결</div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
+        <!-- 2. 핵심 KPI 5분할 카드 -->
         <div class="kpi-row">
-          <div class="kpi-card" style="background:#eff6ff; border-color:#93c5fd;">
-            <div class="kpi-label">일일 생산계획</div>
-            <div class="kpi-val" style="color:#1e40af;">${realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</div>
+          <div class="kpi-card highlight">
+            <div class="kpi-label">일일 총 생산계획</div>
+            <div class="kpi-val" style="color:#1d4ed8;">${realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</div>
+            <div class="kpi-sub">${
+              realOrderMeta?.hasRealOrders
+                ? `2편: ${(realOrderMeta.shift2Qty || 0).toLocaleString()} / 1편: ${(realOrderMeta.shift1Qty || 0).toLocaleString()}`
+                : '1일 2교대 편성'
+            }</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">라인 가동시간</div>
-            <div class="kpi-val">${scheduleTasks.length > 0 ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}` : currentLine.totalTime}</div>
+            <div class="kpi-label">라인 가동 시간대</div>
+            <div class="kpi-val">${
+              scheduleTasks.length > 0
+                ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}`
+                : currentLine.totalTime
+            }</div>
+            <div class="kpi-sub">총 소요 시간 관리</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">생산속도 (UPH)</div>
+            <div class="kpi-label">라인 생산속도 (UPH / 분당)</div>
             <div class="kpi-val" style="color:#059669;">${currentLine.speed}</div>
+            <div class="kpi-sub">실측 목표 준수율 관리</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">투입인원</div>
-            <div class="kpi-val" style="color:#d97706;">${currentLine.personnel}</div>
+            <div class="kpi-label">소인화 투입인원</div>
+            <div class="kpi-val" style="color:#b45309;">${currentLine.personnel}</div>
+            <div class="kpi-sub">라인 오퍼레이터 및 패커</div>
           </div>
           <div class="kpi-card">
-            <div class="kpi-label">공정 책임자</div>
+            <div class="kpi-label">공정 및 품질책임자</div>
             <div class="kpi-val" style="color:#4f46e5;">${currentLine.leadWorker}</div>
+            <div class="kpi-sub">HACCP 안전 관리자 겸임</div>
           </div>
         </div>
 
+        <!-- 3. 실시간 제조 타임테이블 (식약처 HACCP 공인 규격) -->
         <table class="work-table">
           <thead>
             <tr>
-              <th style="width:35px;">순서</th>
+              <th style="width:30px;">NO</th>
               <th style="width:45px;">구분</th>
-              <th style="width:90px;">작업시간</th>
+              <th style="width:85px;">작업시간</th>
               <th style="width:40px;">유형</th>
-              <th>지시 제품명</th>
+              <th>지시 제품명 (규격/스펙)</th>
               <th style="width:75px;">지시수량</th>
-              <th style="width:55px;">소요시간</th>
-              <th style="width:45px;">인원</th>
-              <th style="width:230px;">주요 원부자재 배합 (BOM)</th>
-              <th style="width:160px;">HACCP & CCP 핵심 관리기준</th>
-              <th style="width:50px;">상태</th>
-              <th style="width:55px;">담당자</th>
+              <th style="width:52px;">소요시간</th>
+              <th style="width:45px;">작업인원</th>
+              <th style="width:230px;">주요 원부자재 배합 기준 (BOM)</th>
+              <th style="width:170px;">HACCP & CCP 핵심 관리기준</th>
+              <th style="width:36px;">확인</th>
+              <th style="width:50px;">담당자</th>
             </tr>
           </thead>
           <tbody>
@@ -450,9 +920,55 @@ export const WorkOrderStatusView: React.FC = () => {
           </tbody>
         </table>
 
+        <!-- 4. 하단 2열 그리드: 좌측 소요 원부자재 불출 현황표 + 우측 식약처 HACCP 4대 중점관리수칙 -->
+        <div class="bottom-grid">
+          <!-- 좌측: 소요 원부자재 창고별 불출 지시서 -->
+          <div class="bottom-card">
+            <div class="bottom-title">
+              <span>📦 소요 원부자재 창고별 불출 현황 (BOM 집계)</span>
+              <span style="font-size:8.5px; font-weight:normal; color:#64748b;">(WMS 자동 연동 불출 전표)</span>
+            </div>
+            <table class="mat-table">
+              <thead>
+                <tr>
+                  <th style="width:24px;">NO</th>
+                  <th style="width:42px;">창고</th>
+                  <th>원부자재명 (규격)</th>
+                  <th style="width:65px;">소요량</th>
+                  <th style="width:65px;">현재고</th>
+                  <th style="width:38px;">상태</th>
+                  <th style="width:48px;">확인</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${materialRowsHtml}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 우측: 식약처 HACCP 4대 중점관리수칙 및 현장 안전 점검표 -->
+          <div class="bottom-card">
+            <div class="bottom-title">
+              <span>🛡️ 식약처 HACCP 4대 중점관리수칙 및 현장 안전 점검</span>
+              <span style="font-size:8.5px; font-weight:normal; color:#dc2626;">(필수 엄수)</span>
+            </div>
+            <ul class="haccp-rules-list">
+              <li><strong>1. 가열공정 (CCP-1B):</strong> 가열육/패티 중심온도 85℃ 1분 이상 유지 (심온계 전수 측정 기록).</li>
+              <li><strong>2. 금속검출 (CCP-2P):</strong> 매 30분 주기 정상 작동 점검 (Fe 2.0mm, SUS 3.0mm 테스트피스).</li>
+              <li><strong>3. 교차오염 방지:</strong> 품목 교체 시 컨베이어 벨트 및 커터 칼날 70% 에탄올 소독 분무 필수.</li>
+              <li><strong>4. 공정환경 관리:</strong> 청결구역 실내온도 15℃ 이하 유지 및 바닥 낙하 원자재 전량 즉시 폐기.</li>
+            </ul>
+            <div style="margin-top:6px; padding-top:4px; border-top:1px dashed #cbd5e1; display:flex; justify-content:space-between; align-items:center; font-size:8.5px;">
+              <span style="color:#475569;">위생 및 안전 수칙 점검 완료:</span>
+              <span style="font-weight:700; color:#0f172a;">작업조장 서명: ________________ (인)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. 법적 고지 및 푸터 -->
         <div class="footer-box">
-          <div>* 본 작업지시서는 식품위생법 제48조(해썹) 및 식약처 위해요소중점관리기준을 준수하여 작성되었습니다.</div>
-          <div>GFS 스마트 제조 통합 관제 본부 | 페이지 1 / 1</div>
+          <div>* 본 작업지시서는 식품위생법 제48조(해썹) 및 식약처 위해요소중점관리기준을 준수하여 작성된 정본 전표입니다.</div>
+          <div>GFS 스마트 제조 생산관제 본부 (ERP Pipeline) | 인쇄일시: ${new Date().toLocaleDateString('ko-KR')} | 페이지 1 / 1</div>
         </div>
 
         <script>

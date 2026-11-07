@@ -18,7 +18,7 @@ function getCommonCss() {
   return `
     @page {
       size: A4 landscape;
-      margin: 8mm 10mm 8mm 10mm;
+      margin: 6mm 8mm 6mm 8mm;
     }
     * {
       box-sizing: border-box;
@@ -29,35 +29,122 @@ function getCommonCss() {
       padding: 0;
       color: #0f172a;
       background: #ffffff;
-      font-size: 11px;
-      line-height: 1.3;
+      font-size: 10px;
+      line-height: 1.25;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
-    .header-box {
+    .header-container {
       border: 2px solid #0f172a;
+      border-radius: 6px;
       padding: 8px 12px;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       background: #f8fafc;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
     }
-    .company-title {
+    .header-left {
+      flex: 1;
+      min-width: 0;
+    }
+    .company-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .company-logo {
       font-size: 11px;
-      font-weight: 800;
-      color: #2563eb;
+      font-weight: 900;
+      background: #1e40af;
+      color: #ffffff;
+      padding: 1px 6px;
+      border-radius: 3px;
       letter-spacing: -0.5px;
     }
+    .company-name {
+      font-size: 11px;
+      font-weight: 800;
+      color: #1e3a8a;
+    }
+    .haccp-pill {
+      font-size: 9px;
+      font-weight: 800;
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+      padding: 0 5px;
+      border-radius: 3px;
+    }
     .main-title {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 900;
       color: #0f172a;
-      letter-spacing: -1px;
+      margin: 2px 0 3px 0;
+      letter-spacing: -0.5px;
+    }
+    .doc-meta {
+      font-size: 9px;
+      color: #475569;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .doc-meta .sep {
+      color: #cbd5e1;
+    }
+
+    /* 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 */
+    .date-plaque {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border: 2px solid #d97706;
+      border-radius: 6px;
+      padding: 6px 14px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      color: #ffffff;
+      min-width: 260px;
+      flex-shrink: 0;
+    }
+    .date-plaque-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #fde047;
+      text-transform: uppercase;
+      margin-bottom: 1px;
+    }
+    .date-plaque-val {
+      font-size: 16px;
+      font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
+    .date-plaque-shift {
       margin-top: 2px;
+    }
+    .shift-badge-pill {
+      display: inline-block;
+      background: rgba(56, 189, 248, 0.2);
+      color: #7dd3fc;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 1px 8px;
+      border-radius: 9999px;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .header-right {
+      flex-shrink: 0;
     }
     .approval-table {
       border-collapse: collapse;
       text-align: center;
-      font-size: 10px;
+      font-size: 9.5px;
     }
     .approval-table th, .approval-table td {
       border: 1px solid #475569;
@@ -66,100 +153,179 @@ function getCommonCss() {
     .approval-table th {
       background: #e2e8f0;
       font-weight: 700;
+      color: #1e293b;
+      font-size: 9px;
+    }
+    .approval-table .appr-title {
+      width: 24px;
+      background: #cbd5e1;
+      font-size: 9px;
+      font-weight: 800;
     }
     .approval-table td {
-      height: 32px;
+      height: 34px;
       min-width: 44px;
+      vertical-align: middle;
     }
+    .sign-space {
+      font-size: 8.5px;
+      color: #94a3b8;
+    }
+
+    /* KPI 카드 5분할 */
     .kpi-row {
       display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 7px;
     }
     .kpi-card {
       flex: 1;
-      border: 1px solid #cbd5e1;
-      border-radius: 4px;
-      padding: 6px 10px;
       background: #ffffff;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      padding: 4px 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
     .kpi-card.highlight {
       background: #eff6ff;
       border-color: #93c5fd;
+      border-left: 3px solid #2563eb;
     }
     .kpi-label {
-      font-size: 10px;
-      color: #64748b;
+      font-size: 9px;
       font-weight: 700;
+      color: #64748b;
+      margin-bottom: 1px;
     }
     .kpi-val {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 900;
       color: #0f172a;
       font-family: monospace;
-      margin-top: 2px;
     }
+    .kpi-sub {
+      font-size: 8.5px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+
+    /* 타임테이블 */
     .work-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10px;
-      margin-bottom: 8px;
+      font-size: 9.5px;
+      margin-bottom: 7px;
     }
     .work-table th, .work-table td {
       border: 1px solid #cbd5e1;
-      padding: 4px 6px;
+      padding: 3px 5px;
+      line-height: 1.25;
     }
     .work-table th {
       background: #0f172a;
       color: #ffffff;
-      font-weight: 700;
+      font-weight: 800;
+      font-size: 9.5px;
       text-align: center;
-      font-size: 10px;
+      padding: 5px 4px;
     }
-    .work-table tr:nth-child(even) {
+    .work-table tr.row-alt {
       background: #f8fafc;
     }
     .work-table tr.clean-row {
-      background: #fef3c7;
+      background: #fef3c7 !important;
       color: #92400e;
       font-weight: 700;
     }
     .work-table tr.meal-row {
-      background: #fee2e2;
-      color: #991b1b;
+      background: #f1f5f9 !important;
+      color: #475569;
       font-weight: 700;
     }
     .work-table tr.support-row {
-      background: #ede9fe;
+      background: #ede9fe !important;
       color: #5b21b6;
       font-weight: 700;
     }
-    .work-table tfoot td {
-      background: #fef9c3;
-      font-weight: 900;
-      border-top: 2px solid #334155;
+    .col-center { text-align: center; }
+    .col-right { text-align: right; }
+    .col-seq { font-family: monospace; font-weight: 800; width: 28px; }
+    .col-time { font-family: monospace; font-weight: 700; width: 85px; }
+    .col-item { font-weight: 800; color: #0f172a; font-size: 10px; }
+    .col-qty { font-family: monospace; font-weight: 900; color: #1e3a8a; width: 75px; }
+    .col-duration { font-family: monospace; font-weight: 600; width: 50px; }
+    .col-workers { font-weight: 700; width: 45px; }
+    .col-bom { font-size: 9px; color: #334155; line-height: 1.2; }
+    .col-ccp { font-size: 9px; color: #b91c1c; font-weight: 800; line-height: 1.2; width: 170px; }
+    .col-check { width: 34px; }
+    .check-box {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #94a3b8;
+      border-radius: 2px;
+      margin: auto;
+      background: #ffffff;
     }
+
+    /* 뱃지 */
     .badge {
       display: inline-block;
       padding: 1px 5px;
       border-radius: 3px;
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 800;
     }
     .badge-shift2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
     .badge-shift1 { background: #fce7f3; color: #9d174d; border: 1px solid #fbcfe8; }
     .badge-support { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
     .badge-clean { background: #fef08a; color: #854d0e; border: 1px solid #fde047; }
-    .footer-note {
-      border: 1px solid #e2e8f0;
-      border-radius: 4px;
-      background: #f8fafc;
-      padding: 6px 10px;
+
+    /* 하단 2열 그리드 */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 58% 42%;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .bottom-card {
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #ffffff;
+      padding: 6px 8px;
+    }
+    .bottom-title {
+      font-size: 10px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 3px;
+    }
+    .haccp-rules-list {
       font-size: 9px;
-      color: #475569;
+      line-height: 1.45;
+      color: #1e293b;
+      margin: 0;
+      padding-left: 14px;
+    }
+    .haccp-rules-list li {
+      margin-bottom: 3px;
+    }
+    .haccp-rules-list strong {
+      color: #b91c1c;
+    }
+
+    /* 푸터 */
+    .footer-box {
+      border-top: 1px solid #cbd5e1;
+      padding-top: 5px;
       display: flex;
       justify-content: space-between;
+      font-size: 8.5px;
+      color: #64748b;
     }
     .page-break {
       page-break-after: always;
@@ -495,12 +661,21 @@ const LINE_WORK_ORDERS = [
 ];
 
 // ── 개별 라인 HTML 렌더링 ──
-function generateHtml(order) {
+function generateHtml(order, targetDate = '2026-11-06') {
   const css = getCommonCss();
+
+  // 작업일자 한글 요일 계산
+  const [year, month, day] = targetDate.split('-');
+  const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayOfWeek = isNaN(dateObj.getTime()) ? '금' : dayNames[dateObj.getDay()];
+  const formattedDateKo = `${year}년 ${Number(month)}월 ${Number(day)}일 (${dayOfWeek}요일)`;
+  const docNumber = `GFS-WO-${year}${month}${day}-${order.code.replace(/^[0-9]+_/, '')}`;
+
   const scheduleRows = order.schedule.map((row, idx) => {
-    let rowClass = '';
-    if (row.type === '청소') rowClass = 'clean-row';
-    else if (row.type === '휴게') rowClass = 'meal-row';
+    let rowClass = idx % 2 === 1 ? 'row-alt' : '';
+    if (row.type === '청소' || row.item.includes('세척') || row.item.includes('CIP')) rowClass = 'clean-row';
+    else if (row.type === '휴게' || row.item.includes('중식') || row.item.includes('석식')) rowClass = 'meal-row';
     else if (row.type === '지원') rowClass = 'support-row';
 
     let shiftBadge = '';
@@ -511,17 +686,17 @@ function generateHtml(order) {
 
     return `
       <tr class="${rowClass}">
-        <td style="text-align: center; font-family: monospace;">${idx + 1}</td>
-        <td style="text-align: center;">${shiftBadge}</td>
-        <td style="text-align: center; font-family: monospace; font-weight: 700;">${row.time}</td>
-        <td style="text-align: center; font-weight: 700;">${row.type}</td>
-        <td style="font-weight: 800; color: #0f172a;">${row.item}</td>
-        <td style="text-align: right; font-family: monospace; font-weight: 900;">${typeof row.qty === 'number' ? row.qty.toLocaleString() + ' ea' : row.qty}</td>
-        <td style="text-align: center; font-family: monospace;">${row.duration}</td>
-        <td style="text-align: center; font-weight: 700;">${row.workers || '-'}</td>
-        <td style="font-size: 9.5px; color: #334155;">${row.bom}</td>
-        <td style="font-size: 9.5px; color: #b91c1c; font-weight: 700;">${row.ccp}</td>
-        <td style="text-align: center; width: 40px;"><div style="width: 13px; height: 13px; border: 1.5px solid #94a3b8; border-radius: 2px; margin: auto;"></div></td>
+        <td class="col-center col-seq">${idx + 1}</td>
+        <td class="col-center">${shiftBadge}</td>
+        <td class="col-center col-time">${row.time}</td>
+        <td class="col-center" style="font-weight: 700;">${row.type}</td>
+        <td class="col-item">${row.item}</td>
+        <td class="col-right col-qty">${typeof row.qty === 'number' ? row.qty.toLocaleString() + ' ea' : row.qty}</td>
+        <td class="col-center col-duration">${row.duration}</td>
+        <td class="col-center col-workers">${row.workers || '-'}</td>
+        <td class="col-bom">${row.bom}</td>
+        <td class="col-ccp">${row.ccp}</td>
+        <td class="col-center col-check"><div class="check-box"></div></td>
       </tr>
     `;
   }).join('');
@@ -531,77 +706,105 @@ function generateHtml(order) {
     <html lang="ko">
     <head>
       <meta charset="UTF-8">
-      <title>${order.title}</title>
+      <title>[GFS] ${order.title} (${targetDate})</title>
       <style>${css}</style>
     </head>
     <body>
-      <div class="header-box">
-        <div>
-          <div class="company-title">(주)지에프에스 (GFS Co., Ltd.) | GS25 신선식품 전용 제조공장</div>
+      <!-- 1. 헤더: 좌측 회사/라인명 + 🌟중앙 초강조 날짜 명판🌟 + 우측 결재란 -->
+      <div class="header-container">
+        <div class="header-left">
+          <div class="company-badge">
+            <span class="company-logo">GFS</span>
+            <span class="company-name">(주)지에프에스 스마트 ERP 생산관제 센터</span>
+            <span class="haccp-pill">식약처 HACCP 공인 생산전표</span>
+          </div>
           <div class="main-title">${order.title}</div>
-          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
-            <strong>문서번호:</strong> ${order.docNo} | <strong>기준자료:</strong> 2026-11-06 성형장 최신 타임테이블 (1001) 확정본 | <strong>운영:</strong> 1일 2교대 (2편+1편)
+          <div class="doc-meta">
+            <span><strong>문서번호:</strong> ${docNumber}</span>
+            <span class="sep">|</span>
+            <span><strong>라인소속:</strong> ${order.lineGroup}</span>
+            <span class="sep">|</span>
+            <span><strong>생산운영:</strong> 1일 2교대 (2편+1편 전일 확정본)</span>
           </div>
         </div>
-        <div>
+
+        <!-- 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 -->
+        <div class="date-plaque">
+          <div class="date-plaque-label">📅 작업 지시일자 (PRODUCTION DATE)</div>
+          <div class="date-plaque-val">${formattedDateKo}</div>
+          <div class="date-plaque-shift">
+            <span class="shift-badge-pill">1편·2편 통합 전일 지시 (정본)</span>
+          </div>
+        </div>
+
+        <!-- 우측 4단 결재란 -->
+        <div class="header-right">
           <table class="approval-table">
             <thead>
               <tr>
+                <th rowspan="2" class="appr-title">결<br/>재</th>
                 <th style="width: 48px;">작 성</th>
                 <th style="width: 48px;">검 토</th>
                 <th style="width: 52px;">승 인</th>
-                <th style="width: 52px;">공장장</th>
+                <th style="width: 56px;">공장장(전결)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                <td><div class="sign-space">담당</div></td>
+                <td><div class="sign-space">반장</div></td>
+                <td><div class="sign-space">팀장</div></td>
+                <td><div class="sign-space">전결</div></td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
+      <!-- 2. 핵심 KPI 5분할 카드 -->
       <div class="kpi-row">
         <div class="kpi-card highlight">
           <div class="kpi-label">일일 총 생산계획</div>
           <div class="kpi-val" style="color: #1d4ed8;">${order.totalPlan}</div>
+          <div class="kpi-sub">수주 연동 100% 반영</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">라인 가동 시간대</div>
           <div class="kpi-val">${order.totalTime}</div>
+          <div class="kpi-sub">총 가동 소요시간</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">라인 생산속도 (UPH / 분당)</div>
-          <div class="kpi-val" style="font-size: 12.5px;">${order.speed}</div>
+          <div class="kpi-val" style="color: #059669; font-size: 12.5px;">${order.speed}</div>
+          <div class="kpi-sub">표준 속도 준수 관리</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">소인화 투입인원</div>
-          <div class="kpi-val" style="font-size: 12px; color: #b45309;">${order.personnel}</div>
+          <div class="kpi-val" style="color: #b45309; font-size: 12px;">${order.personnel}</div>
+          <div class="kpi-sub">공정 최적 배치 인원</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">공정 책임자</div>
-          <div class="kpi-val" style="font-size: 13px;">${order.leadWorker}</div>
+          <div class="kpi-label">공정 및 품질책임자</div>
+          <div class="kpi-val" style="color: #4f46e5; font-size: 13px;">${order.leadWorker}</div>
+          <div class="kpi-sub">현장 관리 책임자</div>
         </div>
       </div>
 
+      <!-- 3. 실시간 제조 타임테이블 -->
       <table class="work-table">
         <thead>
           <tr>
-            <th style="width: 30px;">NO</th>
+            <th style="width: 28px;">NO</th>
             <th style="width: 45px;">구분</th>
-            <th style="width: 82px;">작업시간</th>
-            <th style="width: 42px;">유형</th>
-            <th style="width: 175px;">지시 제품명 (규격/스펙)</th>
-            <th style="width: 72px;">지시수량</th>
-            <th style="width: 52px;">소요시간</th>
+            <th style="width: 85px;">작업시간</th>
+            <th style="width: 40px;">유형</th>
+            <th>지시 제품명 (규격/스펙)</th>
+            <th style="width: 75px;">지시수량</th>
+            <th style="width: 50px;">소요시간</th>
             <th style="width: 45px;">작업인원</th>
-            <th>주요 원부자재 배합 기준 (BOM)</th>
-            <th style="width: 165px;">HACCP & CCP 핵심 관리기준</th>
-            <th style="width: 38px;">확인</th>
+            <th style="width: 230px;">주요 원부자재 배합 기준 (BOM)</th>
+            <th style="width: 170px;">HACCP & CCP 핵심 관리기준</th>
+            <th style="width: 34px;">확인</th>
           </tr>
         </thead>
         <tbody>
@@ -609,13 +812,40 @@ function generateHtml(order) {
         </tbody>
       </table>
 
-      <div class="footer-note">
-        <div>
-          <strong>[현장 필수 준수사항]</strong> 1. 매 품목 교체 시 알레르기 유발물질 교차오염 방지용 알코올 70% 세척 필수 &nbsp;|&nbsp; 2. 금속검출기(Fe 2.0mm, SUS 3.0mm) 매 30분 주기 테스트 &nbsp;|&nbsp; 3. 품온 기준 10℃ 이하 엄수 (가열육 중심온도 ≥75℃)
+      <!-- 4. 하단 2열 그리드: 좌측 HACCP 4대 중점관리수칙 + 우측 현장 점검 서명란 -->
+      <div class="bottom-grid">
+        <div class="bottom-card">
+          <div class="bottom-title">
+            <span>🛡️ 식약처 HACCP 4대 필수 중점관리수칙</span>
+            <span style="font-size: 8.5px; font-weight: normal; color: #dc2626;">(작업장 필수 준수)</span>
+          </div>
+          <ul class="haccp-rules-list">
+            <li><strong>1. 가열공정 (CCP-1B):</strong> 가열육/패티 중심온도 85℃ 1분 이상 유지 (심온계 전수 측정 기록).</li>
+            <li><strong>2. 금속검출 (CCP-2P):</strong> 매 30분 주기 정상 작동 점검 (Fe 2.0mm, SUS 3.0mm 테스트피스).</li>
+            <li><strong>3. 교차오염 방지:</strong> 매 품목 교체 시 알레르기 유발물질 방지용 알코올 70% 세척 소독 필수.</li>
+            <li><strong>4. 공정환경 관리:</strong> 청결구역 실내온도 15℃ 이하 유지 및 바닥 낙하 원자재 전량 즉시 폐기.</li>
+          </ul>
         </div>
-        <div style="font-family: monospace;">
-          발행: GFS 제조생산관리 ERP 시스템 (자동 타임테이블 연계)
+        <div class="bottom-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div class="bottom-title">
+            <span>📋 공정 안전 및 일일 점검 확인</span>
+            <span style="font-size: 8.5px; font-weight: normal; color: #166534;">(현장 서명)</span>
+          </div>
+          <div style="font-size: 9px; color: #334155; line-height: 1.4;">
+            * 본 작업지시서의 모든 수주 수량 및 배합비는 생산 ERP와 실시간 동기화되었습니다.<br/>
+            * 현장 작업자는 매 작업 완료 시 [확인]란에 체결 상태를 표기하십시오.
+          </div>
+          <div style="margin-top: 6px; padding-top: 5px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; font-size: 8.5px;">
+            <span style="color: #475569;">공정 인수인계 완료:</span>
+            <span style="font-weight: 700; color: #0f172a;">작업조장 서명: ________________ (인)</span>
+          </div>
         </div>
+      </div>
+
+      <!-- 5. 법적 고지 및 푸터 -->
+      <div class="footer-box">
+        <div>* 본 작업지시서는 식품위생법 제48조(해썹) 및 식약처 위해요소중점관리기준을 준수하여 작성된 정본 전표입니다.</div>
+        <div>GFS 스마트 제조 통합 관제 본부 | 발행시스템: GFS 스마트 ERP | 페이지 1 / 1</div>
       </div>
     </body>
     </html>
@@ -624,13 +854,14 @@ function generateHtml(order) {
 
 // ── 실행 메인 함수 ──
 async function main() {
-  console.log('🚀 GFS 최신 타임테이블(1001) 반영 라인별 작업지시서 PDF 생성 시작...');
+  const targetDate = process.argv[2] || '2026-11-06';
+  console.log(`🚀 GFS 최신 타임테이블 반영 라인별 작업지시서 PDF 생성 시작 (기준일자: ${targetDate})...`);
   const generatedFiles = [];
 
   // 1. 개별 라인별 PDF 생성
   for (let i = 0; i < LINE_WORK_ORDERS.length; i++) {
     const order = LINE_WORK_ORDERS[i];
-    const htmlContent = generateHtml(order);
+    const htmlContent = generateHtml(order, targetDate);
     const htmlPath = path.join(OUTPUT_DIR, `${order.code}_최신.html`);
     const pdfPath = path.join(OUTPUT_DIR, `${order.code}_최신.pdf`);
 
@@ -652,7 +883,7 @@ async function main() {
   // 2. 전 라인 통합 마스터 PDF 생성 (12개 라인 종합본)
   console.log('📑 전 라인 통합 마스터 종합본 PDF 생성 중...');
   const combinedHtmlPages = LINE_WORK_ORDERS.map((order, idx) => {
-    const pageHtml = generateHtml(order)
+    const pageHtml = generateHtml(order, targetDate)
       .replace('<!DOCTYPE html>', '')
       .replace('<html lang="ko">', '')
       .replace('</html>', '')
@@ -668,7 +899,7 @@ async function main() {
     <html lang="ko">
     <head>
       <meta charset="UTF-8">
-      <title>GFS 전 라인 통합 작업지시서 (최신 타임테이블 반영본)</title>
+      <title>GFS 전 라인 통합 작업지시서 (${targetDate})</title>
       <style>${getCommonCss()}</style>
     </head>
     <body>
@@ -692,8 +923,52 @@ async function main() {
     if (fs.existsSync(masterHtmlPath)) fs.unlinkSync(masterHtmlPath);
   }
 
-  console.log(`\n총 ${generatedFiles.length}건의 최신 작업지시서 PDF 파일이 성공적으로 생성되었습니다.`);
+  // 3. UI 호환 라인명 별칭(Alias) 복사
+  const ALIAS_MAP = {
+    '도시락 1': '01_성형_도시락라인_최신.pdf',
+    '도시락 2': '01_성형_도시락라인_최신.pdf',
+    '김밥성형': '02_성형_김밥라인_최신.pdf',
+    '김밥포장': '02_성형_김밥라인_최신.pdf',
+    '삼각김밥': '03_성형_삼각김밥1호기_최신.pdf',
+    '삼각2호기': '04_성형_삼각김밥2호기_최신.pdf',
+    '더큰삼각김밥': '05_성형_더큰삼각김밥_최신.pdf',
+    '샌드위치': '06_성형_샌드위치라인_최신.pdf',
+    '햄버거': '07_성형_햄버거라인_최신.pdf',
+    '조리면': '08_성형_조리면스파게티_최신.pdf',
+    'HMR': '09_성형_HMR라인_최신.pdf',
+    '샐러드': '09_성형_HMR라인_최신.pdf',
+    '연속식취반기 1': '10_전처리_취반공정_최신.pdf',
+    '연속식취반기 2': '10_전처리_취반공정_최신.pdf',
+    '단독취반기': '10_전처리_취반공정_최신.pdf',
+    '로터리밥솥': '10_전처리_취반공정_최신.pdf',
+    '대형 볶음솥 1': '11_전처리_가열조리실_최신.pdf',
+    '대형 볶음솥 2': '11_전처리_가열조리실_최신.pdf',
+    '가스 회전국솥 1': '11_전처리_가열조리실_최신.pdf',
+    '가스 회전국솥 2': '11_전처리_가열조리실_최신.pdf',
+    '스팀 회전국솥': '11_전처리_가열조리실_최신.pdf',
+    '연속식 튀김기': '11_전처리_가열조리실_최신.pdf',
+    '단독 튀김기': '11_전처리_가열조리실_최신.pdf',
+    '콤비오븐 1': '11_전처리_가열조리실_최신.pdf',
+    '콤비오븐 2': '11_전처리_가열조리실_최신.pdf',
+    '다기능 야채절단기': '12_전처리_야채및소스소분_최신.pdf',
+    '초음파 야채세척기': '12_전처리_야채및소스소분_최신.pdf',
+    '소스 배합기': '12_전처리_야채및소스소분_최신.pdf',
+    '초퍼(분쇄기)': '12_전처리_야채및소스소분_최신.pdf',
+    '진공 텀블러': '12_전처리_야채및소스소분_최신.pdf',
+  };
+
+  for (const [aliasName, targetFile] of Object.entries(ALIAS_MAP)) {
+    const src = path.join(OUTPUT_DIR, targetFile);
+    const dest = path.join(OUTPUT_DIR, `${aliasName}.pdf`);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+    }
+  }
+
+  console.log(`\n총 ${generatedFiles.length}건의 최신 작업지시서 PDF 및 라인별 별칭 파일이 성공적으로 갱신되었습니다.`);
   console.log(`저장 디렉토리: ${OUTPUT_DIR}`);
 }
+
+main();
 
 main();
