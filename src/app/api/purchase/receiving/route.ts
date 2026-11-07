@@ -64,11 +64,22 @@ export async function GET(req: NextRequest) {
       if (endDate) where.receivingDate.lte = endDate;
     }
 
+    const partnerId = searchParams.get('partnerId');
+    if (partnerId && partnerId !== 'ALL') {
+      where.OR = [
+        { partnerId },
+        { partnerName: { contains: partnerId } },
+      ];
+    }
+
     if (status && status !== '전체') where.status = status;
     if (search) {
       where.OR = [
         { receivingNo: { contains: search } },
         { partnerName: { contains: search } },
+        { details: { some: { productName: { contains: search } } } },
+        { details: { some: { productCode: { contains: search } } } },
+        { details: { some: { lotNo: { contains: search } } } },
       ];
     }
 
@@ -82,7 +93,10 @@ export async function GET(req: NextRequest) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [
+        { receivingDate: 'desc' },
+        { createdAt: 'desc' },
+      ],
     });
 
     return NextResponse.json({ success: true, data: receivings });
@@ -364,6 +378,410 @@ export async function POST(req: NextRequest) {
     console.error('Failed to register receiving', error);
     return NextResponse.json(
       { success: false, error: error.message || '입고 등록에 실패하였습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/purchase/receiving
+// 입고 내역 수정 (수량, 단가, 유통기한, 창고, LOT, 검수결과 등)
+// 변경된 차이(delta)를 현재고(Inventory), 자재수불부(MaterialLedger), 발주서 잔량(PurchaseOrderDetail)에 즉시 원자적 반영
+export async function PUT(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { updates, detailId, status, remark } = body;
+
+    const listToUpdate: any[] = Array.isArray(updates)
+      ? updates
+      : detailId
+      ? [{ detailId, ...body }]
+      : [];
+
+    if (listToUpdate.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '수정할 항목(updates 또는 detailId)이 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedReceivingIds = new Set<number>();
+
+      for (const item of listToUpdate) {
+        const id = Number(item.detailId || item.id);
+        if (!id) continue;
+
+        const currentDetail = await tx.receivingDetail.findUnique({
+          where: { id },
+          include: { receiving: true, product: true },
+        });
+
+        if (!currentDetail) continue;
+
+        const oldQty = Number(currentDetail.receivedQty || 0);
+        const oldPrice = Number(currentDetail.unitPrice || 0);
+        const oldAmt = Number(currentDetail.amount || 0);
+
+        const newQty = item.receivedQty !== undefined ? Number(item.receivedQty) : oldQty;
+        const newPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : oldPrice;
+        const newAmt = newQty * newPrice;
+
+        const newExpiry = item.expiryDate ?? currentDetail.expiryDate;
+        const newWarehouse = item.warehouse ?? currentDetail.warehouse;
+        const newLotNo = item.lotNo ?? currentDetail.lotNo;
+        const newInspect = item.inspectResult ?? currentDetail.inspectResult;
+        const newRemark = item.remark ?? currentDetail.remark;
+
+        const deltaQty = newQty - oldQty;
+        const deltaAmt = newAmt - oldAmt;
+
+        // 1) ReceivingDetail 갱신
+        await tx.receivingDetail.update({
+          where: { id },
+          data: {
+            receivedQty: newQty,
+            unitPrice: newPrice,
+            amount: newAmt,
+            expiryDate: newExpiry,
+            warehouse: newWarehouse,
+            lotNo: newLotNo,
+            inspectResult: newInspect,
+            remark: newRemark,
+          },
+        });
+
+        updatedReceivingIds.add(currentDetail.receivingId);
+
+        // 2) 현재고 (Inventory) 원자적 가감
+        if (deltaQty !== 0 || deltaAmt !== 0 || newWarehouse !== currentDetail.warehouse || newExpiry !== currentDetail.expiryDate) {
+          const inv = await tx.inventory.findFirst({
+            where: {
+              productId: currentDetail.productId,
+              lotNo: currentDetail.lotNo,
+              warehouse: currentDetail.warehouse,
+            },
+          });
+
+          if (inv) {
+            await tx.inventory.update({
+              where: { id: inv.id },
+              data: {
+                currentQty: { increment: deltaQty },
+                stockAmount: { increment: deltaAmt },
+                warehouse: newWarehouse,
+                expiryDate: newExpiry,
+                lotNo: newLotNo,
+              },
+            });
+          } else if (newQty > 0) {
+            await tx.inventory.create({
+              data: {
+                productId: currentDetail.productId,
+                productCode: currentDetail.productCode,
+                productName: currentDetail.productName,
+                category: currentDetail.product?.category || '원재료',
+                lotNo: newLotNo,
+                expiryDate: newExpiry,
+                warehouse: newWarehouse,
+                currentQty: newQty,
+                unit: currentDetail.unit || 'ea',
+                unitPrice: newPrice,
+                stockAmount: newAmt,
+                lastInDate: currentDetail.receiving.receivingDate,
+              },
+            });
+          }
+
+          // 3) 자재수불부 (MaterialLedger) 감사 로그
+          if (deltaQty !== 0) {
+            const totalStock = await tx.inventory.aggregate({
+              where: { productId: currentDetail.productId },
+              _sum: { currentQty: true },
+            });
+            await tx.materialLedger.create({
+              data: {
+                ledgerDate: currentDetail.receiving.receivingDate,
+                productId: currentDetail.productId,
+                productCode: currentDetail.productCode,
+                productName: currentDetail.productName,
+                category: currentDetail.product?.category || '원재료',
+                unit: currentDetail.unit || 'ea',
+                carryOverQty: 0,
+                inQty: deltaQty > 0 ? deltaQty : 0,
+                outQty: deltaQty < 0 ? Math.abs(deltaQty) : 0,
+                adjustQty: deltaQty,
+                currentQty: totalStock._sum.currentQty || newQty,
+                unitPrice: newPrice,
+                stockAmount: (totalStock._sum.currentQty || newQty) * newPrice,
+                txnType: '입고수정',
+                refNo: currentDetail.receiving.receivingNo,
+                remark: `[입고수량수정] ${oldQty} → ${newQty} (${deltaQty > 0 ? '+' : ''}${deltaQty})`,
+              },
+            });
+          }
+
+          // 4) 발주서 잔량 동기화
+          const poDetail = await tx.purchaseOrderDetail.findFirst({
+            where: {
+              OR: [
+                { productId: currentDetail.productId },
+                { productCode: currentDetail.productCode },
+                { productName: currentDetail.productName },
+              ],
+            },
+            orderBy: { id: 'desc' },
+          });
+
+          if (poDetail) {
+            const updatedRecvQty = Math.max(0, (poDetail.receivedQty || 0) + deltaQty);
+            const updatedRemainQty = Math.max(0, (poDetail.orderQty || 0) - updatedRecvQty);
+            await tx.purchaseOrderDetail.update({
+              where: { id: poDetail.id },
+              data: {
+                receivedQty: updatedRecvQty,
+                remainQty: updatedRemainQty,
+              },
+            });
+
+            const allDetails = await tx.purchaseOrderDetail.findMany({
+              where: { purchaseOrderId: poDetail.purchaseOrderId },
+            });
+            const allDone = allDetails.every((d) => (d.remainQty || 0) <= 0);
+            const anyDone = allDetails.some((d) => (d.receivedQty || 0) > 0);
+            await tx.purchaseOrder.update({
+              where: { id: poDetail.purchaseOrderId },
+              data: { status: allDone ? '입고완료' : anyDone ? '부분입고' : '발주' },
+            });
+          }
+        }
+      }
+
+      // 5) Receiving 헤더 공급가액 및 비고 재계산
+      for (const rId of updatedReceivingIds) {
+        const sumResult = await tx.receivingDetail.aggregate({
+          where: { receivingId: rId },
+          _sum: { amount: true },
+        });
+        await tx.receiving.update({
+          where: { id: rId },
+          data: {
+            totalAmount: sumResult._sum.amount || 0,
+            ...(remark ? { remark } : {}),
+            ...(status ? { status } : {}),
+          },
+        });
+      }
+
+      return { updatedCount: listToUpdate.length };
+    });
+
+    await touchDashboardSnapshot();
+    return NextResponse.json({
+      success: true,
+      message: `${result.updatedCount}건의 입고 내역이 안전하게 수정되었으며 재고 및 발주 잔량에 즉시 동기화되었습니다.`,
+    });
+  } catch (error: any) {
+    console.error('Failed to update receiving', error);
+    return NextResponse.json(
+      { success: false, error: error.message || '입고 수정 처리에 실패하였습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/purchase/receiving
+// 입고 취소 / 롤백 (Receiving 또는 개별 ReceivingDetail)
+// 현재고(Inventory)에서 입고수량 원상 차감, 발주서 잔량(remainQty) 복원, 상태를 '취소'로 전환
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { receivingIds = [], detailIds = [], cancelReason = '사용자 입고취소 및 재고 롤백' } = body;
+    const cancelDate = new Date().toISOString().slice(0, 10);
+
+    if (receivingIds.length === 0 && detailIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '취소할 대상(receivingIds 또는 detailIds)을 선택해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      let cancelledCount = 0;
+
+      // 1) 전체 전표(Receiving) 취소 처리
+      for (const rId of receivingIds) {
+        const receiving = await tx.receiving.findUnique({
+          where: { id: Number(rId) },
+          include: { details: true },
+        });
+
+        if (!receiving || receiving.status === '취소') continue;
+
+        for (const dt of receiving.details) {
+          // 재고 차감
+          const inv = await tx.inventory.findFirst({
+            where: {
+              productId: dt.productId,
+              lotNo: dt.lotNo,
+              warehouse: dt.warehouse,
+            },
+          });
+          if (inv) {
+            await tx.inventory.update({
+              where: { id: inv.id },
+              data: {
+                currentQty: { decrement: dt.receivedQty },
+                stockAmount: { decrement: dt.amount },
+              },
+            });
+          }
+
+          // 발주서 잔량 복원
+          const poDetail = await tx.purchaseOrderDetail.findFirst({
+            where: {
+              OR: [
+                { productId: dt.productId },
+                { productCode: dt.productCode },
+                { productName: dt.productName },
+              ],
+            },
+            orderBy: { id: 'desc' },
+          });
+
+          if (poDetail) {
+            const newRecv = Math.max(0, (poDetail.receivedQty || 0) - dt.receivedQty);
+            await tx.purchaseOrderDetail.update({
+              where: { id: poDetail.id },
+              data: {
+                receivedQty: newRecv,
+                remainQty: (poDetail.remainQty || 0) + dt.receivedQty,
+              },
+            });
+            await tx.purchaseOrder.update({
+              where: { id: poDetail.purchaseOrderId },
+              data: { status: newRecv > 0 ? '부분입고' : '발주' },
+            });
+          }
+
+          // 수불부 감사 기록
+          await tx.materialLedger.create({
+            data: {
+              ledgerDate: receiving.receivingDate,
+              productId: dt.productId,
+              productCode: dt.productCode,
+              productName: dt.productName,
+              category: '원재료',
+              unit: dt.unit || 'ea',
+              carryOverQty: 0,
+              inQty: 0,
+              outQty: dt.receivedQty,
+              adjustQty: -dt.receivedQty,
+              currentQty: 0,
+              unitPrice: dt.unitPrice,
+              stockAmount: 0,
+              txnType: '입고취소',
+              refNo: receiving.receivingNo,
+              remark: `[입고취소] ${cancelReason}`,
+            },
+          });
+        }
+
+        await tx.receiving.update({
+          where: { id: receiving.id },
+          data: {
+            status: '취소',
+            cancelReason,
+            cancelDate,
+          },
+        });
+        cancelledCount++;
+      }
+
+      // 2) 개별 Detail 취소 처리
+      for (const dtId of detailIds) {
+        const dt = await tx.receivingDetail.findUnique({
+          where: { id: Number(dtId) },
+          include: { receiving: true },
+        });
+
+        if (!dt || dt.receivedQty <= 0) continue;
+
+        // 재고 차감
+        const inv = await tx.inventory.findFirst({
+          where: {
+            productId: dt.productId,
+            lotNo: dt.lotNo,
+            warehouse: dt.warehouse,
+          },
+        });
+        if (inv) {
+          await tx.inventory.update({
+            where: { id: inv.id },
+            data: {
+              currentQty: { decrement: dt.receivedQty },
+              stockAmount: { decrement: dt.amount },
+            },
+          });
+        }
+
+        // 발주서 잔량 복원
+        const poDetail = await tx.purchaseOrderDetail.findFirst({
+          where: {
+            OR: [
+              { productId: dt.productId },
+              { productCode: dt.productCode },
+              { productName: dt.productName },
+            ],
+          },
+          orderBy: { id: 'desc' },
+        });
+        if (poDetail) {
+          const newRecv = Math.max(0, (poDetail.receivedQty || 0) - dt.receivedQty);
+          await tx.purchaseOrderDetail.update({
+            where: { id: poDetail.id },
+            data: {
+              receivedQty: newRecv,
+              remainQty: (poDetail.remainQty || 0) + dt.receivedQty,
+            },
+          });
+        }
+
+        await tx.receivingDetail.update({
+          where: { id: dt.id },
+          data: {
+            receivedQty: 0,
+            amount: 0,
+            remark: `[품목취소] ${cancelReason} · ${dt.remark || ''}`,
+          },
+        });
+
+        // 부모 전표 합계 재계산
+        const sumResult = await tx.receivingDetail.aggregate({
+          where: { receivingId: dt.receivingId },
+          _sum: { amount: true },
+        });
+        await tx.receiving.update({
+          where: { id: dt.receivingId },
+          data: {
+            totalAmount: sumResult._sum.amount || 0,
+          },
+        });
+
+        cancelledCount++;
+      }
+
+      return { cancelledCount };
+    });
+
+    await touchDashboardSnapshot();
+    return NextResponse.json({
+      success: true,
+      message: `${result.cancelledCount}건의 입고 항목이 정상 취소(롤백)되어 재고 및 발주 잔량에 즉시 반영되었습니다.`,
+    });
+  } catch (error: any) {
+    console.error('Failed to cancel receiving', error);
+    return NextResponse.json(
+      { success: false, error: error.message || '입고 취소에 실패했습니다.' },
       { status: 500 }
     );
   }
