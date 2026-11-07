@@ -483,8 +483,8 @@ export const MatOrderDayView: React.FC = () => {
           return null;
         }
         const m = getRowMetrics(r, dayIdx);
-        // showOnlyOrderable 가 true 일 때는 dayQty > 0 인 품목만 표시
-        if (showOnlyOrderable && m.dayQty <= 0) return null;
+        // showOnlyOrderable 가 true 일 때는 dayQty > 0 인 품목만 표시 (단, 검색어 입력 시에는 재고/상태 확인을 위해 0건 품목도 표시)
+        if (showOnlyOrderable && !keyword.trim() && m.dayQty <= 0) return null;
         return { r, m, pattern };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
