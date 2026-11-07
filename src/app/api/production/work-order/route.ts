@@ -214,18 +214,46 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
     };
   }
 
-  // 전처리 설비 (PREP: 성형 3~4시간 전 새벽 04:00부터 선행 가동)
-  if (l.includes('취반') || l.includes('로터리') || l === 'ALL_JEONCHEORI') {
+  // 전처리 설비 (PREP: 엑셀 타임테이블_전처리 시트 100% 반영)
+  if (l.includes('로터리') && (l.includes('1') || l.includes('1호'))) {
+    return {
+      key: '취반-로터리1',
+      label: '취반실(로터리 1호)',
+      kind: 'PREP',
+      keywords: ['닭강정', '비엔나', '떡갈비', '햄김치', '비빔참치', '김자반', '전주비빔', '감자탕', '가라아게', '무침', '믹싱'],
+      gyeIds: ['GFS151'],
+      defaultTimeStart: '07:10',
+      speedUph: 2000,
+      workers: '2명',
+      leadWorker: '취반 배합담당 (로터리 1호)',
+      ccp: '배합 균일도 및 품온 관리 (CCP-2B)',
+    };
+  }
+  if (l.includes('로터리') && (l.includes('2') || l.includes('2호'))) {
+    return {
+      key: '취반-로터리2',
+      label: '취반실(로터리 2호)',
+      kind: 'PREP',
+      keywords: ['매콤닭강정', '너비아니', '함박', '고추장불고기', '간장계란', '계란볶음밥', '김치볶음밥', '팔도비빔', '혼합'],
+      gyeIds: ['GFS152'],
+      defaultTimeStart: '07:10',
+      speedUph: 2000,
+      workers: '2명',
+      leadWorker: '취반 배합담당 (로터리 2호)',
+      ccp: '볶음밥 배합 균일도 및 품온 관리 (CCP-2B)',
+    };
+  }
+  if (l.includes('취반') || l === 'ALL_JEONCHEORI') {
     return {
       key: '취반',
-      label: '취반실',
+      label: '취반실 (연속식 취반기)',
       kind: 'PREP',
-      keywords: ['취반', '미반', '밥', '쌀', '식초', '초밥', '정제수', '대두유', '흑미'],
-      gyeIds: ['GFS026', 'GFS151', 'GFS152'],
-      defaultTimeStart: '04:00',
+      keywords: ['취반', '미반', '도시락밥', '조미밥', '비삼각밥', '김밥밥', '파프리카밥', '흑미밥', '옥수수밥'],
+      gyeIds: ['GFS026'],
+      defaultTimeStart: '06:50',
       speedUph: 2000,
-      workers: '6명',
-      leadWorker: '취반 반장',
+      workers: '4명',
+      leadWorker: '취반 반장 (연속식 취반기)',
       ccp: '취반 완료 품온 ≥90℃ / 방랭 후 품온 15~20℃ (CCP-2B)',
     };
   }
@@ -236,7 +264,7 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'PREP',
       keywords: ['조리', '볶음', '삶기', '데침', '가열', '양념', '제육', '불고기', '갈비'],
       gyeIds: ['GFS551', 'GFS552', 'GFS553', 'GFS036'],
-      defaultTimeStart: '04:30',
+      defaultTimeStart: '06:20',
       speedUph: 1500,
       workers: '8명',
       leadWorker: '가열조리 반장',

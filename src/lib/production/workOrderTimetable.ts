@@ -595,11 +595,115 @@ export function getDepartmentAllDef(dept: 'SEONGHYEONG' | 'JEONCHEORI'): LineWor
   };
 }
 
+function getJeoncheoriMaterials(lineId: string): MaterialRequirement[] {
+  if (lineId === '취반실' || lineId === '취반') {
+    return [
+      { id: 'm-rc-1', name: '신동진 햅쌀', spec: '20kg*포', requiredQty: 4200, unit: 'kg', warehouse: '상온', currentStock: 12000, checked: true },
+      { id: 'm-rc-2', name: '삼각초밥배합초', spec: '18L*통', requiredQty: 180, unit: 'L', warehouse: '상온', currentStock: 650, checked: true },
+      { id: 'm-rc-3', name: '청학동참기름(1.8L)', spec: '1.8L*6EA', requiredQty: 36, unit: '병', warehouse: '상온', currentStock: 120, checked: true },
+      { id: 'm-rc-4', name: '취반유 및 정제수', spec: '18L*통', requiredQty: 90, unit: 'L', warehouse: '상온', currentStock: 240, checked: true },
+      { id: 'm-rc-5', name: '국내산 찰흑미/잡곡', spec: '10kg*포', requiredQty: 320, unit: 'kg', warehouse: '상온', currentStock: 800, checked: true },
+    ];
+  }
+  if (lineId.includes('로터리 1') || lineId.includes('로터리1')) {
+    return [
+      { id: 'm-rot1-1', name: '전주비빔밥 고추장특제양념', spec: '10kg*통', requiredQty: 210, unit: 'kg', warehouse: '냉장2', currentStock: 480, checked: true },
+      { id: 'm-rot1-2', name: '순살닭강정 버무림소스', spec: '10kg*통', requiredQty: 150, unit: 'kg', warehouse: '냉장1', currentStock: 350, checked: true },
+      { id: 'm-rot1-3', name: '칼집비엔나 소시지', spec: '1kg*10봉', requiredQty: 180, unit: 'kg', warehouse: '냉장1', currentStock: 420, checked: true },
+      { id: 'm-rot1-4', name: '떡갈비구이 슬라이스/무침장', spec: '10kg*박스', requiredQty: 220, unit: 'kg', warehouse: '냉동', currentStock: 500, checked: true },
+      { id: 'm-rot1-5', name: '전통 청학동참기름(1.8L)', spec: '1.8L*6EA', requiredQty: 25, unit: '병', warehouse: '상온', currentStock: 90, checked: true },
+    ];
+  }
+  if (lineId.includes('로터리 2') || lineId.includes('로터리2')) {
+    return [
+      { id: 'm-rot2-1', name: '매콤닭강정 볶음양념장', spec: '10kg*통', requiredQty: 160, unit: 'kg', warehouse: '냉장1', currentStock: 380, checked: true },
+      { id: 'm-rot2-2', name: '스크램블에그 (계란볶음밥용)', spec: '5kg*4봉', requiredQty: 280, unit: 'kg', warehouse: '냉장1', currentStock: 600, checked: true },
+      { id: 'm-rot2-3', name: 'NEW김치볶음밥용 숙성김치다이스', spec: '10kg*통', requiredQty: 320, unit: 'kg', warehouse: '냉장2', currentStock: 750, checked: true },
+      { id: 'm-rot2-4', name: '미니너비아니(무침용)', spec: '1kg*10봉', requiredQty: 200, unit: 'kg', warehouse: '냉동', currentStock: 450, checked: true },
+      { id: 'm-rot2-5', name: '맘모스함박스테이크70 (무침원료)', spec: '70g*100ea', requiredQty: 1200, unit: 'ea', warehouse: '냉동', currentStock: 3500, checked: true },
+    ];
+  }
+  return [
+    {
+      id: `m-${lineId}-1`,
+      name: `${lineId} 주원료 배합분`,
+      spec: '배치 규격',
+      requiredQty: 500,
+      unit: 'kg',
+      warehouse: '상온',
+      currentStock: 2500,
+      checked: true,
+    },
+    {
+      id: `m-${lineId}-2`,
+      name: '위생 소독 부자재 및 용기',
+      spec: '표준 롤/박스',
+      requiredQty: 20,
+      unit: '개',
+      warehouse: '부자재',
+      currentStock: 150,
+      checked: true,
+    },
+  ];
+}
+
 export function getLineDef(lineId: string, dept: 'SEONGHYEONG' | 'JEONCHEORI' = 'SEONGHYEONG'): LineWorkOrderDef {
   if (lineId === 'ALL_SEONGHYEONG') return getDepartmentAllDef('SEONGHYEONG');
   if (lineId === 'ALL_JEONCHEORI') return getDepartmentAllDef('JEONCHEORI');
   if (lineId === 'ALL') return getDepartmentAllDef(dept);
 
+  // 1. 전처리 설비이거나 전처리 부서 선택인 경우: Gantt 정본 타임테이블에서 100% 우선 조회
+  const isJeoncheoriTarget =
+    dept === 'JEONCHEORI' ||
+    lineId === '취반실' ||
+    lineId === '취반' ||
+    lineId.includes('로터리') ||
+    lineId.includes('스팀') ||
+    lineId.includes('오토후라이어') ||
+    lineId.includes('오븐') ||
+    lineId.includes('샐러드') ||
+    lineId.includes('커팅') ||
+    lineId.includes('채소작업') ||
+    lineId.includes('계량') ||
+    lineId.includes('빵슬라이스') ||
+    GANTT_JEONCHEORI_LINES.some((l) => l.name === lineId || l.id === lineId);
+
+  if (isJeoncheoriTarget) {
+    let targetName = lineId;
+    if (lineId.includes('로터리') && (lineId.includes('1') || lineId.includes('1호'))) {
+      targetName = '취반실(로터리 1호)';
+    } else if (lineId.includes('로터리') && (lineId.includes('2') || lineId.includes('2호'))) {
+      targetName = '취반실(로터리 2호)';
+    } else if (lineId === '취반실' || lineId === '취반') {
+      targetName = '취반실';
+    }
+
+    const ganttInfo = getGanttLineSchedule(targetName);
+    if (ganttInfo.line) {
+      const meta = GANTT_LINE_METAS[targetName];
+      return {
+        id: targetName,
+        code: `GFS-${ganttInfo.line.id.toUpperCase()}`,
+        name: targetName,
+        group: '전처리 및 가공',
+        icon: meta?.icon || '🍚',
+        desc: meta?.desc || `${targetName} 전처리 가공 타임테이블`,
+        docNo: `GFS-WO-20261106-${ganttInfo.line.id.toUpperCase()}`,
+        title: `전처리실: ${targetName} 일일 작업지시서`,
+        lineGroup: `전처리실 / ${targetName}`,
+        speed: meta?.speedText || '정규 가동 UPH 준수',
+        totalPlan: `${ganttInfo.totalQty.toLocaleString()} kg/배치 (원료가공)`,
+        totalTime: ganttInfo.timeRange,
+        leadWorker: meta?.leadWorker || '전처리 담당',
+        personnel: '2~4명',
+        pdfUrl: `/reports/work-orders/${encodeURIComponent(targetName)}.pdf`,
+        schedule: ganttInfo.tasks,
+        materials: getJeoncheoriMaterials(targetName),
+      };
+    }
+  }
+
+  // 2. 성형 라인의 경우 TIMETABLE_LINES 정본에서 매칭
   const found = TIMETABLE_LINES.find(
     (l) =>
       l.id === lineId ||
@@ -611,12 +715,11 @@ export function getLineDef(lineId: string, dept: 'SEONGHYEONG' | 'JEONCHEORI' = 
       (lineId.includes('삼각') && lineId.includes('2') && l.id.includes('삼각김밥 2')) ||
       (lineId.includes('삼각') && l.id.includes('삼각김밥 1')) ||
       (lineId.includes('샌드위치') && l.id.includes('샌드위치')) ||
-      (lineId.includes('햄버거') && l.id.includes('햄버거')) ||
-      (lineId.includes('취반') && l.id.includes('취반')) ||
-      (lineId.includes('스팀') && l.id.includes('가열조리'))
+      (lineId.includes('햄버거') && l.id.includes('햄버거'))
   );
   if (found) return found;
 
+  // 3. 기타 라인 Gantt fallback
   const meta = GANTT_LINE_METAS[lineId];
   const ganttInfo = getGanttLineSchedule(lineId);
   if (ganttInfo.line) {
@@ -640,28 +743,7 @@ export function getLineDef(lineId: string, dept: 'SEONGHYEONG' | 'JEONCHEORI' = 
       personnel: isSeonghyeong ? '14~18명' : '2~4명',
       pdfUrl: `/reports/work-orders/${encodeURIComponent(lineId)}.pdf`,
       schedule: ganttInfo.tasks,
-      materials: [
-        {
-          id: `m-${lineId}-1`,
-          name: `${lineId} 주원료 배합분`,
-          spec: '배치 규격',
-          requiredQty: 500,
-          unit: isSeonghyeong ? 'ea' : 'kg',
-          warehouse: '상온',
-          currentStock: 2500,
-          checked: true,
-        },
-        {
-          id: `m-${lineId}-2`,
-          name: '포장 부자재 및 위생용품',
-          spec: '표준 롤',
-          requiredQty: 20,
-          unit: '롤',
-          warehouse: '부자재',
-          currentStock: 150,
-          checked: true,
-        },
-      ],
+      materials: getJeoncheoriMaterials(lineId),
     };
   }
 

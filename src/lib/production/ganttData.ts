@@ -8994,7 +8994,7 @@ export function getGanttLineSchedule(lineName: string) {
       }
     }
 
-    const shift = (b.startMin < 960 ? '2편' : '1편') as '1편' | '2편';
+    const shift = (line.category === '전처리' ? (b.startMin < 750 ? '2편' : '1편') : (b.startMin < 810 ? '2편' : '1편')) as '1편' | '2편';
 
     let ccp = 'HACCP 기준 준수 (작업장 청결·이물제어)';
     let bom = '표준 규격 원부자재 및 배합 레시피 준수';
@@ -9014,6 +9014,25 @@ export function getGanttLineSchedule(lineName: string) {
     } else if (b.name.includes('샌드') || line.name.includes('샌드위치')) {
       ccp = '원료 저온 유지(≤10℃), 삼각 절단면 외관 검사';
       bom = '식빵 2장, 에그마요 45g, 슬라이스햄 2장, 체다치즈 1장';
+    } else if (line.name.includes('로터리')) {
+      ccp = '로터리 믹싱 교반 균일도 및 품온 관리 (20~25℃ 배출)';
+      if (b.name.includes('전주비빔')) {
+        bom = '취반밥, 전주비빔고추장소스, 참기름, 다진소고기볶음';
+      } else if (b.name.includes('김치볶음밥') || b.name.includes('김치')) {
+        bom = '취반밥, 숙성김치다이스, 볶음김치소스, 스팸큐브';
+      } else if (b.name.includes('계란볶음밥')) {
+        bom = '취반밥, 스크램블에그, 특제간장소스, 대파유';
+      } else if (b.name.includes('닭강정')) {
+        bom = '순살치킨튀김, 특제강정양념장, 볶음참깨';
+      } else if (b.name.includes('비엔나')) {
+        bom = '칼집비엔나소시지, 데리야끼무침소스, 파슬리가루';
+      } else if (b.name.includes('너비아니') || b.name.includes('떡갈비')) {
+        bom = '구이용 너비아니/떡갈비, 달콤간장소스, 통깨';
+      } else if (b.name.includes('함박')) {
+        bom = '함박스테이크70g, 스테이크소스, 양파슬라이스';
+      } else {
+        bom = `${b.name} 주원료 및 전용 배합 양념장`;
+      }
     } else if (line.name.includes('취반')) {
       ccp = '취반 심온 ≥95℃, 뜸들이기 시간 준수, 보온온도 유지';
       bom = '신동진 햅쌀 20kg 포대, 취반유 120ml, 정제수 1.3배수';
