@@ -543,6 +543,53 @@ function determineWarehouse(prod: any, gyeName?: string | null, invWarehouse?: s
   return '상온';
 }
 
+/**
+ * 밥 색상 및 교차오염/착색 방지 시퀀싱 우선순위 (Sequence-Dependent Cleaning Minimization)
+ * 1순위: 백미 계열 (백미밥, 초밥, 조미밥, 김밥밥, 참치마요, 계란밥 등 착색 없는 백색/담색 밥)
+ * 2순위: 흑미/잡곡 계열 (흑미밥, 보리밥, 잡곡밥, 옥수수밥 등 어두운 색상 밥)
+ * 3순위: 빨간 볶음밥/고추장/김치 계열 (김치볶음밥, 스팸김치, 전주비빔밥, 제육, 매콤양념 등 강한 착색·착향 밥)
+ */
+function getRiceColorRank(name: string): number {
+  const n = (name || '').toLowerCase();
+
+  // 3순위: 빨간 볶음밥 / 고추장 / 김치 / 매콤 양념 계열 (가장 마지막에 배치하여 슈트/몰드 착색 방지)
+  if (
+    n.includes('김치') ||
+    n.includes('비빔') ||
+    n.includes('고추장') ||
+    n.includes('제육') ||
+    n.includes('불닭') ||
+    n.includes('빨간') ||
+    n.includes('양념') ||
+    n.includes('감자탕') ||
+    n.includes('팔도') ||
+    n.includes('매콤') ||
+    n.includes('스팸김치') ||
+    n.includes('종가')
+  ) {
+    // 담색 계란/간장 볶음밥은 백미 계열로 분류
+    if (n.includes('계란볶음밥') || n.includes('간장계란')) {
+      return 1;
+    }
+    return 3;
+  }
+
+  // 2순위: 흑미 / 잡곡 / 현미 / 보리 / 옥수수 / 파프리카 계열
+  if (
+    n.includes('흑미') ||
+    n.includes('잡곡') ||
+    n.includes('보리') ||
+    n.includes('현미') ||
+    n.includes('옥수수') ||
+    n.includes('파프리카')
+  ) {
+    return 2;
+  }
+
+  // 1순위: 백미 / 초밥 / 조미밥 / 참치마요 / 계란 등 착색 없는 담색 계열
+  return 1;
+}
+
 function addMinutesToTime(timeStr: string, minutes: number): string {
   const [h, m] = timeStr.split(':').map(Number);
   const total = (h * 60 + m + minutes) % (24 * 60);
@@ -845,10 +892,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 2편(당일 오후 출하) 최우선 정렬 후 1편(익일 새벽 출하) 순차 배치
+    // 1) 2편(당일 오후 출하) 최우선 정렬 후 1편(익일 새벽 출하) 순차 배치
+    // 2) 밥 색상 시퀀싱 룰: [백미/담색 1순위] → [흑미/잡곡 2순위] → [빨간 볶음밥 3순위]
+    // 3) 동일 색상군 내에서는 대량 생산 우선 (qty 내림차순)
     matchedProducts.sort((a, b) => {
+      // 1. 시프트 정렬 (2편 선행)
       if (a.shift === '2편' && b.shift !== '2편') return -1;
       if (a.shift !== '2편' && b.shift === '2편') return 1;
+
+      // 2. 밥 색상 교차착색 방지 시퀀싱 (백미 -> 흑미 -> 빨간 볶음밥)
+      const rankA = getRiceColorRank(a.cleanName);
+      const rankB = getRiceColorRank(b.cleanName);
+      if (rankA !== rankB) {
+        return rankA - rankB;
+      }
+
+      // 3. 동일 색상군 내 수량 내림차순
       return b.qty - a.qty;
     });
 

@@ -75,6 +75,59 @@ const JEONCHEORI_EQUIPMENT = [
   { id: '빵슬라이스실(슬라이서)', name: '빵슬라이스실', icon: '🍞', count: 4 },
 ];
 
+/**
+ * 밥 색상 식별 헬퍼 (백미 ➔ 흑미 ➔ 빨간 볶음밥 시퀀싱 표시)
+ */
+function getRiceColorBadge(name: string) {
+  const n = (name || '').toLowerCase();
+  if (
+    n.includes('김치') ||
+    n.includes('비빔') ||
+    n.includes('고추장') ||
+    n.includes('제육') ||
+    n.includes('불닭') ||
+    n.includes('빨간') ||
+    n.includes('양념') ||
+    n.includes('감자탕') ||
+    n.includes('팔도') ||
+    n.includes('매콤') ||
+    n.includes('스팸김치') ||
+    n.includes('종가')
+  ) {
+    if (n.includes('계란볶음밥') || n.includes('간장계란')) {
+      return { label: '백미/담색', bg: 'bg-amber-100 text-amber-800 border-amber-300' };
+    }
+    return { label: '빨간밥', bg: 'bg-rose-100 text-rose-800 border-rose-300' };
+  }
+  if (
+    n.includes('흑미') ||
+    n.includes('잡곡') ||
+    n.includes('보리') ||
+    n.includes('현미') ||
+    n.includes('옥수수') ||
+    n.includes('파프리카')
+  ) {
+    return { label: '흑미/잡곡', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
+  }
+  if (
+    n.includes('도시락') ||
+    n.includes('김밥') ||
+    n.includes('삼각') ||
+    n.includes('밥') ||
+    n.includes('초밥') ||
+    n.includes('백미') ||
+    n.includes('참치') ||
+    n.includes('스팸') ||
+    n.includes('명불허전') ||
+    n.includes('돈까스') ||
+    n.includes('치킨까스') ||
+    n.includes('한상')
+  ) {
+    return { label: '백미', bg: 'bg-slate-100 text-slate-800 border-slate-300' };
+  }
+  return null;
+}
+
 export const WorkOrderStatusView: React.FC = () => {
   const { openPrintModal, setWorkOrderPayload } = usePrintReport();
 
@@ -360,6 +413,10 @@ export const WorkOrderStatusView: React.FC = () => {
           : 'badge-other';
 
         const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} ea` : t.qty || '-';
+        const rBadge = getRiceColorBadge(t.item);
+        const rTag = rBadge && t.type === '생산'
+          ? `<span class="rice-tag ${rBadge.label === '빨간밥' ? 'rice-tag-red' : rBadge.label.includes('흑미') ? 'rice-tag-purple' : 'rice-tag-white'}">${rBadge.label}</span>`
+          : '';
 
         return `
           <tr class="${rowClass}">
@@ -367,7 +424,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <td class="col-center"><span class="badge ${shiftBadgeClass}">${t.shift}</span></td>
             <td class="col-center col-time">${t.time}</td>
             <td class="col-center"><span class="type-pill type-${t.type}">${t.type}</span></td>
-            <td class="col-item">${t.item}</td>
+            <td class="col-item">${rTag}${t.item}</td>
             <td class="col-right col-qty">${formattedQty}</td>
             <td class="col-center col-duration">${t.duration}</td>
             <td class="col-center col-workers">${t.workers || '-'}</td>
@@ -734,6 +791,18 @@ export const WorkOrderStatusView: React.FC = () => {
           .wh-냉장1, .wh-냉장2 { background: #cffafe; color: #155e75; }
           .wh-냉동 { background: #dbeafe; color: #1e40af; }
           .wh-부자재 { background: #fef3c7; color: #92400e; }
+          .rice-tag {
+            display: inline-block;
+            font-size: 8px;
+            font-weight: 800;
+            padding: 0.5px 3.5px;
+            border-radius: 2px;
+            margin-right: 3px;
+            vertical-align: middle;
+          }
+          .rice-tag-white { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+          .rice-tag-purple { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+          .rice-tag-red { background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3; }
           .mini-sign {
             border: 1px dashed #94a3b8;
             padding: 1px 4px;
@@ -1610,7 +1679,18 @@ export const WorkOrderStatusView: React.FC = () => {
 
                         {/* 5. 지시 제품명 */}
                         <td className="py-3.5 px-4 font-black text-slate-950 text-base sm:text-lg tracking-tight">
-                          {task.item}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {(() => {
+                              const rBadge = getRiceColorBadge(task.item);
+                              if (!rBadge || task.type !== '생산') return null;
+                              return (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-black border shadow-xs ${rBadge.bg}`}>
+                                  {rBadge.label === '빨간밥' ? '🌶️ 빨간밥' : rBadge.label.includes('흑미') ? '🌾 흑미' : '🍚 백미'}
+                                </span>
+                              );
+                            })()}
+                            <span>{task.item}</span>
+                          </div>
                         </td>
 
                         {/* 6. 지시수량 */}
