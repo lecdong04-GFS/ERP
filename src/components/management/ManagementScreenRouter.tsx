@@ -6,6 +6,7 @@ import { SalesPurStatusView } from './screens/SalesPurStatusView';
 import { ProvisionalSalesStatusView } from './screens/ProvisionalSalesStatusView';
 import { KpiRegView } from './screens/KpiRegView';
 import { KpiStatusView } from './screens/KpiStatusView';
+import { CostScreenRouter } from '../cost/CostScreenRouter';
 import { ErpWorkspace } from '../common/ErpWorkspace';
 
 interface ManagementScreenRouterProps {
@@ -13,6 +14,10 @@ interface ManagementScreenRouterProps {
 }
 
 export const ManagementScreenRouter: React.FC<ManagementScreenRouterProps> = ({ tab }) => {
+  if (tab.menuId.startsWith('cost-')) {
+    return <CostScreenRouter tab={tab} />;
+  }
+
   switch (tab.menuId) {
     case 'mgmt-sales-pur-status':
       return <SalesPurStatusView />;

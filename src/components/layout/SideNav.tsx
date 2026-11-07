@@ -22,11 +22,11 @@ import {
 } from 'lucide-react';
 
 const SIDE_QUICK_WORKFLOW = [
-  { step: '1', id: 'sales-order-upload', title: '수주등록 (GS)', desc: '일일 수주', icon: ShoppingBag, color: 'bg-blue-600' },
-  { step: '2', id: 'inv-lookup', title: '재고조회 (5시 실사)', desc: '실사표 업로드', icon: ClipboardCheck, color: 'bg-emerald-600' },
-  { step: '3', id: 'pur-mat-order-day', title: '자재발주 (요일별)', desc: '발주량 자동산출', icon: ShoppingCart, color: 'bg-amber-600' },
-  { step: '4', id: 'master-product-reg', title: '제품등록 (BOM)', desc: '레시피 작성', icon: PackageCheck, color: 'bg-indigo-600' },
-  { step: '5', id: 'pur-order-print', title: '발주서출력', desc: '협력사 전송', icon: Printer, color: 'bg-slate-700' },
+  { step: '1', id: 'sales-order-upload', title: '수주 엑셀 업로드', desc: '일일 수주', icon: ShoppingBag, color: 'bg-blue-600' },
+  { step: '2', id: 'prod-work-order-status', title: '작업지시서 & 취반', desc: '생산 타임테이블', icon: Layers, color: 'bg-indigo-600' },
+  { step: '3', id: 'inv-lookup', title: '통합 재고조회 (5시 실사)', desc: '실사표 업로드', icon: ClipboardCheck, color: 'bg-emerald-600' },
+  { step: '4', id: 'pur-mat-order-day', title: '요일별 자재발주', desc: '발주량 자동산출', icon: ShoppingCart, color: 'bg-amber-600' },
+  { step: '5', id: 'sales-undelivered-status', title: '미출 현황 및 결품', desc: '결품 대조 정산', icon: PackageCheck, color: 'bg-rose-600' },
 ];
 
 interface SideNavProps {
@@ -38,15 +38,12 @@ export const SideNav: React.FC<SideNavProps> = ({ isOpen, onClose }) => {
   const { openTab, activeTab } = useTabs();
   const [searchTerm, setSearchTerm] = useState('');
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
-    work: true,
     sales: true,
-    purchase: true,
     production: true,
+    purchase: true,
     inventory: true,
     management: true,
     master: true,
-    cost: true,
-    help: false,
     admin: false,
   });
 
@@ -128,7 +125,7 @@ export const SideNav: React.FC<SideNavProps> = ({ isOpen, onClose }) => {
           )}
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[11px] text-gray-500 font-medium">
-          <span>전체 10개 대분류 67개 메뉴</span>
+          <span>전체 7개 대분류 67개 메뉴</span>
           <div className="flex items-center gap-1.5">
             <button onClick={expandAll} className="hover:text-blue-700 underline cursor-pointer">
               모두펼침

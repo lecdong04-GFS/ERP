@@ -155,7 +155,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
                 >
                   <div className="px-3 py-1.5 text-[11px] font-bold text-rose-800 border-b border-rose-200 bg-rose-50 flex items-center justify-between">
                     <span>{adminCat.title}</span>
-                    <span className="text-rose-400 font-mono font-normal">(관리자 전용)</span>
+                    <span className="text-rose-500 font-mono font-normal">({adminCat.items.length}개 메뉴)</span>
                   </div>
                   {adminCat.items.map((item) => (
                     <button
