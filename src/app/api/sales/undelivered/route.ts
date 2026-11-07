@@ -4,6 +4,21 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 
+const CENTER_NAME_MAP: Record<string, string> = {
+  'C60810': '양산조리센터',
+  'C68110': '부산조리센터',
+  'CVV20': '(주)지에스리테일 해인CVS',
+  'CVV25': '(주)지에스리테일 진주일배',
+  'CVV57': '(주)지에스리테일 김해일배',
+  'CVV58': '(주)지에스리테일 김해2일배',
+  'CVV65': '㈜지에스리테일 익산일배',
+  'CVV83': '지에스리테일 경산저온',
+  'CVV84': '㈜지에스리테일 경산2저온',
+  'CVV95': '(주)지에스리테일 신광주저온',
+  'CVV96': '(주)지에스리테일 신광주2저온',
+  'CVV97': '(주)지에스리테일 경산3저온',
+};
+
 // GET /api/sales/undelivered?startDate=&endDate=
 // 미출 현황 = 수주(취소 제외) − 납품(취소 제외), 일자·센터·품목별 집계
 // 납품 매칭: 1순위 salesOrderId 연결, 2순위 (센터+품번, 납품일>=수주일) 선입선출 차감
@@ -34,7 +49,7 @@ export async function GET(req: NextRequest) {
       prisma.delivery.findMany({
         where: {
           status: { not: '취소' },
-          deliveryDate: { gte: startDate },
+          deliveryDate: { gte: startDate, lte: endDate },
         },
         include: { details: true },
         orderBy: [{ deliveryDate: 'asc' }, { id: 'asc' }],
@@ -88,6 +103,11 @@ export async function GET(req: NextRequest) {
 
     const rows: any[] = [];
     for (const o of orders) {
+      // GSR-001은 매일 아침 생산 배치용 통합 수주 전표이며,
+      // 실제 편의점 물류센터별 결품(미출)은 아래의 michulDeliveries([미출엑셀])에서 공식 관리되므로 제외합니다.
+      if (o.centerCode === 'GSR-001' && o.status === '접수') {
+        continue;
+      }
       for (const dt of o.details as any[]) {
         const orderQty = Number(dt.totalQty) || 0;
         if (orderQty <= 0) continue;
@@ -95,32 +115,33 @@ export async function GET(req: NextRequest) {
         const { delivered, used } = consume(o.id, o.centerCode || '', code, o.orderDate, orderQty);
         const unDeliv = Math.max(0, orderQty - delivered);
         const price = Number(dt.unitPrice) || 0;
-      rows.push({
-        salesOrderId: o.id,
-        orderNo: o.orderNo,
-        orderDate: o.orderDate,
-        centerCode: o.centerCode,
-        shift: o.shift,
-        orderType: o.orderType,
-        status: o.status,
-        productId: dt.productId,
-        productCode: code,
-        productName: dt.product?.name || '',
-        kind: dt.product?.kind || '',
-        category: dt.product?.category || '완성품',
-        spec: dt.product?.spec || '',
-        unit: dt.product?.unit || 'ea',
-        unitPrice: price,
-        orderQty,
-        orderQty1: Number((dt as any).orderQty1) || 0,
-        orderQty2: Number((dt as any).orderQty2) || 0,
-        orderAmt: Math.round(orderQty * price),
+        const centerName = CENTER_NAME_MAP[o.centerCode || ''] || o.centerCode || '';
+        rows.push({
+          salesOrderId: o.id,
+          orderNo: o.orderNo,
+          orderDate: o.orderDate,
+          centerCode: o.centerCode,
+          shift: o.shift,
+          orderType: o.orderType,
+          status: o.status,
+          productId: dt.productId,
+          productCode: code,
+          productName: dt.product?.name || '',
+          kind: dt.product?.kind || '',
+          category: dt.product?.category || '완성품',
+          spec: dt.product?.spec || '',
+          unit: dt.product?.unit || 'ea',
+          unitPrice: price,
+          orderQty,
+          orderQty1: Number((dt as any).orderQty1) || 0,
+          orderQty2: Number((dt as any).orderQty2) || 0,
+          orderAmt: Math.round(orderQty * price),
           deliveredQty: delivered,
           deliveredAmt: Math.round(delivered * price),
           unDelivQty: unDeliv,
           unDelivAmt: Math.round(unDeliv * price),
           deliveryRefs: used,
-          storeName: dt.remark || o.remark || '',
+          storeName: dt.remark || o.remark || centerName,
         });
       }
     }
@@ -128,7 +149,8 @@ export async function GET(req: NextRequest) {
     // 3. 미출 엑셀로 직접 등록된 납품/미납 상세 내역 병합
     const michulDeliveries = deliveries.filter((d) => d.remark?.startsWith('[미출엑셀]'));
     for (const d of michulDeliveries) {
-      const storeName = d.remark.replace('[미출엑셀]', '').split('(')[0].trim();
+      const rawStore = d.remark.replace('[미출엑셀]', '').split('(')[0].trim();
+      const centerName = CENTER_NAME_MAP[d.centerCode || ''] || rawStore || d.centerCode;
       for (const dt of d.details) {
         const rem = dt.remark || '';
         const m = rem.match(/미출\s*(\d+)개\s*\(([0-9,]+)원\)/);
@@ -143,7 +165,7 @@ export async function GET(req: NextRequest) {
           orderNo: d.deliveryNo,
           orderDate: d.deliveryDate,
           centerCode: d.centerCode,
-          storeName: storeName || d.centerCode,
+          storeName: centerName,
           shift: d.shift || '1편',
           orderType: '정규',
           status: '완료',

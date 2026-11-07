@@ -70,10 +70,13 @@ export const UndeliveredStatusView: React.FC = () => {
 
       rows.forEach((r: any, idx: number) => {
         const center = r.centerCode || '미지정';
+        const displayName = r.storeName ? (r.storeName.includes(center) ? r.storeName : `${r.storeName} (${center})`) : center;
         let sum = sumMap.get(center);
         if (!sum) {
-          sum = { id: center, clientName: center, shift1Qty: 0, shift2Qty: 0, totalQty: 0, shift1Amt: 0, shift2Amt: 0, totalAmt: 0 };
+          sum = { id: center, clientName: displayName, shift1Qty: 0, shift2Qty: 0, totalQty: 0, shift1Amt: 0, shift2Amt: 0, totalAmt: 0 };
           sumMap.set(center, sum);
+        } else if (sum.clientName === center && r.storeName) {
+          sum.clientName = displayName;
         }
 
         const un = Number(r.unDelivQty) || 0;
@@ -436,7 +439,7 @@ export const UndeliveredStatusView: React.FC = () => {
           <div className="bg-[#eef2f7] px-3 py-1 font-bold text-gray-800 text-[12px] border-b border-gray-300 flex items-center justify-between">
             <span className="flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-600" />
-              세부 미출 내역: <span className="text-blue-900 font-black text-[13px]">[{selectedCenter || '센터 선택 안됨'}]</span>
+              세부 미출 내역: <span className="text-blue-900 font-black text-[13px]">[{summaries.find(s => s.id === selectedCenter)?.clientName || selectedCenter || '센터 선택 안됨'}]</span>
               {searchTerm && <span className="text-amber-800 text-xs font-normal">(검색어 &apos;{searchTerm}&apos; 필터 적용 중)</span>}
             </span>
             <span className="text-[12px] text-gray-600 font-mono">
