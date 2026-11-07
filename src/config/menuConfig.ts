@@ -20,7 +20,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     items: [
       { id: 'prod-work-order-status', title: '작업지시서 & 취반 타임테이블', categoryId: 'production', categoryName: '생산·제조', badge: '핵심' },
       { id: 'prod-seq-reg', title: '라인별 생산순서 등록', categoryId: 'production', categoryName: '생산·제조' },
-      { id: 'prod-input-result-reg', title: '원료 투입 실적등록', categoryId: 'production', categoryName: '생산·제조' },
       { id: 'prod-result-status', title: '일일 생산실적 현황', categoryId: 'production', categoryName: '생산·제조' },
       { id: 'prod-discard-reg', title: '공정 불량/폐기 등록', categoryId: 'production', categoryName: '생산·제조' },
       { id: 'prod-food-waste-reg', title: '식품 부산물/폐기물 관리', categoryId: 'production', categoryName: '생산·제조' },
@@ -103,7 +102,8 @@ const MENU_ALIASES: Record<string, string> = {
   'sales-extra-order-status': 'sales-order-extra-reg',
   'sales-order-cancel-status': 'sales-order-status-cancel',
 
-  // 생산 정예화 매핑
+  // 생산 정예화 매핑 (원료투입 -> 생산실적 현황으로 통합)
+  'prod-input-result-reg': 'prod-result-status',
   'prod-extra-prod': 'prod-work-order-status',
   'work-order-status': 'prod-work-order-status',
   'production-work-order-status': 'prod-work-order-status',
