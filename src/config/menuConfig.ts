@@ -72,7 +72,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     title: '기준정보',
     items: [
       { id: 'master-product-reg', title: '제품 및 규격 마스터', categoryId: 'master', categoryName: '기준정보', badge: 'BOM연계' },
-      { id: 'master-repr-prod-status', title: '대표제품 관리', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-bom-normal', title: 'BOM(레시피) 정밀 관리', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-bom-deploy', title: 'BOM 다단계 전개', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-product-price', title: '매입/매출 단가 관리', categoryId: 'master', categoryName: '기준정보' },
@@ -146,7 +145,8 @@ const MENU_ALIASES: Record<string, string> = {
   // 기준정보 정예화 매핑
   'master-pack-spec': 'master-product-reg',
   'master-product-unit': 'master-base-code',
-  'master-repr-prod-reg': 'master-repr-prod-status',
+  'master-repr-prod-status': 'master-product-reg',
+  'master-repr-prod-reg': 'master-product-reg',
 
   // 업무/시스템 정예화 매핑
   'admin-request-edit': 'work-contact',

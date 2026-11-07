@@ -11,8 +11,6 @@ import { PackagingMgmtView } from './screens/PackagingMgmtView';
 import { BomNormalView } from './screens/BomNormalView';
 import { BomExplosionView } from './screens/BomExplosionView';
 import { CvsMgmtView } from './screens/CvsMgmtView';
-import { ReprProductRegView } from './screens/ReprProductRegView';
-import { ReprProductStatusView } from './screens/ReprProductStatusView';
 import { StockLookupView } from './screens/StockLookupView';
 import { ErpWorkspace } from '../common/ErpWorkspace';
 
@@ -41,9 +39,8 @@ export const MasterScreenRouter: React.FC<MasterScreenRouterProps> = ({ tab }) =
     case 'master-cvs-mgmt':
       return <CvsMgmtView />;
     case 'master-repr-prod-reg':
-      return <ReprProductRegView />;
     case 'master-repr-prod-status':
-      return <ReprProductStatusView />;
+      return <ProductRegView />;
     case 'master-stock-lookup':
     case 'inv-lookup':
       return <StockLookupView />;
