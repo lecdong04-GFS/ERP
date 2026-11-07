@@ -72,7 +72,7 @@ interface LineRoutingDef {
 function resolveLineRouting(lineName: string): LineRoutingDef {
   const l = (lineName || '').trim();
 
-  // 성형 9개 라인
+  // 성형 9개 라인 (엑셀 타임테이블 및 참고자료 시트 100% 반영)
   if (l.includes('도시락') || l === 'ALL_SEONGHYEONG') {
     return {
       key: '도시락',
@@ -80,8 +80,8 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥', '정찬', '찬또', '스파게티', '파스타', '돈까스', '치킨까스'],
       gyeIds: ['GFS004'],
-      defaultTimeStart: '09:30',
-      speedUph: 1500,
+      defaultTimeStart: '09:00',
+      speedUph: 1400,
       workers: '18명',
       leadWorker: '도시락 조장 / 성형반장',
       ccp: '가열육 중심온도 ≥75℃ 1분 / 금속검출기 정상 통과',
@@ -94,9 +94,9 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['김밥', '무스비', '꼬마', '롤'],
       gyeIds: ['GFS005', 'GFS006'],
-      defaultTimeStart: '08:00',
-      speedUph: 1200,
-      workers: '12명',
+      defaultTimeStart: '09:00',
+      speedUph: 1600,
+      workers: '성형 7명 / 포장 10명',
       leadWorker: '김밥 반장',
       ccp: '김밥 중심온도 15~20℃ / 금속검출기 통과',
     };
@@ -106,11 +106,11 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       key: '삼각3',
       label: '삼각김밥(더큰)',
       kind: 'FORMING',
-      keywords: ['더큰', '대형', '빅'],
+      keywords: ['더큰', '대형', '빅', '풀)'],
       gyeIds: ['GFS007', 'GFS008'],
-      defaultTimeStart: '07:30',
+      defaultTimeStart: '09:00',
       speedUph: 2400,
-      workers: '8명',
+      workers: '2~4명',
       leadWorker: '삼각김밥 조장',
       ccp: '포장 필름 밀봉도 점검 / 금속검출기 통과',
     };
@@ -120,11 +120,11 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       key: '삼각2',
       label: '삼각김밥 2호기',
       kind: 'FORMING',
-      keywords: ['참치마요', '스팸', '리챔', '치킨마요', '토핑'],
+      keywords: ['참치마요', '스팸', '리챔', '치킨마요', '토핑', '커플'],
       gyeIds: ['GFS007', 'GFS008'],
-      defaultTimeStart: '07:30',
-      speedUph: 2400,
-      workers: '8명',
+      defaultTimeStart: '09:30',
+      speedUph: 2200,
+      workers: '2명',
       leadWorker: '삼각김밥 2호기 조장',
       ccp: '성형기 온도 45℃ / 금속검출기 30분 주기 점검',
     };
@@ -136,9 +136,9 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['전주비빔', '비빔', '삼각', '소고기고추장'],
       gyeIds: ['GFS007'],
-      defaultTimeStart: '07:30',
-      speedUph: 2400,
-      workers: '8명',
+      defaultTimeStart: '14:00',
+      speedUph: 2600,
+      workers: '2명',
       leadWorker: '삼각김밥 1호기 조장',
       ccp: '성형기 온도 45℃ / 금속검출기 30분 주기 점검',
     };
@@ -150,7 +150,7 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['버거', '비프', '치킨버거', '불고기버거', '핫도그'],
       gyeIds: ['GFS002'],
-      defaultTimeStart: '08:00',
+      defaultTimeStart: '10:00',
       speedUph: 1200,
       workers: '10명',
       leadWorker: '조리빵 반장',
@@ -164,11 +164,39 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['샌드', '토스트', '클럽', '치아바타', '크로와상'],
       gyeIds: ['GFS003'],
-      defaultTimeStart: '08:00',
-      speedUph: 1200,
+      defaultTimeStart: '10:00',
+      speedUph: 1000,
       workers: '10명',
       leadWorker: '조리빵 반장',
       ccp: '완성품 품온 10℃ 이하 관리 / 금속검출기 통과',
+    };
+  }
+  if (l.includes('조리면') || l.includes('파스타') || l.includes('스파게티')) {
+    return {
+      key: '조리면',
+      label: '조리면 라인',
+      kind: 'FORMING',
+      keywords: ['스파게티', '파스타', '국수', '우동', '조리면'],
+      gyeIds: ['GFS004', 'GFS008'],
+      defaultTimeStart: '09:30',
+      speedUph: 1400,
+      workers: '14명',
+      leadWorker: '조리면 조장',
+      ccp: '면 삶기 중심온도 및 급냉 품온 관리',
+    };
+  }
+  if (l.includes('HMR') || l.includes('안주')) {
+    return {
+      key: 'HMR',
+      label: 'HMR 라인',
+      kind: 'FORMING',
+      keywords: ['강정', '치킨', '탕수육', '그라탕', '닭발', '안주', '불닭'],
+      gyeIds: ['GFS009'],
+      defaultTimeStart: '08:15',
+      speedUph: 1500,
+      workers: '6명',
+      leadWorker: 'HMR 조장',
+      ccp: '용기 실링 상태 및 중량 계량',
     };
   }
   if (l.includes('커플') || l.includes('포장기')) {
@@ -178,15 +206,15 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['커플', '세트', '반반', '콤비'],
       gyeIds: ['GFS014'],
-      defaultTimeStart: '08:30',
-      speedUph: 1000,
-      workers: '6명',
+      defaultTimeStart: '10:40',
+      speedUph: 1800,
+      workers: '2명',
       leadWorker: '포장 조장',
       ccp: '외관 밀봉 불량 전수 검사',
     };
   }
 
-  // 전처리 설비 (PREP)
+  // 전처리 설비 (PREP: 성형 3~4시간 전 새벽 04:00부터 선행 가동)
   if (l.includes('취반') || l.includes('로터리') || l === 'ALL_JEONCHEORI') {
     return {
       key: '취반',
@@ -194,21 +222,21 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'PREP',
       keywords: ['취반', '미반', '밥', '쌀', '식초', '초밥', '정제수', '대두유', '흑미'],
       gyeIds: ['GFS026', 'GFS151', 'GFS152'],
-      defaultTimeStart: '05:30',
+      defaultTimeStart: '04:00',
       speedUph: 2000,
       workers: '6명',
       leadWorker: '취반 반장',
       ccp: '취반 완료 품온 ≥90℃ / 방랭 후 품온 15~20℃ (CCP-2B)',
     };
   }
-  if (l.includes('스팀') || l.includes('조리')) {
+  if (l.includes('스팀') || l.includes('조리') || l.includes('볶음솥') || l.includes('국솥')) {
     return {
       key: '조리',
       label: '가열조리실(스팀솥)',
       kind: 'PREP',
       keywords: ['조리', '볶음', '삶기', '데침', '가열', '양념', '제육', '불고기', '갈비'],
       gyeIds: ['GFS551', 'GFS552', 'GFS553', 'GFS036'],
-      defaultTimeStart: '06:00',
+      defaultTimeStart: '04:30',
       speedUph: 1500,
       workers: '8명',
       leadWorker: '가열조리 반장',
@@ -222,7 +250,7 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'PREP',
       keywords: ['튀김', '까스', '오븐', '제트', '치킨', '가라아게', '돈까스', '핫도그'],
       gyeIds: ['GFS501', 'GFS502', 'GFS503'],
-      defaultTimeStart: '06:00',
+      defaultTimeStart: '05:00',
       speedUph: 1500,
       workers: '6명',
       leadWorker: '튀김/오븐 조장',
@@ -236,49 +264,49 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'PREP',
       keywords: ['샐러드', '믹싱', '토핑', '콘버터', '마요', '참치', '단호박'],
       gyeIds: ['GFS100', 'GFS101', 'GFS102', 'GFS103'],
-      defaultTimeStart: '06:30',
+      defaultTimeStart: '04:30',
       speedUph: 1500,
       workers: '6명',
       leadWorker: '샐러드 조장',
       ccp: '샐러드 중심온도 10℃ 이하 유지 / 유효염소농도 점검',
     };
   }
-  if (l.includes('커팅')) {
+  if (l.includes('커팅') || l.includes('절단기')) {
     return {
       key: '커팅',
       label: '커팅실',
       kind: 'PREP',
       keywords: ['커팅', '컷', '슬라이스', '다이스', '채', '소스'],
       gyeIds: ['GFS011', 'GFS012', 'GFS028', 'GFS031', 'GFS024'],
-      defaultTimeStart: '05:30',
+      defaultTimeStart: '04:00',
       speedUph: 1500,
       workers: '6명',
       leadWorker: '커팅 조장',
       ccp: '칼날 파손 유무 작업 전/후 점검',
     };
   }
-  if (l.includes('채소')) {
+  if (l.includes('채소') || l.includes('세척기')) {
     return {
       key: '채소',
       label: '채소작업실',
       kind: 'PREP',
       keywords: ['채소', '야채', '세척', '선별', '상추', '깻잎', '당근', '오이', '양배추'],
       gyeIds: ['GFS020', 'GFS027', 'GFS029', 'GFS030', 'GFS032'],
-      defaultTimeStart: '05:30',
+      defaultTimeStart: '04:00',
       speedUph: 1500,
       workers: '6명',
       leadWorker: '채소작업 반장',
       ccp: '차아염소산나트륨 100ppm 유효염소농도 소독 10분, 3회 헹굼 (CCP-1B)',
     };
   }
-  if (l.includes('계량')) {
+  if (l.includes('계량') || l.includes('배합기')) {
     return {
       key: '계량',
       label: '계량실',
       kind: 'PREP',
-      keywords: ['계량', '양념', '분말', '시즈닝', '염지'],
+      keywords: ['계량', '양념', '분말', '시즈닝', '염지', '배합'],
       gyeIds: ['GFS023', 'GFS025', 'GFS046'],
-      defaultTimeStart: '05:30',
+      defaultTimeStart: '04:00',
       speedUph: 1500,
       workers: '4명',
       leadWorker: '계량 조장',
@@ -307,12 +335,93 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
     kind: 'FORMING',
     keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥'],
     gyeIds: ['GFS004'],
-    defaultTimeStart: '09:30',
-    speedUph: 1500,
+    defaultTimeStart: '09:00',
+    speedUph: 1400,
     workers: '18명',
     leadWorker: '도시락 조장',
     ccp: '가열육 중심온도 ≥75℃ / 금속검출기 통과',
   };
+}
+
+// ── GFS 공장 실측 품목별 속도 사전 (엑셀 참고자료 시트 100% 반영) ──
+const ITEM_SPEED_MAP: Record<string, number> = {
+  // 삼각 1호기 (2,600 ea/h)
+  '전주비빔': 2600,
+  '스팸계란': 2600,
+  '비빔참치': 2600,
+  '청양참치': 2600,
+  '김치볶음밥': 2600,
+  '소고기볶음고추장': 2600,
+  '참치마요': 2600,
+  '간장불고기': 2600,
+  '우삼겹': 2600,
+  '명란마요': 2600,
+
+  // 더큰 삼각 (2,400 ea/h)
+  '풀)': 2400,
+  '더큰': 2400,
+  '찬또감자탕': 2400,
+  '스팸마요계란': 2400,
+
+  // 김밥 (일반 1,600 ea/h, 알찬 6,000 ea/h)
+  '김밥': 1600,
+  '알찬': 6000,
+  '진미채': 1600,
+  '근본': 1600,
+  '돈카츠': 1600,
+  '소시지김밥': 1600,
+  '땡초어묵': 1600,
+  '마라어묵': 1600,
+
+  // 도시락 (기본 1,400 ea/h, 혜자제육 등 메인대량 2,000 ea/h)
+  '고진많': 1400,
+  '뭘좋아할지': 1400,
+  '정찬한판': 1400,
+  '흑당갈비': 1400,
+  '마늘돼지': 1400,
+  '통통소야': 1400,
+  '너비아니': 1400,
+  '두부김치': 1400,
+  '제육볶음': 2000,
+  '제육': 2000,
+
+  // 햄버거 (1,200 ea/h)
+  '버거': 1200,
+  '내슈빌': 1200,
+  '치즈버거': 1200,
+  '비프버거': 1200,
+  '하와이안': 1200,
+  '에그데리': 1200,
+  '데리버거': 1200,
+  '무스비': 1200,
+
+  // 샌드위치 (1,000 ea/h)
+  '샌드': 1000,
+  '치킨샐러드': 1000,
+  '옥수수샌드': 1000,
+  '베이컨감자': 1000,
+  '버라이어티': 1000,
+  '트리플후레쉬': 1000,
+  '3단참치': 1000,
+
+  // 조리면 / 파스타 (1,400 ea/h)
+  '스파게티': 1400,
+  '파스타': 1400,
+  '비빔국수': 1400,
+  '우동': 1400,
+
+  // HMR (1,500 ea/h)
+  '닭강정': 1500,
+  '치킨강정': 1500,
+  '그라탕': 1500,
+  '탕수육': 1500,
+};
+
+function resolveItemSpeed(itemName: string, fallbackSpeed: number): number {
+  for (const [key, speed] of Object.entries(ITEM_SPEED_MAP)) {
+    if (itemName.includes(key)) return speed;
+  }
+  return fallbackSpeed;
 }
 
 function determineWarehouse(prod: any, gyeName?: string | null, invWarehouse?: string | null): string {
@@ -412,6 +521,11 @@ function addMinutesToTime(timeStr: string, minutes: number): string {
   const nh = Math.floor(total / 60);
   const nm = total % 60;
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+}
+
+function parseTimeToMinutes(timeStr: string): number {
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
 }
 
 export async function GET(req: NextRequest) {
@@ -713,38 +827,101 @@ export async function GET(req: NextRequest) {
     const tasks: any[] = [];
     let curTime = routing.defaultTimeStart;
     let seq = 1;
+    let hasLunchBreak = false;
     let hasShift1Started = false;
+    let hasDinnerBreak = false;
     const matMap = new Map<string, any>();
 
     for (const item of matchedProducts) {
-      // 1편 시작 직전 중식 및 1차 CIP 세척 소독 휴게시간 삽입 (전체 시프트일 때)
-      if (shift === '전체' && item.shift === '1편' && !hasShift1Started) {
-        hasShift1Started = true;
-        const breakEnd = addMinutesToTime(curTime, 45);
+      // 1) 2편 가동 중 12:30 이후 중식 및 1차 세척소독 삽입 (60분)
+      if (!hasLunchBreak && item.shift === '2편' && parseTimeToMinutes(curTime) >= 750) {
+        hasLunchBreak = true;
+        const lunchEnd = addMinutesToTime(curTime, 60);
         tasks.push({
-          id: 'break-mid',
+          id: 'break-lunch',
           seq: seq++,
           workSeq: seq,
-          workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-CIP`,
+          workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-LUNCH`,
           shift: '휴게',
-          time: `${curTime} ~ ${breakEnd}`,
+          time: `${curTime} ~ ${lunchEnd}`,
           type: '휴게',
           item: '중식 및 컨베이어 1차 고온 살균 세척소독',
           productName: '중식 및 컨베이어 1차 고온 살균 세척소독',
           qty: '-',
           orderQty: 0,
           prodQty: 0,
-          duration: '45분',
+          duration: '60분',
           workers: '교대조',
-          bom: '식약처 HACCP 공정 점검, 알코올 70% 벨트 분무',
+          bom: '컨베이어 벨트 70% 알코올 소독, 낙하물 전량 폐기',
           ccp: '작업장 온도 15℃ 이하 유지',
           status: '대기',
           assignee: '전원',
         });
-        curTime = breakEnd;
+        curTime = lunchEnd;
       }
 
-      const durationMin = Math.max(12, Math.round((item.qty / routing.speedUph) * 60));
+      // 2) 2편 종료 후 1편 전환 시: 중간 CIP 청소 (40분) 및 1편 정규 개시시각 (17:00) 정렬
+      if (shift === '전체' && item.shift === '1편' && !hasShift1Started) {
+        hasShift1Started = true;
+        const cipEnd = addMinutesToTime(curTime, 40);
+        tasks.push({
+          id: 'break-mid-cip',
+          seq: seq++,
+          workSeq: seq,
+          workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-CIP`,
+          shift: '청소',
+          time: `${curTime} ~ ${cipEnd}`,
+          type: '청소',
+          item: '편 교체 전 라인 분해 점검 및 중간 CIP 살균소독',
+          productName: '편 교체 전 라인 분해 점검 및 중간 CIP 살균소독',
+          qty: '-',
+          orderQty: 0,
+          prodQty: 0,
+          duration: '40분',
+          workers: '전원',
+          bom: '성형기 매트 침지소독, 칼날 열탕소독, 알레르기 유발물질 교차방지',
+          ccp: '칼날 파손 유무 육안 점검 및 ATP 측정 (≤30 RLU)',
+          status: '대기',
+          assignee: '전원',
+        });
+        // 1편 정규 시작시각(17:00)보다 이르면 17:00으로 정렬, 이미 지났으면 cipEnd 사용
+        if (parseTimeToMinutes(cipEnd) < 17 * 60) {
+          curTime = '17:00';
+        } else {
+          curTime = cipEnd;
+        }
+      }
+
+      // 3) 1편 가동 중 20:00 이후 석식 및 라인 중간 위생 점검 (30분)
+      if (!hasDinnerBreak && hasShift1Started && parseTimeToMinutes(curTime) >= 1200) {
+        hasDinnerBreak = true;
+        const dinnerEnd = addMinutesToTime(curTime, 30);
+        tasks.push({
+          id: 'break-dinner',
+          seq: seq++,
+          workSeq: seq,
+          workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-DINNER`,
+          shift: '휴게',
+          time: `${curTime} ~ ${dinnerEnd}`,
+          type: '휴게',
+          item: '석식 및 라인 중간 위생 점검',
+          productName: '석식 및 라인 중간 위생 점검',
+          qty: '-',
+          orderQty: 0,
+          prodQty: 0,
+          duration: '30분',
+          workers: '교대조',
+          bom: '작업대 알코올 소독, 교대조 인수인계',
+          ccp: 'HACCP 기준 점검',
+          status: '대기',
+          assignee: '야간조',
+        });
+        curTime = dinnerEnd;
+      }
+
+      // 엑셀 참고자료 시트 100% 반영: 품목별 실측 UPH 적용
+      const itemSpeed = resolveItemSpeed(item.cleanName, routing.speedUph);
+      const durationMin = Math.max(5, Math.round((item.qty / itemSpeed) * 60));
       const nextTime = addMinutesToTime(curTime, durationMin);
 
       // BOM 역산 및 주원료 요약
@@ -801,8 +978,34 @@ export async function GET(req: NextRequest) {
         unit: 'ea',
       });
 
-      // 품목 교체(Changeover) 5분 세척소독
+      // 품목 교체(Changeover) 5분 준비/청소 갭
       curTime = addMinutesToTime(nextTime, 5);
+    }
+
+    // 마감 분해 청소 (엑셀 시트 기준: 삼각 1호기 90분, 김밥 60분, 도시락 30분)
+    if (tasks.length > 0) {
+      const cleanDuration = routing.key.includes('삼각1') ? 90 : routing.key.includes('김밥') ? 60 : 30;
+      const cleanEnd = addMinutesToTime(curTime, cleanDuration);
+      tasks.push({
+        id: 'clean-final',
+        seq: seq++,
+        workSeq: seq,
+        workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-FINAL`,
+        shift: '청소',
+        time: `${curTime} ~ ${cleanEnd}`,
+        type: '청소',
+        item: `${routing.label} 마감 전면 분해 세척 및 CIP 살균 소독`,
+        productName: `${routing.label} 마감 전면 분해 세척 및 CIP 살균 소독`,
+        qty: '-',
+        orderQty: 0,
+        prodQty: 0,
+        duration: `${cleanDuration}분`,
+        workers: routing.workers,
+        bom: '컨베이어 벨트 완전 분해, 85℃ 고온 온수 세척, 소독수 도포',
+        ccp: '작업종료 위생 점검표 서명 및 잔여물 전무 확인 (ATP ≤30 RLU)',
+        status: '대기',
+        assignee: '전원',
+      });
     }
 
     // 소요 원부자재(BOM) 집계 포맷팅
