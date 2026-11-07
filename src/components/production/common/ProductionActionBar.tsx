@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import { useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
-import { HelpCircle, Check, RotateCcw, Search, Save, FileText, Layers, ListOrdered, Printer } from 'lucide-react';
+import { HelpCircle, Check, RotateCcw, Search, Save, FileText, Layers, ListOrdered, Printer, Plus, Trash2, FileSpreadsheet, Sparkles } from 'lucide-react';
 
 export interface ProductionActionButton {
   key: string;
   label: string;
-  icon?: 'search' | 'save' | 'reset' | 'print' | 'doc' | 'list';
+  icon?: 'search' | 'save' | 'reset' | 'print' | 'doc' | 'list' | 'plus' | 'trash' | 'excel' | 'sparkles';
   onClick?: () => void;
   disabled?: boolean;
 }
@@ -41,6 +41,14 @@ export const ProductionActionBar: React.FC<ProductionActionBarProps> = ({
         return <FileText size={12} className="stroke-[2.5]" />;
       case 'list':
         return <ListOrdered size={12} className="stroke-[2.5]" />;
+      case 'plus':
+        return <Plus size={12} className="stroke-[2.5]" />;
+      case 'trash':
+        return <Trash2 size={12} className="stroke-[2.5]" />;
+      case 'excel':
+        return <FileSpreadsheet size={12} className="stroke-[2.5]" />;
+      case 'sparkles':
+        return <Sparkles size={12} className="stroke-[2.5]" />;
       default:
         return null;
     }
