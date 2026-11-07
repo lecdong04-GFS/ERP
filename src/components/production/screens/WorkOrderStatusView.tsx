@@ -38,23 +38,72 @@ import { GanttTimelineView } from '@/components/production/GanttTimelineView';
 import { SpeedSimulatorView } from '@/components/production/SpeedSimulatorView';
 import { kstToday } from '@/lib/kst';
 
+const SEONGHYEONG_LINES = [
+  { id: 'ALL_SEONGHYEONG', name: '전체 성형장 (9개 라인 종합)', icon: '🌟', count: 9 },
+  { id: '도시락 1', name: '도시락 1', icon: '🍱', count: 55 },
+  { id: '김밥성형', name: '김밥성형', icon: '🍙', count: 39 },
+  { id: '김밥포장', name: '김밥포장', icon: '📦', count: 39 },
+  { id: '햄버거', name: '햄버거', icon: '🍔', count: 31 },
+  { id: '샌드위치', name: '샌드위치', icon: '🥪', count: 39 },
+  { id: '커플 포장기', name: '커플 포장기', icon: '🎁', count: 4 },
+  { id: '삼각김밥 1호기', name: '삼각김밥 1호기', icon: '🔺', count: 27 },
+  { id: '삼각김밥 2호기', name: '삼각김밥 2호기', icon: '🔺', count: 33 },
+  { id: '삼각김밥(더큰)', name: '삼각김밥(더큰)', icon: '🍙', count: 40 },
+];
+
+const JEONCHEORI_EQUIPMENT = [
+  { id: 'ALL_JEONCHEORI', name: '전체 전처리실 (20개 설비 종합)', icon: '🌟', count: 20 },
+  { id: '취반실', name: '취반실', icon: '🍚', count: 26 },
+  { id: '취반실(로터리 1호)', name: '취반실(로터리 1호)', icon: '🍚', count: 20 },
+  { id: '취반실(로터리 2호)', name: '취반실(로터리 2호)', icon: '🍚', count: 22 },
+  { id: '스팀솥 1번', name: '스팀솥 1번', icon: '🍲', count: 24 },
+  { id: '스팀솥 2번', name: '스팀솥 2번', icon: '🍲', count: 26 },
+  { id: '자동스팀솥 1호기', name: '자동스팀솥 1호기', icon: '🍲', count: 18 },
+  { id: '자동스팀솥 2호기', name: '자동스팀솥 2호기', icon: '🍲', count: 20 },
+  { id: '오토후라이어1', name: '오토후라이어1', icon: '🍗', count: 22 },
+  { id: '오토후라이어2', name: '오토후라이어2', icon: '🍗', count: 16 },
+  { id: '제트오븐', name: '제트오븐', icon: '♨️', count: 30 },
+  { id: '콤비오븐', name: '콤비오븐', icon: '♨️', count: 28 },
+  { id: '샐러드실(믹서1)', name: '샐러드실(믹서1)', icon: '🥗', count: 32 },
+  { id: '샐러드실(믹서2)', name: '샐러드실(믹서2)', icon: '🥗', count: 38 },
+  { id: '커팅실(후드)', name: '커팅실(후드)', icon: '🔪', count: 6 },
+  { id: '커팅실(푸드커터)', name: '커팅실(푸드커터)', icon: '🔪', count: 2 },
+  { id: '채소작업실(슬라이스)', name: '채소작업실(슬라이스)', icon: '🥬', count: 8 },
+  { id: '채소작업실(후드)', name: '채소작업실(후드)', icon: '🥬', count: 14 },
+  { id: '계량실(계량)', name: '계량실(계량)', icon: '⚖️', count: 2 },
+  { id: '계량실(냉동)', name: '계량실(냉동)', icon: '❄️', count: 2 },
+  { id: '빵슬라이스실(슬라이서)', name: '빵슬라이스실', icon: '🍞', count: 4 },
+];
+
 export const WorkOrderStatusView: React.FC = () => {
   const { openPrintModal, setWorkOrderPayload } = usePrintReport();
 
   // 조회 조건
   const [workDate, setWorkDate] = useState(kstToday() || '2026-11-06');
   const [shift, setShift] = useState<'전체' | '1편' | '2편'>('전체');
-  const [selectedLine, setSelectedLine] = useState<string>('도시락');
+  const [department, setDepartment] = useState<'SEONGHYEONG' | 'JEONCHEORI'>('SEONGHYEONG');
+  const [selectedLine, setSelectedLine] = useState<string>('도시락 1');
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);
   const lineDropdownRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('GANTT');
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
 
+  // 활성 공정에 따른 라인/설비 목록
+  const activeLineList = useMemo(() => {
+    return department === 'SEONGHYEONG' ? SEONGHYEONG_LINES : JEONCHEORI_EQUIPMENT;
+  }, [department]);
+
+  // 공정 변경 핸들러
+  const handleDepartmentChange = (dept: 'SEONGHYEONG' | 'JEONCHEORI') => {
+    setDepartment(dept);
+    setSelectedLine(dept === 'SEONGHYEONG' ? '도시락 1' : '취반실');
+  };
+
   // 현재 라인 정본 정의
   const currentLine = useMemo(() => {
-    return getLineDef(selectedLine);
-  }, [selectedLine]);
+    return getLineDef(selectedLine, department);
+  }, [selectedLine, department]);
 
   // 스케줄 상태 (순서 이동, 상태 토글, 담당자 입력)
   const [scheduleTasks, setScheduleTasks] = useState<ScheduleTask[]>([]);
@@ -329,214 +378,62 @@ export const WorkOrderStatusView: React.FC = () => {
         </div>
       )}
 
-      {/* 1. 상단 메인 컨트롤 바 (12개 라인 선택 + 일자 + 시프트 + 인쇄 액션) */}
-      <div className="bg-white border-b border-slate-300 px-6 py-3.5 shadow-sm shrink-0">
+      {/* 1. 상단 공정 대분류 스위처 및 작업 조건 바 */}
+      <div className="bg-white border-b border-slate-300 px-6 py-3 shadow-xs shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* 좌측: 핵심 3개 필터 (라인 선택, 날짜, 시프트) */}
-          <div className="flex flex-wrap items-center gap-4">
-            {/* 라인 선택 커스텀 드롭다운 (12개 최신 공정 지원) */}
-            <div className="flex items-center gap-2">
-              <span className="text-base font-black text-slate-700">라인:</span>
-              <div className="relative" ref={lineDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsLineDropdownOpen((prev) => !prev)}
-                  className="bg-white hover:bg-blue-50/80 border-2 border-blue-500 hover:border-blue-600 px-4 py-2 rounded-2xl shadow-sm hover:shadow transition-all flex items-center gap-3 cursor-pointer select-none group"
+          {/* 좌측: [🍱 성형장 타임테이블] vs [🍳 전처리실 타임테이블] 대분류 토글 */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => handleDepartmentChange('SEONGHYEONG')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-base transition-all cursor-pointer ${
+                  department === 'SEONGHYEONG'
+                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                    : 'text-slate-700 hover:bg-slate-200/80 hover:text-slate-950'
+                }`}
+              >
+                <span className="text-xl">🍱</span>
+                <span>성형장 타임테이블</span>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
+                    department === 'SEONGHYEONG'
+                      ? 'bg-emerald-700 text-emerald-100'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
                 >
-                  <span className="text-2xl leading-none">{currentLine.icon}</span>
-                  <div className="flex flex-col text-left">
-                    <span className="text-base sm:text-lg font-black text-slate-900 group-hover:text-blue-900 leading-tight">
-                      {currentLine.name}
-                    </span>
-                    <span className="text-[11px] sm:text-xs font-bold text-blue-700 leading-tight mt-0.5 max-w-[210px] truncate">
-                      {currentLine.desc}
-                    </span>
-                  </div>
-                  <ChevronDown
-                    size={20}
-                    className={`text-blue-600 transition-transform duration-200 ml-1 ${
-                      isLineDropdownOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
+                  9개 라인
+                </span>
+              </button>
 
-                {/* 12대 라인 팝오버 메뉴 */}
-                {isLineDropdownOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-[370px] sm:w-[410px] bg-white rounded-2xl shadow-2xl border-2 border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[580px] overflow-y-auto">
-                    {/* 그룹 1: 성형 및 포장 공정 (9대 라인) */}
-                    <div className="mb-2">
-                      <div className="px-3 py-1 flex items-center justify-between text-sm font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-base">🍱</span>
-                          <span>성형 및 포장 공정</span>
-                        </span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[11px] px-2 py-0.5 rounded-full font-black">
-                          9개 라인
-                        </span>
-                      </div>
-                      <div className="mt-1 space-y-1">
-                        {TIMETABLE_LINES.filter((l) => l.group === '성형 및 포장').map((l) => {
-                          const isSelected = selectedLine === l.id;
-                          return (
-                            <button
-                              key={l.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedLine(l.id);
-                                setIsLineDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer border ${
-                                isSelected
-                                  ? 'bg-blue-600 text-white shadow-sm border-blue-600'
-                                  : 'bg-white hover:bg-blue-50/70 border-transparent hover:border-blue-200 text-slate-800'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl leading-none shrink-0">{l.icon}</span>
-                                <div>
-                                  <div
-                                    className={`text-base font-black leading-tight ${
-                                      isSelected ? 'text-white' : 'text-slate-900'
-                                    }`}
-                                  >
-                                    {l.name}
-                                  </div>
-                                  <div
-                                    className={`text-xs font-bold mt-0.5 leading-tight ${
-                                      isSelected ? 'text-blue-100' : 'text-slate-600'
-                                    }`}
-                                  >
-                                    {l.desc}
-                                  </div>
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
-                                  <Check size={14} className="text-white" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 구분선 */}
-                    <div className="border-t border-slate-200 my-2" />
-
-                    {/* 그룹 2: 전처리 및 가공 공정 (3대 라인) */}
-                    <div className="mb-2">
-                      <div className="px-3 py-1 flex items-center justify-between text-sm font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-1">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-base">🍳</span>
-                          <span>전처리 및 가공 공정</span>
-                        </span>
-                        <span className="bg-blue-100 text-blue-800 text-[11px] px-2 py-0.5 rounded-full font-black">
-                          3대 공정
-                        </span>
-                      </div>
-                      <div className="mt-1 space-y-1">
-                        {TIMETABLE_LINES.filter((l) => l.group === '전처리 및 가공').map((l) => {
-                          const isSelected = selectedLine === l.id;
-                          return (
-                            <button
-                              key={l.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedLine(l.id);
-                                setIsLineDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer border ${
-                                isSelected
-                                  ? 'bg-blue-600 text-white shadow-sm border-blue-600'
-                                  : 'bg-white hover:bg-blue-50/70 border-transparent hover:border-blue-200 text-slate-800'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl leading-none shrink-0">{l.icon}</span>
-                                <div>
-                                  <div
-                                    className={`text-base font-black leading-tight ${
-                                      isSelected ? 'text-white' : 'text-slate-900'
-                                    }`}
-                                  >
-                                    {l.name}
-                                  </div>
-                                  <div
-                                    className={`text-xs font-bold mt-0.5 leading-tight ${
-                                      isSelected ? 'text-blue-100' : 'text-slate-600'
-                                    }`}
-                                  >
-                                    {l.desc}
-                                  </div>
-                                </div>
-                              </div>
-                              {isSelected && (
-                                <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
-                                  <Check size={14} className="text-white" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 구분선 */}
-                    <div className="border-t border-slate-200 my-2" />
-
-                    {/* 그룹 3: 통합 보기 */}
-                    <div>
-                      {(() => {
-                        const isSelected = selectedLine === 'ALL';
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedLine('ALL');
-                              setIsLineDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer border ${
-                              isSelected
-                                ? 'bg-indigo-700 text-white shadow-sm border-indigo-700'
-                                : 'bg-indigo-50/70 hover:bg-indigo-100/70 border-indigo-200 text-slate-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <span className="text-2xl leading-none shrink-0">🌟</span>
-                              <div>
-                                <div
-                                  className={`text-base font-black leading-tight ${
-                                    isSelected ? 'text-white' : 'text-indigo-950'
-                                  }`}
-                                >
-                                  전체 공정 통합보기 (ALL)
-                                </div>
-                                <div
-                                  className={`text-xs font-bold mt-0.5 leading-tight ${
-                                    isSelected ? 'text-indigo-100' : 'text-slate-600'
-                                  }`}
-                                >
-                                  12대 공정 전체 작업지시서 종합 스케줄 모니터링
-                                </div>
-                              </div>
-                            </div>
-                            {isSelected && (
-                              <div className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0 ml-2">
-                                <Check size={14} className="text-white" />
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => handleDepartmentChange('JEONCHEORI')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-base transition-all cursor-pointer ${
+                  department === 'JEONCHEORI'
+                    ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                    : 'text-slate-700 hover:bg-slate-200/80 hover:text-slate-950'
+                }`}
+              >
+                <span className="text-xl">🍳</span>
+                <span>전처리실 타임테이블</span>
+                <span
+                  className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
+                    department === 'JEONCHEORI'
+                      ? 'bg-indigo-700 text-indigo-100'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  20개 설비
+                </span>
+              </button>
             </div>
+          </div>
 
+          {/* 우측: 날짜, 시프트, 검색, 액션 버튼들 */}
+          <div className="flex flex-wrap items-center gap-3">
             {/* 작업일자 피커 */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
+            <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-slate-500 flex items-center gap-1">
                 <Calendar size={16} className="text-blue-600" /> 월/일:
               </span>
@@ -579,62 +476,97 @@ export const WorkOrderStatusView: React.FC = () => {
                 className="pl-7 pr-3 py-1 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
               />
             </div>
-          </div>
 
-          {/* 우측: 핵심 액션 버튼들 (PDF 즉시 인쇄, 종합본 인쇄, 저장, 새로고침) */}
-          <div className="flex items-center gap-2.5">
-            {/* 1. 해당 라인 PDF 열기/인쇄 (A4 가로 표준) */}
-            <button
-              type="button"
-              onClick={() => handleOpenPdf()}
-              title="이 라인의 A4 가로 일일 작업지시서 PDF를 새 탭에서 열어 인쇄합니다."
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <FileText size={16} />
-              <span>📄 라인 PDF 인쇄</span>
-              <ExternalLink size={13} className="opacity-75" />
-            </button>
+            {/* 인쇄 및 저장 버튼 그룹 */}
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
+              <button
+                type="button"
+                onClick={() => handleOpenPdf()}
+                title="이 라인의 A4 가로 일일 작업지시서 PDF를 새 탭에서 열어 인쇄합니다."
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <FileText size={15} />
+                <span>라인 PDF</span>
+                <ExternalLink size={12} className="opacity-75" />
+              </button>
 
-            {/* 2. 전 라인 마스터 종합본 PDF 인쇄 */}
-            <button
-              type="button"
-              onClick={handleOpenMasterPdf}
-              title="12개 라인 전체가 수록된 전라인 마스터 작업지시서 종합본(12페이지) PDF를 인쇄합니다."
-              className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl font-black text-xs shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <Printer size={16} />
-              <span>📑 전라인 종합본 인쇄</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleOpenMasterPdf}
+                title="전라인 종합본 PDF를 인쇄합니다."
+                className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Printer size={15} />
+                <span>종합본 인쇄</span>
+              </button>
 
-            {/* 3. 순서 및 상태 저장 */}
-            <button
-              type="button"
-              onClick={handleSaveOrders}
-              disabled={saving}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Save size={15} />
-              <span>{saving ? '저장 중...' : '순서 저장'}</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleSaveOrders}
+                disabled={saving}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save size={14} />
+                <span>{saving ? '저장 중...' : '순서 저장'}</span>
+              </button>
 
-            {/* 4. 새로고침 */}
-            <button
-              type="button"
-              onClick={() => {
-                setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
-                setMaterials(currentLine.materials.map((m) => ({ ...m })));
-                void fetchServerWorkOrders(workDate, shift, selectedLine);
-              }}
-              title="원래 타임테이블 스케줄로 새로고침"
-              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors"
-            >
-              <RotateCcw size={15} />
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
+                  setMaterials(currentLine.materials.map((m) => ({ ...m })));
+                  void fetchServerWorkOrders(workDate, shift, selectedLine);
+                }}
+                title="새로고침"
+                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors"
+              >
+                <RotateCcw size={15} />
+              </button>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* 2. 상단 라인 핵심 KPI 카드 바 (생산계획, 가동시간, UPH속도, 투입인원, 공정책임자) */}
-        <div className="mt-3.5 pt-3 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* 2. 각 라인 및 작업실/설비 선택 칩 바 (Pills Bar) */}
+      <div className="bg-slate-100/90 border-b border-slate-300 px-6 py-2.5 shrink-0 shadow-2xs">
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
+          <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 shrink-0 pr-3 border-r border-slate-300">
+            <span>{department === 'SEONGHYEONG' ? '🍱 성형장 라인:' : '🍳 전처리 설비:'}</span>
+          </div>
+
+          {activeLineList.map((item) => {
+            const isSelected = selectedLine === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedLine(item.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all cursor-pointer border shrink-0 ${
+                  isSelected
+                    ? department === 'SEONGHYEONG'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-300'
+                      : 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-2 ring-indigo-300'
+                    : 'bg-white hover:bg-slate-200/80 text-slate-800 border-slate-300 shadow-2xs'
+                }`}
+              >
+                <span className="text-base">{item.icon}</span>
+                <span>{item.name}</span>
+                <span
+                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-black ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {item.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. 상단 라인 핵심 KPI 카드 바 (생산계획, 가동시간, UPH속도, 투입인원, 공정책임자) */}
+      <div className="bg-white border-b border-slate-200 px-6 py-2.5 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* KPI 1: 일일 총 생산계획 */}
           <div className="bg-blue-50/70 border border-blue-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -824,6 +756,13 @@ export const WorkOrderStatusView: React.FC = () => {
           {activeTab === 'GANTT' && (
             <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
               <GanttTimelineView
+                category={department}
+                selectedLine={selectedLine}
+                onSelectCategory={(cat) => {
+                  if (cat === 'SEONGHYEONG' || cat === 'JEONCHEORI') {
+                    handleDepartmentChange(cat);
+                  }
+                }}
                 onSelectLine={(lineName) => {
                   setSelectedLine(lineName);
                   setActiveTab('TIMETABLE');
@@ -953,6 +892,8 @@ export const WorkOrderStatusView: React.FC = () => {
                                 ? 'bg-blue-100 text-blue-900 font-black'
                                 : task.type === '청소'
                                 ? 'bg-amber-100 text-amber-900 font-black'
+                                : task.type === '준비'
+                                ? 'bg-teal-100 text-teal-900 font-black'
                                 : task.type === '지원'
                                 ? 'bg-indigo-100 text-indigo-900 font-black'
                                 : 'bg-slate-200 text-slate-700 font-bold'

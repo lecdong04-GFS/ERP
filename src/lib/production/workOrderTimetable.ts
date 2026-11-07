@@ -8,7 +8,7 @@ export interface ScheduleTask {
   seq: number;
   shift: '1편' | '2편' | '지원' | '청소' | '휴게' | '1편선행' | '2편선행' | '1편지원' | '2편지원' | '도시락연계' | 'HMR연계' | '마감정리';
   time: string;
-  type: '생산' | '휴게' | '청소' | '지원';
+  type: '생산' | '휴게' | '청소' | '지원' | '준비';
   item: string;
   qty: string | number;
   duration: string;
@@ -543,8 +543,114 @@ ALL_LINE_ITEM.materials = TIMETABLE_LINES.flatMap((l) =>
   }))
 );
 
-export function getLineDef(lineId: string): LineWorkOrderDef {
-  if (lineId === 'ALL') return ALL_LINE_ITEM;
-  return TIMETABLE_LINES.find((l) => l.id === lineId) || TIMETABLE_LINES[0];
+import {
+  GANTT_ALL_LINES,
+  GANTT_SEONGHYEONG_LINES,
+  GANTT_JEONCHEORI_LINES,
+  GANTT_LINE_METAS,
+  getGanttLineSchedule,
+} from './ganttData';
+
+export function getDepartmentAllDef(dept: 'SEONGHYEONG' | 'JEONCHEORI'): LineWorkOrderDef {
+  const isSeonghyeong = dept === 'SEONGHYEONG';
+  const lines = isSeonghyeong ? GANTT_SEONGHYEONG_LINES : GANTT_JEONCHEORI_LINES;
+
+  let allTasks: ScheduleTask[] = [];
+  let totalVolume = 0;
+
+  lines.forEach((l) => {
+    const info = getGanttLineSchedule(l.name);
+    totalVolume += info.totalQty;
+    info.tasks.forEach((t) => {
+      allTasks.push({
+        ...t,
+        id: `${l.id}-${t.id}`,
+        item: `[${l.name}] ${t.item}`,
+      });
+    });
+  });
+
+  return {
+    id: isSeonghyeong ? 'ALL_SEONGHYEONG' : 'ALL_JEONCHEORI',
+    code: isSeonghyeong ? 'GFS-ALL-SH' : 'GFS-ALL-JC',
+    name: isSeonghyeong ? '성형장 전체 (9개 라인 종합)' : '전처리실 전체 (20개 설비 종합)',
+    group: isSeonghyeong ? '성형 및 포장' : '전처리 및 가공',
+    icon: isSeonghyeong ? '🍱' : '🍳',
+    desc: isSeonghyeong
+      ? '성형장 9대 라인(도시락·김밥·버거·샌드·삼각) 일일 종합 타임테이블'
+      : '전처리실 20대 설비(취반·가열·튀김·오븐·샐러드) 일일 종합 타임테이블',
+    docNo: isSeonghyeong ? 'GFS-WO-20261106-SH-ALL' : 'GFS-WO-20261106-JC-ALL',
+    title: isSeonghyeong ? '성형장 9개 라인 통합 작업지시서' : '전처리실 20개 설비 통합 작업지시서',
+    lineGroup: isSeonghyeong ? '성형장 종합 마스터' : '전처리실 종합 마스터',
+    speed: isSeonghyeong ? '성형 9개 라인 동시 가동' : '전처리 20개 설비 순차 가동',
+    totalPlan: isSeonghyeong
+      ? `${totalVolume.toLocaleString()} ea (성형장 일일 총 생산량)`
+      : `${lines.length}개 설비 총 ${allTasks.length}개 조리·가공 작업`,
+    totalTime: isSeonghyeong ? '08:10 ~ 01:25 익일' : '04:00 ~ 19:30',
+    leadWorker: isSeonghyeong ? '성형 공정 총괄 / 성형반장' : '전처리 공정 총괄 / 조리장',
+    personnel: isSeonghyeong ? '총 95명' : '총 25명',
+    pdfUrl: `/reports/work-orders/${isSeonghyeong ? '성형장_종합' : '전처리실_종합'}.pdf`,
+    schedule: allTasks,
+    materials: ALL_LINE_ITEM.materials,
+  };
+}
+
+export function getLineDef(lineId: string, dept: 'SEONGHYEONG' | 'JEONCHEORI' = 'SEONGHYEONG'): LineWorkOrderDef {
+  if (lineId === 'ALL_SEONGHYEONG') return getDepartmentAllDef('SEONGHYEONG');
+  if (lineId === 'ALL_JEONCHEORI') return getDepartmentAllDef('JEONCHEORI');
+  if (lineId === 'ALL') return getDepartmentAllDef(dept);
+
+  const found = TIMETABLE_LINES.find((l) => l.id === lineId || l.name === lineId);
+  if (found) return found;
+
+  const meta = GANTT_LINE_METAS[lineId];
+  const ganttInfo = getGanttLineSchedule(lineId);
+  if (ganttInfo.line) {
+    const isSeonghyeong = ganttInfo.line.category === '성형';
+    return {
+      id: lineId,
+      code: `GFS-${lineId}`,
+      name: lineId,
+      group: isSeonghyeong ? '성형 및 포장' : '전처리 및 가공',
+      icon: meta?.icon || (isSeonghyeong ? '🍱' : '🍳'),
+      desc: meta?.desc || `${lineId} 작업 공정 타임테이블`,
+      docNo: `GFS-WO-20261106-${lineId}`,
+      title: `${isSeonghyeong ? '성형장' : '전처리실'}: ${lineId} 일일 작업지시서`,
+      lineGroup: `${isSeonghyeong ? '성형장' : '전처리실'} / ${lineId}`,
+      speed: meta?.speedText || '정규 가동 UPH 준수',
+      totalPlan: isSeonghyeong
+        ? `${ganttInfo.totalQty.toLocaleString()} ea (타임테이블 계획 합계)`
+        : `${ganttInfo.totalQty.toLocaleString()} kg/배치 (원료가공)`,
+      totalTime: ganttInfo.timeRange,
+      leadWorker: meta?.leadWorker || (isSeonghyeong ? '성형 조장' : '전처리 담당'),
+      personnel: isSeonghyeong ? '14~18명' : '2~4명',
+      pdfUrl: `/reports/work-orders/${encodeURIComponent(lineId)}.pdf`,
+      schedule: ganttInfo.tasks,
+      materials: [
+        {
+          id: `m-${lineId}-1`,
+          name: `${lineId} 주원료 배합분`,
+          spec: '배치 규격',
+          requiredQty: 500,
+          unit: isSeonghyeong ? 'ea' : 'kg',
+          warehouse: '상온',
+          currentStock: 2500,
+          checked: true,
+        },
+        {
+          id: `m-${lineId}-2`,
+          name: '포장 부자재 및 위생용품',
+          spec: '표준 롤',
+          requiredQty: 20,
+          unit: '롤',
+          warehouse: '부자재',
+          currentStock: 150,
+          checked: true,
+        },
+      ],
+    };
+  }
+
+  return TIMETABLE_LINES[0];
 }
 

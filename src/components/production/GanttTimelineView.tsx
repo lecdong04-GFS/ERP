@@ -25,14 +25,32 @@ import {
 
 interface GanttTimelineViewProps {
   onSelectLine?: (lineName: string) => void;
+  category?: 'ALL' | 'SEONGHYEONG' | 'JEONCHEORI';
+  selectedLine?: string;
+  onSelectCategory?: (category: 'ALL' | 'SEONGHYEONG' | 'JEONCHEORI') => void;
 }
 
-export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLine }) => {
+export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({
+  onSelectLine,
+  category = 'ALL',
+  selectedLine,
+  onSelectCategory,
+}) => {
   // 필터 상태
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'SEONGHYEONG' | 'JEONCHEORI'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'SEONGHYEONG' | 'JEONCHEORI'>(category);
   const [timeRange, setTimeRange] = useState<'FULL' | 'DAY' | 'NIGHT' | 'PREP'>('FULL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBlock, setSelectedBlock] = useState<{ block: GanttBlock; line: GanttLine } | null>(null);
+  const [focusSelectedOnly, setFocusSelectedOnly] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (category) setCategoryFilter(category);
+  }, [category]);
+
+  const handleCategoryChange = (newCat: 'ALL' | 'SEONGHYEONG' | 'JEONCHEORI') => {
+    setCategoryFilter(newCat);
+    onSelectCategory?.(newCat);
+  };
 
   // 시간 축 설정 (1시간당 120px, 10분당 20px, 1분당 2px)
   const PX_PER_MIN = 2.0;
@@ -60,12 +78,17 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
     if (categoryFilter === 'SEONGHYEONG') lines = GANTT_SEONGHYEONG_LINES;
     if (categoryFilter === 'JEONCHEORI') lines = GANTT_JEONCHEORI_LINES;
 
+    if (focusSelectedOnly && selectedLine && selectedLine !== 'ALL') {
+      const single = lines.filter((l) => l.name === selectedLine || l.id === selectedLine);
+      if (single.length > 0) return single;
+    }
+
     if (!searchTerm.trim()) return lines;
     const q = searchTerm.toLowerCase();
     return lines.filter(
       (l) => l.name.toLowerCase().includes(q) || l.blocks.some((b) => b.name.toLowerCase().includes(q))
     );
-  }, [categoryFilter, searchTerm]);
+  }, [categoryFilter, searchTerm, focusSelectedOnly, selectedLine]);
 
   // 시간 눈금 목록 (1시간 단위 주 눈금)
   const hourTicks = useMemo(() => {
@@ -114,7 +137,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
           <button
             type="button"
-            onClick={() => setCategoryFilter('ALL')}
+            onClick={() => handleCategoryChange('ALL')}
             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
               categoryFilter === 'ALL'
                 ? 'bg-blue-600 text-white shadow-xs'
@@ -125,7 +148,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
           </button>
           <button
             type="button"
-            onClick={() => setCategoryFilter('SEONGHYEONG')}
+            onClick={() => handleCategoryChange('SEONGHYEONG')}
             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${
               categoryFilter === 'SEONGHYEONG'
                 ? 'bg-emerald-600 text-white shadow-xs'
@@ -137,7 +160,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
           </button>
           <button
             type="button"
-            onClick={() => setCategoryFilter('JEONCHEORI')}
+            onClick={() => handleCategoryChange('JEONCHEORI')}
             className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${
               categoryFilter === 'JEONCHEORI'
                 ? 'bg-indigo-600 text-white shadow-xs'
@@ -145,7 +168,7 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
             }`}
           >
             <span>🍳</span>
-            <span>전처리실 (21개 설비)</span>
+            <span>전처리실 (20개 설비)</span>
           </button>
         </div>
 
@@ -272,18 +295,40 @@ export const GanttTimelineView: React.FC<GanttTimelineViewProps> = ({ onSelectLi
             <div className="divide-y divide-slate-100">
               {filteredLines.map((line) => {
                 const isForming = line.category === '성형';
+                const isCurrentSelected = line.name === selectedLine;
                 return (
                   <div
                     key={line.id}
-                    className="flex hover:bg-blue-50/30 transition-colors group relative"
+                    className={`flex transition-colors group relative ${
+                      isCurrentSelected
+                        ? isForming
+                          ? 'bg-emerald-50/60'
+                          : 'bg-indigo-50/60'
+                        : 'hover:bg-blue-50/30'
+                    }`}
                   >
                     {/* 좌측 라인 헤더 (Sticky Left) */}
-                    <div className="sticky left-0 z-20 w-[240px] shrink-0 bg-white group-hover:bg-blue-50/80 px-4 py-2.5 flex items-center justify-between border-r-2 border-slate-200 shadow-xs transition-colors">
+                    <div
+                      onClick={() => onSelectLine?.(line.name)}
+                      title={`${line.name} 작업지시서 보기 (클릭)`}
+                      className={`sticky left-0 z-20 w-[240px] shrink-0 px-4 py-2.5 flex items-center justify-between border-r-2 shadow-xs transition-colors cursor-pointer ${
+                        isCurrentSelected
+                          ? isForming
+                            ? 'bg-emerald-100 border-r-emerald-500 border-l-4 border-l-emerald-600'
+                            : 'bg-indigo-100 border-r-indigo-500 border-l-4 border-l-indigo-600'
+                          : 'bg-white group-hover:bg-blue-50/80 border-slate-200'
+                      }`}
+                    >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-base shrink-0">{isForming ? '🍱' : '🍳'}</span>
                         <div className="min-w-0">
-                          <div className="text-xs font-black text-slate-900 truncate leading-tight">
-                            {line.name}
+                          <div className="text-xs font-black text-slate-900 truncate leading-tight flex items-center gap-1">
+                            <span>{line.name}</span>
+                            {isCurrentSelected && (
+                              <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.2 rounded font-black">
+                                선택
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] font-bold text-slate-500 leading-tight mt-0.5">
                             총 {line.totalBlocks}개 작업 블록

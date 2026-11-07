@@ -8706,3 +8706,362 @@ export const STANDARD_PRODUCT_SPEEDS: ProductSpeed[] = [
     "shift1Qty": 0
   }
 ];
+
+export interface LineMeta {
+  name: string;
+  category: '성형' | '전처리';
+  icon: string;
+  desc: string;
+  leadWorker: string;
+  speedText: string;
+}
+
+export const GANTT_LINE_METAS: Record<string, LineMeta> = {
+  '도시락 1': {
+    name: '도시락 1',
+    category: '성형',
+    icon: '🍱',
+    desc: '고진많/뭘좋아할지몰라/혜자시리즈 등 편의점 대표 도시락 완제품 조립·포장',
+    leadWorker: '도시락 조장 / 성형반장',
+    speedText: '목표 1,400~2,000 ea/h',
+  },
+  '김밥성형': {
+    name: '김밥성형',
+    category: '성형',
+    icon: '🍙',
+    desc: '알찬김밥 등 롤 김밥 자동 성형',
+    leadWorker: '김밥 성형조장',
+    speedText: '목표 1,200 ea/h',
+  },
+  '김밥포장': {
+    name: '김밥포장',
+    category: '성형',
+    icon: '📦',
+    desc: '성형 줄김밥 슬라이스 절단 및 필름 포장',
+    leadWorker: '김밥 포장조장',
+    speedText: '목표 1,200 ea/h',
+  },
+  '햄버거': {
+    name: '햄버거',
+    category: '성형',
+    icon: '🍔',
+    desc: '빅내슈빌핫치킨버거 등 번스 패티 토핑 및 포장',
+    leadWorker: '버거 조장',
+    speedText: '목표 1,100 ea/h',
+  },
+  '샌드위치': {
+    name: '샌드위치',
+    category: '성형',
+    icon: '🥪',
+    desc: 'K계란샌드 등 식빵 샌딩 및 삼각 패키징',
+    leadWorker: '샌드위치 조장',
+    speedText: '목표 1,000 ea/h',
+  },
+  '커플 포장기': {
+    name: '커플 포장기',
+    category: '성형',
+    icon: '🎁',
+    desc: '샌드위치/버거 페어 2입 세트 포장',
+    leadWorker: '포장 담당자',
+    speedText: '목표 800 ea/h',
+  },
+  '삼각김밥 1호기': {
+    name: '삼각김밥 1호기',
+    category: '성형',
+    icon: '🔺',
+    desc: '소고기볶음고추장 등 표준 삼각김밥 성형·포장',
+    leadWorker: '삼각 1호기 담당',
+    speedText: '목표 2,600 ea/h',
+  },
+  '삼각김밥 2호기': {
+    name: '삼각김밥 2호기',
+    category: '성형',
+    icon: '🔺',
+    desc: '참치마요 등 마요 토핑 삼각김밥 성형·포장',
+    leadWorker: '삼각 2호기 담당',
+    speedText: '목표 2,600 ea/h',
+  },
+  '삼각김밥(더큰)': {
+    name: '삼각김밥(더큰)',
+    category: '성형',
+    icon: '🍙',
+    desc: '더큰/풀사이즈 빅 삼각김밥 전용 자동 성형·포장',
+    leadWorker: '더큰삼각 담당',
+    speedText: '목표 2,200 ea/h',
+  },
+  '취반실': {
+    name: '취반실',
+    category: '전처리',
+    icon: '🍚',
+    desc: '백미/흑미 대용량 연속 자동 취반기',
+    leadWorker: '취반장',
+    speedText: '연속 취반 500 kg/h',
+  },
+  '취반실(로터리 1호)': {
+    name: '취반실(로터리 1호)',
+    category: '전처리',
+    icon: '🍚',
+    desc: '조미액/참기름 회전 배합 믹서 1호',
+    leadWorker: '취반 배합담당',
+    speedText: '배치 300 kg/회',
+  },
+  '취반실(로터리 2호)': {
+    name: '취반실(로터리 2호)',
+    category: '전처리',
+    icon: '🍚',
+    desc: '삼각김밥/김밥용 밥 회전 배합 믹서 2호',
+    leadWorker: '취반 배합담당',
+    speedText: '배치 300 kg/회',
+  },
+  '스팀솥 1번': {
+    name: '스팀솥 1번',
+    category: '전처리',
+    icon: '🍲',
+    desc: '육수/국물/조림 대용량 스팀 자켓솥 1번',
+    leadWorker: '가열조장',
+    speedText: '가열용량 400 L/배치',
+  },
+  '스팀솥 2번': {
+    name: '스팀솥 2번',
+    category: '전처리',
+    icon: '🍲',
+    desc: '소스/반찬류 스팀 자켓솥 2번',
+    leadWorker: '가열조장',
+    speedText: '가열용량 400 L/배치',
+  },
+  '자동스팀솥 1호기': {
+    name: '자동스팀솥 1호기',
+    category: '전처리',
+    icon: '🍲',
+    desc: '자동 교반 날개 장착 회전 볶음솥 1호 (불고기/제육)',
+    leadWorker: '볶음 조장',
+    speedText: '볶음용량 250 kg/배치',
+  },
+  '자동스팀솥 2호기': {
+    name: '자동스팀솥 2호기',
+    category: '전처리',
+    icon: '🍲',
+    desc: '자동 교반 날개 장착 회전 볶음솥 2호',
+    leadWorker: '볶음 조장',
+    speedText: '볶음용량 250 kg/배치',
+  },
+  '오토후라이어1': {
+    name: '오토후라이어1',
+    category: '전처리',
+    icon: '🍗',
+    desc: '돈까스/너비아니 연속 자동 튀김기 1호',
+    leadWorker: '유탕 조장',
+    speedText: '연속 유탕 200 kg/h',
+  },
+  '오토후라이어2': {
+    name: '오토후라이어2',
+    category: '전처리',
+    icon: '🍗',
+    desc: '치킨가라아게/튀김 연속 자동 튀김기 2호',
+    leadWorker: '유탕 조장',
+    speedText: '연속 유탕 200 kg/h',
+  },
+  '제트오븐': {
+    name: '제트오븐',
+    category: '전처리',
+    icon: '♨️',
+    desc: '고온 열풍 제트 분사 패티 급속 구이기',
+    leadWorker: '오븐 담당자',
+    speedText: '급속 구이 250 kg/h',
+  },
+  '콤비오븐': {
+    name: '콤비오븐',
+    category: '전처리',
+    icon: '♨️',
+    desc: '스팀+컨벡션 복합 육즙 보존 오븐',
+    leadWorker: '오븐 담당자',
+    speedText: '스팀구이 200 kg/h',
+  },
+  '샐러드실(믹서1)': {
+    name: '샐러드실(믹서1)',
+    category: '전처리',
+    icon: '🥗',
+    desc: '참치마요/콘샐러드 대형 패들 혼합기 1호',
+    leadWorker: '샐러드 조장',
+    speedText: '배합용량 300 kg/배치',
+  },
+  '샐러드실(믹서2)': {
+    name: '샐러드실(믹서2)',
+    category: '전처리',
+    icon: '🥗',
+    desc: '에그마요/속토핑 대형 패들 혼합기 2호',
+    leadWorker: '샐러드 조장',
+    speedText: '배합용량 300 kg/배치',
+  },
+  '커팅실(후드)': {
+    name: '커팅실(후드)',
+    category: '전처리',
+    icon: '🔪',
+    desc: '대파/고추 후드형 채소 슬라이스기',
+    leadWorker: '전처리 담당',
+    speedText: '세절 150 kg/h',
+  },
+  '커팅실(푸드커터)': {
+    name: '커팅실(푸드커터)',
+    category: '전처리',
+    icon: '🔪',
+    desc: '양파 찹/당근 다짐용 고속 분쇄 커터',
+    leadWorker: '전처리 담당',
+    speedText: '분쇄 200 kg/h',
+  },
+  '채소작업실(슬라이스)': {
+    name: '채소작업실(슬라이스)',
+    category: '전처리',
+    icon: '🥬',
+    desc: '양배추채/토마토/오이 규격 슬라이서',
+    leadWorker: '야채반장',
+    speedText: '슬라이스 200 kg/h',
+  },
+  '채소작업실(후드)': {
+    name: '채소작업실(후드)',
+    category: '전처리',
+    icon: '🥬',
+    desc: '상추/깻잎 오존수 세척 및 원심 탈수조',
+    leadWorker: '야채반장',
+    speedText: '세척·탈수 250 kg/h',
+  },
+  '계량실(계량)': {
+    name: '계량실(계량)',
+    category: '전처리',
+    icon: '⚖️',
+    desc: 'BOM 레시피 기준 양념·분말 정밀 계량',
+    leadWorker: '계량 책임자',
+    speedText: '정밀 전자저울 소분',
+  },
+  '계량실(냉동)': {
+    name: '계량실(냉동)',
+    category: '전처리',
+    icon: '❄️',
+    desc: '냉동 원료육 냉장 완만 해동 관리실',
+    leadWorker: '해동 관리자',
+    speedText: '완만 해동 500 kg/일',
+  },
+  '빵슬라이스실(슬라이서)': {
+    name: '빵슬라이스실(슬라이서)',
+    category: '전처리',
+    icon: '🍞',
+    desc: '식빵 및 번스 자동 슬라이스 분할기',
+    leadWorker: '베이커리 담당',
+    speedText: '슬라이스 1,500 ea/h',
+  },
+};
+
+/**
+ * 특정 라인 또는 설비의 Gantt 블록들을 세로 일일 작업지시서 형태의 태스크 목록으로 변환
+ */
+export function getGanttLineSchedule(lineName: string) {
+  const line = GANTT_ALL_LINES.find((l) => l.name === lineName || l.id === lineName);
+  if (!line) {
+    return { line: undefined, tasks: [], totalQty: 0, timeRange: '-' };
+  }
+
+  const speedMap = new Map<string, number>();
+  STANDARD_PRODUCT_SPEEDS.forEach((s) => {
+    speedMap.set(s.item.trim(), s.speed);
+  });
+
+  let totalQty = 0;
+  const tasks = line.blocks.map((b, idx) => {
+    const isClean = b.type === '청소';
+    const isMeal = b.type === '휴게';
+
+    // 생산 속도 기반 예상 수량 산출
+    let calculatedQty: string | number = '-';
+    if (b.type === '생산') {
+      let speed = speedMap.get(b.name.trim());
+      if (!speed) {
+        for (const [k, v] of speedMap.entries()) {
+          if (b.name.includes(k) || k.includes(b.name)) {
+            speed = v;
+            break;
+          }
+        }
+      }
+      if (speed) {
+        const q = Math.round((speed * b.durationMin) / 60);
+        calculatedQty = q;
+        totalQty += q;
+      } else {
+        const defaultSpeed = line.category === '전처리' ? 150 : 1200;
+        const q = Math.round((defaultSpeed * b.durationMin) / 60);
+        calculatedQty = line.category === '전처리' ? `${q} kg` : q;
+        if (typeof calculatedQty === 'number') totalQty += calculatedQty;
+      }
+    }
+
+    const shift = (b.startMin < 960 ? '2편' : '1편') as '1편' | '2편';
+
+    let ccp = 'HACCP 기준 준수 (작업장 청결·이물제어)';
+    let bom = '표준 규격 원부자재 및 배합 레시피 준수';
+
+    if (b.name.includes('도시락') || line.name.includes('도시락')) {
+      ccp = '가열육 중심온도 ≥75℃, 금속검출기 Fe 1.5mm / SUS 3.0mm';
+      bom = '백미밥 220g, 가열메인 50g, 볶음김치 30g, 계란말이 1ea';
+    } else if (b.name.includes('김밥') || line.name.includes('김밥')) {
+      ccp = '조미밥 품온 유지, 금속검출 및 절단 두께 균일도 점검';
+      bom = '김밥김 1장, 조미밥 140g, 단무지, 지단, 햄, 우엉, 당근';
+    } else if (b.name.includes('삼각') || line.name.includes('삼각')) {
+      ccp = '속재료 충진 중량 ±2g, 필름 핀홀 밀봉도 검사';
+      bom = '삼각김 1매, 조미밥 110g, 중앙 속재료 토핑 25g';
+    } else if (b.name.includes('버거') || line.name.includes('햄버거')) {
+      ccp = '패티 중심온도 ≥75℃, 번스 이물/탄화물 육안 선별';
+      bom = '버거번스 1개, 메인패티 1장, 슬라이스치즈, 소스 15g, 양상추';
+    } else if (b.name.includes('샌드') || line.name.includes('샌드위치')) {
+      ccp = '원료 저온 유지(≤10℃), 삼각 절단면 외관 검사';
+      bom = '식빵 2장, 에그마요 45g, 슬라이스햄 2장, 체다치즈 1장';
+    } else if (line.name.includes('취반')) {
+      ccp = '취반 심온 ≥95℃, 뜸들이기 시간 준수, 보온온도 유지';
+      bom = '신동진 햅쌀 20kg 포대, 취반유 120ml, 정제수 1.3배수';
+    } else if (line.name.includes('스팀') || line.name.includes('솥')) {
+      ccp = 'CCP-2 가열 중심온도 80℃ 이상 3분 유지, 당도/염도 체크';
+      bom = '원료육, 양념장 35%, 다진마늘, 양파, 대파, 참기름';
+    } else if (line.name.includes('후라이어') || line.name.includes('튀김')) {
+      ccp = 'CCP-3 유탕온도 175±5℃, 산가 2.5 이하 관리';
+      bom = '원료육/너비아니, 튀김가루, 신선 대두유(식용유)';
+    } else if (line.name.includes('오븐')) {
+      ccp = '오븐 내부온도 200℃, 중심온도 75℃ 이상 확인';
+      bom = '패티/원육, 마리네이드 시즈닝, 코팅오일';
+    } else if (line.name.includes('샐러드') || line.name.includes('믹서')) {
+      ccp = 'CCP-1B 냉장 원료 품온 ≤8℃ 유지, 교반시간 준수';
+      bom = '탈유참치 65%, 특제골드마요네즈 25%, 양념 및 야채 10%';
+    } else if (line.name.includes('커팅') || line.name.includes('채소')) {
+      ccp = '원심탈수 표면수분율 관리, 잔류염소 100~200ppm 침지소독';
+      bom = '국내산 신선 야채(양배추, 양상추, 대파, 당근, 토마토)';
+    }
+
+    if (isClean) {
+      ccp = '알코올 70% 분무 소독, 낙하물 전량 폐기, 세척 점검표 서명';
+      bom = '식품용 소독제, 청소용 고압 온수 호스';
+    } else if (isMeal) {
+      ccp = '작업장 온도 15℃ 이하 유지 확인';
+      bom = '교대 휴게 및 라인 점검';
+    }
+
+    return {
+      id: b.id,
+      seq: idx + 1,
+      shift,
+      time: `${b.startTime} ~ ${b.endTime}`,
+      type: b.type,
+      item: b.name,
+      qty: calculatedQty,
+      duration: `${b.durationMin}분`,
+      workers: line.category === '성형' ? '14~18명' : '2~4명',
+      bom,
+      ccp,
+      status: '대기' as const,
+      assignee: '',
+    };
+  });
+
+  const firstBlock = line.blocks[0];
+  const lastBlock = line.blocks[line.blocks.length - 1];
+  const timeRange = firstBlock && lastBlock ? `${firstBlock.startTime} ~ ${lastBlock.endTime}` : '-';
+
+  return { line, tasks, totalQty, timeRange };
+}
