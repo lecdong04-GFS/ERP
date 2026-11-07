@@ -4,6 +4,15 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 
+function normalizeForBom(name: string): string {
+  let s = (name || '').trim();
+  s = s.replace(/^\(주문\)\s*/, '');
+  s = s.replace(/\s*[12]편$/, '');
+  s = s.replace(/[12]$/, '');
+  s = s.replace(/\s+/g, '');
+  return s;
+}
+
 // GET /api/gfs/live-usage?date=YYYY-MM-DD
 // ERP 자체 계산: 금일 완제품 수주량 x BOM = 자재별 live 일사용량 (GFS H열과 동일식)
 // GFS를 열지 않아도 버팀일을 살아있게 만드는 엔진
@@ -20,19 +29,33 @@ export async function GET(req: NextRequest) {
       date = latest?.orderDate || kstToday();
     }
 
-    // 1) 당일 완제품 수주량 합산 (productId 기준)
+    // 1) 당일 완제품 수주량 합산 (productId 및 품목명 기준)
     const orders = await prisma.salesOrder.findMany({
       where: { orderDate: date },
-      include: { details: true },
+      include: {
+        details: {
+          include: { product: true },
+        },
+      },
     });
     const menuQty = new Map<number, { qty: number; code: string; name: string }>();
+    const menuQtyByNorm = new Map<string, { qty: number; code: string; name: string }>();
     for (const o of orders) {
       for (const d of o.details as any[]) {
         const pid = Number(d.productId);
-        if (!pid || !(Number(d.totalQty) > 0)) continue;
-        const cur = menuQty.get(pid) || { qty: 0, code: String(d.productCode || ''), name: String(d.productName || '') };
-        cur.qty += Number(d.totalQty);
+        const qty = Number(d.totalQty) || 0;
+        if (!pid || qty <= 0) continue;
+        const pName = d.product?.name || d.productName || '';
+        const cur = menuQty.get(pid) || { qty: 0, code: String(d.productCode || d.product?.productCode || ''), name: pName };
+        cur.qty += qty;
         menuQty.set(pid, cur);
+
+        const norm = normalizeForBom(pName);
+        if (norm) {
+          const normCur = menuQtyByNorm.get(norm) || { qty: 0, code: cur.code, name: pName };
+          normCur.qty += qty;
+          menuQtyByNorm.set(norm, normCur);
+        }
       }
     }
     if (menuQty.size === 0) {
@@ -45,6 +68,7 @@ export async function GET(req: NextRequest) {
     // 2) BOM 전개 (부모별 최신 헤더 1개)
     const headers = await prisma.bomHeader.findMany({
       include: {
+        parentProduct: true,
         details: true,
       },
       orderBy: { id: 'desc' },
@@ -67,7 +91,10 @@ export async function GET(req: NextRequest) {
     // 3) 자재별 live 일사용량 = SUM(메뉴수량 x 단위소요량) / 1000 (엑셀 H열과 동일식)
     const acc = new Map<number, { daily: number; menus: { code: string; name: string; qty: number; unitQty: number }[] }>();
     for (const h of latestHeaders) {
-      const mq = menuQty.get(h.parentProductId);
+      let mq = menuQty.get(h.parentProductId);
+      if (!mq && h.parentProduct?.name) {
+        mq = menuQtyByNorm.get(normalizeForBom(h.parentProduct.name));
+      }
       if (!mq || !(mq.qty > 0)) continue;
       for (const d of h.details) {
         const unitQty = Number(d.unitQty) || 0;
