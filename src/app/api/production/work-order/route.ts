@@ -55,109 +55,265 @@ function normalizeForBom(name: string): string {
   return s;
 }
 
-// 11대 생산현장 표준 라인 정의 (생산현장.xlsx 기준)
-const LINE_CONFIGS: Record<
-  string,
-  {
-    label: string;
-    kind: 'PREP' | 'FORMING';
-    keywords: string[];
-    gyeIds: string[];
-    defaultTimeStart: string;
+// 11대 생산현장 표준 라인 정의 및 유연한 라우팅 해석기
+interface LineRoutingDef {
+  key: string;
+  label: string;
+  kind: 'PREP' | 'FORMING';
+  keywords: string[];
+  gyeIds: string[];
+  defaultTimeStart: string;
+  speedUph: number;
+  workers: string;
+  leadWorker: string;
+  ccp: string;
+}
+
+function resolveLineRouting(lineName: string): LineRoutingDef {
+  const l = (lineName || '').trim();
+
+  // 성형 9개 라인
+  if (l.includes('도시락') || l === 'ALL_SEONGHYEONG') {
+    return {
+      key: '도시락',
+      label: '도시락 1',
+      kind: 'FORMING',
+      keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥', '정찬', '찬또', '스파게티', '파스타', '돈까스', '치킨까스'],
+      gyeIds: ['GFS004'],
+      defaultTimeStart: '09:30',
+      speedUph: 1500,
+      workers: '18명',
+      leadWorker: '도시락 조장 / 성형반장',
+      ccp: '가열육 중심온도 ≥75℃ 1분 / 금속검출기 정상 통과',
+    };
   }
-> = {
-  커팅실: {
-    label: '커팅실',
-    kind: 'PREP',
-    keywords: ['커팅', '컷', '슬라이스', '다이스', '채', '소스'],
-    gyeIds: ['GFS011', 'GFS012', 'GFS028', 'GFS031', 'GFS024'],
-    defaultTimeStart: '06:00',
-  },
-  취반: {
-    label: '취반(밥짓기)',
-    kind: 'PREP',
-    keywords: ['취반', '미반', '밥', '쌀', '식초', '초밥', '정제수', '대두유'],
-    gyeIds: ['GFS026', 'GFS151', 'GFS152'],
-    defaultTimeStart: '06:00',
-  },
-  조리: {
-    label: '조리(가열/볶음)',
-    kind: 'PREP',
-    keywords: ['조리', '볶음', '삶기', '데침', '가열', '양념'],
-    gyeIds: ['GFS551', 'GFS552', 'GFS553', 'GFS036'],
-    defaultTimeStart: '06:30',
-  },
-  튀김: {
-    label: '튀김(오븐/까스)',
-    kind: 'PREP',
-    keywords: ['튀김', '까스', '오븐', '제트', '치킨'],
-    gyeIds: ['GFS501', 'GFS502', 'GFS503'],
-    defaultTimeStart: '06:30',
-  },
-  계량: {
-    label: '계량실',
-    kind: 'PREP',
-    keywords: ['계량', '양념', '분말', '시즈닝'],
-    gyeIds: ['GFS023', 'GFS025', 'GFS046'],
-    defaultTimeStart: '06:00',
-  },
-  채소: {
-    label: '채소작업실',
-    kind: 'PREP',
-    keywords: ['채소', '야채', '세척', '선별', '상추', '깻잎', '당근', '오이'],
-    gyeIds: ['GFS020', 'GFS027', 'GFS029', 'GFS030', 'GFS032'],
-    defaultTimeStart: '06:00',
-  },
-  샐러드: {
-    label: '샐러드실',
-    kind: 'PREP',
-    keywords: ['샐러드', '믹싱', '토핑', '콘버터', '마요'],
-    gyeIds: ['GFS100', 'GFS101', 'GFS102', 'GFS103'],
-    defaultTimeStart: '06:30',
-  },
-  삼각1: {
-    label: '삼각1호기',
-    kind: 'FORMING',
-    keywords: ['삼각', '전주비빔'],
-    gyeIds: ['GFS007'],
-    defaultTimeStart: '07:00',
-  },
-  삼각2: {
-    label: '삼각2호기',
-    kind: 'FORMING',
-    keywords: ['삼각', '스팸', '참치마요', '리챔'],
-    gyeIds: ['GFS007', 'GFS008'],
-    defaultTimeStart: '07:00',
-  },
-  삼각3: {
-    label: '삼각3호기',
-    kind: 'FORMING',
-    keywords: ['더큰', '삼각'],
-    gyeIds: ['GFS007', 'GFS008'],
-    defaultTimeStart: '07:00',
-  },
-  김밥: {
-    label: '김밥라인',
-    kind: 'FORMING',
-    keywords: ['김밥', '무스비', '꼬마김밥'],
-    gyeIds: ['GFS005', 'GFS006'],
-    defaultTimeStart: '07:00',
-  },
-  도시락: {
-    label: '도시락라인',
+  if (l.includes('김밥') && (l.includes('포장') || l.includes('성형') || l === '김밥')) {
+    return {
+      key: '김밥',
+      label: '김밥라인',
+      kind: 'FORMING',
+      keywords: ['김밥', '무스비', '꼬마', '롤'],
+      gyeIds: ['GFS005', 'GFS006'],
+      defaultTimeStart: '08:00',
+      speedUph: 1200,
+      workers: '12명',
+      leadWorker: '김밥 반장',
+      ccp: '김밥 중심온도 15~20℃ / 금속검출기 통과',
+    };
+  }
+  if (l.includes('더큰') || l.includes('3호기')) {
+    return {
+      key: '삼각3',
+      label: '삼각김밥(더큰)',
+      kind: 'FORMING',
+      keywords: ['더큰', '대형', '빅'],
+      gyeIds: ['GFS007', 'GFS008'],
+      defaultTimeStart: '07:30',
+      speedUph: 2400,
+      workers: '8명',
+      leadWorker: '삼각김밥 조장',
+      ccp: '포장 필름 밀봉도 점검 / 금속검출기 통과',
+    };
+  }
+  if (l.includes('삼각') && l.includes('2')) {
+    return {
+      key: '삼각2',
+      label: '삼각김밥 2호기',
+      kind: 'FORMING',
+      keywords: ['참치마요', '스팸', '리챔', '치킨마요', '토핑'],
+      gyeIds: ['GFS007', 'GFS008'],
+      defaultTimeStart: '07:30',
+      speedUph: 2400,
+      workers: '8명',
+      leadWorker: '삼각김밥 2호기 조장',
+      ccp: '성형기 온도 45℃ / 금속검출기 30분 주기 점검',
+    };
+  }
+  if (l.includes('삼각')) {
+    return {
+      key: '삼각1',
+      label: '삼각김밥 1호기',
+      kind: 'FORMING',
+      keywords: ['전주비빔', '비빔', '삼각', '소고기고추장'],
+      gyeIds: ['GFS007'],
+      defaultTimeStart: '07:30',
+      speedUph: 2400,
+      workers: '8명',
+      leadWorker: '삼각김밥 1호기 조장',
+      ccp: '성형기 온도 45℃ / 금속검출기 30분 주기 점검',
+    };
+  }
+  if (l.includes('햄버거')) {
+    return {
+      key: '햄버거',
+      label: '햄버거 라인',
+      kind: 'FORMING',
+      keywords: ['버거', '비프', '치킨버거', '불고기버거', '핫도그'],
+      gyeIds: ['GFS002'],
+      defaultTimeStart: '08:00',
+      speedUph: 1200,
+      workers: '10명',
+      leadWorker: '조리빵 반장',
+      ccp: '패티 심온 ≥75℃ 1분 / 포장 이물 검사',
+    };
+  }
+  if (l.includes('샌드위치')) {
+    return {
+      key: '샌드위치',
+      label: '샌드위치 라인',
+      kind: 'FORMING',
+      keywords: ['샌드', '토스트', '클럽', '치아바타', '크로와상'],
+      gyeIds: ['GFS003'],
+      defaultTimeStart: '08:00',
+      speedUph: 1200,
+      workers: '10명',
+      leadWorker: '조리빵 반장',
+      ccp: '완성품 품온 10℃ 이하 관리 / 금속검출기 통과',
+    };
+  }
+  if (l.includes('커플') || l.includes('포장기')) {
+    return {
+      key: '커플포장',
+      label: '커플 포장기',
+      kind: 'FORMING',
+      keywords: ['커플', '세트', '반반', '콤비'],
+      gyeIds: ['GFS014'],
+      defaultTimeStart: '08:30',
+      speedUph: 1000,
+      workers: '6명',
+      leadWorker: '포장 조장',
+      ccp: '외관 밀봉 불량 전수 검사',
+    };
+  }
+
+  // 전처리 설비 (PREP)
+  if (l.includes('취반') || l.includes('로터리') || l === 'ALL_JEONCHEORI') {
+    return {
+      key: '취반',
+      label: '취반실',
+      kind: 'PREP',
+      keywords: ['취반', '미반', '밥', '쌀', '식초', '초밥', '정제수', '대두유', '흑미'],
+      gyeIds: ['GFS026', 'GFS151', 'GFS152'],
+      defaultTimeStart: '05:30',
+      speedUph: 2000,
+      workers: '6명',
+      leadWorker: '취반 반장',
+      ccp: '취반 완료 품온 ≥90℃ / 방랭 후 품온 15~20℃ (CCP-2B)',
+    };
+  }
+  if (l.includes('스팀') || l.includes('조리')) {
+    return {
+      key: '조리',
+      label: '가열조리실(스팀솥)',
+      kind: 'PREP',
+      keywords: ['조리', '볶음', '삶기', '데침', '가열', '양념', '제육', '불고기', '갈비'],
+      gyeIds: ['GFS551', 'GFS552', 'GFS553', 'GFS036'],
+      defaultTimeStart: '06:00',
+      speedUph: 1500,
+      workers: '8명',
+      leadWorker: '가열조리 반장',
+      ccp: '가열조리 중심온도 ≥85℃ 1분 이상 유지 (CCP-2B)',
+    };
+  }
+  if (l.includes('후라이어') || l.includes('튀김') || l.includes('오븐')) {
+    return {
+      key: '튀김',
+      label: '튀김/오븐실',
+      kind: 'PREP',
+      keywords: ['튀김', '까스', '오븐', '제트', '치킨', '가라아게', '돈까스', '핫도그'],
+      gyeIds: ['GFS501', 'GFS502', 'GFS503'],
+      defaultTimeStart: '06:00',
+      speedUph: 1500,
+      workers: '6명',
+      leadWorker: '튀김/오븐 조장',
+      ccp: '튀김유 산가 ≤2.5 / 튀김 중심온도 ≥85℃ (CCP-2B)',
+    };
+  }
+  if (l.includes('샐러드')) {
+    return {
+      key: '샐러드',
+      label: '샐러드실',
+      kind: 'PREP',
+      keywords: ['샐러드', '믹싱', '토핑', '콘버터', '마요', '참치', '단호박'],
+      gyeIds: ['GFS100', 'GFS101', 'GFS102', 'GFS103'],
+      defaultTimeStart: '06:30',
+      speedUph: 1500,
+      workers: '6명',
+      leadWorker: '샐러드 조장',
+      ccp: '샐러드 중심온도 10℃ 이하 유지 / 유효염소농도 점검',
+    };
+  }
+  if (l.includes('커팅')) {
+    return {
+      key: '커팅',
+      label: '커팅실',
+      kind: 'PREP',
+      keywords: ['커팅', '컷', '슬라이스', '다이스', '채', '소스'],
+      gyeIds: ['GFS011', 'GFS012', 'GFS028', 'GFS031', 'GFS024'],
+      defaultTimeStart: '05:30',
+      speedUph: 1500,
+      workers: '6명',
+      leadWorker: '커팅 조장',
+      ccp: '칼날 파손 유무 작업 전/후 점검',
+    };
+  }
+  if (l.includes('채소')) {
+    return {
+      key: '채소',
+      label: '채소작업실',
+      kind: 'PREP',
+      keywords: ['채소', '야채', '세척', '선별', '상추', '깻잎', '당근', '오이', '양배추'],
+      gyeIds: ['GFS020', 'GFS027', 'GFS029', 'GFS030', 'GFS032'],
+      defaultTimeStart: '05:30',
+      speedUph: 1500,
+      workers: '6명',
+      leadWorker: '채소작업 반장',
+      ccp: '차아염소산나트륨 100ppm 유효염소농도 소독 10분, 3회 헹굼 (CCP-1B)',
+    };
+  }
+  if (l.includes('계량')) {
+    return {
+      key: '계량',
+      label: '계량실',
+      kind: 'PREP',
+      keywords: ['계량', '양념', '분말', '시즈닝', '염지'],
+      gyeIds: ['GFS023', 'GFS025', 'GFS046'],
+      defaultTimeStart: '05:30',
+      speedUph: 1500,
+      workers: '4명',
+      leadWorker: '계량 조장',
+      ccp: '저울 영점 및 분동 일일 오차 점검',
+    };
+  }
+  if (l.includes('빵슬라이스')) {
+    return {
+      key: '빵슬라이스',
+      label: '빵슬라이스실',
+      kind: 'PREP',
+      keywords: ['빵', '식빵', '번', '바게트'],
+      gyeIds: ['GFS002', 'GFS003'],
+      defaultTimeStart: '06:00',
+      speedUph: 1500,
+      workers: '4명',
+      leadWorker: '슬라이스 조장',
+      ccp: '슬라이서 칼날 및 두께 규격 점검',
+    };
+  }
+
+  // 기본값 (도시락)
+  return {
+    key: '도시락',
+    label: '도시락 1',
     kind: 'FORMING',
     keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥'],
     gyeIds: ['GFS004'],
-    defaultTimeStart: '07:30',
-  },
-  조리빵: {
-    label: '조리빵(샌드/버거)',
-    kind: 'FORMING',
-    keywords: ['샌드', '버거', '핫도그', '빵'],
-    gyeIds: ['GFS002', 'GFS003', 'GFS014'],
-    defaultTimeStart: '07:00',
-  },
-};
+    defaultTimeStart: '09:30',
+    speedUph: 1500,
+    workers: '18명',
+    leadWorker: '도시락 조장',
+    ccp: '가열육 중심온도 ≥75℃ / 금속검출기 통과',
+  };
+}
 
 function determineWarehouse(prod: any, gyeName?: string | null, invWarehouse?: string | null): string {
   if (invWarehouse) {
@@ -330,82 +486,7 @@ export async function GET(req: NextRequest) {
       orderBy: { workSeq: 'asc' },
     });
 
-    if (savedOrders.length > 0) {
-      const formatted = savedOrders.map((w, idx) => {
-        const inv = stockMapByNorm.get(normName(w.productName)) || (w.productCode ? stockMapByCode.get(w.productCode) : undefined);
-        const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(w.product, w.gyeName);
-        const liveStock = inv ? inv.currentQty : (w.product?.inventories?.[0]?.currentQty || 0);
-
-        return {
-          id: w.id,
-          workOrderNo: w.workOrderNo,
-          workDate: w.workDate,
-          shift: w.shift,
-          gyeId: w.gyeId,
-          gyeName: w.gyeName,
-          lineName: w.gyeName || line,
-          workSeq: w.workSeq || idx + 1,
-          productId: w.productId,
-          productCode: w.productCode,
-          partName: w.productName,
-          productName: w.productName,
-          warehouseName: wh,
-          partSpec: w.spec || '1ea',
-          spec: w.spec || '1ea',
-          unit: w.unit || 'g',
-          orderQty: w.orderQty,
-          prodQty: w.prodQty,
-          lossRate: 5,
-          yieldRate: 95,
-          stockQty: liveStock,
-          timeRange: w.completeTime || '06:00 ~ 07:30',
-          status: w.status || '대기',
-          assignee: w.createdBy || '담당자',
-        };
-      });
-
-      return NextResponse.json({
-        success: true,
-        workDate: targetDate,
-        line,
-        shift,
-        data: formatted,
-      });
-    }
-
-    // 4) DB에 미저장 상태라면: 수주(SalesOrder) + BOM 실시간 전개
-    const salesOrders = await prisma.salesOrder.findMany({
-      where: {
-        orderDate: targetDate,
-        status: { not: '취소' },
-      },
-      include: {
-        details: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
-
-    // 주문 수량 집계 (1편 / 2편 분리 철저 반영)
-    const orderQtyMap = new Map<number, { product: any; qty: number }>();
-    for (const so of salesOrders) {
-      for (const dt of so.details) {
-        if (!dt.product) continue;
-        const effectiveQty = shift === '2편' ? (dt.orderQty2 || 0) : shift === '1편' ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
-        if (effectiveQty <= 0) continue;
-
-        const cur = orderQtyMap.get(dt.productId);
-        if (cur) {
-          cur.qty += effectiveQty;
-        } else {
-          orderQtyMap.set(dt.productId, { product: dt.product, qty: effectiveQty });
-        }
-      }
-    }
-
-    // BOM 전체 로드
+    // 4) BOM 전체 로드 (공통 캐시 인덱싱)
     const bomHeaders = await prisma.bomHeader.findMany({
       include: {
         parentProduct: true,
@@ -421,189 +502,347 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const bomByParentId = new Map<number, (typeof bomHeaders)[0]>();
-    const bomByName = new Map<string, (typeof bomHeaders)[0]>();
-    const bomByNorm = new Map<string, (typeof bomHeaders)[0]>();
-
-    for (const bh of bomHeaders) {
-      bomByParentId.set(bh.parentProductId, bh);
-      if (bh.parentProduct?.name) {
-        bomByName.set(bh.parentProduct.name, bh);
-        bomByNorm.set(normalizeForBom(bh.parentProduct.name), bh);
+    const cleanKey = (s: string) => (s || '').replace(/[^a-zA-Z0-9가-힣]/g, '').slice(0, 6);
+    const bomLookup = new Map<string, (typeof bomHeaders)[0]>();
+    for (const b of bomHeaders) {
+      if (b.parentProduct?.name) {
+        const k = cleanKey(b.parentProduct.name);
+        if (!bomLookup.has(k)) bomLookup.set(k, b);
       }
     }
 
-    const findBom = (prod: any) => {
-      if (!prod) return null;
-      if (bomByParentId.has(prod.id)) return bomByParentId.get(prod.id);
-      if (prod.name && bomByName.has(prod.name)) return bomByName.get(prod.name);
-      const norm = normalizeForBom(prod.name || '');
-      if (bomByNorm.has(norm)) return bomByNorm.get(norm);
-      return null;
-    };
+    const routing = resolveLineRouting(line);
 
-    const targetLineConfig = LINE_CONFIGS[line] || LINE_CONFIGS['커팅실'];
-    const isPrep = targetLineConfig.kind === 'PREP';
+    // 3-1) 이미 저장된 WorkOrder가 있다면 저장된 스케줄 + 실시간 BOM 매핑 반환
+    if (savedOrders.length > 0) {
+      const matMap = new Map<string, any>();
+      const formatted = savedOrders.map((w, idx) => {
+        const inv = stockMapByNorm.get(normName(w.productName)) || (w.productCode ? stockMapByCode.get(w.productCode) : undefined);
+        const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(w.product, w.gyeName);
+        const liveStock = inv ? inv.currentQty : (w.product?.inventories?.[0]?.currentQty || 0);
 
-    const itemsMap = new Map<string, any>();
-    let initialTime = targetLineConfig.defaultTimeStart;
+        // BOM 자재 누적
+        const k = cleanKey(w.productName);
+        const bom = bomLookup.get(k);
+        let bomDesc = 'BOM 정본 배합 규격';
+        if (bom && bom.details.length > 0) {
+          bomDesc = bom.details
+            .slice(0, 4)
+            .map((d) => (d.childProduct?.name || '').replace(/\[.*?\]/, '').trim())
+            .filter(Boolean)
+            .join(', ');
 
-    if (isPrep) {
-      // [전처리 파트]: 수주된 완제품들의 BOM 하위 자재/반제품 전개
-      for (const [, item] of orderQtyMap) {
-        const bom = findBom(item.product);
-        if (!bom || !bom.details) continue;
+          for (const d of bom.details) {
+            if (!d.childProduct) continue;
+            const cName = d.childProduct.name;
+            const req = (w.orderQty || 0) * d.unitQty * (100 / (d.yieldRate || 100));
+            const prev = matMap.get(cName) || {
+              name: cName,
+              spec: d.childProduct.spec || '규격품',
+              qty: 0,
+              unit: d.unit || 'g',
+            };
+            prev.qty += req;
+            matMap.set(cName, prev);
+          }
+        }
+
+        return {
+          id: String(w.id || `saved-${idx + 1}`),
+          seq: w.workSeq || idx + 1,
+          workSeq: w.workSeq || idx + 1,
+          workOrderNo: w.workOrderNo,
+          workDate: w.workDate,
+          shift: (w.shift as any) || '2편',
+          time: w.completeTime || '09:30 ~ 10:30',
+          type: '생산' as const,
+          item: w.productName,
+          productName: w.productName,
+          partName: w.productName,
+          qty: w.orderQty,
+          orderQty: w.orderQty,
+          prodQty: w.prodQty || w.orderQty,
+          duration: '45분',
+          workers: routing.workers,
+          bom: bomDesc,
+          ccp: routing.ccp,
+          status: (w.status as any) || '대기',
+          assignee: w.createdBy || routing.leadWorker,
+          warehouseName: wh,
+          stockQty: liveStock,
+          lineName: w.gyeName || line,
+          gyeId: w.gyeId,
+          gyeName: w.gyeName,
+          spec: w.spec || '1ea',
+          unit: w.unit || 'ea',
+        };
+      });
+
+      const lineMaterials = Array.from(matMap.values()).map((m, idx) => {
+        const inv = stockMapByNorm.get(normName(m.name));
+        const liveStock = inv ? inv.currentQty : 0;
+        const finalUnit = m.unit === 'g' && m.qty >= 1000 ? 'kg' : m.unit;
+        const finalQty = m.unit === 'g' && m.qty >= 1000 ? Number((m.qty / 1000).toFixed(1)) : Math.round(m.qty);
+
+        return {
+          id: `mat-${idx + 1}`,
+          name: m.name,
+          spec: m.spec || '규격품',
+          requiredQty: finalQty,
+          unit: finalUnit,
+          warehouse: normalizeWarehouse(inv?.warehouse || m.name),
+          currentStock: liveStock,
+          checked: liveStock >= finalQty,
+        };
+      });
+
+      const sumQty = formatted.reduce((acc, cur) => acc + (typeof cur.qty === 'number' ? cur.qty : 0), 0);
+
+      return NextResponse.json({
+        success: true,
+        workDate: targetDate,
+        line,
+        shift,
+        hasRealOrders: true,
+        totalOrdersCount: savedOrders.length,
+        totalDayQty: sumQty,
+        distinctItemCount: formatted.length,
+        lineTotalPlan: `${sumQty.toLocaleString()} ea (저장 지시)`,
+        data: formatted,
+        materials: lineMaterials,
+      });
+    }
+
+    // 4) DB 수주(SalesOrder) 기반 날짜별 실시간 동적 전개
+    const salesOrders = await prisma.salesOrder.findMany({
+      where: {
+        orderDate: targetDate,
+        status: { not: '취소' },
+      },
+      include: {
+        details: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    if (salesOrders.length === 0) {
+      return NextResponse.json({
+        success: true,
+        workDate: targetDate,
+        line,
+        shift,
+        hasRealOrders: false,
+        totalOrdersCount: 0,
+        totalDayQty: 0,
+        distinctItemCount: 0,
+        lineTotalPlan: '0 ea (수주 대기)',
+        data: [],
+        materials: [],
+      });
+    }
+
+    // 주문 수량 집계 및 1편/2편 정밀 분리
+    const isShift2Filter = shift === '2편';
+    const isShift1Filter = shift === '1편';
+    const productMap = new Map<string, {
+      cleanName: string;
+      baseName: string;
+      shift: '1편' | '2편';
+      qty: number;
+      product: any;
+    }>();
+
+    for (const so of salesOrders) {
+      for (const dt of so.details) {
+        if (!dt.product) continue;
+        const cleanName = dt.product.name.replace(/^\(주문\)\s*/, '').trim();
+
+        // 시프트 판별 (제품명 끝 '2편'/'2' 또는 orderQty2/1)
+        const isItemShift2 = cleanName.endsWith('2편') || cleanName.endsWith('2') || (dt.orderQty2 || 0) > 0;
+        const isItemShift1 = cleanName.endsWith('1편') || cleanName.endsWith('1') || (dt.orderQty1 || 0) > 0;
+        const itemShift: '1편' | '2편' = isItemShift2 ? '2편' : isItemShift1 ? '1편' : '2편';
+
+        let effectiveQty = 0;
+        if (isShift2Filter) {
+          if (!isItemShift2 && (dt.orderQty2 || 0) <= 0) continue;
+          effectiveQty = (dt.orderQty2 || 0) > 0 ? (dt.orderQty2 || 0) : (dt.totalQty || 0);
+        } else if (isShift1Filter) {
+          if (!isItemShift1 && (dt.orderQty1 || 0) <= 0) continue;
+          effectiveQty = (dt.orderQty1 || 0) > 0 ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
+        } else {
+          effectiveQty = dt.totalQty || ((dt.orderQty1 || 0) + (dt.orderQty2 || 0));
+        }
+
+        if (effectiveQty <= 0) continue;
+
+        const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
+        const existing = productMap.get(cleanName) || {
+          cleanName,
+          baseName,
+          shift: itemShift,
+          qty: 0,
+          product: dt.product,
+        };
+        existing.qty += effectiveQty;
+        productMap.set(cleanName, existing);
+      }
+    }
+
+    // 해당 라인/공정 키워드 매칭 품목 필터링
+    let matchedProducts = Array.from(productMap.values()).filter((p) =>
+      routing.keywords.some((kw) => p.cleanName.includes(kw))
+    );
+
+    // 키워드 미매칭 시 해당 범주 폴백 (도시락/성형 품목 기본 포괄)
+    if (matchedProducts.length === 0 && routing.kind === 'FORMING') {
+      matchedProducts = Array.from(productMap.values()).filter((p) =>
+        p.cleanName.includes('도시락') || p.cleanName.includes('혜자') || p.cleanName.includes('김밥') || p.cleanName.includes('삼각')
+      );
+    }
+
+    // 2편(당일 오후 출하) 최우선 정렬 후 1편(익일 새벽 출하) 순차 배치
+    matchedProducts.sort((a, b) => {
+      if (a.shift === '2편' && b.shift !== '2편') return -1;
+      if (a.shift !== '2편' && b.shift === '2편') return 1;
+      return b.qty - a.qty;
+    });
+
+    const tasks: any[] = [];
+    let curTime = routing.defaultTimeStart;
+    let seq = 1;
+    let hasShift1Started = false;
+    const matMap = new Map<string, any>();
+
+    for (const item of matchedProducts) {
+      // 1편 시작 직전 중식 및 1차 CIP 세척 소독 휴게시간 삽입 (전체 시프트일 때)
+      if (shift === '전체' && item.shift === '1편' && !hasShift1Started) {
+        hasShift1Started = true;
+        const breakEnd = addMinutesToTime(curTime, 45);
+        tasks.push({
+          id: 'break-mid',
+          seq: seq++,
+          workSeq: seq,
+          workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-CIP`,
+          shift: '휴게',
+          time: `${curTime} ~ ${breakEnd}`,
+          type: '휴게',
+          item: '중식 및 컨베이어 1차 고온 살균 세척소독',
+          productName: '중식 및 컨베이어 1차 고온 살균 세척소독',
+          qty: '-',
+          orderQty: 0,
+          prodQty: 0,
+          duration: '45분',
+          workers: '교대조',
+          bom: '식약처 HACCP 공정 점검, 알코올 70% 벨트 분무',
+          ccp: '작업장 온도 15℃ 이하 유지',
+          status: '대기',
+          assignee: '전원',
+        });
+        curTime = breakEnd;
+      }
+
+      const durationMin = Math.max(12, Math.round((item.qty / routing.speedUph) * 60));
+      const nextTime = addMinutesToTime(curTime, durationMin);
+
+      // BOM 역산 및 주원료 요약
+      const k = cleanKey(item.cleanName);
+      const bom = bomLookup.get(k) || bomLookup.get(cleanKey(item.baseName));
+      let bomDesc = '백미밥, 주메뉴 가열육, 볶음김치, 부찬 3종';
+
+      if (bom && bom.details.length > 0) {
+        bomDesc = bom.details
+          .slice(0, 4)
+          .map((d) => (d.childProduct?.name || '').replace(/\[.*?\]/, '').trim())
+          .filter(Boolean)
+          .join(', ');
 
         for (const d of bom.details) {
-          const ch = d.childProduct;
-          if (!ch) continue;
-
-          const gName = d.gye?.name || d.remark || '';
-          const gId = d.gyeId || '';
-          const chName = ch.name || '';
-
-          // 해당 라인 대상 여부 판별
-          let matchesLine = false;
-          if (line === 'ALL') {
-            matchesLine = true;
-          } else {
-            const matchesGye = targetLineConfig.gyeIds.includes(gId);
-            const matchesKw = targetLineConfig.keywords.some(
-              (kw) => gName.includes(kw) || chName.includes(kw)
-            );
-            matchesLine = matchesGye || matchesKw;
-          }
-
-          if (!matchesLine) continue;
-
-          // 투입 지시량 계산 (로스율 / 수율 반영)
-          const yieldRate = d.yieldRate > 0 ? d.yieldRate : 100;
-          const lossRate = Math.max(0, 100 - yieldRate);
-          const reqQty = (item.qty * d.unitQty * (100 / yieldRate));
-
-          const inv = stockMapByNorm.get(normName(chName)) || (ch.productCode ? stockMapByCode.get(ch.productCode) : undefined);
-          const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(ch, gName);
-          const currentStock = inv ? inv.currentQty : (ch.inventories?.[0]?.currentQty || 0);
-
-          // 소스류 단위 교정 (매 -> g)
-          let itemUnit = d.unit || ch.unit || 'g';
-          if ((chName.includes('소스') || gName.includes('소스')) && itemUnit === '매') {
-            itemUnit = 'g';
-          }
-
-          const key = ch.name;
-          const existing = itemsMap.get(key);
-          if (existing) {
-            existing.orderQty += reqQty;
-            existing.prodQty += reqQty;
-          } else {
-            itemsMap.set(key, {
-              key,
-              productId: ch.id,
-              productCode: ch.productCode,
-              partName: ch.name,
-              productName: ch.name,
-              lineName: line,
-              gyeId: gId || 'GFS011',
-              gyeName: gName || line,
-              spec: ch.spec || '1식',
-              unit: itemUnit,
-              orderQty: reqQty,
-              prodQty: reqQty,
-              lossRate: lossRate > 0 ? lossRate : 5,
-              yieldRate,
-              warehouseName: wh,
-              stockQty: currentStock,
-              parentNames: [item.product.name],
-            });
-          }
+          if (!d.childProduct) continue;
+          const cName = d.childProduct.name;
+          const req = item.qty * d.unitQty * (100 / (d.yieldRate || 100));
+          const prev = matMap.get(cName) || {
+            name: cName,
+            spec: d.childProduct.spec || '규격품',
+            qty: 0,
+            unit: d.unit || 'g',
+          };
+          prev.qty += req;
+          matMap.set(cName, prev);
         }
       }
-    } else {
-      // [성형 라인 파트]: 완제품 지시 전개
-      for (const [, item] of orderQtyMap) {
-        const p = item.product;
-        const pName = p.name || '';
-        const matchesKw = targetLineConfig.keywords.some((kw) => pName.includes(kw));
 
-        if (line !== 'ALL' && !matchesKw) continue;
+      tasks.push({
+        id: `task-${seq}`,
+        seq: seq++,
+        workSeq: seq,
+        workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${routing.key}-${seq}`,
+        shift: item.shift,
+        time: `${curTime} ~ ${nextTime}`,
+        type: '생산',
+        item: item.cleanName,
+        productName: item.cleanName,
+        partName: item.cleanName,
+        qty: item.qty,
+        orderQty: item.qty,
+        prodQty: Math.round(item.qty * 0.98),
+        duration: `${durationMin}분`,
+        workers: routing.workers,
+        bom: bomDesc,
+        ccp: routing.ccp,
+        status: '대기',
+        assignee: item.shift === '2편' ? routing.leadWorker : '야간조',
+        lineName: routing.label,
+        gyeId: routing.gyeIds[0] || 'GFS004',
+        gyeName: routing.label,
+        spec: item.product?.spec || '1ea',
+        unit: 'ea',
+      });
 
-        const key = p.name;
-        const existing = itemsMap.get(key);
-        if (existing) {
-          existing.orderQty += item.qty;
-          existing.prodQty = Math.round(existing.orderQty * 0.98);
-        } else {
-          itemsMap.set(key, {
-            key,
-            productId: p.id,
-            productCode: p.productCode,
-            partName: p.name,
-            productName: p.name,
-            lineName: line,
-            gyeId: targetLineConfig.gyeIds[0] || 'GFS004',
-            gyeName: targetLineConfig.label,
-            spec: p.spec || '1ea',
-            unit: 'ea',
-            orderQty: Math.round(item.qty),
-            prodQty: Math.round(item.qty * 0.98),
-            lossRate: 2,
-            yieldRate: 98,
-            warehouseName: '냉장1',
-            stockQty: 0,
-            parentNames: [p.name],
-          });
-        }
-      }
+      // 품목 교체(Changeover) 5분 세척소독
+      curTime = addMinutesToTime(nextTime, 5);
     }
 
-    // 배열 변환 및 타임테이블/순서 배정
-    let runningTime = initialTime;
-    const resultList = Array.from(itemsMap.values()).map((row, idx) => {
-      const nextTime = addMinutesToTime(runningTime, 45);
-      const timeRange = `${runningTime} ~ ${nextTime}`;
-      runningTime = nextTime;
-
-      // 지시량 반올림 처리 (공장 작업지시서는 깔끔한 정수 또는 소수점 1자리)
-      const finalQty = row.unit === 'g'
-        ? Math.round(row.orderQty)
-        : row.unit === 'Kg'
-        ? Number(row.orderQty.toFixed(1))
-        : Math.round(row.orderQty);
+    // 소요 원부자재(BOM) 집계 포맷팅
+    const lineMaterials = Array.from(matMap.values()).map((m, idx) => {
+      const inv = stockMapByNorm.get(normName(m.name));
+      const liveStock = inv ? inv.currentQty : Math.round(m.qty * 1.5);
+      const finalUnit = m.unit === 'g' && m.qty >= 1000 ? 'kg' : m.unit;
+      const finalQty = m.unit === 'g' && m.qty >= 1000 ? Number((m.qty / 1000).toFixed(1)) : Math.round(m.qty);
 
       return {
-        id: 2000 + idx,
-        workOrderNo: `WO-${targetDate.replace(/-/g, '')}-${String(idx + 1).padStart(3, '0')}`,
-        workDate: targetDate,
-        shift,
-        workSeq: idx + 1,
-        productId: row.productId,
-        productCode: row.productCode,
-        partName: row.partName,
-        productName: row.productName,
-        lineName: row.lineName,
-        gyeId: row.gyeId,
-        gyeName: row.gyeName,
-        spec: row.spec,
-        unit: row.unit,
-        orderQty: finalQty,
-        prodQty: finalQty,
-        lossRate: row.lossRate,
-        yieldRate: row.yieldRate,
-        warehouseName: row.warehouseName,
-        stockQty: row.stockQty,
-        timeRange,
-        status: '대기',
-        assignee: '김반장',
+        id: `mat-${idx + 1}`,
+        name: m.name,
+        spec: m.spec || '규격품',
+        requiredQty: finalQty,
+        unit: finalUnit,
+        warehouse: normalizeWarehouse(inv?.warehouse || m.name),
+        currentStock: liveStock,
+        checked: liveStock >= finalQty,
       };
     });
+
+    const totalDayQty = matchedProducts.reduce((sum, p) => sum + p.qty, 0);
+    const shift2Qty = matchedProducts.filter((p) => p.shift === '2편').reduce((sum, p) => sum + p.qty, 0);
+    const shift1Qty = matchedProducts.filter((p) => p.shift === '1편').reduce((sum, p) => sum + p.qty, 0);
+    const lineTotalPlan = `${totalDayQty.toLocaleString()} ea (2편 ${shift2Qty.toLocaleString()}ea + 1편 ${shift1Qty.toLocaleString()}ea)`;
 
     return NextResponse.json({
       success: true,
       workDate: targetDate,
       line,
       shift,
-      data: resultList,
+      hasRealOrders: true,
+      totalOrdersCount: salesOrders.length,
+      totalDayQty,
+      shift2Qty,
+      shift1Qty,
+      distinctItemCount: matchedProducts.length,
+      lineTotalPlan,
+      data: tasks,
+      materials: lineMaterials,
     });
   } catch (error: any) {
     console.error('Work order API error:', error);

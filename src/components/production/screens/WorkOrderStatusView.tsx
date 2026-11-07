@@ -111,6 +111,15 @@ export const WorkOrderStatusView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [realOrderMeta, setRealOrderMeta] = useState<{
+    hasRealOrders: boolean;
+    totalOrdersCount: number;
+    totalDayQty: number;
+    shift2Qty?: number;
+    shift1Qty?: number;
+    distinctItemCount: number;
+    lineTotalPlan?: string;
+  } | null>(null);
 
   // 드래그 앤 드롭 상태
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -146,32 +155,33 @@ export const WorkOrderStatusView: React.FC = () => {
       );
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-        // DB 저장 상태가 있으면 상태/담당자 병합
-        const serverMap = new Map<string, any>();
-        json.data.forEach((d: any) => {
-          if (d.productName) serverMap.set(d.productName, d);
+        setScheduleTasks(json.data);
+        if (Array.isArray(json.materials) && json.materials.length > 0) {
+          setMaterials(json.materials);
+        }
+        setRealOrderMeta({
+          hasRealOrders: Boolean(json.hasRealOrders),
+          totalOrdersCount: json.totalOrdersCount || 0,
+          totalDayQty: json.totalDayQty || 0,
+          shift2Qty: json.shift2Qty || 0,
+          shift1Qty: json.shift1Qty || 0,
+          distinctItemCount: json.distinctItemCount || json.data.length,
+          lineTotalPlan: json.lineTotalPlan,
         });
-
-        setScheduleTasks((prev) =>
-          prev.map((task) => {
-            const matched = serverMap.get(task.item);
-            if (matched) {
-              return {
-                ...task,
-                status: matched.status || task.status,
-                assignee: matched.assignee || task.assignee,
-              };
-            }
-            return task;
-          })
-        );
+      } else {
+        setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
+        setMaterials(currentLine.materials.map((m) => ({ ...m })));
+        setRealOrderMeta(null);
       }
     } catch (err) {
       console.error('Failed to load work orders:', err);
+      setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
+      setMaterials(currentLine.materials.map((m) => ({ ...m })));
+      setRealOrderMeta(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentLine]);
 
   useEffect(() => {
     void fetchServerWorkOrders(workDate, shift, selectedLine);
@@ -432,7 +442,7 @@ export const WorkOrderStatusView: React.FC = () => {
 
           {/* 우측: 날짜, 시프트, 검색, 액션 버튼들 */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* 작업일자 피커 */}
+            {/* 작업일자 피커 & 실 수주 연동 상태 뱃지 */}
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-slate-500 flex items-center gap-1">
                 <Calendar size={16} className="text-blue-600" /> 월/일:
@@ -443,6 +453,16 @@ export const WorkOrderStatusView: React.FC = () => {
                 onChange={(e) => setWorkDate(e.target.value)}
                 className="bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               />
+              {realOrderMeta && realOrderMeta.hasRealOrders ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>실 수주 연동 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-200 text-slate-600">
+                  표준 템플릿
+                </span>
+              )}
             </div>
 
             {/* 시프트 필터 */}
@@ -574,7 +594,9 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-blue-700 truncate">일일 총 생산계획</div>
-              <div className="text-sm font-black text-blue-950 truncate">{currentLine.totalPlan}</div>
+              <div className="text-sm font-black text-blue-950 truncate">
+                {realOrderMeta?.lineTotalPlan || currentLine.totalPlan}
+              </div>
             </div>
           </div>
 
@@ -585,7 +607,11 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
             <div className="min-w-0">
               <div className="text-[11px] font-bold text-slate-600 truncate">라인 가동 시간대</div>
-              <div className="text-sm font-black text-slate-900 truncate">{currentLine.totalTime}</div>
+              <div className="text-sm font-black text-slate-900 truncate">
+                {scheduleTasks.length > 0 && scheduleTasks[0].time && scheduleTasks[scheduleTasks.length - 1].time
+                  ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}`
+                  : currentLine.totalTime}
+              </div>
             </div>
           </div>
 
