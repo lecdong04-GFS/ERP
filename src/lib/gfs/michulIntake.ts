@@ -48,10 +48,12 @@ export function parseCleanNumber(val: unknown): number {
 export function excelDateToISO(val: unknown): string | null {
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return null;
-    return val.toISOString().slice(0, 10);
+    // XLSX Date 객체는 타임존/초 오프셋 왜곡(한국 역사적 52초 왜곡 등) 방지를 위해 정오(+12시간) 기준 보정
+    const d = new Date(val.getTime() + 12 * 3600 * 1000);
+    return d.toISOString().slice(0, 10);
   }
   if (typeof val === 'number' && val > 20000 && val < 80000) {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+    const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 12 * 3600 * 1000);
     return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
   }
   const s = String(val ?? '').trim().replace(/\u00a0/g, ' ');
@@ -411,6 +413,15 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
     if (colMap.date !== -1 && row[colMap.date]) {
       const d = excelDateToISO(row[colMap.date]);
       if (d) currentDate = d;
+    }
+
+    // 2줄 1쌍 구조에서 고아 2행(금액 행이 상단에 잔존하거나 선행 수량 행 누락 시) 자동 스킵
+    if (isTwoLineHeader && !rawStoreCode && !row[colMap.date]) {
+      const c3 = String(row[colMap.productCode] ?? '').trim();
+      const val4 = parseCleanNumber(row[colMap.orderQty]);
+      if (!/^\d{12,14}$/.test(c3) && val4 > 1000) {
+        continue;
+      }
     }
 
     // 상품코드 및 수량 추출 (쉼표 제거 안전 파싱)
