@@ -42,6 +42,17 @@ export const ProductionResultStatusView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isModified, setIsModified] = useState(false);
+  const [dataSourceInfo, setDataSourceInfo] = useState<{
+    source: 'SALES_ORDER_DB' | 'PRODUCTION_RESULT_DB' | 'CANONICAL_TEMPLATE';
+    sourceLabel: string;
+    orderCount?: number;
+    extraOrderInfo?: string;
+  }>({
+    source: 'CANONICAL_TEMPLATE',
+    sourceLabel: 'GFS 2026 생산일보 정본 템플릿 연동',
+    extraOrderInfo: '정규 수주 마감',
+  });
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   // ── 1. 데이터 로드 (API) ──
   const loadDailyReport = useCallback(async (date: string) => {
@@ -52,6 +63,15 @@ export const ProductionResultStatusView: React.FC = () => {
       if (json.success && Array.isArray(json.items) && json.items.length > 0) {
         setItems(json.items);
         if (json.issueMemo) setIssueMemo(json.issueMemo);
+        setDataSourceInfo({
+          source: json.source || 'CANONICAL_TEMPLATE',
+          sourceLabel: json.sourceLabel || '',
+          orderCount: json.orderCount,
+          extraOrderInfo: json.extraOrderInfo,
+        });
+        if (Array.isArray(json.availableDates) && json.availableDates.length > 0) {
+          setAvailableDates(json.availableDates);
+        }
         setIsModified(false);
       }
     } catch (err) {
@@ -238,7 +258,7 @@ export const ProductionResultStatusView: React.FC = () => {
             label: '인쇄 출력',
             icon: 'print',
             onClick: () => {
-              openPrintModal('작업지시서', { date: baseDate, totals: allTotals });
+              window.print();
             },
           },
           {
@@ -274,7 +294,7 @@ export const ProductionResultStatusView: React.FC = () => {
               <span className="text-[10px] font-semibold bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
                 달성률 100%
               </span>
-              <div className="text-[10px] text-amber-700 mt-1">39개 완제품 합계</div>
+              <div className="text-[10px] text-amber-700 mt-1">{items.length}개 완제품 합계</div>
             </div>
           </div>
 
@@ -311,7 +331,7 @@ export const ProductionResultStatusView: React.FC = () => {
             </div>
             <div className="text-right">
               <span className="text-[11px] font-extrabold bg-blue-200 text-blue-900 px-2 py-0.5 rounded">
-                58.0%
+                {allTotals.totalQty > 0 ? ((allTotals.shift1Qty / allTotals.totalQty) * 100).toFixed(1) + '%' : '58.0%'}
               </span>
               <div className="text-[10px] text-blue-600 mt-1">12개 센터 공급</div>
             </div>
@@ -332,9 +352,11 @@ export const ProductionResultStatusView: React.FC = () => {
             </div>
             <div className="text-right">
               <span className="text-[11px] font-extrabold bg-purple-200 text-purple-900 px-2 py-0.5 rounded">
-                42.0%
+                {allTotals.totalQty > 0 ? ((allTotals.shift2Qty / allTotals.totalQty) * 100).toFixed(1) + '%' : '42.0%'}
               </span>
-              <div className="text-[10px] text-purple-600 mt-1">특판 535개 포함</div>
+              <div className="text-[10px] text-purple-600 mt-1">
+                특판 {items.reduce((s, i) => s + (i.shift2Centers?.['특판'] || 0), 0).toLocaleString()}개 포함
+              </div>
             </div>
           </div>
         </div>
@@ -379,15 +401,17 @@ export const ProductionResultStatusView: React.FC = () => {
           {/* 추가발주 박스 */}
           <div className="bg-[#fce7f3] border border-pink-300 rounded px-3 py-1 flex items-center gap-1.5 shadow-2xs">
             <span className="text-[11px] font-extrabold text-pink-900">추가발주</span>
-            <span className="text-[11px] font-bold text-pink-700 font-mono">0건 (정규 수주 마감)</span>
+            <span className="text-[11px] font-bold text-pink-700 font-mono">
+              {dataSourceInfo.extraOrderInfo || '0건 (정규 수주 마감)'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* ── 4. 검색 필터 & 뷰 모드 전환 바 ── */}
       <div className="bg-[#e2e8f0] border-b border-gray-300 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-[12px]">
-        {/* 좌측: 날짜 선택기 & 카테고리 탭 */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* 좌측: 날짜 선택기 & 퀵 드롭다운 & 파이프라인 연동 배지 & 카테고리 탭 */}
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* 날짜 선택기 */}
           <div className="flex items-center bg-white border border-gray-300 rounded shadow-2xs overflow-hidden">
             <button
@@ -415,14 +439,60 @@ export const ProductionResultStatusView: React.FC = () => {
             </button>
           </div>
 
+          {/* 수주 등록일 퀵 선택기 (DB에 저장된 실제 날짜들) */}
+          {availableDates.length > 0 && (
+            <div className="flex items-center gap-1 bg-white border border-gray-300 rounded px-2 py-1 shadow-2xs">
+              <FileSpreadsheet size={12} className="text-emerald-600" />
+              <span className="text-[11px] font-bold text-gray-600">수주 DB 일자:</span>
+              <select
+                value={availableDates.includes(baseDate) ? baseDate : baseDate === '2026-11-08' ? '2026-11-08' : ''}
+                onChange={(e) => {
+                  if (e.target.value) setBaseDate(e.target.value);
+                }}
+                className="font-mono text-[11px] font-bold text-blue-900 bg-transparent outline-none cursor-pointer max-w-[175px]"
+              >
+                <option value="2026-11-08">2026-11-08 (11/8 정본 59,676개)</option>
+                {availableDates.map((d) => (
+                  <option key={d} value={d}>
+                    {d} (수주 실데이터)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 실시간 파이프라인 연동 배지 */}
+          {dataSourceInfo.source === 'SALES_ORDER_DB' ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-400 rounded text-emerald-900 text-[11px] font-bold shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+              </span>
+              <span>🔗 수주 DB 연동</span>
+              <span className="bg-emerald-200/90 text-emerald-950 px-1.5 py-0.2 rounded text-[10px] font-mono font-extrabold">
+                {dataSourceInfo.orderCount || 0}건 전표
+              </span>
+            </div>
+          ) : dataSourceInfo.source === 'PRODUCTION_RESULT_DB' ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-400 rounded text-purple-900 text-[11px] font-bold shadow-2xs">
+              <CheckCircle2 size={12} className="text-purple-600" />
+              <span>✅ 현장 실적 확정본</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-400 rounded text-blue-900 text-[11px] font-bold shadow-2xs">
+              <Sparkles size={12} className="text-blue-600" />
+              <span>📋 11/8 정본 템플릿</span>
+            </div>
+          )}
+
           {/* 카테고리 필터 탭 */}
           <div className="flex bg-gray-200 p-0.5 rounded border border-gray-300">
             {[
-              { id: 'ALL', label: `전체 (${allTotals.totalQty > 0 ? 39 : items.length})` },
-              { id: '삼각', label: '삼각 (12)' },
-              { id: '줄김밥', label: '줄김밥 (13)' },
-              { id: '도시락', label: '도시락 (12)' },
-              { id: '조리빵', label: '조리빵 (2)' },
+              { id: 'ALL', label: `전체 (${items.length})` },
+              { id: '삼각', label: `삼각 (${items.filter((i) => i.category === '삼각').length})` },
+              { id: '줄김밥', label: `줄김밥 (${items.filter((i) => i.category === '줄김밥').length})` },
+              { id: '도시락', label: `도시락 (${items.filter((i) => i.category === '도시락').length})` },
+              { id: '조리빵', label: `조리빵 (${items.filter((i) => i.category === '조리빵').length})` },
             ].map((cat) => (
               <button
                 key={cat.id}
