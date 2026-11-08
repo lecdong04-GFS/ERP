@@ -2214,7 +2214,7 @@ export const StockLookupView: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-50 text-[14px] select-none">
       {/* 1. Header Action Bar */}
       <MasterActionBar
-        title="통합 재고조회 (5시 실사 연동)"
+        title="실시간 통합 재고조회 (실사 연동)"
         buttons={[
           {
             key: 'save',
@@ -2270,9 +2270,9 @@ export const StockLookupView: React.FC = () => {
         }}
       />
 
-      {/* 2. Filter Bar (시원시원하고 큼직한 현대적 제어 바) */}
-      <div className="bg-slate-100 border-b border-slate-300 px-4 py-2.5 flex items-center justify-between gap-3 text-xs shrink-0 overflow-x-auto whitespace-nowrap w-full shadow-2xs">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* 2-A. 상단 운영 바: 기준일, 재고조사표 등록 상태 & 업로드, BOM 모드, 실사 히스토리, 주간 출석부 */}
+      <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0 shadow-2xs">
+        <div className="flex items-center flex-wrap gap-2.5">
           {/* Target Date with prev/next */}
           <div className="flex shrink-0 items-center gap-1.5 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
             <span className="font-extrabold text-slate-700 px-1.5 flex items-center gap-1 text-[13px]">
@@ -2307,17 +2307,28 @@ export const StockLookupView: React.FC = () => {
             </button>
           </div>
 
-          {/* 1. 당일 재고조사표 업로드 실시간 상태 뱃지 (Check Badge) */}
+          {/* 당일 재고조사표 업로드 실시간 상태 뱃지 & 업로드 액션 */}
           {isCurrentDateUploaded ? (
-            <span
-              className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-black px-3 py-1.5 rounded-xl text-xs shadow-2xs shrink-0"
-              title={`${targetDate} 일일 재고조사표 실사 확정 데이터 (${currentSnapInfo?.count || data.length}건)`}
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>재고조사표 등록완료 ({currentSnapInfo?.count || data.length}건 확정)</span>
-            </span>
+            <div className="inline-flex items-center gap-2 shrink-0">
+              <span
+                className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-black px-3 py-1.5 rounded-xl text-xs shadow-2xs"
+                title={`${targetDate} 일일 재고조사표 실사 확정 데이터 (${currentSnapInfo?.count || data.length}건)`}
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>재고조사표 등록완료 ({currentSnapInfo?.count || data.length}건 확정)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-2.5 py-1.5 rounded-xl text-xs shadow-2xs cursor-pointer transition-colors"
+                title="등록된 재고조사표 다시 덮어쓰기"
+              >
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <span>덮어쓰기</span>
+              </button>
+            </div>
           ) : (
-            <div className="inline-flex items-center gap-1.5 shrink-0">
+            <div className="inline-flex items-center gap-2 shrink-0">
               <span
                 className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 font-black px-2.5 py-1.5 rounded-xl text-xs shadow-2xs"
                 title={`${targetDate} 일자의 확정 재고조사표가 아직 업로드되지 않았습니다.`}
@@ -2337,63 +2348,8 @@ export const StockLookupView: React.FC = () => {
             </div>
           )}
 
-          {/* 2. 최근 7일 주간 출석부 신호등 트래커 (원클릭 날짜 이동) */}
-          <div className="hidden lg:flex items-center gap-1.5 pl-3 border-l border-slate-300 ml-1 shrink-0">
-            <span className="text-xs text-slate-500 font-bold flex items-center gap-1">
-              <span>주간현황:</span>
-            </span>
-            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-              {recentDaysTracker.map((item) => (
-                <button
-                  key={item.date}
-                  type="button"
-                  onClick={() => {
-                    setTargetDate(item.date);
-                    void loadByDate(item.date);
-                  }}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    item.isTarget
-                      ? 'ring-2 ring-blue-600 font-black shadow-xs bg-blue-600 text-white'
-                      : 'hover:opacity-80'
-                  } ${
-                    item.uploaded
-                      ? item.isTarget ? 'bg-blue-600 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                      : item.isTarget ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 border border-dashed border-slate-300'
-                  }`}
-                  title={`${item.date}: ${item.uploaded ? `재고조사표 등록됨 (${item.count}건)` : '미등록 (LIVE 추정재고)'}`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${item.isTarget ? 'bg-white' : item.uploaded ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 저장된 실사일자 퀵선택 드롭다운 */}
-          {availableSnapDates.length > 0 && (
-            <select
-              value={availableSnapDates.some((d) => d.date === targetDate) ? targetDate : ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) {
-                  setTargetDate(val);
-                  void loadByDate(val);
-                }
-              }}
-              className="h-9 px-3 bg-emerald-50 text-emerald-800 border border-emerald-400 font-bold rounded-xl text-xs hover:bg-emerald-100 cursor-pointer shadow-2xs shrink-0"
-              title="데이터베이스에 저장된 실사 일자 목록"
-            >
-              <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
-              {availableSnapDates.map((d) => (
-                <option key={d.date} value={d.date}>
-                  {d.date} ({d.count}건 확정)
-                </option>
-              ))}
-            </select>
-          )}
-
           {/* BOM 일사용량 산출 모드 토글 (⚡ 수주연동 LIVE vs 📋 마스터 기준치) */}
-          <div className="flex shrink-0 items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs ml-1">
+          <div className="flex shrink-0 items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
             <button
               type="button"
               onClick={() => toggleUsageMode('LIVE')}
@@ -2420,13 +2376,87 @@ export const StockLookupView: React.FC = () => {
             </button>
           </div>
 
+          {/* 저장된 실사일자 퀵선택 드롭다운 */}
+          {availableSnapDates.length > 0 && (
+            <select
+              value={availableSnapDates.some((d) => d.date === targetDate) ? targetDate : ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  setTargetDate(val);
+                  void loadByDate(val);
+                }
+              }}
+              className="h-8 px-2.5 bg-white text-slate-800 border border-slate-300 font-bold rounded-xl text-xs hover:border-slate-400 cursor-pointer shadow-2xs shrink-0"
+              title="데이터베이스에 저장된 실사 일자 목록"
+            >
+              <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
+              {availableSnapDates.map((d) => (
+                <option key={d.date} value={d.date}>
+                  {d.date} ({d.count}건 확정)
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* 우측: 최근 7일 주간 출석부 신호등 트래커 & 데이터 상태 뱃지 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden xl:flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-bold flex items-center gap-1">
+              <span>주간현황:</span>
+            </span>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
+              {recentDaysTracker.map((item) => (
+                <button
+                  key={item.date}
+                  type="button"
+                  onClick={() => {
+                    setTargetDate(item.date);
+                    void loadByDate(item.date);
+                  }}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    item.isTarget
+                      ? 'ring-2 ring-blue-600 font-black shadow-xs bg-blue-600 text-white'
+                      : 'hover:opacity-80'
+                  } ${
+                    item.uploaded
+                      ? item.isTarget ? 'bg-blue-600 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                      : item.isTarget ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 border border-dashed border-slate-300'
+                  }`}
+                  title={`${item.date}: ${item.uploaded ? `재고조사표 등록됨 (${item.count}건)` : '미등록 (LIVE 추정재고)'}`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${item.isTarget ? 'bg-white' : item.uploaded ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <span className="shrink-0" title={mergeInfo}>
+            {snapshotMode ? (
+              <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xs">
+                📅 {targetDate.slice(5)} 확정 실사
+              </span>
+            ) : (
+              <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xs">
+                ⚡ 현재고 LIVE
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      {/* 2-B. 하단 필터 바: 창고, 거래처, 상태, 검색, 안전재고 미달, 글자크기, 통계 */}
+      <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 shadow-2xs">
+        <div className="flex items-center flex-wrap gap-2.5">
           {/* Warehouse */}
-          <div className="flex shrink-0 items-center gap-1.5 pl-2 border-l border-slate-300">
+          <div className="flex shrink-0 items-center gap-1.5">
             <span className="font-bold text-slate-700">창고:</span>
             <select
               value={selectedWh}
               onChange={(e) => setSelectedWh(e.target.value)}
-              className="h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <option value="전체">전체 창고</option>
               {WAREHOUSES.map((w) => (
@@ -2443,7 +2473,7 @@ export const StockLookupView: React.FC = () => {
             <select
               value={selectedVendor}
               onChange={(e) => setSelectedVendor(e.target.value)}
-              className="h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none max-w-[150px]"
+              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none max-w-[150px]"
             >
               <option value="전체">전체 거래처</option>
               {vendors.map((v) => (
@@ -2460,7 +2490,7 @@ export const StockLookupView: React.FC = () => {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               {['전체', '정상', '부족', '과잉', '품절'].map((s) => (
                 <option key={s} value={s}>
@@ -2471,38 +2501,38 @@ export const StockLookupView: React.FC = () => {
           </div>
 
           {/* Search keyword */}
-          <div className="relative min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="relative w-64 min-w-[180px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="품명/품번/거래처 검색..."
+              placeholder="품명 / 품번 / 거래처 검색..."
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="h-9 pl-9 pr-3 w-full bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-8 pl-8 pr-3 w-full bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none"
             />
           </div>
 
           {/* Safety Shortage Filter */}
-          <label className="flex shrink-0 items-center gap-2 cursor-pointer text-rose-700 font-black text-xs bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl shadow-2xs">
+          <label className="flex shrink-0 items-center gap-1.5 cursor-pointer text-rose-700 font-black text-xs bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl shadow-2xs hover:bg-rose-100 transition-colors">
             <input
               type="checkbox"
               checked={onlyShortage}
               onChange={(e) => setOnlyShortage(e.target.checked)}
-              className="w-4 h-4 rounded border-rose-400 text-rose-600 focus:ring-0 cursor-pointer"
+              className="w-3.5 h-3.5 rounded border-rose-400 text-rose-600 focus:ring-0 cursor-pointer"
             />
             <span>안전재고 미달만</span>
           </label>
         </div>
 
-        {/* 우측: 글자크기 줌 토글 & 통계 카운트 */}
-        <div className="flex shrink-0 items-center gap-3 ml-auto">
-          {/* 글자크기 시원시원하게 줌 선택 컨트롤 */}
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-            <span className="text-[11px] font-black text-slate-500 px-1.5">🔤 글자크기:</span>
+        {/* 우측: 글자크기 줌 & 통계 카운트 & 리셋 */}
+        <div className="flex shrink-0 items-center gap-2.5 ml-auto">
+          {/* 글자크기 줌 선택 컨트롤 */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-xl p-0.5 shadow-2xs">
+            <span className="text-[11px] font-black text-slate-500 px-1">🔤 크기:</span>
             <button
               type="button"
               onClick={() => setDensity('normal')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                 density === 'normal' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -2511,16 +2541,16 @@ export const StockLookupView: React.FC = () => {
             <button
               type="button"
               onClick={() => setDensity('spacious')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                 density === 'spacious' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              시원하게 (기본) ★
+              시원하게 (기본)
             </button>
             <button
               type="button"
               onClick={() => setDensity('large')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                 density === 'large' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -2529,24 +2559,15 @@ export const StockLookupView: React.FC = () => {
           </div>
 
           {dirtyRowIds.size > 0 && (
-            <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-xl text-xs font-black animate-pulse shadow-2xs">
+            <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-1 rounded-xl text-xs font-black animate-pulse shadow-2xs">
               수정 {dirtyRowIds.size}건
             </span>
           )}
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800" title={mergeInfo}>
-            {snapshotMode ? (
-              <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-lg text-xs font-black">
-                {targetDate.slice(5)} 확정분
-              </span>
-            ) : (
-              <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-lg text-xs font-black">
-                현재고 LIVE
-              </span>
-            )}
-            <span>
-              총 <strong className="text-blue-700 text-sm font-mono">{filteredData.length.toLocaleString()}</strong>건
-            </span>
+
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl" title={mergeInfo}>
+            <span>총 <strong className="text-blue-700 text-xs font-mono">{filteredData.length.toLocaleString()}</strong>건</span>
           </span>
+
           <button
             onClick={() => {
               setKeyword('');
@@ -2559,9 +2580,9 @@ export const StockLookupView: React.FC = () => {
               void loadByDate(targetDate);
             }}
             title="필터 초기화 및 새로고침"
-            className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs"
+            className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-300 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
           >
-            <RotateCw className="w-4 h-4" />
+            <RotateCw className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
