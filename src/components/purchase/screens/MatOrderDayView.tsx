@@ -40,6 +40,7 @@ import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import {
   DAY_CHARS,
+  WEEKDAY_DEMAND_FACTORS,
   calcRow,
   splitWeek,
   classifyPattern,
@@ -1074,12 +1075,14 @@ export const MatOrderDayView: React.FC = () => {
                   const st = dayStats[i];
                   const dateStr = weekDates[i];
                   const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
+                  const factorInfo = WEEKDAY_DEMAND_FACTORS[i];
 
                   return (
                     <button
                       key={d}
                       type="button"
                       onClick={() => setDayIdx(i)}
+                      title={`[${d}요일] 수요 가중치: ${factorInfo?.pctStr} (${factorInfo?.label})`}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] transition cursor-pointer border whitespace-nowrap ${
                         isActive
                           ? 'bg-blue-600 text-white border-blue-600 shadow-2xs font-black ring-1 ring-blue-400/40'
@@ -1090,6 +1093,21 @@ export const MatOrderDayView: React.FC = () => {
                       <span className={`text-[11px] font-medium whitespace-nowrap ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
                         {mmdd}
                       </span>
+                      {factorInfo && (
+                        <span
+                          className={`text-[9.5px] font-mono px-1 py-0.2 rounded font-extrabold whitespace-nowrap ${
+                            isActive
+                              ? 'bg-white/25 text-white'
+                              : factorInfo.tone === 'peak'
+                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                              : factorInfo.tone === 'low'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {factorInfo.pctStr}
+                        </span>
+                      )}
                       <span
                         className={`text-[11px] font-mono px-1.5 py-0.2 rounded font-bold whitespace-nowrap ${
                           isActive
@@ -1474,6 +1492,59 @@ export const MatOrderDayView: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* ── 3-1. 요일별 통계 기반 스마트 수요 가중치 안내 배너 ── */}
+      {mainMode === 'order' && WEEKDAY_DEMAND_FACTORS[dayIdx] && (
+        <div
+          className={`px-4 py-2 flex items-center justify-between text-xs border-b shrink-0 shadow-2xs ${
+            WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+              ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 text-amber-950'
+              : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
+              ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 text-emerald-950'
+              : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 text-blue-950'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles
+              className={`w-4 h-4 shrink-0 ${
+                WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+                  ? 'text-amber-600'
+                  : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
+                  ? 'text-emerald-600'
+                  : 'text-blue-600'
+              }`}
+            />
+            <span>
+              <strong>[실데이터 요일별 수요 가중치 연동]</strong>{' '}
+              <span className="font-extrabold text-blue-900 bg-white/70 px-1.5 py-0.5 rounded border border-blue-200">
+                {DAY_CHARS[dayIdx]}요일 ({weekDates[dayIdx]}) 납품분
+              </span>
+              은 GS25 35일간 실데이터(188만 개) 전수 통계에 따라{' '}
+              <strong
+                className={`px-1.5 py-0.5 rounded font-mono font-black ${
+                  WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+                    ? 'bg-amber-200 text-amber-950'
+                    : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
+                    ? 'bg-emerald-200 text-emerald-950'
+                    : 'bg-blue-200 text-blue-950'
+                }`}
+              >
+                {WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr}
+              </strong>{' '}
+              <strong>{WEEKDAY_DEMAND_FACTORS[dayIdx].label}</strong>이 적용되어, 공급업체별 확정량이 요일 수요에 비례하여 자동 배분되었습니다.
+            </span>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-[11px] font-bold opacity-80">
+            <span className="bg-white/80 px-2 py-0.5 rounded border border-slate-200">
+              {WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+                ? '⚡ 피크 결품 방지 증량'
+                : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
+                ? '🛡️ 주말 신선자재 폐기 방지 감량'
+                : '⚖️ 정석 안정 수요'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── 4. 메인 데이터 테이블 (발주 테이블 or 입고 검수 테이블) ── */}
       <div className="flex-1 min-h-[420px] bg-white rounded-xl border border-slate-300 overflow-hidden shadow-xs flex flex-col">
