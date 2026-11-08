@@ -126,16 +126,22 @@ export async function GET() {
       const baseIncoming = o.incoming || 0;
       const totalIncoming = baseIncoming + pendingBags;
 
+      // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료에 따른 구 스팸 발주 차단
+      const isReplacedSpam = o.name.includes('스팸(340g*20캔)') || (o.name.includes('스팸') && o.supplierHeader.includes('튀김실'));
+      const effectiveDailyUsage = isReplacedSpam ? 0 : o.dailyUsage;
+      const effectiveBoxesBase = isReplacedSpam ? 0 : o.boxes;
+      const effectiveDays = isReplacedSpam ? 0 : o.days;
+
       return {
         id: idx + 1,
         supplier: o.supplierHeader,
         name: o.name,
         norm: o.norm,
-        boxesBase: o.boxes,
+        boxesBase: effectiveBoxesBase,
         packUnit: o.packUnit || 0,
         packUnitAudit: ref?.packUnit || 0,
-        days: o.days,
-        dailyUsage: o.dailyUsage,
+        days: effectiveDays,
+        dailyUsage: effectiveDailyUsage,
         incoming: totalIncoming, // 실시간 기발주 미입고량 합산
         baseIncoming,
         pendingBoxes, // 기발주 미입고 박스 수량
@@ -147,6 +153,8 @@ export async function GET() {
         warehouse: ref?.warehouse || '',
         vendor: ref?.vendor || '',
         itemId: ref?.itemId || '',
+        isReplaced: isReplacedSpam,
+        replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,
       };
     });
     const withTarget = rows.filter((r) => r.name).length;

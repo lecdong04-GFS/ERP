@@ -68,8 +68,10 @@ function getMondayOfWeek(dateStr: string): Date {
 
 export type StrategyMode = 'tight' | 'standard' | 'safety';
 
-// 단종 예정 완제품의 전용 원부자재 불용 방지 경보 맵
+// 단종 및 대체 완료 완제품의 전용 원부자재 불용 방지 경보 맵
 const DISCONTINUED_CAUTION_MAP: Record<string, string> = {
+  '[상온] 스팸(340g*20캔)': '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)',
+  '[상온]스팸(340g*20캔)': '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)',
   '[상온]바릴라스파게티면(종이BOX) 5KG*3EA': '11/10 등심돈까스 단종 전용',
   '[냉장] 경양식돈까스소스H(소포장)(50g*240ea)': '11/10 등심돈까스 단종 전용',
   '[냉장]조청닭강정소스(2kg*10ea)': '11/10 등심돈까스 단종 전용',
@@ -398,10 +400,18 @@ export const MatOrderDayView: React.FC = () => {
       const isPendingOverlap = dailyUsage > 0 && (r.incoming || 0) >= dailyUsage * 1.8;
       const isCriticalShortage = stockDays < 1.2 && (r.incoming || 0) <= 0 && dailyUsage > 0;
       const isSafetyShortage = stockDays < baseTargetDays && dailyUsage > 0 && !isCriticalShortage;
+      const isReplacedItem = r.name.includes('스팸(340g*20캔)') || (r as any).isReplaced;
+      const isDiscontinuedItem = !!DISCONTINUED_CAUTION_MAP[r.name];
 
       let auditStatus: 'critical' | 'warning' | 'normal' | 'overstock' | 'pending_overlap' = 'normal';
       let auditLabel = '정상 재고';
-      if (isOverstocked) {
+      if (isReplacedItem) {
+        auditStatus = 'overstock';
+        auditLabel = '🔄 고미트 대체완료 (발주 0b)';
+      } else if (isDiscontinuedItem) {
+        auditStatus = 'warning';
+        auditLabel = '🚨 단종 불용주의';
+      } else if (isOverstocked) {
         auditStatus = 'overstock';
         auditLabel = '60일+ 과잉재고';
       } else if (isPendingOverlap) {
@@ -415,9 +425,9 @@ export const MatOrderDayView: React.FC = () => {
         auditLabel = '⚠️ 안전미달';
       }
 
-      // 추천 박스수
+      // 추천 박스수: 대체 완료 품목, 과잉재고, 입고중복, 일소진량 0인 경우 0박스 완벽 차단
       const suggestedBoxes =
-        isOverstocked || isPendingOverlap
+        isOverstocked || isPendingOverlap || isReplacedItem || dailyUsage <= 0
           ? 0
           : pack > 0 && shortageBags > 0
           ? Math.ceil(shortageBags / pack)
