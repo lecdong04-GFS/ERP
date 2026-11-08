@@ -3,6 +3,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
+import {
+  getOrderSheetFilePath,
+  readWorkbookFromFile,
+  parseOrderSheetBom,
+  normName,
+  isPieceOrCountItem,
+} from '@/lib/gfs/canonical';
 
 function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -58,14 +66,43 @@ export async function GET(req: NextRequest) {
         }
       }
     }
-    if (menuQty.size === 0) {
+
+    // 1-1) 수주 DB 전표가 없는 날짜 폴백: 정본 생산일보(CANONICAL_DAILY_REPORTS) 또는 생산실적 DB 연동
+    if (menuQtyByNorm.size === 0 && CANONICAL_DAILY_REPORTS[date]) {
+      const canonical = CANONICAL_DAILY_REPORTS[date];
+      for (const item of canonical.items) {
+        if (item.totalQty > 0) {
+          const norm = normalizeForBom(item.productName);
+          if (norm) {
+            menuQtyByNorm.set(norm, { qty: item.totalQty, code: '', name: item.productName });
+          }
+        }
+      }
+    }
+
+    if (menuQtyByNorm.size === 0) {
+      const prodResults = await prisma.productionResult.findMany({
+        where: { resultDate: date },
+      });
+      for (const pr of prodResults) {
+        const qty = Number(pr.prodQty) || 0;
+        if (qty > 0) {
+          const norm = normalizeForBom(pr.productName);
+          if (norm) {
+            menuQtyByNorm.set(norm, { qty, code: pr.productCode || '', name: pr.productName });
+          }
+        }
+      }
+    }
+
+    if (menuQtyByNorm.size === 0) {
       return NextResponse.json({
         success: true,
         data: { asOf: date, orderCount: 0, rows: [], message: '해당 일자 수주 없음' },
       });
     }
 
-    // 2) BOM 전개 (부모별 최신 헤더 1개)
+    // 2) BOM 전개 (1: DB bomHeader 기반)
     const headers = await prisma.bomHeader.findMany({
       include: {
         parentProduct: true,
@@ -113,29 +150,103 @@ export async function GET(req: NextRequest) {
     });
     const invMap = new Map(invSums.map((r) => [r.productId, Number(r._sum.currentQty) || 0]));
 
-    const rows = [...acc.entries()].map(([pid, v]) => {
+    const rowsByNorm = new Map<string, any>();
+
+    [...acc.entries()].forEach(([pid, v]) => {
       const p = childMap.get(pid);
       const daily = Math.ceil(v.daily * 10) / 10; // ROUNDUP 1자리 (엑셀과 동일)
       const total = invMap.get(pid) || 0;
-      return {
-        productId: pid,
-        productCode: p?.productCode || '',
-        productName: p?.name || '',
-        warehouse: p?.warehouse || '',
-        liveDaily: daily,
-        liveTotal: total,
-        liveDays: daily > 0 ? total / daily : null,
-        menuCount: v.menus.length,
-        menus: v.menus.slice(0, 5),
-      };
+      const nm = p?.name || '';
+      const k = normName(nm);
+      if (k) {
+        rowsByNorm.set(k, {
+          productId: pid,
+          productCode: p?.productCode || '',
+          productName: nm,
+          warehouse: p?.warehouse || '',
+          liveDaily: daily,
+          liveTotal: total,
+          liveDays: daily > 0 ? total / daily : null,
+          menuCount: v.menus.length,
+          menus: v.menus.slice(0, 5),
+          source: 'DB_BOM',
+        });
+      }
     });
+
+    // 5) BOM 전개 (2: 발주서 정본 엑셀 내장 BOM 파싱 및 수주비례 동적 소요량 보완)
+    try {
+      const orderFile = getOrderSheetFilePath();
+      if (orderFile) {
+        const wb = readWorkbookFromFile(orderFile);
+        const mats = parseOrderSheetBom(wb);
+        for (const mat of mats) {
+          if (!mat.name || !mat.menus || mat.menus.length === 0) continue;
+          const k = normName(mat.name);
+          if (!k || rowsByNorm.has(k)) continue;
+
+          let totalActualCons = 0;
+          let totalBaseCons = 0;
+          const contributingMenus: any[] = [];
+
+          for (const m of mat.menus) {
+            const nMenu = normalizeForBom(m.menu);
+            const mq = menuQtyByNorm.get(nMenu) || menuQtyByNorm.get(m.normMenu);
+            const actualQty = mq?.qty || 0;
+            const unitQty = Number(m.perUnit) || 1;
+            const baseQty = Number(m.qty) || 0;
+
+            totalBaseCons += baseQty * unitQty;
+            if (actualQty > 0) {
+              totalActualCons += actualQty * unitQty;
+              contributingMenus.push({
+                code: mq?.code || '',
+                name: m.menu,
+                qty: actualQty,
+                unitQty,
+              });
+            }
+          }
+
+          const baseDaily = Number(mat.dailyUsage) || 0;
+          let liveDaily = 0;
+          if (baseDaily > 0 && totalBaseCons > 0) {
+            // 수주량 변동 비율에 맞춰 정밀 스케일링
+            liveDaily = Math.round((baseDaily * (totalActualCons / totalBaseCons)) * 10) / 10;
+          } else if (totalActualCons > 0) {
+            liveDaily = isPieceOrCountItem(mat.name)
+              ? Math.round(totalActualCons * 10) / 10
+              : Math.round((totalActualCons / 1000) * 10) / 10;
+          }
+
+          rowsByNorm.set(k, {
+            productId: null,
+            productCode: '',
+            productName: mat.name,
+            warehouse: '',
+            liveDaily,
+            baselineDaily: baseDaily,
+            diffPercent: baseDaily > 0 ? Math.round(((liveDaily - baseDaily) / baseDaily) * 100) : 0,
+            liveTotal: 0,
+            liveDays: null,
+            menuCount: contributingMenus.length,
+            menus: contributingMenus.slice(0, 5),
+            source: 'ORDER_SHEET_BOM',
+          });
+        }
+      }
+    } catch (sheetBomErr) {
+      console.warn('Live usage sheet BOM parsing fallback failed:', sheetBomErr);
+    }
+
+    const rows = Array.from(rowsByNorm.values());
 
     return NextResponse.json({
       success: true,
       data: {
         asOf: date,
         orderCount: orders.length,
-        menuCount: menuQty.size,
+        menuCount: menuQtyByNorm.size,
         rowCount: rows.length,
         rows,
       },

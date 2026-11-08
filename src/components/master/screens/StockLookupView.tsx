@@ -44,6 +44,11 @@ interface StockItem {
   expiryDate: string; // 유통기한
   orderDay: string; // 발주일
   dailyUsage: number; // BOM 일사용량 (현재고 기준 봉/낱개/롤 단위)
+  liveDailyUsage?: number; // 당일 수주연동 LIVE 일사용량
+  masterDailyUsage?: number; // 공장 발주서 마스터 기준치 (H열)
+  usageSource?: 'LIVE_ORDER' | 'MASTER' | 'ESTIMATED'; // 일사용량 출처
+  liveMenuCount?: number; // 반영된 완제품 수
+  liveDiffPercent?: number; // 마스터 기준치 대비 변동률 (%)
   actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
   avg20DailyUsage?: number; // 실사용 평균(20일) (최근 20일간의 실제 일평균 소진량)
   avg7DailyUsage?: number; // 하위 호환
@@ -662,6 +667,42 @@ export const StockLookupView: React.FC = () => {
   const [snapshotMode, setSnapshotMode] = useState(false);
   // DB에 저장되어 있는 전체 실사 일자 목록
   const [availableSnapDates, setAvailableSnapDates] = useState<{ date: string; count: number }[]>([]);
+  // 일사용량 모드: 'LIVE' (당일 수주연동 실시간) vs 'MASTER' (발주서 마스터 고정치)
+  const [usageMode, setUsageMode] = useState<'LIVE' | 'MASTER'>('LIVE');
+
+  // 일사용량 모드 즉시 전환 (BOM 일사용량, 안전재고, 버팀일 재계산)
+  const toggleUsageMode = (mode: 'LIVE' | 'MASTER') => {
+    setUsageMode(mode);
+    setData((prev) =>
+      applyBurnRank(
+        prev.map((item) => {
+          const liveVal = item.liveDailyUsage;
+          const masterVal = item.masterDailyUsage ?? (item.usageSource === 'MASTER' ? item.dailyUsage : 0);
+          const estVal = item.estDailyUsage || 0;
+          const chosen = mode === 'LIVE'
+            ? (liveVal != null && liveVal > 0 ? liveVal : (masterVal > 0 ? masterVal : estVal))
+            : (masterVal > 0 ? masterVal : estVal);
+          const effectiveDaily = chosen > 0 ? chosen : 0;
+          const pack = Number(item.packUnit) || 1;
+          const autoSafety = calcSafetyStock(effectiveDaily, pack, parseLeadDays(item.inboundDate || item.orderSupplier || ''));
+          const safety = autoSafety > 0 ? autoSafety : item.safetyStock;
+          const curIn = Number(item.inQty) || 0;
+          const cur = Number(item.currentStock) || 0;
+          const nDays = calcStockDays(cur, effectiveDaily, null, curIn);
+          return {
+            ...item,
+            dailyUsage: chosen,
+            safetyStock: safety,
+            shortage: cur - safety,
+            status: calcStockStatus(cur, safety),
+            stockDays: nDays,
+            gfsDays: nDays,
+            usageSource: (mode === 'LIVE' && liveVal != null && liveVal > 0) ? 'LIVE_ORDER' : (masterVal > 0 ? 'MASTER' : 'ESTIMATED'),
+          };
+        })
+      )
+    );
+  };
 
   // 기준일 스냅샷 확정 정보 (업로드 여부)
   const currentSnapInfo = useMemo(() => {
@@ -712,8 +753,9 @@ export const StockLookupView: React.FC = () => {
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
+      fetch(`/api/gfs/live-usage?date=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson]) => {
+      .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson, liveUsageJson]) => {
         if (estJson?.success && estJson.data) {
           estMapRef.current = {
             byWhAndKey: estJson.data.byWhAndKey || {},
@@ -724,6 +766,19 @@ export const StockLookupView: React.FC = () => {
           if (!normKey) return null;
           return estMapRef.current.byWhAndKey[`${wh}|${normKey}`] || estMapRef.current.byKeyOnly[normKey] || null;
         };
+
+        // 실시간 수주연동 LIVE 일사용량 맵 구축
+        const liveUsageByNorm = new Map<string, any>();
+        const liveUsageByCode = new Map<string, any>();
+        if (liveUsageJson?.success && Array.isArray(liveUsageJson.data?.rows)) {
+          liveUsageJson.data.rows.forEach((r: any) => {
+            const kn = normName(r.productName || '');
+            if (kn) liveUsageByNorm.set(kn, r);
+            const kc = String(r.productCode || '').trim();
+            if (kc) liveUsageByCode.set(kc, r);
+          });
+        }
+        const liveOrderMenuCount = liveUsageJson?.data?.menuCount || 0;
 
         // 전일 재고 스냅샷 맵 구축 (품목명/창고 기준)
         const yesterdayMap = new Map<string, number>();
@@ -825,11 +880,27 @@ export const StockLookupView: React.FC = () => {
             const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
             if (estDaily > 0) estMatched += 1;
             const cleanCode = String(inv.itemCode || inv.productCode || inv.product?.productCode || '').split('#')[0];
+
+            // 실시간 수주연동 LIVE 계산값 조회
+            const liveEntry = (cleanCode ? liveUsageByCode.get(cleanCode) : null) || liveUsageByNorm.get(norm);
+            const liveDailyVal = liveEntry && liveEntry.liveDaily != null && !isNaN(Number(liveEntry.liveDaily))
+              ? Number(liveEntry.liveDaily)
+              : null;
+            const liveDiffPct = liveEntry && liveEntry.diffPercent != null ? Number(liveEntry.diffPercent) : undefined;
+            const liveMenus = liveEntry?.menuCount || 0;
+            const baseDailyVal = dailyU > 0 ? dailyU : (liveEntry && Number(liveEntry.baselineDaily) > 0 ? Number(liveEntry.baselineDaily) : 0);
+
+            // 사용 모드에 따른 최종 일사용량 및 버팀일 산출
+            const chosenDaily = usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0
+              ? liveDailyVal
+              : (baseDailyVal > 0 ? baseDailyVal : estDaily);
+            const effectiveDaily = chosenDaily > 0 ? chosenDaily : 0;
+
             const snapEntry = snapOf(cleanCode, name);
-            const fallbackDays =
-              (o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
-              (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null);
-            const effectiveDaily = dailyU > 0 ? dailyU : estDaily;
+            const fallbackDays = (usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0)
+              ? null
+              : ((o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
+                 (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null));
             const inbound = inv.lastInDate
               ? String(inv.lastInDate).slice(5)
               : inv.inboundDate
@@ -880,7 +951,14 @@ export const StockLookupView: React.FC = () => {
               inboundDate: inbound,
               expiryDate: inv.expiryDate || '',
               orderDay: inv.product?.partner?.orderDay || '',
-              dailyUsage: dailyU,
+              dailyUsage: chosenDaily,
+              liveDailyUsage: liveDailyVal ?? undefined,
+              masterDailyUsage: baseDailyVal > 0 ? baseDailyVal : undefined,
+              usageSource: (liveDailyVal != null && liveDailyVal > 0 && usageMode === 'LIVE')
+                ? 'LIVE_ORDER'
+                : (baseDailyVal > 0 ? 'MASTER' : 'ESTIMATED'),
+              liveMenuCount: liveMenus,
+              liveDiffPercent: liveDiffPct,
               actualDailyUsage: actualUsageVal,
               avg20DailyUsage: estDaily > 0 ? estDaily : 0,
               avg7DailyUsage: estDaily > 0 ? estDaily : 0,
@@ -925,16 +1003,32 @@ export const StockLookupView: React.FC = () => {
               const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
               const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
               if (estDaily > 0) estMatched += 1;
+
+              // 실시간 수주연동 LIVE 계산값 조회 (엑셀 항목)
+              const liveEntry = (o.itemId ? liveUsageByCode.get(o.itemId) : null) || liveUsageByNorm.get(norm);
+              const liveDailyVal = liveEntry && liveEntry.liveDaily != null && !isNaN(Number(liveEntry.liveDaily))
+                ? Number(liveEntry.liveDaily)
+                : null;
+              const liveDiffPct = liveEntry && liveEntry.diffPercent != null ? Number(liveEntry.diffPercent) : undefined;
+              const liveMenus = liveEntry?.menuCount || 0;
+              const baseDailyVal = daily > 0 ? daily : (liveEntry && Number(liveEntry.baselineDaily) > 0 ? Number(liveEntry.baselineDaily) : 0);
+
+              const chosenDaily = usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0
+                ? liveDailyVal
+                : (baseDailyVal > 0 ? baseDailyVal : estDaily);
+              const effectiveDaily = chosenDaily > 0 ? chosenDaily : 0;
+
               const leadM = /D-(\d+)/.exec(o.supplier || '');
-              const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
+              const autoSafety = calcSafetyStock(effectiveDaily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
               const s = snapOf(o.itemId || '', o.name || '');
-              const fallbackDays =
-                (o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
-                (s && s.stockDays != null ? Number(s.stockDays) : null);
+              const fallbackDays = (usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0)
+                ? null
+                : ((o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
+                   (s && s.stockDays != null ? Number(s.stockDays) : null));
               const inQty = Number(o.incoming) || 0;
-              const rowDays = (o.stockDays != null && !isNaN(Number(o.stockDays)))
+              const rowDays = (o.stockDays != null && !isNaN(Number(o.stockDays)) && (usageMode !== 'LIVE' || liveDailyVal == null))
                 ? Math.round(Number(o.stockDays) * 10) / 10
-                : calcStockDays(current, daily > 0 ? daily : estDaily, fallbackDays, inQty);
+                : calcStockDays(current, effectiveDaily, fallbackDays, inQty);
 
               const yKeyWh = `${wh}|${norm}`;
               const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
@@ -966,7 +1060,14 @@ export const StockLookupView: React.FC = () => {
                 inboundDate: '',
                 expiryDate: '',
                 orderDay: '',
-                dailyUsage: daily,
+                dailyUsage: chosenDaily,
+                liveDailyUsage: liveDailyVal ?? undefined,
+                masterDailyUsage: baseDailyVal > 0 ? baseDailyVal : undefined,
+                usageSource: (liveDailyVal != null && liveDailyVal > 0 && usageMode === 'LIVE')
+                  ? 'LIVE_ORDER'
+                  : (baseDailyVal > 0 ? 'MASTER' : 'ESTIMATED'),
+                liveMenuCount: liveMenus,
+                liveDiffPercent: liveDiffPct,
                 actualDailyUsage: actualUsageVal,
                 avg20DailyUsage: estDaily > 0 ? estDaily : 0,
                 avg7DailyUsage: estDaily > 0 ? estDaily : 0,
@@ -1003,16 +1104,19 @@ export const StockLookupView: React.FC = () => {
           setNewRowIds(freshIds);
           setSnapshotMode(isSnap);
           const prevLabel = prevSnapDate ? `전일(${prevSnapDate.slice(5)}) 대비 ` : '';
+          const liveSuffix = liveOrderMenuCount > 0
+            ? ` · ⚡ 당일 수주 ${liveOrderMenuCount}종 실시간 연동 (${usageMode === 'LIVE' ? 'LIVE 일사용량' : '마스터 기준'})`
+            : '';
           setMergeInfo(
             isSnap
-              ? `${snapDate ? snapDate.slice(5) : ''} 확정 실사 ${loaded.length}건 · ${prevLabel}실사 기반 당일 실사용량 자동 산출`
+              ? `${snapDate ? snapDate.slice(5) : ''} 확정 실사 ${loaded.length}건 · ${prevLabel}실사 기반 당일 실사용량 자동 산출${liveSuffix}`
               : (orderByNorm.size > 0
-                  ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}`
+                  ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}${liveSuffix}`
                   : orderJson?.data?.errors?.length
                   ? `정본 실패: ${orderJson.data.errors[0]}`
                   : orderJson && !orderJson.success
                   ? `정본 실패: ${orderJson.error || '알 수 없음'}`
-                  : `${prevLabel}당일 실사용량 자동 산출`)
+                  : `${prevLabel}당일 실사용량 자동 산출${liveSuffix}`)
           );
         }
       })
@@ -1031,7 +1135,7 @@ export const StockLookupView: React.FC = () => {
     } catch {
       /* 스냅샷 조회 실패 시 현재고로 폴백 */
     }
-    loadStockData();
+    loadStockData(null, date);
   };
 
   // DB에 보관된 전체 실사 일자 목록 로드
@@ -1153,7 +1257,7 @@ export const StockLookupView: React.FC = () => {
   const handleLiveRecalc = async () => {
     setIsLiving(true);
     try {
-      const res = await fetch('/api/gfs/live-usage');
+      const res = await fetch(`/api/gfs/live-usage?date=${targetDate}`);
       const json = await res.json();
       if (!json.success) {
         alert('LIVE 계산 실패: ' + (json.error || '알 수 없는 오류'));
@@ -1754,9 +1858,9 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'dailyUsage',
-      label: locked ? 'BOM 일사용량 🔒' : 'BOM 일사용량',
-      width: '5.1%',
-      minWidth: '76px',
+      label: usageMode === 'LIVE' ? 'BOM 일사용량 ⚡' : (locked ? 'BOM 일사용량 🔒' : 'BOM 일사용량'),
+      width: '5.5%',
+      minWidth: '85px',
       align: 'right',
       format: 'number',
       sortable: true,
@@ -1767,18 +1871,46 @@ export const StockLookupView: React.FC = () => {
         const pack = Number(row.packUnit) || 1;
         const disp = Number(num.toFixed(2)).toLocaleString();
         const boxTxt = pack > 1 ? `(${Number((num / pack).toFixed(1))}박)` : '';
+        const isLive = row.usageSource === 'LIVE_ORDER';
+        const diffPct = row.liveDiffPercent;
+        const masterVal = row.masterDailyUsage;
+
         return (
-          <span
-            className="font-mono text-gray-800 whitespace-nowrap"
-            title={
-              pack > 1
-                ? `BOM 일사용량: ${disp} (기준 발주 단위 · 약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
-                : `BOM 일사용량: ${disp} (기준 발주 단위)`
-            }
-          >
-            {disp}
-            {boxTxt && <span className="ml-0.5 text-[10px] text-gray-500 font-sans">{boxTxt}</span>}
-          </span>
+          <div className="flex items-center justify-end gap-1">
+            {isLive && (
+              <span
+                className="inline-flex items-center text-[10px] px-1 py-0.5 rounded font-black bg-emerald-100 text-emerald-800"
+                title={`당일 수주 ${row.liveMenuCount || 0}종 연동 LIVE 계산${masterVal ? ` (마스터 기준치: ${masterVal})` : ''}`}
+              >
+                ⚡
+              </span>
+            )}
+            <span
+              className={`font-mono whitespace-nowrap ${isLive ? 'text-emerald-700 font-bold' : 'text-gray-800'}`}
+              title={
+                isLive
+                  ? `⚡ 수주연동 LIVE 일사용량: ${disp} (반영 메뉴 ${row.liveMenuCount || 0}종)${
+                      masterVal ? `\n마스터 기준치: ${masterVal} (변동률 ${diffPct && diffPct > 0 ? `+${diffPct}` : diffPct || 0}%)` : ''
+                    }${pack > 1 ? `\n약 ${(num / pack).toFixed(2)}박스/일 (입수량 ${pack})` : ''}`
+                  : (pack > 1
+                      ? `BOM 일사용량(마스터): ${disp} (약 ${(num / pack).toFixed(2)}박스/일, 입수량 ${pack})`
+                      : `BOM 일사용량(마스터): ${disp}`)
+              }
+            >
+              {disp}
+              {boxTxt && <span className={`ml-0.5 text-[10px] font-sans ${isLive ? 'text-emerald-600' : 'text-gray-500'}`}>{boxTxt}</span>}
+            </span>
+            {isLive && diffPct != null && Math.abs(diffPct) >= 20 && (
+              <span
+                className={`text-[9px] px-1 rounded font-mono font-bold ${
+                  diffPct > 0 ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                }`}
+                title={`마스터 기준치 대비 수주 변동률: ${diffPct > 0 ? `+${diffPct}` : diffPct}%`}
+              >
+                {diffPct > 0 ? `+${diffPct}%` : `${diffPct}%`}
+              </span>
+            )}
+          </div>
         );
       },
     },
@@ -2259,6 +2391,34 @@ export const StockLookupView: React.FC = () => {
               ))}
             </select>
           )}
+
+          {/* BOM 일사용량 산출 모드 토글 (⚡ 수주연동 LIVE vs 📋 마스터 기준치) */}
+          <div className="flex shrink-0 items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs ml-1">
+            <button
+              type="button"
+              onClick={() => toggleUsageMode('LIVE')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                usageMode === 'LIVE'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+              }`}
+              title="당일 실제 완제품 수주량에 따라 BOM 일사용량과 버팀일을 실시간 정밀 연동합니다 (기본/권장)."
+            >
+              <span>⚡ 수주연동 LIVE</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleUsageMode('MASTER')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                usageMode === 'MASTER'
+                  ? 'bg-slate-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              title="발주서 마스터 양식(H열)의 고정 일사용량 및 기준 재고유지일을 표시합니다."
+            >
+              <span>📋 마스터 기준치</span>
+            </button>
+          </div>
 
           {/* Warehouse */}
           <div className="flex shrink-0 items-center gap-1.5 pl-2 border-l border-slate-300">

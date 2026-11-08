@@ -8,6 +8,8 @@ import {
   DailyProductionItem,
   SHIFT1_CENTER_LIST,
   SHIFT2_CENTER_LIST,
+  CANONICAL_DAILY_REPORTS,
+  getCanonicalDailyReport,
 } from '@/components/production/data/dailyProductionReportData';
 
 // 센터별 표준 배분 가중치 (1편)
@@ -23,6 +25,7 @@ const SHIFT1_WEIGHTS: Record<string, number> = {
   '익산': 0.123,
   '신양산': 0.007,
   '신양산2': 0.010,
+  '경산3': 0.019,
   '부산수탁': 0.019,
 };
 
@@ -37,7 +40,8 @@ const SHIFT2_WEIGHTS: Record<string, number> = {
   '신광주2': 0.071,
   '신광주': 0.069,
   '익산': 0.138,
-  '특판': 0.021,
+  '경산3': 0.021,
+  '특판': 0.000,
 };
 
 /**
@@ -107,7 +111,8 @@ export async function GET(req: NextRequest) {
       orderBy: { orderDate: 'desc' },
       take: 60,
     });
-    const availableDates = orderDateRows.map((r) => r.orderDate).filter(Boolean);
+    const rawOrderDates = orderDateRows.map((r) => r.orderDate).filter(Boolean);
+    const availableDates = Array.from(new Set(['2026-11-08', '2026-11-07', ...rawOrderDates]));
 
     // ── 1. DB에 저장된 최종 확정 생산실적(ProductionResult) 확인 ──
     const dbResults = await prisma.productionResult.findMany({
@@ -118,9 +123,10 @@ export async function GET(req: NextRequest) {
     if (dbResults && dbResults.length > 0) {
       // 확정 저장된 실적이 있는 경우 (우선 반환)
       const dbItems: DailyProductionItem[] = dbResults.map((r, idx) => {
-        let cat: '삼각' | '줄김밥' | '도시락' | '조리빵' = '삼각';
+        let cat: '삼각' | '줄김밥' | '도시락' | '조리빵' | '특판' = '삼각';
         const name = r.productName;
-        if (name.includes('김밥') && !name.includes('삼각')) cat = '줄김밥';
+        if (name.includes('특판') || name.includes('기본김밥')) cat = '특판';
+        else if (name.includes('김밥') && !name.includes('삼각')) cat = '줄김밥';
         else if (name.includes('도시락') || name.includes('덮밥') || name.includes('비빔밥') || name.includes('혜자') || name.includes('정식')) cat = '도시락';
         else if (name.includes('핫도그') || name.includes('빵') || name.includes('버거') || name.includes('샌드')) cat = '조리빵';
 
@@ -303,17 +309,20 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // ── 3. 업로드 데이터가 없는 날짜 폴백 (2026-11-08 표준 템플릿) ──
-    const items: DailyProductionItem[] = JSON.parse(JSON.stringify(INITIAL_DAILY_PRODUCTION_REPORT));
+    // ── 3. 업로드 데이터가 없는 날짜 폴백 (2026-11-07 토 / 2026-11-08 일 정본 템플릿) ──
+    const canonical = getCanonicalDailyReport(date);
+    const items: DailyProductionItem[] = JSON.parse(JSON.stringify(canonical.items));
     const totals = calculateReportTotals(items);
 
     return NextResponse.json({
       success: true,
       date,
       source: 'CANONICAL_TEMPLATE',
-      sourceLabel: 'GFS 2026 생산일보 정본 템플릿 연동',
-      issueMemo: '정규 수주 59,676개 전량 생산 완료. 미출·결품 0건 정상 출하.',
-      extraOrderInfo: '특이 추가발주 없음 (정상 수주 출하 완료)',
+      sourceLabel: date === '2026-11-07'
+        ? 'GFS 2026-11-07(토) 생산일보 정본 (특판 5,000개 수주 포함)'
+        : 'GFS 2026-11-08(일) 생산일보 정본 템플릿 연동',
+      issueMemo: canonical.issueMemo,
+      extraOrderInfo: canonical.extraOrderInfo,
       availableDates,
       items,
       totals,

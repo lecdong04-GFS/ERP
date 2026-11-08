@@ -34,7 +34,7 @@ import { erpConfirm } from '@/context/ConfirmContext';
 export const ProductionResultStatusView: React.FC = () => {
   const { openPrintModal } = usePrintReport();
   const [baseDate, setBaseDate] = useState('2026-11-08');
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | '삼각' | '줄김밥' | '도시락' | '조리빵'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | '삼각' | '줄김밥' | '도시락' | '조리빵' | '특판'>('ALL');
   const [viewMode, setViewMode] = useState<'SUMMARY' | 'SHIFT1' | 'SHIFT2' | 'FULL'>('SUMMARY');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [items, setItems] = useState<DailyProductionItem[]>(INITIAL_DAILY_PRODUCTION_REPORT);
@@ -116,7 +116,7 @@ export const ProductionResultStatusView: React.FC = () => {
 
   // 카테고리별 그룹핑
   const categoryGroups = useMemo(() => {
-    const order: Array<'삼각' | '줄김밥' | '도시락' | '조리빵'> = ['삼각', '줄김밥', '도시락', '조리빵'];
+    const order: Array<'삼각' | '줄김밥' | '도시락' | '조리빵' | '특판'> = ['삼각', '줄김밥', '도시락', '조리빵', '특판'];
     return order
       .map((cat) => {
         const catItems = filteredItems.filter((i) => i.category === cat);
@@ -439,27 +439,28 @@ export const ProductionResultStatusView: React.FC = () => {
             </button>
           </div>
 
-          {/* 수주 등록일 퀵 선택기 (DB에 저장된 실제 날짜들) */}
-          {availableDates.length > 0 && (
-            <div className="flex items-center gap-1 bg-white border border-gray-300 rounded px-2 py-1 shadow-2xs">
-              <FileSpreadsheet size={12} className="text-emerald-600" />
-              <span className="text-[11px] font-bold text-gray-600">수주 DB 일자:</span>
-              <select
-                value={availableDates.includes(baseDate) ? baseDate : baseDate === '2026-11-08' ? '2026-11-08' : ''}
-                onChange={(e) => {
-                  if (e.target.value) setBaseDate(e.target.value);
-                }}
-                className="font-mono text-[11px] font-bold text-blue-900 bg-transparent outline-none cursor-pointer max-w-[175px]"
-              >
-                <option value="2026-11-08">2026-11-08 (11/8 정본 59,676개)</option>
-                {availableDates.map((d) => (
+          {/* 수주 등록일 퀵 선택기 (DB 및 정본 날짜들) */}
+          <div className="flex items-center gap-1 bg-white border border-gray-300 rounded px-2 py-1 shadow-2xs">
+            <FileSpreadsheet size={12} className="text-emerald-600" />
+            <span className="text-[11px] font-bold text-gray-600">일자 선택:</span>
+            <select
+              value={baseDate}
+              onChange={(e) => {
+                if (e.target.value) setBaseDate(e.target.value);
+              }}
+              className="font-mono text-[11px] font-bold text-blue-900 bg-transparent outline-none cursor-pointer max-w-[210px]"
+            >
+              <option value="2026-11-08">2026-11-08 (11/8 일 정본 59,676개)</option>
+              <option value="2026-11-07">2026-11-07 (11/7 토 정본 55,119개 - 특판포함)</option>
+              {availableDates
+                .filter((d) => d !== '2026-11-08' && d !== '2026-11-07')
+                .map((d) => (
                   <option key={d} value={d}>
                     {d} (수주 실데이터)
                   </option>
                 ))}
-              </select>
-            </div>
-          )}
+            </select>
+          </div>
 
           {/* 실시간 파이프라인 연동 배지 */}
           {dataSourceInfo.source === 'SALES_ORDER_DB' ? (
@@ -481,7 +482,7 @@ export const ProductionResultStatusView: React.FC = () => {
           ) : (
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-400 rounded text-blue-900 text-[11px] font-bold shadow-2xs">
               <Sparkles size={12} className="text-blue-600" />
-              <span>📋 11/8 정본 템플릿</span>
+              <span>📋 {baseDate === '2026-11-07' ? '11/7 토 정본 (특판 5,000개 포함)' : '11/8 일 정본 템플릿'}</span>
             </div>
           )}
 
@@ -493,13 +494,20 @@ export const ProductionResultStatusView: React.FC = () => {
               { id: '줄김밥', label: `줄김밥 (${items.filter((i) => i.category === '줄김밥').length})` },
               { id: '도시락', label: `도시락 (${items.filter((i) => i.category === '도시락').length})` },
               { id: '조리빵', label: `조리빵 (${items.filter((i) => i.category === '조리빵').length})` },
+              ...(items.some((i) => i.category === '특판')
+                ? [{ id: '특판', label: `특판 (${items.filter((i) => i.category === '특판').length})` }]
+                : []),
             ].map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setCategoryFilter(cat.id as any)}
                 className={`px-2.5 py-1 rounded text-[11.5px] font-semibold transition-all ${
                   categoryFilter === cat.id
-                    ? 'bg-blue-600 text-white shadow-2xs'
+                    ? cat.id === '특판'
+                      ? 'bg-pink-600 text-white shadow-2xs'
+                      : 'bg-blue-600 text-white shadow-2xs'
+                    : cat.id === '특판'
+                    ? 'text-pink-800 bg-pink-100 hover:bg-pink-200'
                     : 'text-gray-700 hover:text-black hover:bg-gray-300'
                 }`}
               >
@@ -686,15 +694,23 @@ export const ProductionResultStatusView: React.FC = () => {
                     return (
                       <tr
                         key={item.no}
-                        className={`border-b border-gray-200 transition-colors hover:bg-amber-50/50 ${
-                          idx % 2 === 1 ? 'bg-gray-50/50' : 'bg-white'
+                        className={`border-b border-gray-200 transition-colors ${
+                          item.category === '특판'
+                            ? 'bg-pink-50/70 hover:bg-pink-100/80 font-medium'
+                            : idx % 2 === 1
+                            ? 'bg-gray-50/50 hover:bg-amber-50/50'
+                            : 'bg-white hover:bg-amber-50/50'
                         }`}
                       >
                         {/* 카테고리 구분 열 (그룹 첫 번째 행에만 rowspan) */}
                         {idx === 0 ? (
                           <td
                             rowSpan={group.items.length + 1}
-                            className="py-2 px-1 border-r border-gray-300 text-center font-extrabold bg-[#f1f5f9] text-gray-800 align-middle"
+                            className={`py-2 px-1 border-r border-gray-300 text-center font-extrabold align-middle ${
+                              group.category === '특판'
+                                ? 'bg-pink-100 text-pink-950 font-black border-pink-300'
+                                : 'bg-[#f1f5f9] text-gray-800'
+                            }`}
                           >
                             {group.category}
                           </td>
@@ -818,7 +834,11 @@ export const ProductionResultStatusView: React.FC = () => {
 
                   {/* ── 카테고리별 소계 행 ── */}
                   <tr className="bg-gray-100 font-bold text-gray-900 border-b border-gray-400 text-center">
-                    <td className="py-1.5 px-2 border-r border-gray-300 text-left font-bold text-gray-800 bg-gray-200">
+                    <td
+                      className={`py-1.5 px-2 border-r border-gray-300 text-left font-bold ${
+                        group.category === '특판' ? 'bg-pink-200 text-pink-950 font-black' : 'bg-gray-200 text-gray-800'
+                      }`}
+                    >
                       {group.items.length} Unit ({group.category} 소계)
                     </td>
                     <td className="py-1.5 px-1.5 border-r border-gray-300 text-gray-400">-</td>

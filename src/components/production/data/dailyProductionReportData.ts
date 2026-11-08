@@ -16,7 +16,7 @@ export interface DailyReportCenterQty {
 
 export interface DailyProductionItem {
   no: number;
-  category: '삼각' | '줄김밥' | '도시락' | '조리빵';
+  category: '삼각' | '줄김밥' | '도시락' | '조리빵' | '특판';
   productName: string;
   deliveryPrice: number; // GFS 납품 공급단가 (원가/공급단가)
   retailPrice: number;   // GS25 매장 판매가 (소비자가격)
@@ -28,19 +28,19 @@ export interface DailyProductionItem {
   shift1Amount: number;  // 1편 금액
   shift2Qty: number;     // 2편 수량
   shift2Amount: number;  // 2편 금액
-  shift1Centers: DailyReportCenterQty; // 1편 거래처별 (김해, 김해2, 왜관, 경산, 경산2, 진주, 신광주2, 신광주, 익산, 신양산, 신양산2, 부산수탁)
-  shift2Centers: DailyReportCenterQty; // 2편 거래처별 (김해, 김해2, 왜관, 경산, 경산2, 진주, 신광주2, 신광주, 익산, 특판)
+  shift1Centers: DailyReportCenterQty; // 1편 거래처별 (김해, 김해2, 왜관, 경산, 경산2, 진주, 신광주2, 신광주, 익산, 신양산, 신양산2, 경산3/부산수탁)
+  shift2Centers: DailyReportCenterQty; // 2편 거래처별 (김해, 김해2, 왜관, 경산, 경산2, 진주, 신광주2, 신광주, 익산, 경산3, 특판)
   highlightShift1Centers?: string[]; // 강조 셀 (예: ['익산'])
   highlightShift2Centers?: string[]; // 강조 셀 (예: ['익산'])
   remark?: string;
 }
 
 export const SHIFT1_CENTER_LIST = [
-  '김해', '김해2', '왜관', '경산', '경산2', '진주', '신광주2', '신광주', '익산', '신양산', '신양산2', '부산수탁'
+  '김해', '김해2', '왜관', '경산', '경산2', '진주', '신광주2', '신광주', '익산', '신양산', '신양산2', '경산3'
 ] as const;
 
 export const SHIFT2_CENTER_LIST = [
-  '김해', '김해2', '왜관', '경산', '경산2', '진주', '신광주2', '신광주', '익산', '특판'
+  '김해', '김해2', '왜관', '경산', '경산2', '진주', '신광주2', '신광주', '익산', '경산3', '특판'
 ] as const;
 
 export const GSR_SHORTAGE_MONITOR_CENTERS = [
@@ -763,7 +763,7 @@ export function calculateReportTotals(items: DailyProductionItem[]): DailyReport
     s2Amt += item.shift2Amount;
 
     SHIFT1_CENTER_LIST.forEach((c) => {
-      s1Centers[c] += item.shift1Centers[c] || 0;
+      s1Centers[c] += item.shift1Centers[c] || (c === '경산3' ? (item.shift1Centers['부산수탁'] || 0) : 0) || 0;
     });
     SHIFT2_CENTER_LIST.forEach((c) => {
       s2Centers[c] += item.shift2Centers[c] || 0;
@@ -780,4 +780,896 @@ export function calculateReportTotals(items: DailyProductionItem[]): DailyReport
     shift1Centers: s1Centers,
     shift2Centers: s2Centers
   };
+}
+
+/**
+ * 2026-11-08(일) 정본 데이터셋 별칭
+ */
+export const DAILY_PRODUCTION_REPORT_20261108: DailyProductionItem[] = INITIAL_DAILY_PRODUCTION_REPORT;
+
+/**
+ * 2026-11-07(토) GFS 생산일보 정본 데이터셋
+ * 총계: 55,119 Ea / 104,155,712 원
+ * 1편: 26,398 Ea / 52,263,083 원 (47.9%)
+ * 2편: 28,721 Ea / 51,892,629 원 (52.1%)
+ * 특판: 기본김밥 2,500개 + 참치마요 2,500개 = 5,000개 (2편 직출)
+ */
+export const DAILY_PRODUCTION_REPORT_20261107: DailyProductionItem[] = [
+  // ─── 삼각 (10 Unit) ─── 소계 27,673개 / 29,709,109원 (1편: 14,437 / 2편: 13,236)
+  {
+    no: 1,
+    category: '삼각',
+    productName: 'NEW스팸구이',
+    deliveryPrice: 1020,
+    retailPrice: 1700,
+    totalQty: 1626,
+    qtyRatio: 2.9,
+    totalAmount: 1658520,
+    amtRatio: 1.6,
+    shift1Qty: 771,
+    shift1Amount: 786420,
+    shift2Qty: 855,
+    shift2Amount: 872100,
+    shift1Centers: { '김해': 57, '김해2': 80, '왜관': 143, '경산': 86, '경산2': 105, '진주': 110, '신광주2': 51, '신광주': 68, '익산': 60, '신양산': 0, '신양산2': 0, '경산3': 11 },
+    shift2Centers: { '김해': 78, '김해2': 125, '왜관': 176, '경산': 96, '경산2': 90, '진주': 109, '신광주2': 41, '신광주': 55, '익산': 76, '경산3': 9, '특판': 0 }
+  },
+  {
+    no: 2,
+    category: '삼각',
+    productName: '(마스터)햄&참치김치볶음밥',
+    deliveryPrice: 1182,
+    retailPrice: 2000,
+    totalQty: 811,
+    qtyRatio: 1.5,
+    totalAmount: 958440,
+    amtRatio: 0.9,
+    shift1Qty: 360,
+    shift1Amount: 425448,
+    shift2Qty: 451,
+    shift2Amount: 532992,
+    shift1Centers: { '김해': 33, '김해2': 26, '왜관': 54, '경산': 32, '경산2': 38, '진주': 53, '신광주2': 43, '신광주': 31, '익산': 43, '신양산': 0, '신양산2': 0, '경산3': 7 },
+    shift2Centers: { '김해': 43, '김해2': 39, '왜관': 80, '경산': 60, '경산2': 60, '진주': 51, '신광주2': 25, '신광주': 31, '익산': 52, '경산3': 10, '특판': 0 }
+  },
+  {
+    no: 3,
+    category: '삼각',
+    productName: '(마스터)햄&소청양불고기',
+    deliveryPrice: 1182,
+    retailPrice: 2000,
+    totalQty: 303,
+    qtyRatio: 0.5,
+    totalAmount: 358085,
+    amtRatio: 0.3,
+    shift1Qty: 132,
+    shift1Amount: 155998,
+    shift2Qty: 171,
+    shift2Amount: 202088,
+    shift1Centers: { '김해': 11, '김해2': 7, '왜관': 23, '경산': 17, '경산2': 15, '진주': 15, '신광주2': 11, '신광주': 19, '익산': 13, '신양산': 0, '신양산2': 0, '경산3': 1 },
+    shift2Centers: { '김해': 14, '김해2': 19, '왜관': 30, '경산': 26, '경산2': 23, '진주': 21, '신광주2': 9, '신광주': 8, '익산': 17, '경산3': 4, '특판': 0 }
+  },
+  {
+    no: 4,
+    category: '삼각',
+    productName: '(더큰)통안심치킨마요',
+    deliveryPrice: 1064,
+    retailPrice: 1800,
+    totalQty: 2665,
+    qtyRatio: 4.8,
+    totalAmount: 2834494,
+    amtRatio: 2.7,
+    shift1Qty: 1356,
+    shift1Amount: 1442242,
+    shift2Qty: 1309,
+    shift2Amount: 1392252,
+    shift1Centers: { '김해': 109, '김해2': 96, '왜관': 185, '경산': 163, '경산2': 166, '진주': 163, '신광주2': 128, '신광주': 139, '익산': 196, '신양산': 0, '신양산2': 0, '경산3': 11 },
+    shift2Centers: { '김해': 99, '김해2': 116, '왜관': 210, '경산': 136, '경산2': 165, '진주': 156, '신광주2': 98, '신광주': 98, '익산': 203, '경산3': 28, '특판': 0 }
+  },
+  {
+    no: 5,
+    category: '삼각',
+    productName: '(더큰)스팸참치볶음밥',
+    deliveryPrice: 1080,
+    retailPrice: 1800,
+    totalQty: 4809,
+    qtyRatio: 8.7,
+    totalAmount: 5193720,
+    amtRatio: 5.0,
+    shift1Qty: 2481,
+    shift1Amount: 2679480,
+    shift2Qty: 2328,
+    shift2Amount: 2514240,
+    shift1Centers: { '김해': 192, '김해2': 210, '왜관': 372, '경산': 307, '경산2': 307, '진주': 271, '신광주2': 245, '신광주': 241, '익산': 306, '신양산': 0, '신양산2': 0, '경산3': 30 },
+    shift2Centers: { '김해': 181, '김해2': 195, '왜관': 395, '경산': 271, '경산2': 273, '진주': 274, '신광주2': 208, '신광주': 175, '익산': 310, '경산3': 46, '특판': 0 }
+  },
+  {
+    no: 6,
+    category: '삼각',
+    productName: '삼각)전주비빔',
+    deliveryPrice: 687,
+    retailPrice: 1200,
+    totalQty: 2367,
+    qtyRatio: 4.3,
+    totalAmount: 1625129,
+    amtRatio: 1.6,
+    shift1Qty: 1213,
+    shift1Amount: 833331,
+    shift2Qty: 1154,
+    shift2Amount: 792798,
+    shift1Centers: { '김해': 86, '김해2': 90, '왜관': 168, '경산': 156, '경산2': 116, '진주': 133, '신광주2': 121, '신광주': 128, '익산': 199, '신양산': 0, '신양산2': 0, '경산3': 16 },
+    shift2Centers: { '김해': 74, '김해2': 85, '왜관': 169, '경산': 157, '경산2': 126, '진주': 132, '신광주2': 90, '신광주': 89, '익산': 201, '경산3': 23, '특판': 0 }
+  },
+  {
+    no: 7,
+    category: '삼각',
+    productName: '(더큰)고추장이지육&맛있삼밥',
+    deliveryPrice: 1064,
+    retailPrice: 1800,
+    totalQty: 1165,
+    qtyRatio: 2.1,
+    totalAmount: 1239094,
+    amtRatio: 1.2,
+    shift1Qty: 614,
+    shift1Amount: 653050,
+    shift2Qty: 551,
+    shift2Amount: 586044,
+    shift1Centers: { '김해': 54, '김해2': 47, '왜관': 85, '경산': 64, '경산2': 82, '진주': 62, '신광주2': 47, '신광주': 55, '익산': 103, '신양산': 0, '신양산2': 0, '경산3': 15 },
+    shift2Centers: { '김해': 48, '김해2': 42, '왜관': 95, '경산': 86, '경산2': 75, '진주': 52, '신광주2': 29, '신광주': 37, '익산': 78, '경산3': 9, '특판': 0 }
+  },
+  {
+    no: 8,
+    category: '삼각',
+    productName: '(주문)(더큰)비빔참치마요',
+    deliveryPrice: 1064,
+    retailPrice: 1800,
+    totalQty: 1,
+    qtyRatio: 0.0,
+    totalAmount: 1064,
+    amtRatio: 0.0,
+    shift1Qty: 1,
+    shift1Amount: 1064,
+    shift2Qty: 0,
+    shift2Amount: 0,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 1, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '진주센터 스팟 주문'
+  },
+  {
+    no: 9,
+    category: '삼각',
+    productName: '(주문)삼각)전주비빔',
+    deliveryPrice: 687,
+    retailPrice: 1200,
+    totalQty: 15,
+    qtyRatio: 0.0,
+    totalAmount: 10305,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 15,
+    shift2Amount: 10305,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 15, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '신광주센터 추가 주문'
+  },
+  {
+    no: 10,
+    category: '삼각',
+    productName: '(더큰)스팸계란볶음밥',
+    deliveryPrice: 1123,
+    retailPrice: 1900,
+    totalQty: 3752,
+    qtyRatio: 6.8,
+    totalAmount: 4212370,
+    amtRatio: 4.0,
+    shift1Qty: 1901,
+    shift1Amount: 2134253,
+    shift2Qty: 1851,
+    shift2Amount: 2078118,
+    shift1Centers: { '김해': 153, '김해2': 160, '왜관': 284, '경산': 221, '경산2': 232, '진주': 232, '신광주2': 169, '신광주': 178, '익산': 248, '신양산': 0, '신양산2': 0, '경산3': 24 },
+    shift2Centers: { '김해': 126, '김해2': 160, '왜관': 334, '경산': 223, '경산2': 215, '진주': 215, '신광주2': 154, '신광주': 134, '익산': 251, '경산3': 38, '특판': 0 }
+  },
+  {
+    no: 11,
+    category: '삼각',
+    productName: '(더큰)떡갈비이색',
+    deliveryPrice: 1131,
+    retailPrice: 1900,
+    totalQty: 947,
+    qtyRatio: 1.7,
+    totalAmount: 1071435,
+    amtRatio: 1.0,
+    shift1Qty: 500,
+    shift1Amount: 565700,
+    shift2Qty: 447,
+    shift2Amount: 505736,
+    shift1Centers: { '김해': 51, '김해2': 43, '왜관': 74, '경산': 57, '경산2': 52, '진주': 57, '신광주2': 41, '신광주': 41, '익산': 71, '신양산': 0, '신양산2': 0, '경산3': 13 },
+    shift2Centers: { '김해': 31, '김해2': 32, '왜관': 71, '경산': 61, '경산2': 64, '진주': 57, '신광주2': 26, '신광주': 24, '익산': 73, '경산3': 8, '특판': 0 }
+  },
+  {
+    no: 12,
+    category: '삼각',
+    productName: '(더큰)들기름묵은지참치',
+    deliveryPrice: 1080,
+    retailPrice: 1800,
+    totalQty: 3572,
+    qtyRatio: 6.5,
+    totalAmount: 3857760,
+    amtRatio: 3.7,
+    shift1Qty: 1839,
+    shift1Amount: 1986120,
+    shift2Qty: 1733,
+    shift2Amount: 1871640,
+    shift1Centers: { '김해': 131, '김해2': 181, '왜관': 228, '경산': 227, '경산2': 223, '진주': 175, '신광주2': 163, '신광주': 199, '익산': 288, '신양산': 0, '신양산2': 0, '경산3': 24 },
+    shift2Centers: { '김해': 118, '김해2': 153, '왜관': 262, '경산': 205, '경산2': 203, '진주': 181, '신광주2': 135, '신광주': 164, '익산': 285, '경산3': 27, '특판': 0 }
+  },
+  {
+    no: 13,
+    category: '삼각',
+    productName: '커플)참치김치&비빔밥',
+    deliveryPrice: 1418,
+    retailPrice: 2400,
+    totalQty: 1943,
+    qtyRatio: 3.5,
+    totalAmount: 2755563,
+    amtRatio: 2.6,
+    shift1Qty: 1147,
+    shift1Amount: 1626675,
+    shift2Qty: 796,
+    shift2Amount: 1128887,
+    shift1Centers: { '김해': 90, '김해2': 89, '왜관': 151, '경산': 155, '경산2': 144, '진주': 132, '신광주2': 105, '신광주': 106, '익산': 148, '신양산': 0, '신양산2': 0, '경산3': 31 },
+    shift2Centers: { '김해': 48, '김해2': 69, '왜관': 147, '경산': 109, '경산2': 108, '진주': 89, '신광주2': 58, '신광주': 51, '익산': 104, '경산3': 19, '특판': 0 }
+  },
+  {
+    no: 14,
+    category: '삼각',
+    productName: '(더큰)명란마요',
+    deliveryPrice: 1064,
+    retailPrice: 1800,
+    totalQty: 3697,
+    qtyRatio: 6.7,
+    totalAmount: 3932129,
+    amtRatio: 3.8,
+    shift1Qty: 2122,
+    shift1Amount: 2256959,
+    shift2Qty: 1575,
+    shift2Amount: 1675170,
+    shift1Centers: { '김해': 156, '김해2': 172, '왜관': 305, '경산': 301, '경산2': 282, '진주': 254, '신광주2': 166, '신광주': 174, '익산': 271, '신양산': 0, '신양산2': 0, '경산3': 41 },
+    shift2Centers: { '김해': 100, '김해2': 142, '왜관': 228, '경산': 205, '경산2': 214, '진주': 175, '신광주2': 102, '신광주': 121, '익산': 247, '경산3': 41, '특판': 0 }
+  },
+
+  // ─── 줄김밥 (13 Unit) ─── 소계 11,300개 / 23,149,851원 (1편: 6,769 / 2편: 5,531)
+  {
+    no: 15,
+    category: '줄김밥',
+    productName: 'THE근초김밥',
+    deliveryPrice: 1660,
+    retailPrice: 2900,
+    totalQty: 2487,
+    qtyRatio: 4.5,
+    totalAmount: 4128420,
+    amtRatio: 4.0,
+    shift1Qty: 1161,
+    shift1Amount: 1927260,
+    shift2Qty: 1326,
+    shift2Amount: 2201160,
+    shift1Centers: { '김해': 84, '김해2': 98, '왜관': 180, '경산': 152, '경산2': 139, '진주': 127, '신광주2': 109, '신광주': 94, '익산': 165, '신양산': 0, '신양산2': 0, '경산3': 13 },
+    shift2Centers: { '김해': 97, '김해2': 103, '왜관': 215, '경산': 189, '경산2': 178, '진주': 145, '신광주2': 78, '신광주': 88, '익산': 198, '경산3': 35, '특판': 0 }
+  },
+  {
+    no: 16,
+    category: '줄김밥',
+    productName: '더블치즈소시지김밥',
+    deliveryPrice: 2160,
+    retailPrice: 3600,
+    totalQty: 1134,
+    qtyRatio: 2.1,
+    totalAmount: 2449440,
+    amtRatio: 2.4,
+    shift1Qty: 559,
+    shift1Amount: 1207440,
+    shift2Qty: 575,
+    shift2Amount: 1242000,
+    shift1Centers: { '김해': 34, '김해2': 47, '왜관': 81, '경산': 66, '경산2': 83, '진주': 60, '신광주2': 55, '신광주': 50, '익산': 80, '신양산': 0, '신양산2': 0, '경산3': 3 },
+    shift2Centers: { '김해': 34, '김해2': 53, '왜관': 99, '경산': 73, '경산2': 83, '진주': 56, '신광주2': 46, '신광주': 33, '익산': 84, '경산3': 14, '특판': 0 }
+  },
+  {
+    no: 17,
+    category: '줄김밥',
+    productName: '불고기치즈김밥',
+    deliveryPrice: 2127,
+    retailPrice: 3600,
+    totalQty: 876,
+    qtyRatio: 1.6,
+    totalAmount: 1861125,
+    amtRatio: 1.8,
+    shift1Qty: 437,
+    shift1Amount: 929499,
+    shift2Qty: 438,
+    shift2Amount: 931626,
+    shift1Centers: { '김해': 26, '김해2': 36, '왜관': 66, '경산': 51, '경산2': 67, '진주': 56, '신광주2': 36, '신광주': 31, '익산': 66, '신양산': 0, '신양산2': 0, '경산3': 3 },
+    shift2Centers: { '김해': 31, '김해2': 21, '왜관': 85, '경산': 57, '경산2': 70, '진주': 50, '신광주2': 26, '신광주': 23, '익산': 69, '경산3': 6, '특판': 0 }
+  },
+  {
+    no: 18,
+    category: '줄김밥',
+    productName: '스팸계란치즈김밥',
+    deliveryPrice: 2045,
+    retailPrice: 3600,
+    totalQty: 1061,
+    qtyRatio: 1.9,
+    totalAmount: 2169745,
+    amtRatio: 2.1,
+    shift1Qty: 573,
+    shift1Amount: 1171785,
+    shift2Qty: 488,
+    shift2Amount: 997960,
+    shift1Centers: { '김해': 48, '김해2': 49, '왜관': 91, '경산': 67, '경산2': 93, '진주': 53, '신광주2': 36, '신광주': 59, '익산': 72, '신양산': 0, '신양산2': 0, '경산3': 5 },
+    shift2Centers: { '김해': 46, '김해2': 49, '왜관': 77, '경산': 64, '경산2': 61, '진주': 52, '신광주2': 22, '신광주': 36, '익산': 78, '경산3': 3, '특판': 0 }
+  },
+  {
+    no: 19,
+    category: '줄김밥',
+    productName: '왕돈까스김밥',
+    deliveryPrice: 2141,
+    retailPrice: 3800,
+    totalQty: 926,
+    qtyRatio: 1.7,
+    totalAmount: 1980425,
+    amtRatio: 1.9,
+    shift1Qty: 476,
+    shift1Amount: 1019116,
+    shift2Qty: 449,
+    shift2Amount: 961309,
+    shift1Centers: { '김해': 33, '김해2': 34, '왜관': 85, '경산': 71, '경산2': 69, '진주': 54, '신광주2': 36, '신광주': 44, '익산': 51, '신양산': 0, '신양산2': 0, '경산3': 9 },
+    shift2Centers: { '김해': 30, '김해2': 48, '왜관': 83, '경산': 52, '경산2': 60, '진주': 55, '신광주2': 25, '신광주': 33, '익산': 56, '경산3': 7, '특판': 0 }
+  },
+  {
+    no: 20,
+    category: '줄김밥',
+    productName: '직화)한돈제육쌈김밥',
+    deliveryPrice: 2185,
+    retailPrice: 3700,
+    totalQty: 897,
+    qtyRatio: 1.6,
+    totalAmount: 1960842,
+    amtRatio: 1.9,
+    shift1Qty: 454,
+    shift1Amount: 992444,
+    shift2Qty: 443,
+    shift2Amount: 968398,
+    shift1Centers: { '김해': 33, '김해2': 22, '왜관': 58, '경산': 47, '경산2': 64, '진주': 66, '신광주2': 34, '신광주': 46, '익산': 78, '신양산': 0, '신양산2': 0, '경산3': 6 },
+    shift2Centers: { '김해': 31, '김해2': 38, '왜관': 70, '경산': 41, '경산2': 52, '진주': 46, '신광주2': 34, '신광주': 28, '익산': 92, '경산3': 11, '특판': 0 }
+  },
+  {
+    no: 21,
+    category: '줄김밥',
+    productName: '(주문)THE근초김밥',
+    deliveryPrice: 1660,
+    retailPrice: 2900,
+    totalQty: 3,
+    qtyRatio: 0.0,
+    totalAmount: 4980,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 3,
+    shift2Amount: 4980,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 1, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 2, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '김해2/신광주 추가 주문'
+  },
+  {
+    no: 22,
+    category: '줄김밥',
+    productName: '(주문)왕돈까스김밥',
+    deliveryPrice: 2141,
+    retailPrice: 3800,
+    totalQty: 2,
+    qtyRatio: 0.0,
+    totalAmount: 4282,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 2,
+    shift2Amount: 4282,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 1, '경산': 0, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '왜관/경산2 추가 주문'
+  },
+  {
+    no: 23,
+    category: '줄김밥',
+    productName: '참치김치볶음김밥',
+    deliveryPrice: 2084,
+    retailPrice: 3500,
+    totalQty: 1512,
+    qtyRatio: 2.7,
+    totalAmount: 3151008,
+    amtRatio: 3.0,
+    shift1Qty: 821,
+    shift1Amount: 1710964,
+    shift2Qty: 691,
+    shift2Amount: 1440044,
+    shift1Centers: { '김해': 86, '김해2': 60, '왜관': 93, '경산': 77, '경산2': 90, '진주': 95, '신광주2': 89, '신광주': 90, '익산': 128, '신양산': 0, '신양산2': 0, '경산3': 13 },
+    shift2Centers: { '김해': 44, '김해2': 41, '왜관': 125, '경산': 80, '경산2': 84, '진주': 71, '신광주2': 64, '신광주': 59, '익산': 107, '경산3': 16, '특판': 0 }
+  },
+  {
+    no: 24,
+    category: '줄김밥',
+    productName: '진미채치즈김밥',
+    deliveryPrice: 2144,
+    retailPrice: 3600,
+    totalQty: 527,
+    qtyRatio: 1.0,
+    totalAmount: 1129677,
+    amtRatio: 1.1,
+    shift1Qty: 292,
+    shift1Amount: 626931,
+    shift2Qty: 235,
+    shift2Amount: 503746,
+    shift1Centers: { '김해': 23, '김해2': 23, '왜관': 43, '경산': 57, '경산2': 40, '진주': 31, '신광주2': 20, '신광주': 24, '익산': 28, '신양산': 0, '신양산2': 0, '경산3': 3 },
+    shift2Centers: { '김해': 17, '김해2': 18, '왜관': 39, '경산': 50, '경산2': 39, '진주': 19, '신광주2': 10, '신광주': 7, '익산': 27, '경산3': 9, '특판': 0 }
+  },
+  {
+    no: 25,
+    category: '줄김밥',
+    productName: '넷플)디핑온더K왕갈비김밥',
+    deliveryPrice: 2545,
+    retailPrice: 4000,
+    totalQty: 1303,
+    qtyRatio: 2.4,
+    totalAmount: 3316135,
+    amtRatio: 3.2,
+    shift1Qty: 672,
+    shift1Amount: 1710240,
+    shift2Qty: 631,
+    shift2Amount: 1605895,
+    shift1Centers: { '김해': 50, '김해2': 41, '왜관': 82, '경산': 80, '경산2': 94, '진주': 87, '신광주2': 61, '신광주': 59, '익산': 105, '신양산': 0, '신양산2': 0, '경산3': 13 },
+    shift2Centers: { '김해': 42, '김해2': 38, '왜관': 92, '경산': 79, '경산2': 82, '진주': 68, '신광주2': 63, '신광주': 44, '익산': 104, '경산3': 19, '특판': 0 }
+  },
+  {
+    no: 26,
+    category: '줄김밥',
+    productName: '디핑)시장꼬마김밥',
+    deliveryPrice: 1636,
+    retailPrice: 3000,
+    totalQty: 290,
+    qtyRatio: 0.5,
+    totalAmount: 474440,
+    amtRatio: 0.5,
+    shift1Qty: 161,
+    shift1Amount: 263396,
+    shift2Qty: 129,
+    shift2Amount: 211044,
+    shift1Centers: { '김해': 16, '김해2': 11, '왜관': 21, '경산': 12, '경산2': 19, '진주': 20, '신광주2': 18, '신광주': 15, '익산': 28, '신양산': 0, '신양산2': 0, '경산3': 1 },
+    shift2Centers: { '김해': 10, '김해2': 5, '왜관': 19, '경산': 11, '경산2': 20, '진주': 18, '신광주2': 12, '신광주': 11, '익산': 23, '경산3': 0, '특판': 0 }
+  },
+  {
+    no: 27,
+    category: '줄김밥',
+    productName: '(주문)디핑)시장꼬마김밥',
+    deliveryPrice: 1636,
+    retailPrice: 3000,
+    totalQty: 2,
+    qtyRatio: 0.0,
+    totalAmount: 3272,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 2,
+    shift2Amount: 3272,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 1, '경산': 1, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '왜관/경산 추가 주문'
+  },
+  {
+    no: 28,
+    category: '줄김밥',
+    productName: '디핑)에그참치마요꼬마김밥',
+    deliveryPrice: 1830,
+    retailPrice: 3300,
+    totalQty: 280,
+    qtyRatio: 0.5,
+    totalAmount: 512400,
+    amtRatio: 0.5,
+    shift1Qty: 163,
+    shift1Amount: 298290,
+    shift2Qty: 117,
+    shift2Amount: 214110,
+    shift1Centers: { '김해': 11, '김해2': 7, '왜관': 17, '경산': 21, '경산2': 20, '진주': 14, '신광주2': 22, '신광주': 17, '익산': 33, '신양산': 0, '신양산2': 0, '경산3': 1 },
+    shift2Centers: { '김해': 7, '김해2': 3, '왜관': 23, '경산': 18, '경산2': 14, '진주': 14, '신광주2': 13, '신광주': 10, '익산': 13, '경산3': 2, '특판': 0 }
+  },
+  {
+    no: 29,
+    category: '줄김밥',
+    productName: '(주문)디핑)에그참치마요꼬마김밥',
+    deliveryPrice: 1830,
+    retailPrice: 3300,
+    totalQty: 2,
+    qtyRatio: 0.0,
+    totalAmount: 3660,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 2,
+    shift2Amount: 3660,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 2, '경산3': 0, '특판': 0 },
+    remark: '익산센터 추가 주문'
+  },
+
+  // ─── 도시락 (12 Unit) ─── 소계 11,146개 / 44,869,252원 (1편: 6,192 / 2편: 4,954)
+  {
+    no: 30,
+    category: '도시락',
+    productName: '혜자)통등심돈까스',
+    deliveryPrice: 3700,
+    retailPrice: 5500,
+    totalQty: 531,
+    qtyRatio: 1.0,
+    totalAmount: 1964700,
+    amtRatio: 1.9,
+    shift1Qty: 306,
+    shift1Amount: 1132200,
+    shift2Qty: 225,
+    shift2Amount: 832500,
+    shift1Centers: { '김해': 35, '김해2': 48, '왜관': 73, '경산': 67, '경산2': 71, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 12 },
+    shift2Centers: { '김해': 31, '김해2': 25, '왜관': 65, '경산': 50, '경산2': 39, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 15, '특판': 0 }
+  },
+  {
+    no: 31,
+    category: '도시락',
+    productName: '혜자)돌아온통통치킨',
+    deliveryPrice: 3915,
+    retailPrice: 5900,
+    totalQty: 2056,
+    qtyRatio: 3.7,
+    totalAmount: 8049240,
+    amtRatio: 7.7,
+    shift1Qty: 1105,
+    shift1Amount: 4326075,
+    shift2Qty: 951,
+    shift2Amount: 3723165,
+    shift1Centers: { '김해': 94, '김해2': 97, '왜관': 185, '경산': 106, '경산2': 141, '진주': 127, '신광주2': 80, '신광주': 101, '익산': 156, '신양산': 0, '신양산2': 0, '경산3': 19 },
+    shift2Centers: { '김해': 72, '김해2': 60, '왜관': 157, '경산': 128, '경산2': 130, '진주': 75, '신광주2': 64, '신광주': 54, '익산': 189, '경산3': 22, '특판': 0 }
+  },
+  {
+    no: 32,
+    category: '도시락',
+    productName: 'NEW혜자)백설갈비양념제육',
+    deliveryPrice: 3403,
+    retailPrice: 5200,
+    totalQty: 967,
+    qtyRatio: 1.8,
+    totalAmount: 3290701,
+    amtRatio: 3.2,
+    shift1Qty: 626,
+    shift1Amount: 2130278,
+    shift2Qty: 341,
+    shift2Amount: 1160423,
+    shift1Centers: { '김해': 42, '김해2': 34, '왜관': 229, '경산': 57, '경산2': 54, '진주': 64, '신광주2': 33, '신광주': 38, '익산': 59, '신양산': 0, '신양산2': 0, '경산3': 16 },
+    shift2Centers: { '김해': 22, '김해2': 25, '왜관': 56, '경산': 39, '경산2': 53, '진주': 44, '신광주2': 24, '신광주': 17, '익산': 56, '경산3': 5, '특판': 0 }
+  },
+  {
+    no: 33,
+    category: '도시락',
+    productName: '(주문)혜자)통등심돈까스',
+    deliveryPrice: 3915,
+    retailPrice: 5900,
+    totalQty: 10,
+    qtyRatio: 0.0,
+    totalAmount: 39150,
+    amtRatio: 0.0,
+    shift1Qty: 2,
+    shift1Amount: 7830,
+    shift2Qty: 8,
+    shift2Amount: 31320,
+    shift1Centers: { '김해': 0, '김해2': 1, '왜관': 0, '경산': 0, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 3, '신광주': 1, '익산': 1, '경산3': 3, '특판': 0 },
+    remark: '호남/경산 스팟 추가'
+  },
+  {
+    no: 34,
+    category: '도시락',
+    productName: 'NEW통모아치킨&돈까스',
+    deliveryPrice: 4431,
+    retailPrice: 6500,
+    totalQty: 970,
+    qtyRatio: 1.8,
+    totalAmount: 4298070,
+    amtRatio: 4.1,
+    shift1Qty: 521,
+    shift1Amount: 2308551,
+    shift2Qty: 449,
+    shift2Amount: 1989519,
+    shift1Centers: { '김해': 74, '김해2': 79, '왜관': 123, '경산': 100, '경산2': 124, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 21 },
+    shift2Centers: { '김해': 60, '김해2': 60, '왜관': 125, '경산': 86, '경산2': 92, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 26, '특판': 0 }
+  },
+  {
+    no: 35,
+    category: '도시락',
+    productName: '혜자)바싹불고기',
+    deliveryPrice: 3600,
+    retailPrice: 5500,
+    totalQty: 1029,
+    qtyRatio: 1.9,
+    totalAmount: 3704400,
+    amtRatio: 3.6,
+    shift1Qty: 591,
+    shift1Amount: 2127600,
+    shift2Qty: 438,
+    shift2Amount: 1576800,
+    shift1Centers: { '김해': 61, '김해2': 41, '왜관': 75, '경산': 64, '경산2': 66, '진주': 66, '신광주2': 50, '신광주': 52, '익산': 89, '신양산': 0, '신양산2': 0, '경산3': 7 },
+    shift2Centers: { '김해': 29, '김해2': 26, '왜관': 79, '경산': 59, '경산2': 50, '진주': 34, '신광주2': 39, '신광주': 29, '익산': 84, '경산3': 13, '특판': 0 }
+  },
+  {
+    no: 36,
+    category: '도시락',
+    productName: '(주문)혜자)바싹불고기',
+    deliveryPrice: 3600,
+    retailPrice: 5500,
+    totalQty: 1,
+    qtyRatio: 0.0,
+    totalAmount: 3600,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 1,
+    shift2Amount: 3600,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 1, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '진주센터 스팟 주문'
+  },
+  {
+    no: 37,
+    category: '도시락',
+    productName: '(주문)NEW통모아치킨&돈까스',
+    deliveryPrice: 4431,
+    retailPrice: 6500,
+    totalQty: 3,
+    qtyRatio: 0.0,
+    totalAmount: 13293,
+    amtRatio: 0.0,
+    shift1Qty: 2,
+    shift1Amount: 8862,
+    shift2Qty: 1,
+    shift2Amount: 4431,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 1, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 1, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '경산/경산2 추가 주문'
+  },
+  {
+    no: 38,
+    category: '도시락',
+    productName: '(주문)혜자)두부김치제육',
+    deliveryPrice: 3763,
+    retailPrice: 5800,
+    totalQty: 5,
+    qtyRatio: 0.0,
+    totalAmount: 18815,
+    amtRatio: 0.0,
+    shift1Qty: 1,
+    shift1Amount: 3763,
+    shift2Qty: 4,
+    shift2Amount: 15052,
+    shift1Centers: { '김해': 0, '김해2': 1, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 1, '김해2': 0, '왜관': 1, '경산': 1, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '복수센터 소량 추가'
+  },
+  {
+    no: 39,
+    category: '도시락',
+    productName: '혜자)두부김치제육',
+    deliveryPrice: 3763,
+    retailPrice: 5800,
+    totalQty: 1430,
+    qtyRatio: 2.6,
+    totalAmount: 5381090,
+    amtRatio: 5.2,
+    shift1Qty: 761,
+    shift1Amount: 2863643,
+    shift2Qty: 669,
+    shift2Amount: 2517447,
+    shift1Centers: { '김해': 57, '김해2': 74, '왜관': 101, '경산': 97, '경산2': 82, '진주': 80, '신광주2': 63, '신광주': 83, '익산': 117, '신양산': 0, '신양산2': 0, '경산3': 7 },
+    shift2Centers: { '김해': 49, '김해2': 58, '왜관': 115, '경산': 75, '경산2': 74, '진주': 75, '신광주2': 47, '신광주': 45, '익산': 117, '경산3': 14, '특판': 0 }
+  },
+  {
+    no: 40,
+    category: '도시락',
+    productName: '(주문)혜자)두부김치제육(원가인상)',
+    deliveryPrice: 3763,
+    retailPrice: 5800,
+    totalQty: 4,
+    qtyRatio: 0.0,
+    totalAmount: 15052,
+    amtRatio: 0.0,
+    shift1Qty: 3,
+    shift1Amount: 11289,
+    shift2Qty: 1,
+    shift2Amount: 3763,
+    shift1Centers: { '김해': 0, '김해2': 1, '왜관': 0, '경산': 1, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 1, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '원가인상형 주문분'
+  },
+  {
+    no: 41,
+    category: '도시락',
+    productName: '혜자)통소세지&돈까스',
+    deliveryPrice: 3954,
+    retailPrice: 5800,
+    totalQty: 1382,
+    qtyRatio: 2.5,
+    totalAmount: 5464428,
+    amtRatio: 5.2,
+    shift1Qty: 751,
+    shift1Amount: 2969454,
+    shift2Qty: 631,
+    shift2Amount: 2494974,
+    shift1Centers: { '김해': 60, '김해2': 53, '왜관': 110, '경산': 97, '경산2': 91, '진주': 87, '신광주2': 58, '신광주': 72, '익산': 112, '신양산': 0, '신양산2': 0, '경산3': 11 },
+    shift2Centers: { '김해': 45, '김해2': 41, '왜관': 111, '경산': 86, '경산2': 77, '진주': 52, '신광주2': 49, '신광주': 41, '익산': 102, '경산3': 17, '특판': 0 }
+  },
+  {
+    no: 42,
+    category: '도시락',
+    productName: '혜자)7첩도시락',
+    deliveryPrice: 4500,
+    retailPrice: 6900,
+    totalQty: 1702,
+    qtyRatio: 3.1,
+    totalAmount: 7659000,
+    amtRatio: 7.4,
+    shift1Qty: 949,
+    shift1Amount: 4270500,
+    shift2Qty: 753,
+    shift2Amount: 3388500,
+    shift1Centers: { '김해': 86, '김해2': 76, '왜관': 114, '경산': 121, '경산2': 101, '진주': 122, '신광주2': 94, '신광주': 78, '익산': 144, '신양산': 0, '신양산2': 0, '경산3': 13 },
+    shift2Centers: { '김해': 51, '김해2': 54, '왜관': 99, '경산': 87, '경산2': 99, '진주': 100, '신광주2': 76, '신광주': 53, '익산': 117, '경산3': 17, '특판': 0 }
+  },
+  {
+    no: 43,
+    category: '도시락',
+    productName: '이달의도시락10월(혜자)',
+    deliveryPrice: 4704,
+    retailPrice: 6900,
+    totalQty: 376,
+    qtyRatio: 0.7,
+    totalAmount: 1768704,
+    amtRatio: 1.7,
+    shift1Qty: 200,
+    shift1Amount: 940800,
+    shift2Qty: 176,
+    shift2Amount: 827904,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 89, '경산2': 100, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 11 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 75, '경산2': 84, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 17, '특판': 0 },
+    remark: '경산권역 특화 공급'
+  },
+  {
+    no: 44,
+    category: '도시락',
+    productName: '이달의도시락11월(K세일판)',
+    deliveryPrice: 4704,
+    retailPrice: 6900,
+    totalQty: 681,
+    qtyRatio: 1.2,
+    totalAmount: 3203424,
+    amtRatio: 3.1,
+    shift1Qty: 374,
+    shift1Amount: 1759296,
+    shift2Qty: 307,
+    shift2Amount: 1444128,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 157, '경산2': 195, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 22 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 144, '경산2': 136, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 27, '특판': 0 },
+    remark: '경산권역 특화 공급'
+  },
+
+  // ─── 조리빵 (2 Unit) ─── 소계 0개 / 0원
+  {
+    no: 45,
+    category: '조리빵',
+    productName: '착한1900핫도그(사라다)',
+    deliveryPrice: 1286,
+    retailPrice: 1900,
+    totalQty: 0,
+    qtyRatio: 0.0,
+    totalAmount: 0,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 0,
+    shift2Amount: 0,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '토요일 미생산'
+  },
+  {
+    no: 46,
+    category: '조리빵',
+    productName: '착한1900핫도그(오리지널)',
+    deliveryPrice: 1286,
+    retailPrice: 1900,
+    totalQty: 0,
+    qtyRatio: 0.0,
+    totalAmount: 0,
+    amtRatio: 0.0,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 0,
+    shift2Amount: 0,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 0 },
+    remark: '토요일 미생산'
+  },
+
+  // ─── 특판 (5 Unit 중 실생산 2품목) ─── 소계 5,000개 / 6,427,500원 (1편: 0 / 2편: 5,000 전량 직납)
+  {
+    no: 47,
+    category: '특판',
+    productName: '기본김밥',
+    deliveryPrice: 1410,
+    retailPrice: 2000,
+    totalQty: 2500,
+    qtyRatio: 4.5,
+    totalAmount: 3525000,
+    amtRatio: 3.4,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 2500,
+    shift2Amount: 3525000,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 2500 },
+    highlightShift2Centers: ['특판'],
+    remark: '특판 대량 행사 직납 (2편 전용)'
+  },
+  {
+    no: 48,
+    category: '특판',
+    productName: '참치마요',
+    deliveryPrice: 1161,
+    retailPrice: 1800,
+    totalQty: 2500,
+    qtyRatio: 4.5,
+    totalAmount: 2902500,
+    amtRatio: 2.8,
+    shift1Qty: 0,
+    shift1Amount: 0,
+    shift2Qty: 2500,
+    shift2Amount: 2902500,
+    shift1Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '신양산': 0, '신양산2': 0, '경산3': 0 },
+    shift2Centers: { '김해': 0, '김해2': 0, '왜관': 0, '경산': 0, '경산2': 0, '진주': 0, '신광주2': 0, '신광주': 0, '익산': 0, '경산3': 0, '특판': 2500 },
+    highlightShift2Centers: ['특판'],
+    remark: '특판 대량 행사 직납 (2편 전용)'
+  }
+];
+
+export interface CanonicalDailyReportEntry {
+  date: string;
+  label: string;
+  issueMemo: string;
+  extraOrderInfo: string;
+  items: DailyProductionItem[];
+}
+
+export const CANONICAL_DAILY_REPORTS: Record<string, CanonicalDailyReportEntry> = {
+  '2026-11-08': {
+    date: '2026-11-08',
+    label: '2026-11-08(일) 정본 (59,676개)',
+    issueMemo: '2026-11-08(일) 정규 수주 59,676개 전량 생산 완료. 미출·결품 0건 정상 출하.',
+    extraOrderInfo: '정규 수주 마감 (미출 0건 클린)',
+    items: DAILY_PRODUCTION_REPORT_20261108
+  },
+  '2026-11-07': {
+    date: '2026-11-07',
+    label: '2026-11-07(토) 정본 (55,119개 - 특판 5,000개 포함)',
+    issueMemo: '2026-11-07(토) 정규 수주 50,119개 + 특판 5,000개 전량 생산 완료. 미출·결품 0건 정상 출하.',
+    extraOrderInfo: '특판 5,000개 수주 포함 (2편 단체 직납)',
+    items: DAILY_PRODUCTION_REPORT_20261107
+  }
+};
+
+export function getCanonicalDailyReport(date: string): CanonicalDailyReportEntry {
+  if (CANONICAL_DAILY_REPORTS[date]) {
+    return CANONICAL_DAILY_REPORTS[date];
+  }
+  // 기본 폴백은 2026-11-08
+  return CANONICAL_DAILY_REPORTS['2026-11-08'];
 }
