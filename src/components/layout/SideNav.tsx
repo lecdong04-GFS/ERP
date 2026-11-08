@@ -22,11 +22,11 @@ import {
 } from 'lucide-react';
 
 const SIDE_QUICK_WORKFLOW = [
-  { step: '1', id: 'sales-order-upload', title: '수주 엑셀 업로드', desc: '일일 수주', icon: ShoppingBag, color: 'bg-blue-600' },
-  { step: '2', id: 'prod-work-order-status', title: '작업지시서 & 취반', desc: '생산 타임테이블', icon: Layers, color: 'bg-indigo-600' },
-  { step: '3', id: 'inv-lookup', title: '통합 재고조회 (5시 실사)', desc: '실사표 업로드', icon: ClipboardCheck, color: 'bg-emerald-600' },
-  { step: '4', id: 'pur-mat-order-day', title: '요일별 자재발주', desc: '발주량 자동산출', icon: ShoppingCart, color: 'bg-amber-600' },
-  { step: '5', id: 'sales-undelivered-status', title: '미출 현황 및 결품', desc: '결품 대조 정산', icon: PackageCheck, color: 'bg-rose-600' },
+  { step: '1', id: 'sales-order-upload', title: '일일 수주 업로드', desc: 'GSR 수주 엑셀', icon: ShoppingBag, color: 'bg-blue-600' },
+  { step: '2', id: 'prod-work-order-status', title: '작업지시서 & 취반', desc: '생산 스케줄 편성', icon: Layers, color: 'bg-indigo-600' },
+  { step: '3', id: 'inv-lookup', title: '실시간 재고조회', desc: '5시 실사표 연동', icon: ClipboardCheck, color: 'bg-emerald-600' },
+  { step: '4', id: 'pur-mat-order-day', title: '스마트 자재발주', desc: '요일별 D-N 자동산출', icon: ShoppingCart, color: 'bg-amber-600' },
+  { step: '5', id: 'sales-undelivered-status', title: '미출하·결품 정산', desc: '결품 대조 정산', icon: PackageCheck, color: 'bg-rose-600' },
 ];
 
 interface SideNavProps {
