@@ -4,7 +4,6 @@ import React from 'react';
 import { TabItem } from '@/types/erp';
 import { OverheadRegView } from './screens/OverheadRegView';
 import { ProdPlStatusView } from './screens/ProdPlStatusView';
-import { MonthlyPlStatusView } from './screens/MonthlyPlStatusView';
 import { RecipeCostRateView } from './screens/RecipeCostRateView';
 import { ErpWorkspace } from '../common/ErpWorkspace';
 
@@ -17,9 +16,8 @@ export const CostScreenRouter: React.FC<CostScreenRouterProps> = ({ tab }) => {
     case 'cost-overhead-reg':
       return <OverheadRegView />;
     case 'cost-prod-pl-status':
-      return <ProdPlStatusView />;
     case 'cost-monthly-pl-status':
-      return <MonthlyPlStatusView />;
+      return <ProdPlStatusView />;
     case 'cost-recipe-rate':
       return <RecipeCostRateView />;
     default:

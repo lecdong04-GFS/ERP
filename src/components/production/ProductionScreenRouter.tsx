@@ -4,7 +4,6 @@ import React from 'react';
 import { TabItem } from '@/types/erp';
 import { WorkOrderStatusView } from './screens/WorkOrderStatusView';
 import { DiscardRegGsrView } from './screens/DiscardRegGsrView';
-import { FoodWasteRegView } from './screens/FoodWasteRegView';
 import { ProductionResultStatusView } from './screens/ProductionResultStatusView';
 import { ExtraProductionView } from './screens/ExtraProductionView';
 import { ProductionSeqRegView } from './screens/ProductionSeqRegView';
@@ -23,9 +22,8 @@ export const ProductionScreenRouter: React.FC<ProductionScreenRouterProps> = ({ 
     case 'prod-result-status':
       return <ProductionResultStatusView />;
     case 'prod-discard-reg':
-      return <DiscardRegGsrView />;
     case 'prod-food-waste-reg':
-      return <FoodWasteRegView />;
+      return <DiscardRegGsrView />;
     case 'prod-extra-prod':
       return <ExtraProductionView />;
     case 'prod-seq-reg':

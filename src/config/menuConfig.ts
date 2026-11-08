@@ -22,7 +22,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { id: 'prod-seq-reg', title: '라인별 생산순서 등록', categoryId: 'production', categoryName: '생산·제조' },
       { id: 'prod-result-status', title: '일일 생산실적 현황', categoryId: 'production', categoryName: '생산·제조' },
       { id: 'prod-discard-reg', title: '공정 불량/폐기 등록', categoryId: 'production', categoryName: '생산·제조' },
-      { id: 'prod-food-waste-reg', title: '식품 부산물/폐기물 관리', categoryId: 'production', categoryName: '생산·제조' },
     ],
   },
   {
@@ -57,11 +56,9 @@ export const MENU_CATEGORIES: MenuCategory[] = [
     title: '원가·경영',
     items: [
       { id: 'mgmt-provisional-sales-status', title: '가매출·미출·확정금액 정산', categoryId: 'management', categoryName: '원가·경영', badge: '핵심' },
-      { id: 'mgmt-sales-pur-status', title: '매입 / 매출 종합 집계', categoryId: 'management', categoryName: '원가·경영' },
       { id: 'cost-recipe-rate', title: '완성품 레시피 원가율', categoryId: 'management', categoryName: '원가·경영' },
       { id: 'cost-overhead-reg', title: '제조 간접비 등록', categoryId: 'management', categoryName: '원가·경영' },
       { id: 'cost-prod-pl-status', title: '제품별 공헌이익 (P&L)', categoryId: 'management', categoryName: '원가·경영' },
-      { id: 'cost-monthly-pl-status', title: '월별 손익계산서', categoryId: 'management', categoryName: '원가·경영' },
     ],
   },
   {
@@ -71,7 +68,6 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { id: 'master-product-reg', title: '제품 및 규격 마스터', categoryId: 'master', categoryName: '기준정보', badge: 'BOM연계' },
       { id: 'master-bom-normal', title: 'BOM(레시피) 정밀 관리', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-bom-deploy', title: 'BOM 다단계 전개', categoryId: 'master', categoryName: '기준정보' },
-      { id: 'master-product-price', title: '매입/매출 단가 관리', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-partner-mgmt', title: '거래처 마스터 (협력사)', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-cvs-mgmt', title: 'GS 물류센터 마스터 (12개점)', categoryId: 'master', categoryName: '기준정보' },
       { id: 'master-base-code', title: 'ERP 기초코드 관리', categoryId: 'master', categoryName: '기준정보' },
@@ -102,8 +98,9 @@ const MENU_ALIASES: Record<string, string> = {
   'sales-extra-order-status': 'sales-order-extra-reg',
   'sales-order-cancel-status': 'sales-order-status-cancel',
 
-  // 생산 정예화 매핑 (원료투입 -> 생산실적 현황으로 통합)
+  // 생산 정예화 매핑 (원료투입 -> 생산실적 현황으로 통합, 부산물/폐기물 -> 불량/폐기 등록으로 통합)
   'prod-input-result-reg': 'prod-result-status',
+  'prod-food-waste-reg': 'prod-discard-reg',
   'prod-extra-prod': 'prod-work-order-status',
   'work-order-status': 'prod-work-order-status',
   'production-work-order-status': 'prod-work-order-status',
@@ -135,14 +132,17 @@ const MENU_ALIASES: Record<string, string> = {
   'inventory-safety-stock': 'inv-safety-stock-mgmt',
   'inv-mat-extra-issue-status': 'inv-mat-extra-issue-reg',
   'inv-discard-status': 'prod-discard-reg',
-  'inv-food-waste-status': 'prod-food-waste-reg',
+  'inv-food-waste-status': 'prod-discard-reg',
   'inv-return-reg': 'inv-return-status',
 
   // 경영/원가 정예화 매핑
   'mgmt-kpi-status': 'mgmt-provisional-sales-status',
   'mgmt-kpi-reg': 'mgmt-provisional-sales-status',
+  'mgmt-sales-pur-status': 'mgmt-provisional-sales-status',
+  'cost-monthly-pl-status': 'cost-prod-pl-status',
 
   // 기준정보 정예화 매핑
+  'master-product-price': 'master-product-reg',
   'master-pack-spec': 'master-product-reg',
   'master-product-unit': 'master-base-code',
   'master-repr-prod-status': 'master-product-reg',

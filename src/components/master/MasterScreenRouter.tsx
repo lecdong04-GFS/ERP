@@ -6,7 +6,6 @@ import { BaseCodeView } from './screens/BaseCodeView';
 import { PartnerMgmtView } from './screens/PartnerMgmtView';
 import { ProductRegView } from './screens/ProductRegView';
 import { ProductUnitView } from './screens/ProductUnitView';
-import { ProductPriceView } from './screens/ProductPriceView';
 import { PackagingMgmtView } from './screens/PackagingMgmtView';
 import { BomNormalView } from './screens/BomNormalView';
 import { BomExplosionView } from './screens/BomExplosionView';
@@ -25,11 +24,10 @@ export const MasterScreenRouter: React.FC<MasterScreenRouterProps> = ({ tab }) =
     case 'master-partner-mgmt':
       return <PartnerMgmtView />;
     case 'master-product-reg':
+    case 'master-product-price':
       return <ProductRegView />;
     case 'master-product-unit':
       return <ProductUnitView />;
-    case 'master-product-price':
-      return <ProductPriceView />;
     case 'master-pack-spec':
       return <PackagingMgmtView />;
     case 'master-bom-normal':
