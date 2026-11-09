@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       options = {
         updateStock: true,
         updatePrice: true,
-        syncPo: true,
+        syncPo: false,
         createLedger: true,
       },
     } = body as {
