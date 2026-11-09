@@ -2066,24 +2066,6 @@ export const StockLookupView: React.FC = () => {
       ),
     },
     {
-      key: 'diffStock',
-      label: '전일대비증감',
-      width: '4.4%',
-      minWidth: '60px',
-      align: 'right',
-      sortable: true,
-      editable: false,
-      render: (v, row) => {
-        const diff = row.diffStock != null ? Number(row.diffStock) : (Number(row.currentStock || 0) - Number(row.prevStock || 0));
-        if (diff > 0) {
-          return <span className={`text-blue-600 font-black font-mono ${density === 'large' ? 'text-[15px]' : density === 'spacious' ? 'text-[14px]' : 'text-[12.5px]'}`}>+{diff.toLocaleString()}</span>;
-        } else if (diff < 0) {
-          return <span className={`text-rose-600 font-black font-mono ${density === 'large' ? 'text-[15px]' : density === 'spacious' ? 'text-[14px]' : 'text-[12.5px]'}`}>{diff.toLocaleString()}</span>;
-        }
-        return <span className="text-gray-400 font-mono">0</span>;
-      },
-    },
-    {
       key: 'stockDays',
       label: '재고유지일',
       width: '4.2%',
