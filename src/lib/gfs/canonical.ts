@@ -43,7 +43,9 @@ export interface BomMaterial {
   packUnit: number;
   bagPrice: number;
   days: number;
-  dailyUsage: number; // H열 일사용량(박스)
+  dailyUsage: number; // H열 일사용량(박스/봉/병)
+  divisor?: number; // H열 공식 내 단위 환산 분모 (예: 1000, 2000, 1.65, 40, 50 등)
+  multiplier?: number; // H열 공식 내 계수 (예: 0.8)
   menus: BomChildLink[];
 }
 
@@ -93,6 +95,16 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
       // A열이 비어있거나, A열에 비고 메모가 적혀있어도 자재 속성(packUnit, days, dailyUsage, boxes)을 가진 경우 유효 자재행으로 수용
       const isMaterial = aStr === '' || packUnit > 0 || days > 0 || dailyUsage > 0 || hasBoxNum;
       if (isMaterial) {
+        const hCell = ws['H' + (i + 1)];
+        let divisor = 1;
+        let multiplier = 1;
+        if (hCell && hCell.f) {
+          const divMatch = String(hCell.f).match(/\/([0-9.]+)/);
+          const multMatch = String(hCell.f).match(/\*([0-9.]+)/);
+          if (divMatch) divisor = Number(divMatch[1]) || 1;
+          if (multMatch) multiplier = Number(multMatch[1]) || 1;
+        }
+
         cur = {
           name: cStr,
           norm: normName(cStr),
@@ -101,6 +113,8 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
           bagPrice: num(r[16]),
           days,
           dailyUsage,
+          divisor,
+          multiplier,
           menus: [],
         };
         mats.push(cur);
@@ -186,7 +200,15 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
 export function isPieceOrCountItem(name: string): boolean {
   if (!name) return false;
   const n = String(name).toLowerCase();
-  return /패티|돈까스|돈카츠|까스|카츠|치킨|가라야게|스테이크|함박|너비아니|떡갈비|츠쿠네|산적|소시지|소세지|후랑크|핫도그번|핫바|어묵바|전\b|부추전|옥수수전|계란|란\b|알\b|메추리알|장어|유부|동그랑땡|완자|소포장|김밥김|삼각김|롤김|재래김|도시락김|곱창김|절김|1\/2김|용기|뚜껑|필름|스티커|라벨|바코드|컵|트레이|봉투|내피|외피|바란|간지|감열지|밴드|수축/.test(n) || /\(([0-9]{3,5})\)/.test(n);
+  // 소스, 양념, 엑기스, 오일, 유, 장, 가루, 분말, 면류, 베이스 등 벌크 액체/분말은 무조건 중량(g) 품목
+  if (/소스|양념|엑기스|시즈닝|드레싱|오일|참기름|들기름|식용유|간장|고추장|된장|식초|미림|물엿|시럽|설탕|소금|염|가루|분말|다시다|면\b|우동면|소면|라면|스프|베이스/.test(n)) {
+    return false;
+  }
+  return (
+    /패티|돈까스|돈카츠|까스|카츠|치킨|가라야게|스테이크|함박|너비아니|떡갈비|츠쿠네|산적|소시지|소세지|후랑크|핫도그번|핫바|어묵바|전\b|부추전|옥수수전|계란|란\b|알\b|메추리알|장어|유부|동그랑땡|완자|소포장|김밥김|삼각김|롤김|재래김|도시락김|곱창김|절김|1\/2김|용기|뚜껑|필름|스티커|라벨|바코드|컵|트레이|봉투|내피|외피|바란|간지|감열지|밴드|수축/.test(
+      n
+    ) || /\(([0-9]{3,5})\s*(매|장|개|ea|입)\)/i.test(n)
+  );
 }
 
 /** BOM 투입단위 추론: 개수품목→장/매, 벌크→g */

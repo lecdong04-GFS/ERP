@@ -230,17 +230,19 @@ export async function GET(req: NextRequest) {
           }
 
           const baseDaily = Number(mat.dailyUsage) || 0;
+          const divisor = mat.divisor && mat.divisor > 0 ? mat.divisor : (isPieceOrCountItem(mat.name) ? 1 : 1000);
+          const mult = mat.multiplier && mat.multiplier > 0 ? mat.multiplier : 1;
+
           let liveDaily = 0;
           if (baseDaily > 0 && totalBaseCons > 0 && totalActualCons > 0) {
             // 수주량 변동 비율에 맞춰 정밀 스케일링
             liveDaily = Math.round((baseDaily * (totalActualCons / totalBaseCons)) * 10) / 10;
+          } else if (totalActualCons > 0) {
+            // 정본 엑셀 공식 분모(divisor) 및 계수(mult) 적용하여 포장단위(봉/병/EA)로 정확 환산
+            liveDaily = Math.round((Math.ceil((totalActualCons / divisor) * 10) / 10) * mult * 10) / 10;
           } else if (baseDaily > 0) {
             // 메뉴 매칭이 없더라도 발주시트의 검증된 기준 일사용량 보존
             liveDaily = baseDaily;
-          } else if (totalActualCons > 0) {
-            liveDaily = isPieceOrCountItem(mat.name)
-              ? Math.round(totalActualCons * 10) / 10
-              : Math.round((totalActualCons / 1000) * 10) / 10;
           }
 
           const matchedProd = prodByNorm.get(k);
