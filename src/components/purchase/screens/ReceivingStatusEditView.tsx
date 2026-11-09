@@ -583,13 +583,13 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800 text-[15px]">
-      {/* ── [섹션 1] 탑 네비게이션 & 파이프라인 관제 배너 (시원시원한 대형 헤더) ── */}
-      <header className="px-6 py-4.5 bg-white border-b border-slate-200 shrink-0 shadow-xs">
+      {/* ── [섹션 1] 탑 네비게이션 & 파이프라인 관제 배너 (대시보드 탭바와 쾌적한 상단 여백) ── */}
+      <header className="px-6 pt-6 pb-4 bg-white border-b border-slate-200 shrink-0 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* 타이틀 및 뱃지 */}
           <div className="flex items-center gap-4">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-200 shrink-0">
-              <Truck className="w-7 h-7" />
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-200 shrink-0">
+              <Truck className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-3">
@@ -660,7 +660,7 @@ export const ReceivingStatusEditView: React.FC = () => {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="h-11 px-4.5 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+              className="h-11 px-4 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
             >
               <Upload size={17} className="text-blue-700" />
               <span>입고 파일 업로드 (CSV/엑셀)</span>
@@ -670,7 +670,7 @@ export const ReceivingStatusEditView: React.FC = () => {
               type="button"
               onClick={handleExportExcel}
               disabled={filteredRows.length === 0}
-              className="h-11 px-4.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+              className="h-11 px-4 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
             >
               <FileSpreadsheet size={16} className="text-emerald-700" />
               <span>엑셀 다운로드</span>
@@ -748,7 +748,7 @@ export const ReceivingStatusEditView: React.FC = () => {
       {/* ── [섹션 2] 핵심 통계 KPI 요약 카드 4종 (시원시원하고 큼직한 가독성) ── */}
       <section className="px-6 py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
         {/* KPI 1: 총 입고 실적 */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-sm font-black text-slate-500 uppercase tracking-wider">총 입고 실적</div>
             <div className="text-3xl font-black text-slate-900 mt-1.5 font-mono">
@@ -761,13 +761,13 @@ export const ReceivingStatusEditView: React.FC = () => {
               <span>선택 기간 내 검수 입고 완료</span>
             </div>
           </div>
-          <div className="w-13 h-13 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
             <Truck size={26} />
           </div>
         </div>
 
         {/* KPI 2: 총 입고 공급가액 */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-sm font-black text-slate-500 uppercase tracking-wider">총 입고 공급가액</div>
             <div className="text-3xl font-black text-indigo-800 mt-1.5 font-mono">
@@ -777,13 +777,13 @@ export const ReceivingStatusEditView: React.FC = () => {
               공급가액 기준 (부가세 별도)
             </div>
           </div>
-          <div className="w-13 h-13 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-black text-xl font-mono">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-black text-xl font-mono">
             ₩
           </div>
         </div>
 
         {/* KPI 3: 결품 및 수량 차이 경보 */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-sm font-black text-slate-500 uppercase tracking-wider">결품 및 분할입고 경보</div>
             <div className="text-3xl font-black mt-1.5 font-mono flex items-center gap-2.5">
@@ -800,7 +800,7 @@ export const ReceivingStatusEditView: React.FC = () => {
               {stats.shortageCount > 0 ? '발주 대비 입고 부족 품목 발생' : '발주수량 100% 전량 정기입고'}
             </div>
           </div>
-          <div className={`w-13 h-13 rounded-2xl border flex items-center justify-center ${
+          <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center ${
             stats.shortageCount > 0
               ? 'bg-rose-50 border-rose-200 text-rose-600'
               : 'bg-emerald-50 border-emerald-200 text-emerald-600'
@@ -810,7 +810,7 @@ export const ReceivingStatusEditView: React.FC = () => {
         </div>
 
         {/* KPI 4: HACCP 콜드체인 합격률 */}
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-sm font-black text-slate-500 uppercase tracking-wider">HACCP 콜드체인 합격률</div>
             <div className="text-3xl font-black text-emerald-700 mt-1.5 font-mono">
@@ -820,7 +820,7 @@ export const ReceivingStatusEditView: React.FC = () => {
               차량온도 · 외관 · 라벨표시 · 청결
             </div>
           </div>
-          <div className="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
             <ShieldCheck size={26} />
           </div>
         </div>
@@ -828,7 +828,7 @@ export const ReceivingStatusEditView: React.FC = () => {
 
       {/* ── [섹션 3] 검색 및 다차원 필터 컨트롤 바 (크고 시원시원한 인터페이스) ── */}
       <section className="px-6 pb-3 shrink-0">
-        <div className="bg-white rounded-2xl p-4.5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
           {/* 좌측: 기간 프리셋 및 날짜 선택 */}
           <div className="flex flex-wrap items-center gap-3.5">
             <span className="text-sm font-black text-slate-800 flex items-center gap-1.5">
@@ -929,7 +929,7 @@ export const ReceivingStatusEditView: React.FC = () => {
 
           {/* 우측: 실시간 통합 키워드 검색 */}
           <div className="relative min-w-[280px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={keyword}
