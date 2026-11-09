@@ -258,6 +258,7 @@ export const MatOrderDayView: React.FC = () => {
             pendingOrderNos: r.pendingOrderNos || [],
             latestOrderDate: r.latestOrderDate || '',
             baseIncoming: r.baseIncoming || 0,
+            orderDay: r.orderDay || '',
           };
         });
         setRows(loaded);
@@ -377,7 +378,7 @@ export const MatOrderDayView: React.FC = () => {
       const dailyUsage = r.dailyUsage || 0;
       const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : totalStock > 0 ? 99 : 0;
 
-      const pattern = classifyPattern(r.supplier);
+      const pattern = classifyPattern(r.supplier, r.orderDay);
       const isDaily = pattern === '매일';
 
       // 3단 전략 모드에 따른 목표 안전일수 결정
@@ -478,7 +479,7 @@ export const MatOrderDayView: React.FC = () => {
       let amt = 0;
       rows.forEach((r) => {
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
-        if (patternFilter !== '전체' && classifyPattern(r.supplier) !== patternFilter) return;
+        if (patternFilter !== '전체' && classifyPattern(r.supplier, r.orderDay) !== patternFilter) return;
         if (
           keyword.trim() &&
           !r.name.toLowerCase().includes(keyword.trim().toLowerCase()) &&
@@ -502,7 +503,7 @@ export const MatOrderDayView: React.FC = () => {
     return rows
       .map((r) => {
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
-        const pattern = classifyPattern(r.supplier);
+        const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
         if (
           keyword.trim() &&
@@ -1615,6 +1616,15 @@ export const MatOrderDayView: React.FC = () => {
                           <p className="text-[13px] text-slate-500">
                             거래처별 납품 요일 패턴상 오늘은 납품이 없거나, 다른 요일로 배정되어 있습니다. 상단의 다른 요일 탭을 확인하시거나 [전체 품목 보기]를 선택해 보세요.
                           </p>
+                          {showOnlyOrderable && (
+                            <button
+                              type="button"
+                              onClick={() => setShowOnlyOrderable(false)}
+                              className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
+                            >
+                              [전체 품목 ({rows.length}개) 재고 및 런웨이 보기]
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

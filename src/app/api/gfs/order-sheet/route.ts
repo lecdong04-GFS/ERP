@@ -157,6 +157,7 @@ export async function GET() {
         stockDays,
         warehouse: inv.warehouse,
         vendor: p?.partner?.name || '',
+        orderDay: p?.partner?.orderDay || '월화수목금',
         itemId: code,
         isReplaced: isReplacedSpam,
         replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,

@@ -15,6 +15,7 @@ export interface SheetRowInput {
   vendor: string;
   finalBoxes: number;
   manual: boolean;
+  orderDay?: string;
   pendingBoxes?: number;
   pendingOrderNos?: string[];
   latestOrderDate?: string;
@@ -69,12 +70,18 @@ export function calcRow(r: SheetRowInput): CalcResult {
   return { pack, totalStock, required, diff, stockDays, shortageBags, boxesStd, suggest, finalBoxes, amount, dailyBox };
 }
 
-/** 거래처 헤더에서 납품요일 파싱 (월~일 순서 boolean) */
-export function parseDeliveryDays(header: string): boolean[] {
-  const h = header || '';
-  if (/월화수목금토/.test(h)) return [true, true, true, true, true, true, false];
-  if (!/[월화수목금토일]/.test(h)) return [false, false, false, true, false, false, false];
-  return DAY_CHARS.map((d) => h.includes(d));
+/** 거래처 헤더 및 DB orderDay 에서 납품요일 파싱 (월~일 순서 boolean) */
+export function parseDeliveryDays(header: string, orderDay?: string): boolean[] {
+  const h = (orderDay || header || '').replace(/\s+/g, '');
+  if (/월화수목금토|매일|월~토/.test(h)) return [true, true, true, true, true, true, false];
+  if (/월화수목금|주5일|월~금/.test(h)) return [true, true, true, true, true, false, false];
+  if (/월수금/.test(h)) return [true, false, true, false, true, false, false];
+  if (/화목토/.test(h)) return [false, true, false, true, false, true, false];
+  if (/[월화수목금토일]/.test(h)) {
+    return DAY_CHARS.map((d) => h.includes(d));
+  }
+  // 기본 기본값: 주 5일 (월~금) 정상 배분 (특정 요일 몰림 방지)
+  return [true, true, true, true, true, false, false];
 }
 
 /**
@@ -82,7 +89,7 @@ export function parseDeliveryDays(header: string): boolean[] {
  * 총합 보존 법칙 (sum === finalBoxes) 및 정수 박스 분할 100% 보장
  */
 export function splitWeek(r: SheetRowInput, finalBoxes: number): number[] {
-  const days = parseDeliveryDays(r.supplier || '');
+  const days = parseDeliveryDays(r.supplier || '', r.orderDay);
   const idx = days.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
   const out = [0, 0, 0, 0, 0, 0, 0];
   if (finalBoxes <= 0 || idx.length === 0) return out;
@@ -130,12 +137,13 @@ export function splitWeek(r: SheetRowInput, finalBoxes: number): number[] {
 }
 
 /** 납품 패턴 분류 */
-export function classifyPattern(header: string): '매일' | '월수금' | '화목토' | '기타' {
-  const h = header || '';
-  if (/월화수목금토/.test(h)) return '매일';
+export function classifyPattern(header: string, orderDay?: string): '매일' | '월수금' | '화목토' | '주5일' | '기타' {
+  const h = (orderDay || header || '').replace(/\s+/g, '');
+  if (/월화수목금토|매일|월~토/.test(h)) return '매일';
+  if (/월화수목금|주5일|월~금/.test(h)) return '주5일';
   const hasMonWedFri = h.includes('월') && h.includes('수') && h.includes('금');
   const hasTueThuSat = h.includes('화') && h.includes('목') && h.includes('토');
   if (hasMonWedFri && !hasTueThuSat) return '월수금';
   if (hasTueThuSat && !hasMonWedFri) return '화목토';
-  return '기타';
+  return '주5일';
 }
