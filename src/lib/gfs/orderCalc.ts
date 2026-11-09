@@ -169,10 +169,17 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '고급4호',
   '고극4호',
   'DRG-1',
+  '롯데) GS마요네즈',
+  '롯데)GS마요네즈',
+  '롯데마요네즈',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
   if (!name) return false;
   const lower = name.toLowerCase();
-  return EXCLUDED_ORDER_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
+  const clean = lower.replace(/\s+/g, '');
+  return EXCLUDED_ORDER_KEYWORDS.some((kw) => {
+    const k = kw.toLowerCase();
+    return lower.includes(k) || clean.includes(k.replace(/\s+/g, ''));
+  });
 }
