@@ -286,15 +286,8 @@ export function getAuditFilePath(): string | null {
 }
 
 export function getOrderSheetFilePath(): string | null {
-  return (
-    findLatestByPattern(/^★★발주서양식통합★★.*\.xlsx$/) ||
-    findFile([
-      '★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
-      'GFS.xlsx',
-      '/Users/bunker/GFS/★★발주서양식통합★★(정준오)(v.260831) (2).xlsx',
-      '/Users/bunker/GFS/GFS.xlsx',
-    ])
-  );
+  // DB 100% 일원화: 과거 외부 발주시트 엑셀 파일 의존성 영구 차단 (단일 진실 공급원 = PostgreSQL)
+  return null;
 }
 
 /** 재고조사표 평일/주말 다중 양식 적응형 → 정본 맵 (norm → AuditEntry) */

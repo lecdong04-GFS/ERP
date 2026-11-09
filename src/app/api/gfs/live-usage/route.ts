@@ -4,13 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
-import {
-  getOrderSheetFilePath,
-  readWorkbookFromFile,
-  parseOrderSheetBom,
-  normName,
-  isPieceOrCountItem,
-} from '@/lib/gfs/canonical';
+import { normName } from '@/lib/gfs/canonical';
 
 function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -192,88 +186,6 @@ export async function GET(req: NextRequest) {
         });
       }
     });
-
-    // 5) BOM 전개 (2: 발주서 정본 엑셀 내장 BOM 파싱 및 수주비례 동적 소요량 보완)
-    try {
-      const orderFile = getOrderSheetFilePath();
-      if (orderFile) {
-        const wb = readWorkbookFromFile(orderFile);
-        const mats = parseOrderSheetBom(wb);
-        for (const mat of mats) {
-          if (!mat.name) continue;
-          const k = normName(mat.name);
-          if (!k) continue;
-
-          let totalActualCons = 0;
-          let totalBaseCons = 0;
-          const contributingMenus: any[] = [];
-
-          if (mat.menus && mat.menus.length > 0) {
-            for (const m of mat.menus) {
-              const nMenu = normalizeForBom(m.menu);
-              const mq = menuQtyByNorm.get(nMenu) || menuQtyByNorm.get(m.normMenu);
-              const actualQty = mq?.qty || 0;
-              const unitQty = Number(m.perUnit) || 1;
-              const baseQty = Number(m.qty) || 0;
-
-              totalBaseCons += baseQty * unitQty;
-              if (actualQty > 0) {
-                totalActualCons += actualQty * unitQty;
-                contributingMenus.push({
-                  code: mq?.code || '',
-                  name: m.menu,
-                  qty: actualQty,
-                  unitQty,
-                });
-              }
-            }
-          }
-
-          const baseDaily = Number(mat.dailyUsage) || 0;
-          const divisor = mat.divisor && mat.divisor > 0 ? mat.divisor : (isPieceOrCountItem(mat.name) ? 1 : 1000);
-          const mult = mat.multiplier && mat.multiplier > 0 ? mat.multiplier : 1;
-
-          let liveDaily = 0;
-          if (baseDaily > 0 && totalBaseCons > 0 && totalActualCons > 0) {
-            // 수주량 변동 비율에 맞춰 정밀 스케일링
-            liveDaily = Math.round((baseDaily * (totalActualCons / totalBaseCons)) * 10) / 10;
-          } else if (totalActualCons > 0) {
-            // 정본 엑셀 공식 분모(divisor) 및 계수(mult) 적용하여 포장단위(봉/병/EA)로 정확 환산
-            liveDaily = Math.round((Math.ceil((totalActualCons / divisor) * 10) / 10) * mult * 10) / 10;
-          } else if (baseDaily > 0) {
-            // 메뉴 매칭이 없더라도 발주시트의 검증된 기준 일사용량 보존
-            liveDaily = baseDaily;
-          }
-
-          const matchedProd = prodByNorm.get(k);
-          const pid = matchedProd?.id || null;
-          const pCode = matchedProd?.productCode || '';
-          const pWh = matchedProd?.warehouse || '';
-          const total = (pid ? invMap.get(pid) : 0) || 0;
-
-          // 정본 발주시트 BOM이 우선(더 상세하고 검증된 레시피)이거나 기존 DB_BOM이 없을 때 갱신
-          const existing = rowsByNorm.get(k);
-          if (!existing || (mat.menus && mat.menus.length > 0) || (baseDaily > 0 && existing.source === 'DB_BOM')) {
-            rowsByNorm.set(k, {
-              productId: pid ?? existing?.productId ?? null,
-              productCode: pCode || existing?.productCode || '',
-              productName: mat.name,
-              warehouse: pWh || existing?.warehouse || '',
-              liveDaily,
-              baselineDaily: baseDaily,
-              diffPercent: baseDaily > 0 ? Math.round(((liveDaily - baseDaily) / baseDaily) * 100) : 0,
-              liveTotal: total || existing?.liveTotal || 0,
-              liveDays: liveDaily > 0 && total > 0 ? total / liveDaily : (existing?.liveDays ?? null),
-              menuCount: contributingMenus.length || existing?.menuCount || 0,
-              menus: contributingMenus.length > 0 ? contributingMenus.slice(0, 5) : (existing?.menus ?? []),
-              source: 'ORDER_SHEET_BOM',
-            });
-          }
-        }
-      }
-    } catch (sheetBomErr) {
-      console.warn('Live usage sheet BOM parsing fallback failed:', sheetBomErr);
-    }
 
     const rows = Array.from(rowsByNorm.values());
 

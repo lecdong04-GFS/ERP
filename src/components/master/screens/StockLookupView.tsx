@@ -772,13 +772,12 @@ export const StockLookupView: React.FC = () => {
       baseRows
         ? Promise.resolve({ success: true, data: baseRows })
         : fetch('/api/inventory/stock').then((res) => res.json()),
-      fetch('/api/gfs/order-sheet').then((res) => res.json()).catch(() => null),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/gfs/live-usage?date=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, orderJson, snapJson, estJson, yesterdaySnapJson, liveUsageJson]) => {
+      .then(([json, snapJson, estJson, yesterdaySnapJson, liveUsageJson]) => {
         if (estJson?.success && estJson.data) {
           estMapRef.current = {
             byWhAndKey: estJson.data.byWhAndKey || {},
@@ -824,16 +823,6 @@ export const StockLookupView: React.FC = () => {
         }
 
         if (json.success && json.data && json.data.length > 0) {
-          // 발주서 정본 맵 (품명 정규화 기준) — 엑셀 우선
-          const orderByNorm = new Map<string, any>();
-          if (orderJson?.success && Array.isArray(orderJson.data?.rows)) {
-            orderJson.data.rows.forEach((r: any) => {
-              const k = normName(r.name);
-              if (k && !orderByNorm.has(k)) orderByNorm.set(k, r);
-            });
-          }
-          let merged = 0;
-          let added = 0;
           let estMatched = 0;
           const snapMap: Record<string, { stockDays: number | null; asOf: string; productName: string }> =
             snapJson?.success && snapJson.data?.map ? snapJson.data.map : {};
@@ -859,44 +848,23 @@ export const StockLookupView: React.FC = () => {
             const wh = inv.warehouse || '상온';
             const norm = normName(name);
             seen.add(norm);
-            const o = norm ? orderByNorm.get(norm) : undefined;
-            // 스마트발주 최신 발주서 마스터(o) 반영:
-            // 확정 스냅샷 모드(isSnap)에서는 과거 실사 당일의 inv.inQty만 사용하고 발주서 시트의 o.incoming 개입 차단
-            const inQty = isSnap
-              ? (Number(inv.inQty) || 0)
-              : (o && o.incoming != null && !isNaN(Number(o.incoming))
-                  ? Number(o.incoming)
-                  : (Number(inv.inQty) || 0));
+            const inQty = Number(inv.inQty) || 0;
+            const current = inv.currentQty !== undefined && inv.currentQty !== null
+              ? Number(inv.currentQty)
+              : 0;
 
-            // 현재고: LIVE 모드에서는 최신 발주서 o.currentStock 최우선, 스냅샷 모드에서는 스냅샷 실사값 유지
-            const current = isSnap
-              ? (Number(inv.currentQty) || 0)
-              : (o && o.currentStock != null && !isNaN(Number(o.currentStock))
-                  ? Number(o.currentStock)
-                  : (inv.currentQty !== undefined && inv.currentQty !== null
-                      ? Number(inv.currentQty)
-                      : 0));
-
-            // 스마트발주 최신 발주서 마스터(o) 우선: 입수량 및 일사용량 일원화
             const pack =
-              (isSnap && Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
-              (o && Number(o.packUnit) > 0 ? Number(o.packUnit) : 0) ||
+              (Number(inv.packUnit) > 0 ? Number(inv.packUnit) : 0) ||
               inv.product?.boxQty ||
               1;
-            const box = isSnap && inv.boxQty !== undefined && Number(inv.boxQty) > 0
+            const box = inv.boxQty !== undefined && Number(inv.boxQty) > 0
               ? Number(inv.boxQty)
               : Math.floor(current / pack);
-            const piece = isSnap && inv.pieceQty !== undefined && Number(inv.pieceQty) > 0
+            const piece = inv.pieceQty !== undefined && Number(inv.pieceQty) > 0
               ? Number(inv.pieceQty)
               : Math.round((current % pack) * 10) / 10;
-            const uprice = isSnap && Number(inv.unitPrice) > 0
-              ? Number(inv.unitPrice)
-              : (o && Number(o.bagPrice) > 0 ? Number(o.bagPrice) : (Number(inv.unitPrice) > 0 ? Number(inv.unitPrice) : price));
-            const rawDailyU = isSnap
-              ? (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage)) ? Number(o.dailyUsage) : 0))
-              : (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage))
-                  ? Number(o.dailyUsage)
-                  : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0));
+            const uprice = Number(inv.unitPrice) > 0 ? Number(inv.unitPrice) : price;
+            const rawDailyU = Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0;
             // 쌀 등 대용량 포대 자재(packUnit >= 100, 예: 평화햅쌀 500kg/포)의 일사용량이 포대 단위(7.5포)로 들어온 경우 kg 기본 단위로 통일
             const normalizedDailyU =
               pack >= 100 && rawDailyU > 0 && rawDailyU < 50 && current > 100
@@ -927,8 +895,7 @@ export const StockLookupView: React.FC = () => {
             const snapEntry = snapOf(cleanCode, name);
             const fallbackDays = (usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0)
               ? null
-              : ((o && o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
-                 (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null));
+              : (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null);
             const inbound = inv.lastInDate
               ? String(inv.lastInDate).slice(5)
               : inv.inboundDate
@@ -936,7 +903,7 @@ export const StockLookupView: React.FC = () => {
               : inv.product?.partner?.leadTime
               ? `D+${inv.product.partner.leadTime}`
               : 'D+2';
-            const autoSafety = calcSafetyStock(effectiveDaily, pack, parseLeadDays(inbound || o?.supplier || ''));
+            const autoSafety = calcSafetyStock(effectiveDaily, pack, parseLeadDays(inbound));
             const safety =
               isSnap && Number(inv.safetyStock) > 0
                 ? Number(inv.safetyStock)
@@ -946,7 +913,6 @@ export const StockLookupView: React.FC = () => {
                 ? Number(inv.product.safetyStockQty)
                 : 0;
             const nDays = calcStockDays(current, effectiveDaily, fallbackDays, inQty);
-            if (o) merged += 1;
 
             const yKeyWh = `${wh}|${norm}`;
             const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
@@ -966,8 +932,8 @@ export const StockLookupView: React.FC = () => {
               snapId: isSnap ? inv.id : 0,
               whName: wh,
               vendor: inv.vendor || inv.product?.partner?.name || inv.product?.partnerId || '',
-              orderSupplier: o?.supplier || '',
-              orderDays: o ? Number(o.days) || 0 : 0,
+              orderSupplier: '',
+              orderDays: 0,
               itemCode: cleanCode,
               lotNo: inv.lotNo || '',
               lotDate: inv.lastInDate || '',
@@ -1014,124 +980,7 @@ export const StockLookupView: React.FC = () => {
               totalAmount: current * uprice,
             });
           });
-          // LIVE 모드에서 엑셀에만 있는 품목은 신규행으로 추가 (저장 시 품목 자동생성)
-          let tempId = -(Date.now() % 1000000) - 1;
           const freshIds = new Set<number>();
-          if (!isSnap && orderByNorm.size > 0) {
-            orderByNorm.forEach((o: any, norm: string) => {
-              if (seen.has(norm) || !o.name) return;
-              const wh = o.warehouse || '상온';
-              const pack = Number(o.packUnit) > 0 ? Number(o.packUnit) : 1;
-              const current = Number(o.currentStock) || 0;
-              const price = Number(o.bagPrice) || 0;
-              const box = Math.floor(current / pack);
-              const piece = Math.round((current % pack) * 10) / 10;
-              const rawDaily = Number(o.dailyUsage) || 0;
-              const normalizedDaily =
-                pack >= 100 && rawDaily > 0 && rawDaily < 50 && current > 100
-                  ? rawDaily * pack
-                  : rawDaily;
-              const daily = Math.round(normalizedDaily * 100) / 100;
-              const estEntry = lookupEst(wh, norm);
-              const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
-              const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
-              if (estDaily > 0) estMatched += 1;
-
-              // 실시간 수주연동 LIVE 계산값 조회 (엑셀 항목)
-              const liveEntry = (o.itemId ? liveUsageByCode.get(o.itemId) : null) || liveUsageByNorm.get(norm);
-              const liveDailyVal = liveEntry && liveEntry.liveDaily != null && !isNaN(Number(liveEntry.liveDaily))
-                ? Number(liveEntry.liveDaily)
-                : null;
-              const liveDiffPct = liveEntry && liveEntry.diffPercent != null ? Number(liveEntry.diffPercent) : undefined;
-              const liveMenus = liveEntry?.menuCount || 0;
-              const baseDailyVal = daily > 0 ? daily : (liveEntry && Number(liveEntry.baselineDaily) > 0 ? Number(liveEntry.baselineDaily) : 0);
-
-              const chosenDaily = usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0
-                ? liveDailyVal
-                : (baseDailyVal > 0 ? baseDailyVal : estDaily);
-              const effectiveDaily = chosenDaily > 0 ? chosenDaily : 0;
-
-              const leadM = /D-(\d+)/.exec(o.supplier || '');
-              const autoSafety = calcSafetyStock(effectiveDaily, pack, leadM ? Math.max(1, parseInt(leadM[1], 10)) : 2);
-              const s = snapOf(o.itemId || '', o.name || '');
-              const fallbackDays = (usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0)
-                ? null
-                : ((o.stockDays != null && !isNaN(Number(o.stockDays)) ? Number(o.stockDays) : null) ??
-                   (s && s.stockDays != null ? Number(s.stockDays) : null));
-              const inQty = Number(o.incoming) || 0;
-              const rowDays = (o.stockDays != null && !isNaN(Number(o.stockDays)) && (usageMode !== 'LIVE' || liveDailyVal == null))
-                ? Math.round(Number(o.stockDays) * 10) / 10
-                : calcStockDays(current, effectiveDaily, fallbackDays, inQty);
-
-              const yKeyWh = `${wh}|${norm}`;
-              const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
-              const yQty = yesterdayMap.get(yKeyWh) ?? yesterdayMap.get(norm);
-              const hasPrevStock = hasY || (o.prevStock != null && !isNaN(Number(o.prevStock)));
-              const prevStockVal = yQty != null
-                ? yQty
-                : (o.prevStock != null && !isNaN(Number(o.prevStock))
-                  ? Number(o.prevStock)
-                  : current);
-              const diffStockVal = Math.round((current - prevStockVal) * 10) / 10;
-              const rawUsage = (prevStockVal + inQty) - current;
-              const actualUsageVal = hasPrevStock && rawUsage > 0 ? Math.round(rawUsage * 100) / 100 : 0;
-
-              const row: StockItem = {
-                id: tempId--,
-                whName: wh,
-                vendor: o.vendor || o.supplierHeader || '',
-                orderSupplier: o.supplier || o.supplierHeader || '',
-                orderDays: Number(o.days) || 0,
-                itemCode: o.itemId || '',
-                lotNo: '',
-                lotDate: '',
-                itemType: '원재료',
-                category: '원부자재',
-                itemName: o.name,
-                spec: '',
-                unit: 'box',
-                inboundDate: '',
-                expiryDate: '',
-                orderDay: '',
-                dailyUsage: chosenDaily,
-                liveDailyUsage: liveDailyVal ?? undefined,
-                masterDailyUsage: baseDailyVal > 0 ? baseDailyVal : undefined,
-                usageSource: (liveDailyVal != null && liveDailyVal > 0 && usageMode === 'LIVE')
-                  ? 'LIVE_ORDER'
-                  : (baseDailyVal > 0 ? 'MASTER' : 'ESTIMATED'),
-                liveMenuCount: liveMenus,
-                liveDiffPercent: liveDiffPct,
-                actualDailyUsage: actualUsageVal,
-                avg20DailyUsage: estDaily > 0 ? estDaily : 0,
-                avg7DailyUsage: estDaily > 0 ? estDaily : 0,
-                hasPrevStock,
-                prevSnapDate,
-                estDailyUsage: estDaily,
-                estSampleCount: estSamples,
-                packUnit: pack,
-                boxQty: box,
-                pieceQty: piece,
-                prevStock: prevStockVal,
-                diffStock: diffStockVal,
-                inQty: inQty,
-                outQty: 0,
-                currentStock: current,
-                safetyStock: autoSafety,
-                shortage: current - autoSafety,
-                status: calcStockStatus(current, autoSafety),
-                stockDays: rowDays,
-                gfsDays: rowDays,
-                gfsAsOf: snapAsOf,
-                burnRank: 0,
-                fefoWarn: false,
-                unitPrice: price,
-                totalAmount: current * price,
-              };
-              loaded.push(row);
-              freshIds.add(row.id);
-              added += 1;
-            });
-          }
           setData(applyBurnRank(loaded));
           setDirtyRowIds(new Set());
           setNewRowIds(freshIds);
@@ -1143,13 +992,7 @@ export const StockLookupView: React.FC = () => {
           setMergeInfo(
             isSnap
               ? `${snapDate ? snapDate.slice(5) : ''} 확정 실사 ${loaded.length}건 · ${prevLabel}실사 기반 당일 실사용량 자동 산출${liveSuffix}`
-              : (orderByNorm.size > 0
-                  ? `정본 병합: ${merged}건 반영 · ${prevLabel}당일 실사용량 자동 산출${added > 0 ? ` · 신규 ${added}건` : ''}${snapAsOf ? ` · 재고유지일 ${snapAsOf} 기준` : ''}${liveSuffix}`
-                  : orderJson?.data?.errors?.length
-                  ? `정본 실패: ${orderJson.data.errors[0]}`
-                  : orderJson && !orderJson.success
-                  ? `정본 실패: ${orderJson.error || '알 수 없음'}`
-                  : `${prevLabel}당일 실사용량 자동 산출${liveSuffix}`)
+              : `✅ DB 100% 일원화 정본 (${loaded.length}개 품목) · ${prevLabel}실시간 재고평가 연동${liveSuffix}`
           );
         }
       })
@@ -1356,19 +1199,6 @@ export const StockLookupView: React.FC = () => {
 
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
-      // 발주서 정본 맵 (유지일 계산용 J/I/H) — 엑셀 우선
-      let orderByNorm = new Map<string, any>();
-      try {
-        const orderJson = await fetch('/api/gfs/order-sheet').then((r) => r.json());
-        if (orderJson?.success && Array.isArray(orderJson.data?.rows)) {
-          orderJson.data.rows.forEach((o: any) => {
-            const k = normName(o.name);
-            if (k && !orderByNorm.has(k)) orderByNorm.set(k, o);
-          });
-        }
-      } catch {
-        /* 정본 없으면 감사값으로 표시 */
-      }
       // 시트별 행 수집: R3 헤더, R4~ 데이터 (1거래처 2ID 3제품명 4입고일 5일사용량 7박스 8낱개 9현재고 10입수량 12봉단가)
       const byNorm = new Map<string, StockItem>();
       data.forEach((d) => {
@@ -1528,13 +1358,9 @@ export const StockLookupView: React.FC = () => {
           if (exist) {
             const oldStock = exist.currentStock;
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
-            // 유지일: 현재고 ÷ 일사용량 실시간 계산 (폴백: 발주서 정본 N열)
-            const oRef = orderByNorm.get(norm);
-            const fallbackDays = oRef && oRef.stockDays != null ? Number(oRef.stockDays) : exist.stockDays;
-            const masterDaily = oRef && oRef.dailyUsage != null && !isNaN(Number(oRef.dailyUsage))
-              ? Math.round(Number(oRef.dailyUsage) * 100) / 100
-              : null;
-            const effDaily = masterDaily ?? (daily || exist.dailyUsage || estDaily);
+            // 유지일: 현재고 ÷ 일사용량 실시간 계산
+            const fallbackDays = exist.stockDays;
+            const effDaily = daily || exist.dailyUsage || estDaily;
             const nDays = calcStockDays(current, effDaily, fallbackDays);
             const changed =
               exist.whName !== wh ||
@@ -1549,9 +1375,7 @@ export const StockLookupView: React.FC = () => {
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
             if (inbound) exist.inboundDate = inbound;
-            if (masterDaily != null) {
-              exist.dailyUsage = masterDaily;
-            } else if (daily) {
+            if (daily) {
               exist.dailyUsage = daily;
             }
             exist.estDailyUsage = estDaily;
@@ -1586,12 +1410,8 @@ export const StockLookupView: React.FC = () => {
           } else {
             const newSafety = autoSafety > 0 ? autoSafety : 0;
             if (autoSafety > 0) autoFilled += 1;
-            const oo = orderByNorm.get(norm);
-            const orderDaily = oo && oo.dailyUsage != null && !isNaN(Number(oo.dailyUsage))
-              ? Math.round(Number(oo.dailyUsage) * 100) / 100
-              : (daily > 0 ? daily : 0);
-            const nEffDaily = orderDaily > 0 ? orderDaily : estDaily;
-            const nDays = calcStockDays(current, nEffDaily, oo && oo.stockDays != null ? Number(oo.stockDays) : null);
+            const nEffDaily = daily > 0 ? daily : estDaily;
+            const nDays = calcStockDays(current, nEffDaily, null);
             const row: StockItem = {
               id: tempId--,
               whName: wh,
@@ -1611,7 +1431,7 @@ export const StockLookupView: React.FC = () => {
               inboundDate: inbound,
               expiryDate: expiry,
               orderDay: '',
-              dailyUsage: orderDaily,
+              dailyUsage: daily,
               actualDailyUsage: 0,
               hasPrevStock: false,
               estDailyUsage: estDaily,

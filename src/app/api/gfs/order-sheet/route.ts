@@ -1,45 +1,37 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import * as XLSX from 'xlsx';
-import { loadCanonicalFromRepo, parseOrderSheet, OrderSheetItem, normName } from '@/lib/gfs/canonical';
+import { normName } from '@/lib/gfs/canonical';
 
-const MASTER_KEY = 'gfs_master_workbook';
-
-// GET /api/gfs/order-sheet — 발주서 정본(발주시트) + 재고조사표 정본 + DB 기발주 미입고(Pending PO) 실시간 연동
+// GET /api/gfs/order-sheet — 100% PostgreSQL DB 기반 정본 및 기발주 미입고(Pending PO) 실시간 연동
 export async function GET() {
   try {
-    const { audit, orderItems: repoOrderItems, suppliers: repoSuppliers, auditFile, orderFile: repoOrderFile, errors } = loadCanonicalFromRepo();
+    const errors: string[] = [];
 
-    let orderItems: OrderSheetItem[] = repoOrderItems;
-    let suppliers: string[] = repoSuppliers;
-    let orderFile = repoOrderFile;
-    let masterSource: 'db' | 'repo' = 'repo';
-
-    // 1. 스마트발주(GFS) 최신 발주서 마스터(gfs_master_workbook) 우선 조회
-    try {
-      const row = await prisma.dashboardSnapshot.findUnique({
-        where: { key: MASTER_KEY },
-      });
-      if (row?.payload && typeof row.payload === 'object') {
-        const p = row.payload as Record<string, any>;
-        if (p.base64) {
-          const buf = Buffer.from(p.base64, 'base64');
-          const wb = XLSX.read(buf, { type: 'buffer' });
-          const parsed = parseOrderSheet(wb);
-          if (parsed.items.length > 0) {
-            orderItems = parsed.items;
-            suppliers = parsed.suppliers;
-            orderFile = String(p.fileName || '발주서_마스터(DB)');
-            masterSource = 'db';
-          }
-        }
-      }
-    } catch (dbErr: any) {
-      errors.push(`DB 마스터 발주서 조회/파싱 실패: ${dbErr?.message || dbErr}`);
-    }
+    // 1. DB에서 활성 재고 및 품목 마스터 일괄 조회
+    const inventories = await prisma.inventory.findMany({
+      where: {
+        product: {
+          isUsed: true,
+        },
+      },
+      include: {
+        product: {
+          include: {
+            partner: true,
+            prices: {
+              orderBy: { effectiveDate: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: [
+        { warehouse: 'asc' },
+        { productCode: 'asc' },
+      ],
+    });
 
     // 2. DB에서 현재 미입고 상태인 '기발주(Pending PO)' 내역 실시간 일괄 조회
-    // 발주 후 창고 입고(물리적 도착) 전까지 중복 발주를 100% 원천 방지하기 위해 계산식의 incoming(입고예정)에 합산
     type PendingPoInfo = {
       remainBoxes: number;
       orderBoxes: number;
@@ -77,7 +69,6 @@ export async function GET() {
         const orderDate = d.purchaseOrder?.orderDate || '';
         const boxes = d.remainQty > 0 ? d.remainQty : d.orderQty;
 
-        // 품목코드로 매핑
         if (d.productCode) {
           const cur = pendingByCode.get(d.productCode) || {
             remainBoxes: 0,
@@ -92,7 +83,6 @@ export async function GET() {
           pendingByCode.set(d.productCode, cur);
         }
 
-        // 정규화 품명으로 매핑 (정본 시트와의 연결 강화)
         const norm = normName(d.productName);
         if (norm) {
           const cur = pendingByNorm.get(norm) || {
@@ -112,68 +102,85 @@ export async function GET() {
       errors.push(`DB 기발주 미입고 내역 연동 실패: ${poErr?.message || poErr}`);
     }
 
-    const auditByNorm = new Map(audit.map((a) => [a.norm, a]));
-    const rows = orderItems.map((o, idx) => {
-      const ref = auditByNorm.get(o.norm);
-      const pack = o.packUnit || ref?.packUnit || 0;
+    const suppliersSet = new Set<string>();
 
-      // 품목코드 또는 정규화 품명으로 기발주 미입고량 매칭
-      const poInfo = (ref?.itemId && pendingByCode.get(ref.itemId)) || pendingByNorm.get(o.norm);
+    const rows = inventories.map((inv, idx) => {
+      const p = inv.product;
+      const name = p?.name || inv.productCode;
+      const norm = normName(name);
+      const code = inv.productCode || p?.productCode || '';
+      const pack = (Number(p?.boxQty) > 0 ? Number(p?.boxQty) : 1);
+      const current = Number(inv.currentQty) || 0;
+      const dailyUsage = Number(inv.dailyUsage) || 0;
+      const leadTime = p?.partner?.leadTime || 2;
+
+      // 발주 거래처 / 공급자 명칭
+      const supplier = p?.partner?.name || inv.warehouse || '기타';
+      if (supplier) suppliersSet.add(supplier);
+
+      // 기발주 미입고 내역 매칭
+      const poInfo = (code && pendingByCode.get(code)) || (norm ? pendingByNorm.get(norm) : null);
       const pendingBoxes = poInfo?.remainBoxes || 0;
-      // 발주시트 계산식 단위는 낱개(Bags)이므로 박스x포장입수로 낱개 환산 가산
       const pendingBags = pack > 0 ? pendingBoxes * pack : pendingBoxes;
 
-      const baseIncoming = o.incoming || 0;
+      const baseIncoming = Number((inv as any).inQty) || 0;
       const totalIncoming = baseIncoming + pendingBags;
 
-      // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료에 따른 구 스팸 발주 차단
-      const isReplacedSpam = o.name.includes('스팸(340g*20캔)') || (o.name.includes('스팸') && o.supplierHeader.includes('튀김실'));
-      const effectiveDailyUsage = isReplacedSpam ? 0 : o.dailyUsage;
-      const effectiveBoxesBase = isReplacedSpam ? 0 : o.boxes;
-      const effectiveDays = isReplacedSpam ? 0 : o.days;
+      const unitPrice = Number(inv.unitPrice) > 0
+        ? Number(inv.unitPrice)
+        : (p?.prices?.[0]?.purchasePrice ? Number(p.prices[0].purchasePrice) : 0);
+
+      const stockDays = dailyUsage > 0 ? Math.round((current / dailyUsage) * 10) / 10 : null;
+
+      // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료
+      const isReplacedSpam = name.includes('스팸(340g*20캔)') || (name.includes('스팸') && supplier.includes('튀김실'));
+      const effectiveDailyUsage = isReplacedSpam ? 0 : dailyUsage;
+      const effectiveBoxesBase = isReplacedSpam ? 0 : Math.floor(current / pack);
 
       return {
-        id: idx + 1,
-        supplier: o.supplierHeader,
-        name: o.name,
-        norm: o.norm,
+        id: inv.id || idx + 1,
+        supplier,
+        name,
+        norm,
         boxesBase: effectiveBoxesBase,
-        packUnit: o.packUnit || 0,
-        packUnitAudit: ref?.packUnit || 0,
-        days: effectiveDays,
+        packUnit: pack,
+        packUnitAudit: pack,
+        days: leadTime,
         dailyUsage: effectiveDailyUsage,
-        incoming: totalIncoming, // 실시간 기발주 미입고량 합산
+        incoming: totalIncoming,
         baseIncoming,
-        pendingBoxes, // 기발주 미입고 박스 수량
+        pendingBoxes,
         pendingOrderNos: poInfo?.orderNos || [],
         latestOrderDate: poInfo?.latestOrderDate || '',
-        currentStock: o.currentStock,
-        bagPrice: o.bagPrice || ref?.bagPrice || 0,
-        stockDays: o.stockDays,
-        warehouse: ref?.warehouse || '',
-        vendor: ref?.vendor || '',
-        itemId: ref?.itemId || '',
+        currentStock: current,
+        bagPrice: unitPrice,
+        stockDays,
+        warehouse: inv.warehouse,
+        vendor: p?.partner?.name || '',
+        itemId: code,
         isReplaced: isReplacedSpam,
         replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,
       };
     });
-    const withTarget = rows.filter((r) => r.name).length;
+
+    const suppliers = Array.from(suppliersSet).sort();
+
     return NextResponse.json({
       success: true,
       data: {
         rows,
         suppliers,
-        auditCount: audit.length,
-        rowCount: withTarget,
-        auditFile,
-        orderFile,
-        masterSource,
+        auditCount: rows.length,
+        rowCount: rows.length,
+        auditFile: null,
+        orderFile: 'PostgreSQL DB (100% 일원화)',
+        masterSource: 'db',
         errors,
       },
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || 'order-sheet 로드 실패' },
+      { success: false, error: error.message || 'order-sheet DB 조회 실패' },
       { status: 500 }
     );
   }
