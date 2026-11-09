@@ -874,7 +874,12 @@ export const StockLookupView: React.FC = () => {
               : (o && o.dailyUsage != null && !isNaN(Number(o.dailyUsage))
                   ? Number(o.dailyUsage)
                   : (Number(inv.dailyUsage) > 0 ? Number(inv.dailyUsage) : 0));
-            const dailyU = Math.round(rawDailyU * 100) / 100;
+            // 쌀 등 대용량 포대 자재(packUnit >= 100, 예: 평화햅쌀 500kg/포)의 일사용량이 포대 단위(7.5포)로 들어온 경우 kg 기본 단위로 통일
+            const normalizedDailyU =
+              pack >= 100 && rawDailyU > 0 && rawDailyU < 50 && current > 100
+                ? rawDailyU * pack
+                : rawDailyU;
+            const dailyU = Math.round(normalizedDailyU * 100) / 100;
             const estEntry = lookupEst(wh, norm);
             const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
             const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
@@ -998,7 +1003,12 @@ export const StockLookupView: React.FC = () => {
               const price = Number(o.bagPrice) || 0;
               const box = Math.floor(current / pack);
               const piece = Math.round((current % pack) * 10) / 10;
-              const daily = Math.round((Number(o.dailyUsage) || 0) * 100) / 100;
+              const rawDaily = Number(o.dailyUsage) || 0;
+              const normalizedDaily =
+                pack >= 100 && rawDaily > 0 && rawDaily < 50 && current > 100
+                  ? rawDaily * pack
+                  : rawDaily;
+              const daily = Math.round(normalizedDaily * 100) / 100;
               const estEntry = lookupEst(wh, norm);
               const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
               const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
