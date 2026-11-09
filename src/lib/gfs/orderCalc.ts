@@ -178,6 +178,8 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '롯데마요네즈',
   '참치(2kg*5봉)-사조대림',
   '참치-사조대림',
+  '다진맛김치(10kg*2pk)',
+  '다진맛김치(10kg*2',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
