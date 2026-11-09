@@ -114,6 +114,71 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
     }
   }
 
+  // 보조 계산기 시트(볶음참깨, 참기름, 마요네즈, 참치 등)의 정밀 레시피 연동
+  try {
+    const sesameSheet = wb.Sheets['볶음참깨, 참기름'];
+    if (sesameSheet) {
+      const sRows: any[][] = XLSX.utils.sheet_to_json(sesameSheet, { header: 1, defval: null });
+      const oilMenus: BomChildLink[] = [];
+      const seedMenus: BomChildLink[] = [];
+      for (let i = 4; i < sRows.length; i++) {
+        const r = sRows[i];
+        if (!r) continue;
+        const oilQty = num(r[7]);
+        const oilMenu = r[8] != null ? String(r[8]).trim() : '';
+        const oilPerUnit = num(r[9]);
+        if (oilMenu && oilPerUnit > 0) {
+          oilMenus.push({ menu: oilMenu, normMenu: normName(oilMenu), qty: oilQty, perUnit: oilPerUnit });
+        }
+        const seedQty = num(r[1]);
+        const seedMenu = r[2] != null ? String(r[2]).trim() : '';
+        const seedPerUnit = num(r[3]);
+        if (seedMenu && seedPerUnit > 0) {
+          seedMenus.push({ menu: seedMenu, normMenu: normName(seedMenu), qty: seedQty, perUnit: seedPerUnit });
+        }
+      }
+      for (const m of mats) {
+        if (m.name.includes('청학동참기름(1.8L') && oilMenus.length > 0) {
+          m.menus = oilMenus;
+        } else if (m.name.includes('볶음참깨') && !m.name.includes('흑임자') && seedMenus.length > 0) {
+          m.menus = seedMenus;
+        }
+      }
+    }
+
+    const mayoSheet = wb.Sheets['마요네즈, 참치'];
+    if (mayoSheet) {
+      const mRows: any[][] = XLSX.utils.sheet_to_json(mayoSheet, { header: 1, defval: null });
+      const mayoMenus: BomChildLink[] = [];
+      const tunaMenus: BomChildLink[] = [];
+      for (let i = 4; i < mRows.length; i++) {
+        const r = mRows[i];
+        if (!r) continue;
+        const mayoQty = num(r[1]);
+        const mayoMenu = r[2] != null ? String(r[2]).trim() : '';
+        const mayoPerUnit = num(r[3]);
+        if (mayoMenu && mayoPerUnit > 0) {
+          mayoMenus.push({ menu: mayoMenu, normMenu: normName(mayoMenu), qty: mayoQty, perUnit: mayoPerUnit });
+        }
+        const tunaQty = num(r[7]);
+        const tunaMenu = r[8] != null ? String(r[8]).trim() : '';
+        const tunaPerUnit = num(r[9]);
+        if (tunaMenu && tunaPerUnit > 0) {
+          tunaMenus.push({ menu: tunaMenu, normMenu: normName(tunaMenu), qty: tunaQty, perUnit: tunaPerUnit });
+        }
+      }
+      for (const m of mats) {
+        if (m.name.includes('마요네즈') && mayoMenus.length > 0) {
+          m.menus = mayoMenus;
+        } else if ((m.name.includes('동원가라') || (m.name.includes('참치') && !m.name.includes('김치') && !m.name.includes('액젓'))) && tunaMenus.length > 0) {
+          m.menus = tunaMenus;
+        }
+      }
+    }
+  } catch (subErr) {
+    console.warn('Sub-calculator sheets parsing failed:', subErr);
+  }
+
   return mats;
 }
 
