@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normName } from '@/lib/gfs/canonical';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 // GET /api/gfs/order-sheet — 100% PostgreSQL DB 기반 정본 및 기발주 미입고(Pending PO) 실시간 연동
 export async function GET() {
@@ -107,8 +108,7 @@ export async function GET() {
     const rows = inventories
       .filter((inv) => {
         const name = inv.product?.name || inv.productCode;
-        // 발주 제외 요청 품목 (미니너비아니, 미니사각어묵 등) 제외
-        if (name.includes('미니너비아니') || name.includes('미니사각어묵')) {
+        if (isExcludedFromOrder(name)) {
           return false;
         }
         return true;

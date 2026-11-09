@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday, makeDocNo } from '@/lib/kst';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import {
   BOM_MASTER_RECIPES,
   REPR_MAPPINGS,
@@ -114,8 +115,8 @@ export async function GET(req: NextRequest) {
               if (bd.level === 3 || bd.level === 2) {
                 const childCode = bd.childProduct.productCode;
                 const childName = bd.childProduct.name || '';
-                // 발주 제외 요청 품목 (미니너비아니, 미니사각어묵) 및 비활성 품목 스킵
-                if (childName.includes('미니너비아니') || childName.includes('미니사각어묵') || !bd.childProduct.isUsed) {
+                // 발주 제외 요청 품목 및 비활성 품목 스킵
+                if (isExcludedFromOrder(childName) || !bd.childProduct.isUsed) {
                   return;
                 }
                 const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
@@ -131,7 +132,7 @@ export async function GET(req: NextRequest) {
                 const rawComponents = comp.subComponents || [comp];
                 rawComponents.forEach((raw) => {
                   if (raw.level === 3 || raw.level === 2) {
-                    if (raw.componentName?.includes('미니너비아니') || raw.componentName?.includes('미니사각어묵')) {
+                    if (isExcludedFromOrder(raw.componentName)) {
                       return;
                     }
                     const rawFactor = raw.unitQty / ((raw.yieldRate || 100) / 100);

@@ -147,3 +147,25 @@ export function classifyPattern(header: string, orderDay?: string): '매일' | '
   if (hasTueThuSat && !hasMonWedFri) return '화목토';
   return '주5일';
 }
+
+/**
+ * 발주 제외 키워드 목록 (사용자 지정 발주 제외 품목)
+ */
+export const EXCLUDED_ORDER_KEYWORDS = [
+  '미니너비아니',
+  '미니사각어묵',
+  'GS혜자너비아니',
+  '찌개용어슷후랑크',
+  '다이스드닭갈비',
+  '쵸핑스모크햄',
+  '하이비엔나',
+  '즉석스모크햄세절',
+  '살사후실리샐러드',
+  '살사후시리샐러드',
+  '5찬도시락뚜껑C',
+];
+
+export function isExcludedFromOrder(name?: string | null): boolean {
+  if (!name) return false;
+  return EXCLUDED_ORDER_KEYWORDS.some((kw) => name.includes(kw));
+}

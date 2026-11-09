@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 interface OrderResultItem {
   productCode: string;
@@ -48,10 +49,10 @@ export async function POST(req: NextRequest) {
 
     const today = orderDate || kstToday();
 
-    // 발주 제외 요청 품목 (미니너비아니, 미니사각어묵) 필터링
+    // 발주 제외 요청 품목 필터링
     const targetItems = items.filter((it) => {
       const nm = it.productName || '';
-      return !nm.includes('미니너비아니') && !nm.includes('미니사각어묵');
+      return !isExcludedFromOrder(nm);
     });
 
     if (targetItems.length === 0) {

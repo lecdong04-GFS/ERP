@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,7 +126,7 @@ export async function GET(req: NextRequest) {
             .filter((d) => {
               const cp = d.childProduct;
               const name = cp?.name || '';
-              if (name.includes('미니너비아니') || name.includes('미니사각어묵') || (cp && !cp.isUsed)) {
+              if (isExcludedFromOrder(name) || (cp && !cp.isUsed)) {
                 return false;
               }
               return true;
