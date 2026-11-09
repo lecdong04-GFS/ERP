@@ -4,13 +4,17 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
-// GET /api/inventory/stock?category=원재료&warehouse=상온보관고
+// GET /api/inventory/stock?category=원재료&warehouse=상온보관고&targetDate=2026-11-09
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
     const warehouse = searchParams.get('warehouse');
     const search = searchParams.get('search');
+    const rawTargetDate = searchParams.get('targetDate');
+    const targetDate = rawTargetDate
+      ? rawTargetDate.replace(/\./g, '-').slice(0, 10)
+      : new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
     const where: any = {};
     if (category) where.category = category;
@@ -35,7 +39,64 @@ export async function GET(req: NextRequest) {
       orderBy: [{ expiryDate: 'asc' }, { productCode: 'asc' }],
     });
 
-    return NextResponse.json({ success: true, data: items });
+    // 당일(또는 targetDate) 입고 확정 전표(Receiving & ReceivingDetail)로부터 입고수량 집계 (실시간 조회 연동)
+    // * 중요: 현재고(currentQty)는 절대 수정/조작하지 않고 순수 입고수량(inQty) 정보만 부착하여 반환
+    const receivings = await prisma.receiving.findMany({
+      where: {
+        receivingDate: targetDate,
+        status: { not: '취소' },
+      },
+      select: {
+        details: {
+          select: {
+            productId: true,
+            productCode: true,
+            warehouse: true,
+            receivedQty: true,
+          },
+        },
+      },
+    });
+
+    // 필터와 무관하게 전체 재고 위치를 기준으로 입고수량을 정확한 재고 ID에 매핑
+    const allInvs = await prisma.inventory.findMany({
+      select: { id: true, productId: true, warehouse: true },
+    });
+    const invMap = new Map<string, { id: number; productId: number; warehouse: string }>();
+    const invsByProd = new Map<number, { id: number; productId: number; warehouse: string }[]>();
+    for (const inv of allInvs) {
+      invMap.set(`${inv.productId}_${inv.warehouse}`, inv);
+      if (!invsByProd.has(inv.productId)) {
+        invsByProd.set(inv.productId, []);
+      }
+      invsByProd.get(inv.productId)!.push(inv);
+    }
+
+    const inQtyByInvId = new Map<number, number>();
+    for (const r of receivings) {
+      for (const d of r.details) {
+        let target = invMap.get(`${d.productId}_${d.warehouse}`);
+        if (!target) {
+          const candidates = invsByProd.get(d.productId);
+          if (candidates && candidates.length > 0) {
+            target = candidates[0];
+          }
+        }
+        if (target) {
+          inQtyByInvId.set(
+            target.id,
+            (inQtyByInvId.get(target.id) || 0) + (Number(d.receivedQty) || 0)
+          );
+        }
+      }
+    }
+
+    const responseItems = items.map((inv) => ({
+      ...inv,
+      inQty: inQtyByInvId.get(inv.id) || 0,
+    }));
+
+    return NextResponse.json({ success: true, data: responseItems });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch inventory' },

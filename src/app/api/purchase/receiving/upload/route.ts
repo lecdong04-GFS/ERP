@@ -2,6 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 
+function normalizeDate(val: any): string {
+  if (!val) return '';
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d{4}\.\d{2}\.\d{2}/.test(s)) return s.slice(0, 10).replace(/\./g, '-');
+  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return s.slice(0, 10).replace(/\//g, '-');
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (mdy) {
+    let year = Number(mdy[3]);
+    if (year < 100) year += 2000;
+    const month = String(mdy[1]).padStart(2, '0');
+    const day = String(mdy[2]).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const n = Number(s);
+  if (!isNaN(n) && n > 20000 && n < 60000) {
+    const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return d.toISOString().slice(0, 10);
+  }
+  return s;
+}
+
 function normalizeMaterialName(name: string): string {
   if (!name) return '';
   return name
@@ -77,7 +100,9 @@ export async function POST(req: NextRequest) {
 
     for (const row of rows) {
       const pName = (row.partnerName || '공급사미지정').trim();
-      const rDate = row.receivingDate || new Date().toISOString().slice(0, 10);
+      const rDate = normalizeDate(row.receivingDate) || new Date().toISOString().slice(0, 10);
+      row.receivingDate = rDate;
+      if (row.orderDate) row.orderDate = normalizeDate(row.orderDate);
       const key = `${rDate}|${pName}`;
 
       if (!grouped.has(key)) {

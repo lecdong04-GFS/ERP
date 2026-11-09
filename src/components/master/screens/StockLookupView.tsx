@@ -711,7 +711,7 @@ export const StockLookupView: React.FC = () => {
           const safety = autoSafety > 0 ? autoSafety : item.safetyStock;
           const curIn = Number(item.inQty) || 0;
           const cur = Number(item.currentStock) || 0;
-          const nDays = calcStockDays(cur, effectiveDaily, null, curIn);
+          const nDays = calcStockDays(cur, effectiveDaily, null);
           return {
             ...item,
             dailyUsage: chosen,
@@ -771,7 +771,7 @@ export const StockLookupView: React.FC = () => {
     Promise.all([
       baseRows
         ? Promise.resolve({ success: true, data: baseRows })
-        : fetch('/api/inventory/stock').then((res) => res.json()),
+        : fetch(`/api/inventory/stock?targetDate=${targetDay}`).then((res) => res.json()),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
@@ -912,7 +912,7 @@ export const StockLookupView: React.FC = () => {
                 : Number(inv.product?.safetyStockQty) > 0
                 ? Number(inv.product.safetyStockQty)
                 : 0;
-            const nDays = calcStockDays(current, effectiveDaily, fallbackDays, inQty);
+            const nDays = calcStockDays(current, effectiveDaily, fallbackDays);
 
             const yKeyWh = `${wh}|${norm}`;
             const hasY = prevKnownSet.has(yKeyWh) || prevKnownSet.has(norm);
@@ -1069,15 +1069,14 @@ export const StockLookupView: React.FC = () => {
         const inQty = Number(columnKey === 'inQty' ? newValue : updated.inQty) || 0;
         const outQty = Number(columnKey === 'outQty' ? newValue : updated.outQty) || 0;
 
-        if (columnKey === 'prevStock' || columnKey === 'inQty' || columnKey === 'outQty') {
+        if (columnKey === 'prevStock' || columnKey === 'outQty') {
           updated.currentStock = prevStock + inQty - outQty;
         }
 
-        // 현재고(또는 이월/입고/출고) 직접 수정 시 박스/낱개 역산 동기화
+        // 현재고(또는 이월/출고) 직접 수정 시 박스/낱개 역산 동기화
         if (
           columnKey === 'currentStock' ||
           columnKey === 'prevStock' ||
-          columnKey === 'inQty' ||
           columnKey === 'outQty'
         ) {
           const pack = Number(updated.packUnit) || 0;
@@ -1108,12 +1107,11 @@ export const StockLookupView: React.FC = () => {
         }
         const safetyStock = Number(updated.safetyStock) || 0;
 
-        // 과부족, 재고유지일 및 재고금액 실시간 자동 계산 (총재고 = 현재고 + 입고량)
-        const curIn = Number(updated.inQty) || 0;
+        // 과부족, 재고유지일 및 재고금액 실시간 자동 계산
         updated.shortage = currentStock - safetyStock;
         updated.status = calcStockStatus(currentStock, safetyStock);
         updated.stockDays = effectiveDaily > 0
-          ? Math.round(((currentStock + curIn) / effectiveDaily) * 10) / 10
+          ? Math.round((currentStock / effectiveDaily) * 10) / 10
           : (updated.stockDays ?? null);
         updated.gfsDays = updated.stockDays;
         updated.totalAmount = currentStock * unitPrice;
@@ -2040,7 +2038,7 @@ export const StockLookupView: React.FC = () => {
       align: 'right',
       format: 'number',
       sortable: true,
-      editable: true,
+      editable: false,
     },
     {
       key: 'prevStock',
