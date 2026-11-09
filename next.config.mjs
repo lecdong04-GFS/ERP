@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: false,
   poweredByHeader: false,
+  outputFileTracingIncludes: {
+    '/api/**/*': ['./26년도/**/*', './*.xlsx'],
+  },
   async headers() {
     return [
       {
