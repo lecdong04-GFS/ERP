@@ -104,7 +104,16 @@ export async function GET() {
 
     const suppliersSet = new Set<string>();
 
-    const rows = inventories.map((inv, idx) => {
+    const rows = inventories
+      .filter((inv) => {
+        const name = inv.product?.name || inv.productCode;
+        // 발주 제외 요청 품목 (미니너비아니, 미니사각어묵 등) 제외
+        if (name.includes('미니너비아니') || name.includes('미니사각어묵')) {
+          return false;
+        }
+        return true;
+      })
+      .map((inv, idx) => {
       const p = inv.product;
       const name = p?.name || inv.productCode;
       const norm = normName(name);

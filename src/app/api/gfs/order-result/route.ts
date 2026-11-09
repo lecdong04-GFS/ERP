@@ -48,9 +48,24 @@ export async function POST(req: NextRequest) {
 
     const today = orderDate || kstToday();
 
+    // 발주 제외 요청 품목 (미니너비아니, 미니사각어묵) 필터링
+    const targetItems = items.filter((it) => {
+      const nm = it.productName || '';
+      return !nm.includes('미니너비아니') && !nm.includes('미니사각어묵');
+    });
+
+    if (targetItems.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: '발주 제외 품목만 포함되어 발주서가 생성되지 않았습니다.',
+        count: 0,
+        orders: [],
+      });
+    }
+
     // 그룹핑: partnerId별 1건씩 발주서 생성 (미지정 시 첫 번째 유효 거래처 사용)
     const groups = new Map<string, OrderResultItem[]>();
-    for (const it of items) {
+    for (const it of targetItems) {
       const pid = it.partnerId || partnerId || '__DEFAULT__';
       if (!groups.has(pid)) groups.set(pid, []);
       groups.get(pid)!.push(it);

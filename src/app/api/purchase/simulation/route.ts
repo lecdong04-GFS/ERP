@@ -121,7 +121,16 @@ export async function GET(req: NextRequest) {
           simulQty: baseQty,
           seasonalityFactor: currentSeasonality.factor,
           seasonalityNote: currentSeasonality.note,
-          ingredients: bh.details.map((d) => {
+          ingredients: bh.details
+            .filter((d) => {
+              const cp = d.childProduct;
+              const name = cp?.name || '';
+              if (name.includes('미니너비아니') || name.includes('미니사각어묵') || (cp && !cp.isUsed)) {
+                return false;
+              }
+              return true;
+            })
+            .map((d) => {
             const cp = d.childProduct;
             const yieldRate = d.yieldRate > 0 ? d.yieldRate : 100;
             const unitQty = d.unitQty || 0;
