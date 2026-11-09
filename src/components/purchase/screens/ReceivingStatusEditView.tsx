@@ -31,7 +31,9 @@ import {
   ChevronRight,
   RefreshCw,
   SlidersHorizontal,
+  Upload,
 } from 'lucide-react';
+import { ReceivingUploadModal } from '../modals/ReceivingUploadModal';
 
 // KST 시간 헬퍼
 function kstToday(): string {
@@ -113,6 +115,20 @@ export const ReceivingStatusEditView: React.FC = () => {
   const [rows, setRows] = useState<ReceivingRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+
+  // 파일 업로드 모달 상태
+  const [uploadModalOpen, setUploadModalOpen] = useState<boolean>(false);
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setSelectedUploadFile(f);
+      setUploadModalOpen(true);
+    }
+    e.target.value = '';
+  };
 
   // ── 1. 데이터 로드 (실제 DB 연동) ──
   const loadReceivingData = useCallback(async () => {
@@ -631,6 +647,23 @@ export const ReceivingStatusEditView: React.FC = () => {
             >
               <Printer size={16} />
               <span>HACCP 검수일지(A4)</span>
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept=".csv, .xlsx, .xls"
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-11 px-4.5 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-900 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+            >
+              <Upload size={17} className="text-blue-700" />
+              <span>입고 파일 업로드 (CSV/엑셀)</span>
             </button>
 
             <button
@@ -1367,6 +1400,17 @@ export const ReceivingStatusEditView: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* ── 입고 파일 업로드 검증 및 확정 모달 ── */}
+      <ReceivingUploadModal
+        isOpen={uploadModalOpen}
+        file={selectedUploadFile}
+        onClose={() => setUploadModalOpen(false)}
+        onSuccess={(msg) => {
+          if (msg) alert(msg);
+          loadReceivingData();
+        }}
+      />
     </div>
   );
 };
