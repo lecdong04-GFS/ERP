@@ -166,6 +166,8 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '6칸공용용기',
   'DR-126',
   '126호 용기',
+  '고급4호',
+  '고극4호',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
