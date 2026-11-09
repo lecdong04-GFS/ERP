@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
+import { getCanonicalDailyReport } from '@/components/production/data/dailyProductionReportData';
 
 function normalizeWarehouse(rawWh?: string | null): string {
   if (!rawWh) return '상온';
@@ -675,7 +676,7 @@ export async function GET(req: NextRequest) {
       orderBy: { workSeq: 'asc' },
     });
 
-    // 4) BOM 전체 로드 (공통 캐시 인덱싱)
+    // 4) BOM 전체 로드 (공통 캐시 인덱싱 및 정밀 룩업 구축)
     const bomHeaders = await prisma.bomHeader.findMany({
       include: {
         parentProduct: true,
@@ -691,14 +692,46 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const cleanKey = (s: string) => (s || '').replace(/[^a-zA-Z0-9가-힣]/g, '').slice(0, 6);
-    const bomLookup = new Map<string, (typeof bomHeaders)[0]>();
+    // 정밀 BOM 매핑 사전 (완전 일치 우선 -> 수식어/접두어 제외 일치 -> 단어 매칭)
+    const bomLookupExact = new Map<string, (typeof bomHeaders)[0]>();
+    const bomLookupBase = new Map<string, (typeof bomHeaders)[0]>();
     for (const b of bomHeaders) {
       if (b.parentProduct?.name) {
-        const k = cleanKey(b.parentProduct.name);
-        if (!bomLookup.has(k)) bomLookup.set(k, b);
+        const pName = b.parentProduct.name;
+        const nExact = normName(pName);
+        if (!bomLookupExact.has(nExact)) bomLookupExact.set(nExact, b);
+
+        const nBase = normName(pName.replace(/^\(주문\)\s*/, '').replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''));
+        if (nBase && !bomLookupBase.has(nBase)) bomLookupBase.set(nBase, b);
       }
     }
+
+    const findBom = (name: string, base?: string) => {
+      const n1 = normName(name);
+      if (bomLookupExact.has(n1)) return bomLookupExact.get(n1);
+
+      if (base) {
+        const nBase = normName(base);
+        if (bomLookupExact.has(nBase)) return bomLookupExact.get(nBase);
+      }
+
+      const nStrip = normName(name.replace(/^\(주문\)\s*/, '').replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''));
+      if (bomLookupBase.has(nStrip)) return bomLookupBase.get(nStrip);
+
+      if (base) {
+        const nStripBase = normName(base.replace(/^\(주문\)\s*/, '').replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''));
+        if (bomLookupBase.has(nStripBase)) return bomLookupBase.get(nStripBase);
+      }
+
+      for (const b of bomHeaders) {
+        if (!b.parentProduct?.name) continue;
+        const bNorm = normName(b.parentProduct.name);
+        if (bNorm.length >= 3 && (n1.includes(bNorm) || bNorm.includes(n1))) {
+          return b;
+        }
+      }
+      return undefined;
+    };
 
     const routing = resolveLineRouting(line);
 
@@ -710,9 +743,8 @@ export async function GET(req: NextRequest) {
         const wh = inv ? normalizeWarehouse(inv.warehouse) : determineWarehouse(w.product, w.gyeName);
         const liveStock = inv ? inv.currentQty : (w.product?.inventories?.[0]?.currentQty || 0);
 
-        // BOM 자재 누적
-        const k = cleanKey(w.productName);
-        const bom = bomLookup.get(k);
+        // BOM 자재 정밀 매핑
+        const bom = findBom(w.productName);
         let bomDesc = 'BOM 정본 배합 규격';
         if (bom && bom.details.length > 0) {
           bomDesc = bom.details
@@ -817,7 +849,100 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    if (salesOrders.length === 0) {
+    // 주문 수량 집계 및 1편/2편 정밀 분리
+    const isShift2Filter = shift === '2편';
+    const isShift1Filter = shift === '1편';
+    const productMap = new Map<string, {
+      cleanName: string;
+      baseName: string;
+      shift: '1편' | '2편';
+      qty: number;
+      product: any;
+      unitPrice?: number;
+      amount?: number;
+    }>();
+
+    let totalOrdersCount = salesOrders.length;
+
+    if (salesOrders.length > 0) {
+      for (const so of salesOrders) {
+        for (const dt of so.details) {
+          if (!dt.product) continue;
+          const cleanName = dt.product.name.replace(/^\(주문\)\s*/, '').trim();
+
+          // 시프트 판별 (제품명 끝 '2편'/'2' 또는 orderQty2/1)
+          const isItemShift2 = cleanName.endsWith('2편') || cleanName.endsWith('2') || (dt.orderQty2 || 0) > 0;
+          const isItemShift1 = cleanName.endsWith('1편') || cleanName.endsWith('1') || (dt.orderQty1 || 0) > 0;
+          const itemShift: '1편' | '2편' = isItemShift2 ? '2편' : isItemShift1 ? '1편' : '2편';
+
+          let effectiveQty = 0;
+          if (isShift2Filter) {
+            if (!isItemShift2 && (dt.orderQty2 || 0) <= 0) continue;
+            effectiveQty = (dt.orderQty2 || 0) > 0 ? (dt.orderQty2 || 0) : (dt.totalQty || 0);
+          } else if (isShift1Filter) {
+            if (!isItemShift1 && (dt.orderQty1 || 0) <= 0) continue;
+            effectiveQty = (dt.orderQty1 || 0) > 0 ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
+          } else {
+            effectiveQty = dt.totalQty || ((dt.orderQty1 || 0) + (dt.orderQty2 || 0));
+          }
+
+          if (effectiveQty <= 0) continue;
+
+          const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
+          const existing = productMap.get(cleanName) || {
+            cleanName,
+            baseName,
+            shift: itemShift,
+            qty: 0,
+            product: dt.product,
+            unitPrice: Number(dt.unitPrice) || 0,
+            amount: 0,
+          };
+          existing.qty += effectiveQty;
+          existing.amount = (existing.amount || 0) + effectiveQty * (existing.unitPrice || 0);
+          productMap.set(cleanName, existing);
+        }
+      }
+    } else {
+      // SalesOrder가 DB에 없는 일자(예: 11월 7일, 8일 등)는 생산일보 정본 데이터셋(Canonical Daily Report)에서 동적 로드
+      const canonical = getCanonicalDailyReport(targetDate);
+      if (canonical && canonical.items && canonical.items.length > 0) {
+        totalOrdersCount = canonical.items.length;
+        for (const item of canonical.items) {
+          const cleanName = item.productName.trim();
+          const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
+
+          // 2편 물량 등록
+          if (!isShift1Filter && item.shift2Qty > 0) {
+            const key2 = `${cleanName} 2편`;
+            productMap.set(key2, {
+              cleanName,
+              baseName,
+              shift: '2편',
+              qty: item.shift2Qty,
+              unitPrice: item.deliveryPrice,
+              amount: item.shift2Amount || item.shift2Qty * item.deliveryPrice,
+              product: { name: cleanName, spec: '1ea', unit: 'ea', unitPrice: item.deliveryPrice },
+            });
+          }
+          // 1편 물량 등록
+          if (!isShift2Filter && item.shift1Qty > 0) {
+            const key1 = `${cleanName} 1편`;
+            productMap.set(key1, {
+              cleanName,
+              baseName,
+              shift: '1편',
+              qty: item.shift1Qty,
+              unitPrice: item.deliveryPrice,
+              amount: item.shift1Amount || item.shift1Qty * item.deliveryPrice,
+              product: { name: cleanName, spec: '1ea', unit: 'ea', unitPrice: item.deliveryPrice },
+            });
+          }
+        }
+      }
+    }
+
+    if (productMap.size === 0) {
       return NextResponse.json({
         success: true,
         workDate: targetDate,
@@ -831,53 +956,6 @@ export async function GET(req: NextRequest) {
         data: [],
         materials: [],
       });
-    }
-
-    // 주문 수량 집계 및 1편/2편 정밀 분리
-    const isShift2Filter = shift === '2편';
-    const isShift1Filter = shift === '1편';
-    const productMap = new Map<string, {
-      cleanName: string;
-      baseName: string;
-      shift: '1편' | '2편';
-      qty: number;
-      product: any;
-    }>();
-
-    for (const so of salesOrders) {
-      for (const dt of so.details) {
-        if (!dt.product) continue;
-        const cleanName = dt.product.name.replace(/^\(주문\)\s*/, '').trim();
-
-        // 시프트 판별 (제품명 끝 '2편'/'2' 또는 orderQty2/1)
-        const isItemShift2 = cleanName.endsWith('2편') || cleanName.endsWith('2') || (dt.orderQty2 || 0) > 0;
-        const isItemShift1 = cleanName.endsWith('1편') || cleanName.endsWith('1') || (dt.orderQty1 || 0) > 0;
-        const itemShift: '1편' | '2편' = isItemShift2 ? '2편' : isItemShift1 ? '1편' : '2편';
-
-        let effectiveQty = 0;
-        if (isShift2Filter) {
-          if (!isItemShift2 && (dt.orderQty2 || 0) <= 0) continue;
-          effectiveQty = (dt.orderQty2 || 0) > 0 ? (dt.orderQty2 || 0) : (dt.totalQty || 0);
-        } else if (isShift1Filter) {
-          if (!isItemShift1 && (dt.orderQty1 || 0) <= 0) continue;
-          effectiveQty = (dt.orderQty1 || 0) > 0 ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
-        } else {
-          effectiveQty = dt.totalQty || ((dt.orderQty1 || 0) + (dt.orderQty2 || 0));
-        }
-
-        if (effectiveQty <= 0) continue;
-
-        const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
-        const existing = productMap.get(cleanName) || {
-          cleanName,
-          baseName,
-          shift: itemShift,
-          qty: 0,
-          product: dt.product,
-        };
-        existing.qty += effectiveQty;
-        productMap.set(cleanName, existing);
-      }
     }
 
     // 해당 라인/공정 키워드 매칭 품목 필터링
@@ -1011,9 +1089,8 @@ export async function GET(req: NextRequest) {
       const durationMin = Math.max(5, Math.round((item.qty / itemSpeed) * 60));
       const nextTime = addMinutesToTime(curTime, durationMin);
 
-      // BOM 역산 및 주원료 요약
-      const k = cleanKey(item.cleanName);
-      const bom = bomLookup.get(k) || bomLookup.get(cleanKey(item.baseName));
+      // BOM 역산 및 주원료 요약 (정밀 매핑)
+      const bom = findBom(item.cleanName, item.baseName);
       let bomDesc = '백미밥, 주메뉴 가열육, 볶음김치, 부찬 3종';
 
       if (bom && bom.details.length > 0) {
@@ -1115,6 +1192,7 @@ export async function GET(req: NextRequest) {
     });
 
     const totalDayQty = matchedProducts.reduce((sum, p) => sum + p.qty, 0);
+    const totalDayAmount = matchedProducts.reduce((sum, p) => sum + (p.amount || p.qty * (p.unitPrice || 0)), 0);
     const shift2Qty = matchedProducts.filter((p) => p.shift === '2편').reduce((sum, p) => sum + p.qty, 0);
     const shift1Qty = matchedProducts.filter((p) => p.shift === '1편').reduce((sum, p) => sum + p.qty, 0);
     const lineTotalPlan = `${totalDayQty.toLocaleString()} ea (2편 ${shift2Qty.toLocaleString()}ea + 1편 ${shift1Qty.toLocaleString()}ea)`;
@@ -1125,8 +1203,9 @@ export async function GET(req: NextRequest) {
       line,
       shift,
       hasRealOrders: true,
-      totalOrdersCount: salesOrders.length,
+      totalOrdersCount,
       totalDayQty,
+      totalDayAmount,
       shift2Qty,
       shift1Qty,
       distinctItemCount: matchedProducts.length,
@@ -1164,7 +1243,8 @@ export async function POST(req: NextRequest) {
               workSeq: Number(r.workSeq) || existing.workSeq,
               status: r.status || existing.status,
               orderQty: Number(r.orderQty) || existing.orderQty,
-              completeTime: r.timeRange || existing.completeTime,
+              completeTime: r.completeTime || r.timeRange || existing.completeTime,
+              productName: r.productName || existing.productName,
               createdBy: r.assignee || existing.createdBy,
             },
           });

@@ -440,19 +440,50 @@ export async function getRollingUsageWindowWithDb(
     series.forEach((pts, mk) => {
       const m = meta.get(mk);
       if (!m) return;
+      const pack = m.packUnit > 0 ? m.packUnit : 1;
       const drops: number[] = [];
+
       for (let i = 0; i < pts.length - 1; i++) {
         const p1 = pts[i];
         const p2 = pts[i + 1];
         const d = daysBetween(p1.date, p2.date);
+        if (d <= 0 || d > 7) continue;
+
+        // 1. 임시 0 누락 또는 급감 후 원상복구(바운스백) 제외 (현장 실사 누락 후 다음날 복구 등)
+        if (i + 2 < pts.length) {
+          const p3 = pts[i + 2];
+          if (p2.qty < p1.qty * 0.3 && p3.qty >= p1.qty * 0.7) {
+            continue;
+          }
+        }
+
+        // 2. 대단위 입수량(pack >= 50) 품목에서 낱개 -> 박스단위 표기 혼동에 따른 가짜 급감(예: 1500 -> 2.5) 제외
+        if (pack >= 50 && p1.qty >= 50 && p2.qty <= 10 && p2.qty > 0) {
+          continue;
+        }
+
         if (p1.qty > p2.qty && p1.qty > 0) {
           drops.push((p1.qty - p2.qty) / d);
         }
       }
+
       if (drops.length === 0) return;
-      const avg = drops.reduce((s, v) => s + v, 0) / drops.length;
+
+      // 이상치 정밀 트림 (극단적 점프값 제거)
+      drops.sort((a, b) => a - b);
+      let trimmed = drops;
+      if (drops.length >= 5) {
+        trimmed = drops.slice(1, -1);
+      } else if (drops.length >= 3) {
+        const med = drops[Math.floor(drops.length / 2)];
+        if (med > 0 && drops[drops.length - 1] > med * 2.5) {
+          trimmed = drops.slice(0, -1);
+        }
+      }
+
+      const avg = trimmed.reduce((s, v) => s + v, 0) / trimmed.length;
       const rounded = avg >= 10 ? Math.round(avg * 10) / 10 : Math.round(avg * 100) / 100;
-      const pack = m.packUnit > 0 ? m.packUnit : 1;
+
       const entry: EstimatedUsageEntry = {
         warehouse: m.warehouse,
         canonKey: m.canonKey,
@@ -460,7 +491,7 @@ export async function getRollingUsageWindowWithDb(
         packUnit: pack,
         estDailyUsage: rounded,
         estDailyBox: rounded > 0 ? Math.round((rounded / pack) * 100) / 100 : 0,
-        sampleCount: drops.length,
+        sampleCount: trimmed.length,
         observedDays: pts.length,
       };
       byWhAndKey[mk] = entry;

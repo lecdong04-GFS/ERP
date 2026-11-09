@@ -1390,36 +1390,138 @@ export const StockLookupView: React.FC = () => {
       let autoFilled = 0;
       let parsed = 0;
       let tempId = -(Date.now() % 1000000) - 1;
-      for (const sheet of AUDIT_SHEETS) {
-        const ws = wb.Sheets[sheet];
+      // 시트 감지: 표준 5개 창고 시트 우선, 없으면 주말 통합/단일 시트 자동 탐색
+      const availableStandardSheets = AUDIT_SHEETS.filter((s) => wb.Sheets[s] != null);
+      const isMultiSheet = availableStandardSheets.length > 0;
+      const sheetsToProcess: { sheetName: string; defaultWh: string }[] = isMultiSheet
+        ? availableStandardSheets.map((s) => ({ sheetName: s, defaultWh: s }))
+        : wb.SheetNames.filter((sn) => wb.Sheets[sn] && !/불용|폐기|수식|코드|참고|기준/i.test(sn.trim()))
+            .map((s) => ({ sheetName: s, defaultWh: '' }));
+
+      // 만약 유효 시트가 하나도 걸러지지 않았다면 첫 번째 시트 채택
+      if (sheetsToProcess.length === 0 && wb.SheetNames.length > 0) {
+        sheetsToProcess.push({ sheetName: wb.SheetNames[0], defaultWh: '' });
+      }
+
+      for (const { sheetName, defaultWh } of sheetsToProcess) {
+        const ws = wb.Sheets[sheetName];
         if (!ws) continue;
         const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-        for (let i = 4; i < rows.length; i++) {
+        if (!rows || rows.length === 0) continue;
+
+        // 헤더 행 탐색 (최대 상위 10행 스캔)
+        let headerIdx = -1;
+        let colMap = {
+          name: 3,
+          vendor: 1,
+          code: 2,
+          inbound: 4,
+          daily: 5,
+          expiry: 6,
+          box: 7,
+          piece: 8,
+          current: 9,
+          pack: 10,
+          price: 12,
+          wh: -1,
+        };
+
+        for (let r = 0; r < Math.min(10, rows.length); r++) {
+          const row = rows[r];
+          if (!Array.isArray(row)) continue;
+          const hasNameHeader = row.some((c: any) => {
+            const s = String(c ?? '').replace(/\s+/g, '');
+            return /제품명|품명|품목명|자재명|원부자재명/.test(s);
+          });
+          if (hasNameHeader) {
+            headerIdx = r;
+            const newMap = { ...colMap };
+            row.forEach((cellVal: any, cIdx: number) => {
+              const s = String(cellVal ?? '').replace(/\s+/g, '');
+              if (/제품명|품명|품목명|자재명|원부자재명/.test(s)) newMap.name = cIdx;
+              else if (/거래처|공급처|매입처|업체명|공급사/.test(s)) newMap.vendor = cIdx;
+              else if (/ID|품번|품목코드|자재코드|^코드$/.test(s)) newMap.code = cIdx;
+              else if (/입고일|발주주기|주기|리드타임/.test(s)) newMap.inbound = cIdx;
+              else if (/일사용량|일일사용량|일사용/.test(s)) newMap.daily = cIdx;
+              else if (/유통기한|소비기한|기한/.test(s)) newMap.expiry = cIdx;
+              else if (/박스|box/i.test(s)) newMap.box = cIdx;
+              else if (/낱개|낱개\(봉\)|봉수량|^봉$|^ea$/i.test(s) && !/입수|단가/.test(s)) newMap.piece = cIdx;
+              else if (/현재고|실사재고|재고수량|^재고$/i.test(s)) newMap.current = cIdx;
+              else if (/입수량|포장단위|^입수$/i.test(s)) newMap.pack = cIdx;
+              else if (/봉단가|매입단가|^단가$/i.test(s)) newMap.price = cIdx;
+              else if (/창고|보관창고|저장위치|창고명/.test(s)) newMap.wh = cIdx;
+            });
+            colMap = newMap;
+            break;
+          }
+        }
+
+        const startRow = headerIdx >= 0 ? headerIdx + 1 : 4;
+        for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
           if (!r) continue;
-          const name = String(r[3] ?? '').trim();
-          if (name.length < 2) continue;
+          const name = String(r[colMap.name] ?? '').trim();
+          if (name.length < 2 || name === 'None' || name === 'undefined') continue;
           const norm = normName(name);
           if (!norm) continue;
-          const box = Number(r[7]) || 0;
-          const piece = Number(r[8]) || 0;
-          const pack = Number(r[10]) || 0;
-          const current = Number(r[9]) || box * (pack || 0) + piece;
-          const price = Number(r[12]) || 0;
-          const vendor = String(r[1] ?? '').trim();
-          const itemId = r[2] != null && String(r[2]).trim() !== '' ? String(r[2]).trim() : '';
-          const inbound = String(r[4] ?? '').trim();
-          const fCell = ws[XLSX.utils.encode_cell({ r: i, c: 5 })];
-          const fFormula = String(fCell?.f || '');
-          const rawDaily = Number(r[5]) || 0;
+
+          const box = colMap.box >= 0 ? Number(r[colMap.box]) || 0 : 0;
+          const piece = colMap.piece >= 0 ? Number(r[colMap.piece]) || 0 : 0;
+          const pack = colMap.pack >= 0 ? Number(r[colMap.pack]) || 0 : 0;
+          const rawCurrent = colMap.current >= 0 && r[colMap.current] != null && !isNaN(Number(r[colMap.current]))
+            ? Number(r[colMap.current])
+            : null;
+          const current = rawCurrent !== null ? rawCurrent : (box * (pack || 0) + piece);
+
+          // 박스/낱개 역산출 보정 (현재고는 있으나 박스/낱개가 비어있는 경우)
+          let resolvedBox = box;
+          let resolvedPiece = piece;
+          if (current > 0 && box === 0 && piece === 0 && pack > 0) {
+            resolvedBox = Math.floor(current / pack);
+            resolvedPiece = Math.round((current % pack) * 100) / 100;
+          }
+
+          const price = colMap.price >= 0 ? Number(r[colMap.price]) || 0 : 0;
+          const vendor = colMap.vendor >= 0 ? String(r[colMap.vendor] ?? '').trim() : '';
+          const itemId = colMap.code >= 0 && r[colMap.code] != null && String(r[colMap.code]).trim() !== '' ? String(r[colMap.code]).trim() : '';
+          const inbound = colMap.inbound >= 0 ? String(r[colMap.inbound] ?? '').trim() : '';
+          const expiry = colMap.expiry >= 0 && r[colMap.expiry] != null && String(r[colMap.expiry]).trim() !== '' ? String(r[colMap.expiry]).trim() : '';
+
+          // 창고명 자동 판별 (기본 시트창고 -> 열 데이터 -> 기존 품목 창고 -> 제품명 접두사 -> 기본값)
+          let wh = defaultWh;
+          if (!wh && colMap.wh >= 0 && r[colMap.wh]) {
+            wh = String(r[colMap.wh]).trim();
+          }
+          if (!wh) {
+            const existItem = nextByNorm.get(norm);
+            if (existItem?.whName) {
+              wh = existItem.whName;
+            } else if (name.startsWith('[냉장]')) {
+              wh = '냉장1';
+            } else if (name.startsWith('[냉동]')) {
+              wh = '냉동';
+            } else if (name.startsWith('[상온]')) {
+              wh = '상온';
+            } else if (/적색|청색|필름|봉투|스티커|박스|롤|감열지|용기/i.test(name)) {
+              wh = '부자재';
+            } else {
+              wh = '상온';
+            }
+          }
+
+          let fFormula = '';
+          if (colMap.daily >= 0) {
+            const fCell = ws[XLSX.utils.encode_cell({ r: i, c: colMap.daily })];
+            fFormula = String(fCell?.f || '');
+          }
+          const rawDaily = colMap.daily >= 0 ? Number(r[colMap.daily]) || 0 : 0;
           const daily =
-            rawDaily > 0 && (sheet !== '부자재' || fFormula.includes('/K')) && pack > 0
+            rawDaily > 0 && (wh !== '부자재' || fFormula.includes('/K')) && pack > 0
               ? Math.round(rawDaily * pack * 100) / 100
               : Math.round(rawDaily * 100) / 100;
-          const estEntry = estMapRef.current.byWhAndKey[`${sheet}|${norm}`] || estMapRef.current.byKeyOnly[norm] || null;
+          const estEntry = estMapRef.current.byWhAndKey[`${wh}|${norm}`] || estMapRef.current.byKeyOnly[norm] || null;
           const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
           const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
-          const expiry = r[6] != null && String(r[6]).trim() !== '' ? String(r[6]).trim() : '';
           const exist = nextByNorm.get(norm);
           // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
           const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, parseLeadDays(inbound));
@@ -1435,7 +1537,7 @@ export const StockLookupView: React.FC = () => {
             const effDaily = masterDaily ?? (daily || exist.dailyUsage || estDaily);
             const nDays = calcStockDays(current, effDaily, fallbackDays);
             const changed =
-              exist.whName !== sheet ||
+              exist.whName !== wh ||
               (vendor && exist.vendor !== vendor) ||
               exist.currentStock !== current ||
               (price > 0 && exist.unitPrice !== price) ||
@@ -1443,7 +1545,7 @@ export const StockLookupView: React.FC = () => {
               (pack > 0 && exist.packUnit !== pack) ||
               newSafety !== exist.safetyStock ||
               nDays !== exist.stockDays;
-            exist.whName = sheet;
+            exist.whName = wh;
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
             if (inbound) exist.inboundDate = inbound;
@@ -1456,8 +1558,8 @@ export const StockLookupView: React.FC = () => {
             exist.estSampleCount = estSamples;
             if (expiry) exist.expiryDate = expiry;
             if (pack > 0) exist.packUnit = pack;
-            exist.boxQty = box;
-            exist.pieceQty = piece;
+            exist.boxQty = resolvedBox;
+            exist.pieceQty = resolvedPiece;
             exist.currentStock = current;
             exist.prevStock = oldStock;
             exist.diffStock = Math.round((current - oldStock) * 10) / 10;
@@ -1492,7 +1594,7 @@ export const StockLookupView: React.FC = () => {
             const nDays = calcStockDays(current, nEffDaily, oo && oo.stockDays != null ? Number(oo.stockDays) : null);
             const row: StockItem = {
               id: tempId--,
-              whName: sheet,
+              whName: wh,
               vendor,
               lotNo: '',
               lotDate: '',
@@ -1501,7 +1603,7 @@ export const StockLookupView: React.FC = () => {
               itemCode: itemId,
               burnRank: 0,
               fefoWarn: false,
-              itemType: sheet === '부자재' ? '부자재' : '원자재',
+              itemType: wh === '부자재' ? '부자재' : '원자재',
               category: '원부자재',
               itemName: name,
               spec: '',
@@ -1515,8 +1617,8 @@ export const StockLookupView: React.FC = () => {
               estDailyUsage: estDaily,
               estSampleCount: estSamples,
               packUnit: pack,
-              boxQty: box,
-              pieceQty: piece,
+              boxQty: resolvedBox,
+              pieceQty: resolvedPiece,
               prevStock: current,
               inQty: 0,
               outQty: 0,
@@ -1551,10 +1653,15 @@ export const StockLookupView: React.FC = () => {
       setNewRowIds(freshIds);
       setReviewList(review);
       setReviewOpen(review.length > 0);
+      const formatLabel = isMultiSheet
+        ? `표준 5개 창고 시트 (${availableStandardSheets.join(', ')})`
+        : `주말/통합 양식 (${sheetsToProcess.map((s) => s.sheetName).join(', ')})`;
       alert(
         `업로드 반영 완료 (${uploadTargetDate} 기준):\n` +
-        `신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건 · 안전재고 자동계산 ${autoFilled}건 · 확인필요 ${review.length}건\n\n` +
-        `⚠️ 알림: 현재 화면 표에만 임시 반영된 상태입니다.\n` +
+        `• 양식 구분: ${formatLabel}\n` +
+        `• 수집 품목: 총 ${parsed}건 (신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건)\n` +
+        `• 안전재고 자동계산: ${autoFilled}건 · 수량 급변 확인필요: ${review.length}건\n\n` +
+        `⚠️ 알림: 현재 화면 표에 임시 반영된 상태입니다.\n` +
         `반드시 상단의 [저장 (Ctrl+S)] 버튼을 누르셔야 데이터베이스에 [${uploadTargetDate} 확정 실사]로 영구 저장됩니다.`
       );
     } catch (e: any) {

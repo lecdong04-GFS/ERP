@@ -128,6 +128,33 @@ function getRiceColorBadge(name: string) {
   return null;
 }
 
+/**
+ * 시간 및 소요시간 파싱/연산 헬퍼 (스마트 연쇄 재계산)
+ */
+function parseTimeStr(t: string): { start: string; end: string; startMin: number; endMin: number } {
+  const parts = (t || '').split('~').map((s) => s.trim());
+  const start = parts[0] || '09:00';
+  const end = parts[1] || '09:45';
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+  const endMin = (isNaN(eh) ? 9 : eh) * 60 + (isNaN(em) ? 45 : em);
+  return { start, end, startMin, endMin };
+}
+
+function minToTimeStr(min: number): string {
+  const normalized = ((min % 1440) + 1440) % 1440;
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function parseDurationMin(dur: string, fallback: number = 30): number {
+  const match = String(dur || '').match(/(\d+(?:\.\d+)?)/);
+  if (match) return Math.max(1, Math.round(parseFloat(match[1])));
+  return fallback;
+}
+
 export const WorkOrderStatusView: React.FC = () => {
   const { openPrintModal, setWorkOrderPayload } = usePrintReport();
 
@@ -141,6 +168,10 @@ export const WorkOrderStatusView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('GANTT');
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
+
+  // 작업시간 연쇄 자동 계산 활성화 플래그
+  const [autoCascadeTime, setAutoCascadeTime] = useState(true);
+  const [autoCascadeOnReorder, setAutoCascadeOnReorder] = useState(true);
 
   // 활성 공정에 따른 라인/설비 목록
   const activeLineList = useMemo(() => {
@@ -168,6 +199,7 @@ export const WorkOrderStatusView: React.FC = () => {
     hasRealOrders: boolean;
     totalOrdersCount: number;
     totalDayQty: number;
+    totalDayAmount?: number;
     shift2Qty?: number;
     shift1Qty?: number;
     distinctItemCount: number;
@@ -216,6 +248,7 @@ export const WorkOrderStatusView: React.FC = () => {
           hasRealOrders: Boolean(json.hasRealOrders),
           totalOrdersCount: json.totalOrdersCount || 0,
           totalDayQty: json.totalDayQty || 0,
+          totalDayAmount: json.totalDayAmount || 0,
           shift2Qty: json.shift2Qty || 0,
           shift1Qty: json.shift1Qty || 0,
           distinctItemCount: json.distinctItemCount || json.data.length,
@@ -251,11 +284,25 @@ export const WorkOrderStatusView: React.FC = () => {
     newTasks[index] = newTasks[targetIdx];
     newTasks[targetIdx] = temp;
 
-    // seq 재계산
+    // seq 재계산 및 시간 연쇄 자동 정렬
     const reordered = newTasks.map((t, idx) => ({
       ...t,
       seq: idx + 1,
     }));
+
+    if (autoCascadeOnReorder && reordered.length > 0) {
+      const baseStart = parseTimeStr(reordered[0].time).start || '09:00';
+      const [sh, sm] = baseStart.split(':').map(Number);
+      let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+      for (let i = 0; i < reordered.length; i++) {
+        const task = reordered[i];
+        const dur = parseDurationMin(task.duration, 30);
+        const endMin = curStartMin + dur;
+        reordered[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
+        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+        curStartMin = endMin + gap;
+      }
+    }
 
     setScheduleTasks(reordered);
   };
@@ -296,9 +343,205 @@ export const WorkOrderStatusView: React.FC = () => {
       seq: idx + 1,
     }));
 
+    if (autoCascadeOnReorder && reordered.length > 0) {
+      const baseStart = parseTimeStr(reordered[0].time).start || '09:00';
+      const [sh, sm] = baseStart.split(':').map(Number);
+      let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+      for (let i = 0; i < reordered.length; i++) {
+        const task = reordered[i];
+        const dur = parseDurationMin(task.duration, 30);
+        const endMin = curStartMin + dur;
+        reordered[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
+        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+        curStartMin = endMin + gap;
+      }
+    }
+
     setScheduleTasks(reordered);
     setDraggedIndex(null);
     setDragOverIndex(null);
+  };
+
+  // ── 스마트 편집 핸들러 (작업시간 연쇄 계산 및 제품명/수량 수정) ──
+
+  // 1. 작업 시작시각 변경 및 연쇄 자동 계산
+  const updateTaskStartTime = (id: string, newStart: string) => {
+    setScheduleTasks((prev) => {
+      const list = prev.map((t) => ({ ...t }));
+      const idx = list.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+
+      const [sh, sm] = newStart.split(':').map(Number);
+      if (isNaN(sh) || isNaN(sm) || sh < 0 || sh > 23 || sm < 0 || sm > 59) {
+        list[idx].time = `${newStart} ~ ${parseTimeStr(list[idx].time).end}`;
+        return list;
+      }
+
+      let curStartMin = sh * 60 + sm;
+
+      for (let i = idx; i < list.length; i++) {
+        const task = list[i];
+        const dur = parseDurationMin(task.duration, 30);
+        const endMin = curStartMin + dur;
+        list[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
+
+        if (!autoCascadeTime) break;
+
+        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+        curStartMin = endMin + gap;
+      }
+
+      return list;
+    });
+  };
+
+  // 2. 작업 종료시각 변경
+  const updateTaskEndTime = (id: string, newEnd: string) => {
+    setScheduleTasks((prev) => {
+      const list = prev.map((t) => ({ ...t }));
+      const idx = list.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+
+      const [eh, em] = newEnd.split(':').map(Number);
+      if (isNaN(eh) || isNaN(em) || eh < 0 || eh > 23 || em < 0 || em > 59) {
+        list[idx].time = `${parseTimeStr(list[idx].time).start} ~ ${newEnd}`;
+        return list;
+      }
+
+      const { startMin, start } = parseTimeStr(list[idx].time);
+      const endMin = eh * 60 + em;
+      let dur = endMin - startMin;
+      if (dur < 0) dur += 1440;
+      if (dur === 0) dur = 5;
+
+      list[idx].duration = `${dur}분`;
+      list[idx].time = `${start} ~ ${minToTimeStr(endMin)}`;
+
+      if (autoCascadeTime) {
+        let curStartMin = endMin + (list[idx].type === '휴게' || list[idx].type === '청소' ? 0 : 5);
+        for (let i = idx + 1; i < list.length; i++) {
+          const task = list[i];
+          const taskDur = parseDurationMin(task.duration, 30);
+          const nextEndMin = curStartMin + taskDur;
+          list[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(nextEndMin)}`;
+          const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+          curStartMin = nextEndMin + gap;
+        }
+      }
+
+      return list;
+    });
+  };
+
+  // 3. 소요시간 변경 및 연쇄 자동 계산
+  const updateTaskDuration = (id: string, newDuration: string) => {
+    setScheduleTasks((prev) => {
+      const list = prev.map((t) => ({ ...t }));
+      const idx = list.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+
+      const dur = parseDurationMin(newDuration, 30);
+      list[idx].duration = `${dur}분`;
+
+      const { startMin, start } = parseTimeStr(list[idx].time);
+      const endMin = startMin + dur;
+      list[idx].time = `${start} ~ ${minToTimeStr(endMin)}`;
+
+      if (autoCascadeTime) {
+        let curStartMin = endMin + (list[idx].type === '휴게' || list[idx].type === '청소' ? 0 : 5);
+        for (let i = idx + 1; i < list.length; i++) {
+          const task = list[i];
+          const taskDur = parseDurationMin(task.duration, 30);
+          const nextEndMin = curStartMin + taskDur;
+          list[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(nextEndMin)}`;
+          const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+          curStartMin = nextEndMin + gap;
+        }
+      }
+
+      return list;
+    });
+  };
+
+  // 4. 지시 제품명 변경
+  const updateTaskItem = (id: string, newItem: string) => {
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, item: newItem } : t))
+    );
+  };
+
+  // 5. 지시 수량 변경
+  const updateTaskQty = (id: string, newQty: string | number) => {
+    const num = typeof newQty === 'number' ? newQty : Number(newQty) || 0;
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, qty: num } : t))
+    );
+  };
+
+  // 6. 인원 변경
+  const updateTaskWorkers = (id: string, workers: string) => {
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, workers } : t))
+    );
+  };
+
+  // 7. BOM 텍스트 변경
+  const updateTaskBom = (id: string, bom: string) => {
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, bom } : t))
+    );
+  };
+
+  // 8. CCP 텍스트 변경
+  const updateTaskCcp = (id: string, ccp: string) => {
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ccp } : t))
+    );
+  };
+
+  // 9. 시프트 변경 토글
+  const updateTaskShift = (id: string, newShift: any) => {
+    setScheduleTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, shift: newShift } : t))
+    );
+  };
+
+  // 10. 전체 시간 순차 자동 정렬
+  const handleRecalculateAll = (firstStart?: string) => {
+    setScheduleTasks((prev) => {
+      if (prev.length === 0) return prev;
+      const list = prev.map((t) => ({ ...t }));
+      const baseStart = firstStart || parseTimeStr(list[0].time).start || '09:00';
+      const [sh, sm] = baseStart.split(':').map(Number);
+      let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+
+      for (let i = 0; i < list.length; i++) {
+        const task = list[i];
+        const dur = parseDurationMin(task.duration, 30);
+        const endMin = curStartMin + dur;
+        list[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
+        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+        curStartMin = endMin + gap;
+      }
+      return list;
+    });
+  };
+
+  // 11. 전체 시간 일괄 넛지 (+10분 / -10분)
+  const handleNudgeAll = (deltaMin: number) => {
+    setScheduleTasks((prev) => {
+      if (prev.length === 0) return prev;
+      const list = prev.map((t) => {
+        const { startMin, endMin } = parseTimeStr(t.time);
+        const newStart = startMin + deltaMin;
+        const newEnd = endMin + deltaMin;
+        return {
+          ...t,
+          time: `${minToTimeStr(newStart)} ~ ${minToTimeStr(newEnd)}`,
+        };
+      });
+      return list;
+    });
   };
 
   const handleDragEnd = () => {
@@ -1346,16 +1589,28 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 3. 상단 라인 핵심 KPI 카드 바 (생산계획, 가동시간, UPH속도, 투입인원, 공정책임자) */}
       <div className="bg-white border-b border-slate-200 px-6 py-2.5 shrink-0">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* KPI 1: 일일 총 생산계획 */}
+          {/* KPI 1: 일일 총 생산계획 및 수주금액 연동 */}
           <div className="bg-blue-50/70 border border-blue-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <PackageCheck size={18} />
             </div>
             <div className="min-w-0">
-              <div className="text-[11px] font-bold text-blue-700 truncate">일일 총 생산계획</div>
+              <div className="text-[11px] font-bold text-blue-700 truncate flex items-center gap-1.5">
+                <span>일일 총 생산계획</span>
+                {realOrderMeta?.totalDayAmount ? (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">
+                    수주 연동 100%
+                  </span>
+                ) : null}
+              </div>
               <div className="text-sm font-black text-blue-950 truncate">
                 {realOrderMeta?.lineTotalPlan || currentLine.totalPlan}
               </div>
+              {realOrderMeta?.totalDayAmount ? (
+                <div className="text-[11px] font-bold text-emerald-700 truncate">
+                  수주금액: {realOrderMeta.totalDayAmount.toLocaleString()}원 (BOM 연동)
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -1562,217 +1817,359 @@ export const WorkOrderStatusView: React.FC = () => {
               <SpeedSimulatorView />
             </div>
           )}
-          {/* TAB 1: 타임테이블 스케줄 테이블 (일일 작업지시서) */}
+          {/* TAB 1: 타임테이블 스케줄 테이블 (일일 작업지시서 - 스마트 편집 모드) */}
           {activeTab === 'TIMETABLE' && (
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-sm sm:text-base">
-                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
-                  <tr>
-                    <th className="py-3.5 px-2.5 w-24 text-center font-black">순서</th>
-                    <th className="py-3.5 px-2.5 w-28 text-center font-black">구분</th>
-                    <th className="py-3.5 px-3 w-40 text-center font-black">작업시간</th>
-                    <th className="py-3.5 px-2.5 w-24 text-center font-black">유형</th>
-                    <th className="py-3.5 px-4 text-left font-black">지시 제품명</th>
-                    <th className="py-3.5 px-4 w-36 text-right font-black">지시수량</th>
-                    <th className="py-3.5 px-3 w-28 text-center font-black">소요시간</th>
-                    <th className="py-3.5 px-2.5 w-24 text-center font-black">인원</th>
-                    <th className="py-3.5 px-4 text-left font-black">주요 원부자재 배합 기준 (BOM)</th>
-                    <th className="py-3.5 px-4 w-52 text-left font-black">HACCP & CCP 핵심 관리기준</th>
-                    <th className="py-3.5 px-3 w-32 text-center font-black">진행상태</th>
-                    <th className="py-3.5 px-3 w-32 text-center font-black">담당자</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredSchedule.map((task, idx) => {
-                    const isDone = task.status === '완료';
-                    const isProgress = task.status === '진행중';
-                    const isClean = task.type === '청소';
-                    const isMeal = task.type === '휴게';
-                    const isSupport = task.type === '지원';
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              {/* 스마트 편집 상단 액션 바 */}
+              <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex items-center justify-between gap-3 flex-wrap shrink-0">
+                <div className="flex items-center gap-3 flex-wrap text-xs">
+                  <div className="flex items-center gap-1.5 font-black text-slate-800">
+                    <Sparkles size={16} className="text-blue-600" />
+                    <span>스마트 지시서 편집</span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+                    <input
+                      type="checkbox"
+                      checked={autoCascadeTime}
+                      onChange={(e) => setAutoCascadeTime(e.target.checked)}
+                      className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                    />
+                    <span>⏱️ 시간 연쇄 자동 계산</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+                    <input
+                      type="checkbox"
+                      checked={autoCascadeOnReorder}
+                      onChange={(e) => setAutoCascadeOnReorder(e.target.checked)}
+                      className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                    />
+                    <span>🔄 순서 이동 시 시간 자동 연동</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
+                    💡 작업시간·소요시간 변경 시 다음 순서 시간들이 연속 자동 계산됩니다.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleNudgeAll(-10)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                    title="전체 스케줄 시간을 10분 앞당깁니다"
+                  >
+                    -10분
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNudgeAll(10)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                    title="전체 스케줄 시간을 10분 늦춥니다"
+                  >
+                    +10분
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRecalculateAll()}
+                    className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="시작 시각부터 모든 작업을 5분 갭으로 순차 자동 정렬합니다"
+                  >
+                    <Clock size={13} />
+                    <span>전체 순차 자동 정렬</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveOrders}
+                    disabled={saving}
+                    className="px-3.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Save size={13} />
+                    <span>{saving ? '저장중...' : '지시 확정 저장'}</span>
+                  </button>
+                </div>
+              </div>
 
-                    // 시프트 뱃지 색상
-                    let shiftBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
-                    if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-black';
-                    else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-black';
-                    else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-black';
-                    else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
+              {/* 스케줄 테이블 */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <table className="w-full text-left border-collapse text-sm sm:text-base">
+                  <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
+                    <tr>
+                      <th className="py-3 px-2 w-24 text-center font-black">순서</th>
+                      <th className="py-3 px-2 w-28 text-center font-black">구분</th>
+                      <th className="py-3 px-2 w-44 text-center font-black">작업시간</th>
+                      <th className="py-3 px-2 w-24 text-center font-black">유형</th>
+                      <th className="py-3 px-3 min-w-[220px] text-left font-black">지시 제품명</th>
+                      <th className="py-3 px-3 w-36 text-right font-black">지시수량</th>
+                      <th className="py-3 px-2 w-24 text-center font-black">소요시간</th>
+                      <th className="py-3 px-2 w-20 text-center font-black">인원</th>
+                      <th className="py-3 px-3 min-w-[200px] text-left font-black">주요 원부자재 배합 기준 (BOM)</th>
+                      <th className="py-3 px-3 min-w-[200px] text-left font-black">HACCP & CCP 핵심 관리기준</th>
+                      <th className="py-3 px-2 w-28 text-center font-black">진행상태</th>
+                      <th className="py-3 px-2 w-28 text-center font-black">담당자</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredSchedule.map((task, idx) => {
+                      const isDone = task.status === '완료';
+                      const isProgress = task.status === '진행중';
+                      const isClean = task.type === '청소';
+                      const isMeal = task.type === '휴게';
+                      const isSupport = task.type === '지원';
 
-                    return (
-                      <tr
-                        key={task.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, idx)}
-                        onDragOver={(e) => handleDragOver(e, idx)}
-                        onDragLeave={handleDragLeave}
-                        onDrop={(e) => handleDrop(e, idx)}
-                        onDragEnd={handleDragEnd}
-                        className={`transition-all select-none ${
-                          draggedIndex === idx
-                            ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
-                            : dragOverIndex === idx
-                            ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
-                            : isClean
-                            ? 'bg-amber-50/60'
-                            : isMeal
-                            ? 'bg-slate-100/70'
-                            : isSupport
-                            ? 'bg-indigo-50/50'
-                            : isDone
-                            ? 'bg-slate-50 opacity-80'
-                            : 'hover:bg-blue-50/40'
-                        }`}
-                      >
-                        {/* 1. 순서 핸들러 & 순번 */}
-                        <td className="py-3.5 px-2.5 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span
-                              className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-slate-200/60"
-                              title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
-                            >
-                              <GripVertical size={18} />
-                            </span>
-                            <span className="font-mono font-black text-slate-900 text-base sm:text-lg w-7">
-                              {task.seq}
-                            </span>
-                            <div className="flex flex-col gap-0.5">
-                              <button
-                                type="button"
-                                onClick={() => moveTask(idx, 'UP')}
-                                disabled={idx === 0}
-                                title="위로 순서 올리기"
-                                className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                      // 시프트 뱃지 색상
+                      let shiftBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                      if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-black';
+                      else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-black';
+                      else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-black';
+                      else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
+
+                      const { start, end } = parseTimeStr(task.time);
+
+                      return (
+                        <tr
+                          key={task.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, idx)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, idx)}
+                          onDragEnd={handleDragEnd}
+                          className={`transition-all select-none ${
+                            draggedIndex === idx
+                              ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
+                              : dragOverIndex === idx
+                              ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
+                              : isClean
+                              ? 'bg-amber-50/60'
+                              : isMeal
+                              ? 'bg-slate-100/70'
+                              : isSupport
+                              ? 'bg-indigo-50/50'
+                              : isDone
+                              ? 'bg-slate-50 opacity-80'
+                              : 'hover:bg-blue-50/40'
+                          }`}
+                        >
+                          {/* 1. 순서 핸들러 & 순번 */}
+                          <td className="py-2.5 px-2 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <span
+                                className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-slate-200/60"
+                                title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
                               >
-                                <ArrowUp size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => moveTask(idx, 'DOWN')}
-                                disabled={idx === filteredSchedule.length - 1}
-                                title="아래로 순서 내리기"
-                                className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
-                              >
-                                <ArrowDown size={14} />
-                              </button>
+                                <GripVertical size={16} />
+                              </span>
+                              <span className="font-mono font-black text-slate-900 text-base w-6">
+                                {task.seq}
+                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => moveTask(idx, 'UP')}
+                                  disabled={idx === 0}
+                                  title="위로 순서 올리기"
+                                  className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                >
+                                  <ArrowUp size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveTask(idx, 'DOWN')}
+                                  disabled={idx === filteredSchedule.length - 1}
+                                  title="아래로 순서 내리기"
+                                  className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                                >
+                                  <ArrowDown size={13} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* 2. 구분 (시프트 뱃지) */}
-                        <td className="py-3.5 px-2.5 text-center">
-                          <span className={`inline-block px-3 py-1 rounded-lg text-xs sm:text-sm font-black border ${shiftBadgeClass}`}>
-                            {task.shift}
-                          </span>
-                        </td>
+                          {/* 2. 구분 (시프트 클릭 토글) */}
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const shifts: ScheduleTask['shift'][] = ['2편', '1편', '지원', '청소', '휴게'];
+                                const curIdx = shifts.findIndex((s) => s === task.shift);
+                                const nextShift = shifts[(curIdx + 1) % shifts.length];
+                                updateTaskShift(task.id, nextShift);
+                              }}
+                              className={`inline-block px-2.5 py-1 rounded-lg text-xs sm:text-sm font-black border cursor-pointer hover:opacity-80 transition-all ${shiftBadgeClass}`}
+                              title="클릭하여 시프트 전환"
+                            >
+                              {task.shift}
+                            </button>
+                          </td>
 
-                        {/* 3. 작업시간 */}
-                        <td className="py-3.5 px-3 text-center font-mono font-black text-slate-900 text-sm sm:text-base whitespace-nowrap">
-                          {task.time}
-                        </td>
+                          {/* 3. 작업시간 (시작/종료 직접 편집 + 연쇄 자동 계산) */}
+                          <td className="py-2.5 px-2 text-center">
+                            <div className="flex items-center justify-center gap-1 font-mono">
+                              <input
+                                type="text"
+                                value={start}
+                                onChange={(e) => updateTaskStartTime(task.id, e.target.value)}
+                                className="w-14 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all"
+                                title="시작 시각 (수정 시 이후 작업시간이 자동으로 순차 재계산됩니다)"
+                              />
+                              <span className="text-slate-400 font-bold text-xs">~</span>
+                              <input
+                                type="text"
+                                value={end}
+                                onChange={(e) => updateTaskEndTime(task.id, e.target.value)}
+                                className="w-14 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all"
+                                title="종료 시각 (수정 시 소요시간 및 이후 작업시간이 연쇄 재계산됩니다)"
+                              />
+                            </div>
+                          </td>
 
-                        {/* 4. 유형 */}
-                        <td className="py-3.5 px-2.5 text-center">
-                          <span
-                            className={`inline-block px-2.5 py-1 rounded-md text-xs sm:text-sm font-black ${
-                              task.type === '생산'
-                                ? 'bg-blue-100 text-blue-900 font-black'
-                                : task.type === '청소'
-                                ? 'bg-amber-100 text-amber-900 font-black'
-                                : task.type === '준비'
-                                ? 'bg-teal-100 text-teal-900 font-black'
-                                : task.type === '지원'
-                                ? 'bg-indigo-100 text-indigo-900 font-black'
-                                : 'bg-slate-200 text-slate-700 font-bold'
-                            }`}
-                          >
-                            {task.type}
-                          </span>
-                        </td>
+                          {/* 4. 유형 */}
+                          <td className="py-2.5 px-2 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-md text-xs sm:text-sm font-black ${
+                                task.type === '생산'
+                                  ? 'bg-blue-100 text-blue-900 font-black'
+                                  : task.type === '청소'
+                                  ? 'bg-amber-100 text-amber-900 font-black'
+                                  : task.type === '준비'
+                                  ? 'bg-teal-100 text-teal-900 font-black'
+                                  : task.type === '지원'
+                                  ? 'bg-indigo-100 text-indigo-900 font-black'
+                                  : 'bg-slate-200 text-slate-700 font-bold'
+                              }`}
+                            >
+                              {task.type}
+                            </span>
+                          </td>
 
-                        {/* 5. 지시 제품명 */}
-                        <td className="py-3.5 px-4 font-black text-slate-950 text-base sm:text-lg tracking-tight">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {(() => {
-                              const rBadge = getRiceColorBadge(task.item);
-                              if (!rBadge || task.type !== '생산') return null;
-                              return (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-black border shadow-xs ${rBadge.bg}`}>
-                                  {rBadge.label === '빨간밥' ? '🌶️ 빨간밥' : rBadge.label.includes('흑미') ? '🌾 흑미' : '🍚 백미'}
-                                </span>
-                              );
-                            })()}
-                            <span>{task.item}</span>
-                          </div>
-                        </td>
+                          {/* 5. 지시 제품명 (직접 수정 가능 + 실시간 밥색상 뱃지) */}
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-1.5 min-w-[200px]">
+                              {(() => {
+                                const rBadge = getRiceColorBadge(task.item);
+                                if (!rBadge || task.type !== '생산') return null;
+                                return (
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-black border shrink-0 ${rBadge.bg}`}>
+                                    {rBadge.label === '빨간밥' ? '🌶️' : rBadge.label.includes('흑미') ? '🌾' : '🍚'} {rBadge.label}
+                                  </span>
+                                );
+                              })()}
+                              <input
+                                type="text"
+                                value={task.item}
+                                onChange={(e) => updateTaskItem(task.id, e.target.value)}
+                                placeholder="지시 제품명 입력"
+                                className="w-full font-black text-slate-950 text-sm sm:text-base bg-white border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded-lg px-2 py-1 transition-all"
+                                title="지시 제품명 (직접 수정 가능)"
+                              />
+                            </div>
+                          </td>
 
-                        {/* 6. 지시수량 */}
-                        <td className="py-3.5 px-4 text-right font-mono font-black text-indigo-950 text-base sm:text-lg whitespace-nowrap">
-                          {typeof task.qty === 'number' ? task.qty.toLocaleString() + ' ea' : task.qty}
-                        </td>
+                          {/* 6. 지시수량 (직접 수정 가능) */}
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1">
+                              <input
+                                type="number"
+                                value={typeof task.qty === 'number' ? task.qty : ''}
+                                onChange={(e) => updateTaskQty(task.id, e.target.value)}
+                                placeholder="0"
+                                className="w-24 text-right font-mono font-black text-indigo-950 text-sm sm:text-base bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1"
+                                title="지시수량 (직접 수정 가능)"
+                              />
+                              <span className="text-xs text-slate-500 font-bold shrink-0">ea</span>
+                            </div>
+                          </td>
 
-                        {/* 7. 소요시간 */}
-                        <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-800 text-sm sm:text-base">
-                          {task.duration}
-                        </td>
+                          {/* 7. 소요시간 (수정 시 연쇄 재계산) */}
+                          <td className="py-2.5 px-2 text-center">
+                            <input
+                              type="text"
+                              value={task.duration}
+                              onChange={(e) => updateTaskDuration(task.id, e.target.value)}
+                              placeholder="30분"
+                              className="w-16 text-center font-mono font-bold text-slate-800 text-xs sm:text-sm bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1"
+                              title="소요시간 (변경 시 종료시각 및 이후 작업시간이 자동 연쇄 갱신됩니다)"
+                            />
+                          </td>
 
-                        {/* 8. 인원 */}
-                        <td className="py-3.5 px-2.5 text-center font-black text-slate-900 text-sm sm:text-base">
-                          {task.workers}
-                        </td>
+                          {/* 8. 인원 */}
+                          <td className="py-2.5 px-2 text-center">
+                            <input
+                              type="text"
+                              value={task.workers}
+                              onChange={(e) => updateTaskWorkers(task.id, e.target.value)}
+                              placeholder="인원"
+                              className="w-16 text-center font-black text-slate-900 text-xs sm:text-sm bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-1 py-1"
+                            />
+                          </td>
 
-                        {/* 9. 주요 원부자재 배합 기준 (BOM) */}
-                        <td className="py-3.5 px-4 text-sm sm:text-base text-slate-800 leading-relaxed font-medium">
-                          {task.bom}
-                        </td>
+                          {/* 9. 주요 원부자재 배합 기준 (BOM) */}
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="text"
+                              value={task.bom}
+                              onChange={(e) => updateTaskBom(task.id, e.target.value)}
+                              placeholder="BOM 배합 기준"
+                              className="w-full text-xs sm:text-sm text-slate-800 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1 font-medium"
+                              title="주요 원부자재 배합 기준 (BOM)"
+                            />
+                          </td>
 
-                        {/* 10. HACCP & CCP 핵심 관리기준 */}
-                        <td className="py-3.5 px-4 text-sm sm:text-base font-black text-red-700 leading-snug">
-                          {task.ccp}
-                        </td>
+                          {/* 10. HACCP & CCP 핵심 관리기준 */}
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="text"
+                              value={task.ccp}
+                              onChange={(e) => updateTaskCcp(task.id, e.target.value)}
+                              placeholder="CCP 핵심 관리기준"
+                              className="w-full text-xs sm:text-sm font-black text-red-700 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1"
+                              title="HACCP & CCP 핵심 관리기준"
+                            />
+                          </td>
 
-                        {/* 11. 진행상태 버튼 토글 */}
-                        <td className="py-3.5 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => toggleStatus(task.id)}
-                            className={`px-3.5 py-1.5 rounded-xl font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto ${
-                              isDone
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                : isProgress
-                                ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300'
-                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                            }`}
-                          >
-                            {isDone ? (
-                              <>
-                                <CheckCircle2 size={15} />
-                                <span>완료</span>
-                              </>
-                            ) : isProgress ? (
-                              <>
-                                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-                                <span>진행중</span>
-                              </>
-                            ) : (
-                              <span>대기</span>
-                            )}
-                          </button>
-                        </td>
+                          {/* 11. 진행상태 버튼 토글 */}
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleStatus(task.id)}
+                              className={`px-3 py-1.5 rounded-xl font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
+                                isDone
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : isProgress
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300'
+                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                              }`}
+                            >
+                              {isDone ? (
+                                <>
+                                  <CheckCircle2 size={14} />
+                                  <span>완료</span>
+                                </>
+                              ) : isProgress ? (
+                                <>
+                                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                  <span>진행중</span>
+                                </>
+                              ) : (
+                                <span>대기</span>
+                              )}
+                            </button>
+                          </td>
 
-                        {/* 12. 담당자 인풋 */}
-                        <td className="py-3.5 px-3 text-center">
-                          <input
-                            type="text"
-                            value={task.assignee}
-                            onChange={(e) => updateAssignee(task.id, e.target.value)}
-                            placeholder="담당자"
-                            className="w-24 text-center font-black text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          {/* 12. 담당자 인풋 */}
+                          <td className="py-2.5 px-2 text-center">
+                            <input
+                              type="text"
+                              value={task.assignee}
+                              onChange={(e) => updateAssignee(task.id, e.target.value)}
+                              placeholder="담당자"
+                              className="w-20 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

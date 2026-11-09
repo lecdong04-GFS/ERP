@@ -297,29 +297,79 @@ export function getOrderSheetFilePath(): string | null {
   );
 }
 
-/** 재고조사표 5시트 → 정본 맵 (norm → AuditEntry) */
+/** 재고조사표 평일/주말 다중 양식 적응형 → 정본 맵 (norm → AuditEntry) */
 export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
   const map = new Map<string, AuditEntry>();
-  for (const sheet of AUDIT_SHEETS) {
+  // 1) 표준 5대 창고 시트 확인
+  const availSheets = AUDIT_SHEETS.filter((s) => wb.Sheets[s] != null);
+  const targetSheets =
+    availSheets.length > 0
+      ? availSheets.map((s) => ({ sheet: s, defaultWh: s }))
+      : wb.SheetNames.filter((sn) => wb.Sheets[sn] && !/불용|폐기|수식|코드|참고|기준/i.test(sn.trim()))
+          .map((s) => ({ sheet: s, defaultWh: '' }));
+
+  if (targetSheets.length === 0 && wb.SheetNames.length > 0) {
+    targetSheets.push({ sheet: wb.SheetNames[0], defaultWh: '' });
+  }
+
+  for (const { sheet, defaultWh } of targetSheets) {
     const ws = wb.Sheets[sheet];
     if (!ws) continue;
     const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-    // R3 헤더, R4부터 데이터: 1거래처 2ID 3제품명 7박스 8낱개 9현재고 10입수량 12봉단가
-    for (let i = 4; i < rows.length; i++) {
+    if (!rows || rows.length < 2) continue;
+
+    // 헤더 행 탐색 (최대 상위 10행 스캔)
+    let headerIdx = -1;
+    let colName = 3, colVendor = 1, colId = 2, colPack = 10, colPrice = 12, colWh = -1;
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      const row = rows[i];
+      if (!Array.isArray(row)) continue;
+      const found = row.some((c: any) => /제품명|품명|품목명|자재명|원부자재명/.test(String(c ?? '')));
+      if (found) {
+        headerIdx = i;
+        row.forEach((c: any, idx: number) => {
+          const s = String(c ?? '').replace(/\s+/g, '');
+          if (/제품명|품명|품목명|자재명|원부자재명/.test(s)) colName = idx;
+          else if (/거래처|공급처|매입처|업체명|공급사/.test(s)) colVendor = idx;
+          else if (/ID|품번|품목코드|자재코드|^코드$/.test(s)) colId = idx;
+          else if (/입수량|포장단위|^입수$/.test(s)) colPack = idx;
+          else if (/봉단가|매입단가|^단가$/.test(s)) colPrice = idx;
+          else if (/창고|보관창고|저장위치|창고명/.test(s)) colWh = idx;
+        });
+        break;
+      }
+    }
+
+    const startRow = headerIdx >= 0 ? headerIdx + 1 : 4;
+    for (let i = startRow; i < rows.length; i++) {
       const r = rows[i];
       if (!r) continue;
-      const name = r[3];
-      if (!name || String(name).trim().length < 2) continue;
+      const name = r[colName];
+      if (!name || String(name).trim().length < 2 || String(name).trim() === 'None') continue;
       const norm = normName(name);
       if (!norm || map.has(norm)) continue;
+
+      let wh = defaultWh;
+      if (!wh && colWh >= 0 && r[colWh]) {
+        wh = String(r[colWh]).trim();
+      }
+      if (!wh) {
+        const sName = String(name).trim();
+        if (sName.startsWith('[냉장]')) wh = '냉장1';
+        else if (sName.startsWith('[냉동]')) wh = '냉동';
+        else if (sName.startsWith('[상온]')) wh = '상온';
+        else if (/적색|청색|필름|봉투|스티커|박스|롤|감열지|용기/i.test(sName)) wh = '부자재';
+        else wh = '상온';
+      }
+
       map.set(norm, {
         name: String(name).trim(),
         norm,
-        warehouse: sheet,
-        vendor: String(r[1] ?? '').trim(),
-        itemId: r[2] != null ? String(r[2]).trim() : '',
-        packUnit: Number(r[10]) || 0,
-        bagPrice: Number(r[12]) || 0,
+        warehouse: wh,
+        vendor: colVendor >= 0 ? String(r[colVendor] ?? '').trim() : '',
+        itemId: colId >= 0 && r[colId] != null ? String(r[colId]).trim() : '',
+        packUnit: colPack >= 0 ? Number(r[colPack]) || 0 : 0,
+        bagPrice: colPrice >= 0 ? Number(r[colPrice]) || 0 : 0,
       });
     }
   }
