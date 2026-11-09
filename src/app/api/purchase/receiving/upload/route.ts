@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 
+function normalizeMaterialName(name: string): string {
+  if (!name) return '';
+  return name
+    .replace(/^\[(냉동|냉장|상온|소모품|부자재|포장재)\]\s*/, '')
+    .replace(/^[●★■◆▲▼*]/, '')
+    .replace(/_?(리테일|네트웍스|금행|동원|진보|CJ|대선|DS유통|이우|직배)/gi, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/box|pk/gi, '')
+    .replace(/[0-9]+(kg|g|ea|봉|통|캔|박스|롤|매|줄|L|ml|%)/gi, '')
+    .replace(/[\*\-\_\/\,\.\s]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export interface UploadReceivingItem {
   receivingDate: string;
   orderNo?: string;
@@ -111,9 +126,14 @@ export async function POST(req: NextRequest) {
         // [캐싱 2] 품목 사전 조회
         const allProducts = await tx.product.findMany();
         const productMap = new Map<string, any>();
+        const normalizedProductMap = new Map<string, any>();
         for (const p of allProducts) {
           productMap.set(p.name.trim(), p);
           productMap.set(p.name.replace(/\s+/g, ''), p);
+          const norm = normalizeMaterialName(p.name);
+          if (norm && !normalizedProductMap.has(norm)) {
+            normalizedProductMap.set(norm, p);
+          }
         }
 
         // [캐싱 3] 발주서(PO) 사전 조회
@@ -167,8 +187,23 @@ export async function POST(req: NextRequest) {
               warehouse = '상온';
             }
 
-            // 품목(Product) 확인 또는 자동 생성
+            // 품목(Product) 확인 (정확 일치 -> 정규화 매칭 -> 포함 매칭 -> 없을 때만 신규 생성)
             let product = productMap.get(cleanName) || productMap.get(matchKey);
+            if (!product) {
+              const normKey = normalizeMaterialName(cleanName);
+              if (normKey && normalizedProductMap.has(normKey)) {
+                product = normalizedProductMap.get(normKey);
+              } else if (normKey && normKey.length >= 3) {
+                const found = allProducts.find((p) => {
+                  const pNorm = normalizeMaterialName(p.name);
+                  return pNorm && (pNorm.includes(normKey) || normKey.includes(pNorm));
+                });
+                if (found) {
+                  product = found;
+                }
+              }
+            }
+
             if (!product) {
               const pCode = `MAT-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
               product = await tx.product.create({
@@ -184,9 +219,14 @@ export async function POST(req: NextRequest) {
                   isUsed: true,
                 },
               });
-              productMap.set(cleanName, product);
-              productMap.set(matchKey, product);
+              allProducts.push(product);
+              const newNorm = normalizeMaterialName(cleanName);
+              if (newNorm) normalizedProductMap.set(newNorm, product);
             }
+
+            // 검색 캐시에 등록하여 이후 동일 항목 즉시 매칭
+            productMap.set(cleanName, product);
+            productMap.set(matchKey, product);
 
             // 구매단가 최신화 (ProductPrice)
             if (options.updatePrice && item.buyPrice > 0) {
