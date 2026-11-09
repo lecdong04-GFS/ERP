@@ -17,14 +17,33 @@ export async function GET(req: NextRequest) {
       : new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
     const where: any = {};
-    if (category) where.category = category;
-    if (warehouse) where.warehouse = warehouse;
+    const andConditions: any[] = [];
+
+    if (category) andConditions.push({ category });
+    if (warehouse) andConditions.push({ warehouse });
     if (search) {
-      where.OR = [
-        { productCode: { contains: search } },
-        { productName: { contains: search } },
-        { lotNo: { contains: search } },
-      ];
+      andConditions.push({
+        OR: [
+          { productCode: { contains: search } },
+          { productName: { contains: search } },
+          { lotNo: { contains: search } },
+        ],
+      });
+    }
+
+    // 단종/미사용(isUsed=false) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A)
+    const includeDiscontinued = searchParams.get('includeDiscontinued') === 'true';
+    if (!includeDiscontinued) {
+      andConditions.push({
+        OR: [
+          { product: { isUsed: true } },
+          { currentQty: { gt: 0 } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const items = await prisma.inventory.findMany({
