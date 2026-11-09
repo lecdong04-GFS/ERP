@@ -4,9 +4,32 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
-import { ChevronLeft, ChevronRight, RotateCw, Search, CheckCircle2, AlertCircle, Upload, Calendar } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  RotateCw,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  Upload,
+  Calendar,
+  DollarSign,
+  Boxes,
+  ShieldAlert,
+  Sparkles,
+  Lock,
+  Unlock,
+  X,
+} from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { normName } from '@/lib/gfs/norm';
+
+function getKoreanDayOfWeek(dateStr: string): string {
+  if (!dateStr) return '';
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const d = new Date(dateStr + 'T00:00:00');
+  return isNaN(d.getTime()) ? '' : days[d.getDay()];
+}
 
 // 재고조사표 정본 시트 (서버 lib/gfs/canonical.ts와 동일 기준)
 const AUDIT_SHEETS = ['부자재', '냉장1', '냉장2', '냉동', '상온'] as const;
@@ -1789,6 +1812,49 @@ export const StockLookupView: React.FC = () => {
     };
   }, [filteredData]);
 
+  // 창고별 등록 품목 수 (원클릭 탭 버튼용)
+  const whCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      '전체': data.length,
+      '상온': 0,
+      '냉장1': 0,
+      '냉장2': 0,
+      '냉동': 0,
+      '부자재': 0,
+    };
+    data.forEach((d) => {
+      const wh = d.whName;
+      if (counts[wh] !== undefined) {
+        counts[wh]++;
+      }
+    });
+    return counts;
+  }, [data]);
+
+  // 안전재고 부족 및 품절 통계 (KPI 요약 카드용)
+  const shortageStats = useMemo(() => {
+    let shortageCount = 0;
+    let outOfStockCount = 0;
+    data.forEach((row) => {
+      if (row.currentStock <= 0 || row.status === '품절') {
+        outOfStockCount++;
+        shortageCount++;
+      } else if (row.status === '부족' || row.shortage < 0) {
+        shortageCount++;
+      }
+    });
+    return { shortageCount, outOfStockCount };
+  }, [data]);
+
+  // 오늘/어제 등 상대 일자 퀵 점프
+  const setDateOffset = (offsetDays: number) => {
+    const d = new Date(kstToday() + 'T00:00:00');
+    d.setDate(d.getDate() + offsetDays);
+    const next = toLocalISODate(d);
+    setTargetDate(next);
+    void loadByDate(next);
+  };
+
   const columns: MasterGridColumnDef[] = [
     {
       key: 'whName',
@@ -2262,340 +2328,426 @@ export const StockLookupView: React.FC = () => {
         }}
       />
 
-      {/* 2-A. 상단 운영 바: 기준일, 재고조사표 등록 상태 & 업로드, BOM 모드, 실사 히스토리, 주간 출석부 */}
-      <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0 shadow-2xs">
-        <div className="flex items-center flex-wrap gap-2.5">
-          {/* Target Date with prev/next */}
-          <div className="flex shrink-0 items-center gap-1.5 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-            <span className="font-extrabold text-slate-700 px-1.5 flex items-center gap-1 text-[13px]">
-              <Calendar className="w-4 h-4 text-blue-600" />
-              기준일:
-            </span>
-            <button
-              onClick={() => shiftDay(-1)}
-              className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-700 transition cursor-pointer"
-              title="이전 날짜"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => {
-                const next = e.target.value;
-                setTargetDate(next);
-                if (/^\d{4}-\d{2}-\d{2}$/.test(next)) {
-                  void loadByDate(next);
-                }
-              }}
-              className="bg-transparent border-0 font-mono font-bold text-slate-900 text-xs px-2 py-1 focus:outline-none focus:ring-0 cursor-pointer"
-            />
-            <button
-              onClick={() => shiftDay(1)}
-              className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-700 transition cursor-pointer"
-              title="다음 날짜"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+      {/* 2. [섹션 A] 핵심 지표 4대 KPI 요약 대시보드 카드 */}
+      <section className="px-5 pt-3.5 pb-2 bg-slate-100/70 border-b border-slate-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: 총 재고 평가금액 */}
+          <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <DollarSign size={13} className="text-indigo-600" /> 총 재고 평가금액
+              </span>
+              <div className="text-xl font-black font-mono text-slate-900 tracking-tight">
+                ₩{summaries.totalAmount.toLocaleString()}
+              </div>
+              <div className="text-[11px] font-medium text-slate-500">
+                원부재료 단가 연동 총 재고자산
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+              <DollarSign size={20} />
+            </div>
           </div>
 
-          {/* 당일 재고조사표 업로드 실시간 상태 뱃지 & 업로드 액션 */}
-          {isCurrentDateUploaded ? (
-            <div className="inline-flex items-center gap-2 shrink-0">
-              <span
-                className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-black px-3 py-1.5 rounded-xl text-xs shadow-2xs"
-                title={`${targetDate} 일일 재고조사표 실사 확정 데이터 (${currentSnapInfo?.count || data.length}건)`}
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>재고조사표 등록완료 ({currentSnapInfo?.count || data.length}건 확정)</span>
+          {/* Card 2: 관리 품목 및 총 재고 수량 */}
+          <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs flex items-center justify-between hover:shadow-xs transition">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <Boxes size={13} className="text-blue-600" /> 관리 품목 · 재고량
               </span>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold px-2.5 py-1.5 rounded-xl text-xs shadow-2xs cursor-pointer transition-colors"
-                title="등록된 재고조사표 다시 덮어쓰기"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-500" />
-                <span>덮어쓰기</span>
-              </button>
+              <div className="text-xl font-black text-slate-900 tracking-tight flex items-baseline gap-1.5">
+                <span>{filteredData.length.toLocaleString()}개</span>
+                <span className="text-xs font-mono font-bold text-slate-500">({summaries.currentStock.toLocaleString()} 단위)</span>
+              </div>
+              <div className="text-[11px] font-medium text-slate-500">
+                전체 {data.length.toLocaleString()}개 품목 중 {selectedWh !== '전체' ? `[${selectedWh}]` : '전체 창고'}
+              </div>
             </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 shrink-0">
-              <span
-                className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 border border-amber-300 font-black px-2.5 py-1.5 rounded-xl text-xs shadow-2xs"
-                title={`${targetDate} 일자의 확정 재고조사표가 아직 업로드되지 않았습니다.`}
-              >
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>미등록 (LIVE 추정치)</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black px-3 py-1.5 rounded-xl text-xs shadow-xs cursor-pointer transition-colors"
-                title="지금 당일 재고조사표 엑셀 업로드하기"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>재고조사표 업로드</span>
-              </button>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+              <Boxes size={20} />
             </div>
-          )}
-
-          {/* BOM 일사용량 산출 모드 토글 (⚡ 수주연동 LIVE vs 📋 마스터 기준치) */}
-          <div className="flex shrink-0 items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => toggleUsageMode('LIVE')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                usageMode === 'LIVE'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
-              }`}
-              title="당일 실제 완제품 수주량에 따라 BOM 일사용량과 버팀일을 실시간 정밀 연동합니다 (기본/권장)."
-            >
-              <span>⚡ 수주연동 LIVE</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleUsageMode('MASTER')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                usageMode === 'MASTER'
-                  ? 'bg-slate-700 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-              title="발주서 마스터 양식(H열)의 고정 일사용량 및 기준 재고유지일을 표시합니다."
-            >
-              <span>📋 마스터 기준치</span>
-            </button>
           </div>
 
-          {/* 저장된 실사일자 퀵선택 드롭다운 */}
-          {availableSnapDates.length > 0 && (
-            <select
-              value={availableSnapDates.some((d) => d.date === targetDate) ? targetDate : ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) {
-                  setTargetDate(val);
-                  void loadByDate(val);
-                }
-              }}
-              className="h-8 px-2.5 bg-white text-slate-800 border border-slate-300 font-bold rounded-xl text-xs hover:border-slate-400 cursor-pointer shadow-2xs shrink-0"
-              title="데이터베이스에 저장된 실사 일자 목록"
-            >
-              <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
-              {availableSnapDates.map((d) => (
-                <option key={d.date} value={d.date}>
-                  {d.date} ({d.count}건 확정)
-                </option>
-              ))}
-            </select>
-          )}
+          {/* Card 3: 안전재고 위험 알림 (부족 / 품절) - 클릭 시 필터 토글 */}
+          <button
+            type="button"
+            onClick={() => setOnlyShortage((prev) => !prev)}
+            className={`bg-white rounded-xl p-3 border text-left transition cursor-pointer flex items-center justify-between ${
+              onlyShortage
+                ? 'ring-2 ring-rose-500 border-rose-300 bg-rose-50/50 shadow-xs'
+                : shortageStats.shortageCount > 0
+                ? 'border-rose-200 hover:border-rose-300 hover:shadow-xs'
+                : 'border-slate-200 hover:shadow-xs'
+            }`}
+          >
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider flex items-center gap-1">
+                <ShieldAlert size={13} className="text-rose-600" /> 안전재고 미달 위험 {onlyShortage && <span className="bg-rose-600 text-white text-[9px] px-1 py-0.2 rounded font-black">필터적용중</span>}
+              </span>
+              <div className="text-xl font-black font-mono text-rose-600 tracking-tight flex items-baseline gap-1.5">
+                <span>{shortageStats.shortageCount.toLocaleString()}건</span>
+                {shortageStats.outOfStockCount > 0 && (
+                  <span className="text-xs font-bold text-rose-700 bg-rose-100 px-1.5 py-0.2 rounded">
+                    품절 {shortageStats.outOfStockCount}
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] font-semibold text-rose-700/80">
+                {onlyShortage ? '클릭 시 전체 품목 표시' : '클릭 시 위험 품목만 모아보기'}
+              </div>
+            </div>
+            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
+              shortageStats.shortageCount > 0
+                ? 'bg-rose-50 border-rose-200 text-rose-600'
+                : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              <ShieldAlert size={20} />
+            </div>
+          </button>
+
+          {/* Card 4: 일일 실사 등록 현황 & 주간 출석 신호등 */}
+          <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs flex flex-col justify-between hover:shadow-xs transition">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <Calendar size={13} className="text-emerald-600" /> {targetDate.slice(5)} 실사 상태
+              </span>
+              {isCurrentDateUploaded ? (
+                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300">
+                  <CheckCircle2 size={11} /> 실사 확정 ({currentSnapInfo?.count || data.length}건)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
+                  <AlertCircle size={11} /> 미등록 (LIVE 추정)
+                </span>
+              )}
+            </div>
+
+            {/* 미니 주간 출석부 칩 (최근 7일) */}
+            <div className="flex items-center justify-between gap-1 pt-1.5 mt-1 border-t border-slate-100">
+              <span className="text-[10px] font-bold text-slate-500 shrink-0">주간실사:</span>
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {recentDaysTracker.map((item) => (
+                  <button
+                    key={item.date}
+                    type="button"
+                    onClick={() => {
+                      setTargetDate(item.date);
+                      void loadByDate(item.date);
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-0.5 cursor-pointer ${
+                      item.isTarget
+                        ? 'bg-blue-600 text-white font-black shadow-2xs'
+                        : item.uploaded
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    }`}
+                    title={`${item.date}: ${item.uploaded ? `재고조사표 등록됨 (${item.count}건)` : '미등록'}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${item.isTarget ? 'bg-white' : item.uploaded ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
+      </section>
 
-        {/* 우측: 최근 7일 주간 출석부 신호등 트래커 & 데이터 상태 뱃지 */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden xl:flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-bold flex items-center gap-1">
-              <span>주간현황:</span>
-            </span>
-            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-xl p-1 shadow-2xs">
-              {recentDaysTracker.map((item) => (
-                <button
-                  key={item.date}
-                  type="button"
-                  onClick={() => {
-                    setTargetDate(item.date);
-                    void loadByDate(item.date);
+      {/* 3. [섹션 B] 통합 필터 & 운영 컨트롤 데크 */}
+      <section className="px-5 py-3 bg-white border-b border-slate-200 shadow-2xs space-y-2.5">
+        {/* 상단 라인: 기준일 네비게이션 + 실사 히스토리 + BOM 산출 모드 + 스냅샷 배지 */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* 기준일자 네비게이터 */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <span className="font-extrabold text-slate-700 px-2 flex items-center gap-1.5 text-xs">
+                <Calendar size={14} className="text-blue-600" />
+                기준일:
+              </span>
+              <button
+                type="button"
+                onClick={() => shiftDay(-1)}
+                className="w-7 h-7 flex items-center justify-center bg-white hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-700 transition cursor-pointer"
+                title="이전 날짜 (D-1)"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-0.5">
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setTargetDate(next);
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+                      void loadByDate(next);
+                    }
                   }}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                    item.isTarget
-                      ? 'ring-2 ring-blue-600 font-black shadow-xs bg-blue-600 text-white'
-                      : 'hover:opacity-80'
-                  } ${
-                    item.uploaded
-                      ? item.isTarget ? 'bg-blue-600 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                      : item.isTarget ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 border border-dashed border-slate-300'
-                  }`}
-                  title={`${item.date}: ${item.uploaded ? `재고조사표 등록됨 (${item.count}건)` : '미등록 (LIVE 추정재고)'}`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${item.isTarget ? 'bg-white' : item.uploaded ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
+                  className="bg-transparent font-mono font-black text-slate-900 text-xs focus:outline-none cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-500 ml-1 font-sans">
+                  ({getKoreanDayOfWeek(targetDate)})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => shiftDay(1)}
+                className="w-7 h-7 flex items-center justify-center bg-white hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-700 transition cursor-pointer"
+                title="다음 날짜 (D+1)"
+              >
+                <ChevronRight size={15} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDateOffset(0)}
+                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition cursor-pointer ml-0.5"
+              >
+                오늘
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateOffset(-1)}
+                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 transition cursor-pointer"
+              >
+                어제
+              </button>
             </div>
+
+            {/* BOM 일사용량 모드 토글 (수주연동 LIVE vs 마스터 기준치) */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => toggleUsageMode('LIVE')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                  usageMode === 'LIVE'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-emerald-700 hover:bg-white'
+                }`}
+                title="당일 실제 완제품 수주량에 따라 BOM 일사용량과 버팀일을 실시간 정밀 연동합니다 (권장)."
+              >
+                <span>⚡ 수주연동 LIVE</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleUsageMode('MASTER')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                  usageMode === 'MASTER'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                }`}
+                title="발주서 마스터 양식(H열)의 고정 일사용량 및 기준 재고유지일을 표시합니다."
+              >
+                <span>📋 마스터 기준치</span>
+              </button>
+            </div>
+
+            {/* 실사 히스토리 퀵 드롭다운 */}
+            {availableSnapDates.length > 0 && (
+              <select
+                value={availableSnapDates.some((d) => d.date === targetDate) ? targetDate : ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    setTargetDate(val);
+                    void loadByDate(val);
+                  }
+                }}
+                className="h-9 px-3 bg-white text-slate-800 border border-slate-300 font-bold rounded-xl text-xs hover:border-slate-400 cursor-pointer shadow-2xs"
+                title="데이터베이스에 저장된 실사 일자 목록"
+              >
+                <option value="">📅 실사 히스토리 ({availableSnapDates.length}일분) ▾</option>
+                {availableSnapDates.map((d) => (
+                  <option key={d.date} value={d.date}>
+                    {d.date} ({d.count}건 확정)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          <span className="shrink-0" title={mergeInfo}>
-            {snapshotMode ? (
-              <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xs">
-                📅 {targetDate.slice(5)} 확정 실사
-              </span>
-            ) : (
-              <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2.5 py-1 rounded-xl text-xs font-black shadow-2xs">
-                ⚡ 현재고 LIVE
+          {/* 우측: 수정 건수 뱃지 & 데이터 모드 표시 */}
+          <div className="flex items-center gap-2">
+            {dirtyRowIds.size > 0 && (
+              <span className="bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-xl text-xs font-black animate-pulse shadow-2xs">
+                수정 중: {dirtyRowIds.size}건 (저장 필요)
               </span>
             )}
-          </span>
-        </div>
-      </div>
-
-      {/* 2-B. 하단 필터 바: 창고, 거래처, 상태, 검색, 안전재고 미달, 글자크기, 통계 */}
-      <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 shadow-2xs">
-        <div className="flex items-center flex-wrap gap-2.5">
-          {/* Warehouse */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-bold text-slate-700">창고:</span>
-            <select
-              value={selectedWh}
-              onChange={(e) => setSelectedWh(e.target.value)}
-              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            >
-              <option value="전체">전체 창고</option>
-              {WAREHOUSES.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
+            <span title={mergeInfo}>
+              {snapshotMode ? (
+                <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1">
+                  <CheckCircle2 size={13} className="text-emerald-700" /> {targetDate.slice(5)} 확정 실사 스냅샷
+                </span>
+              ) : (
+                <span className="bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1">
+                  <Sparkles size={13} className="text-amber-700" /> 현재고 전산 LIVE
+                </span>
+              )}
+            </span>
           </div>
+        </div>
 
-          {/* Vendor (거래처) */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-bold text-slate-700">거래처:</span>
+        {/* 하단 라인: 창고 세그먼트 탭 + 검색 + 거래처 + 상태 + 안전재고 토글 + 글자크기 줌 */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 창고 세그먼트 탭 버튼 (원클릭 전환) */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              {(['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'] as const).map((w) => {
+                const count = whCounts[w] || 0;
+                const isSelected = selectedWh === w;
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setSelectedWh(w)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-700 hover:text-slate-950 hover:bg-white'
+                    }`}
+                  >
+                    <span>{w}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 통합 검색창 */}
+            <div className="relative w-64 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="품명, 품번, 거래처 검색..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="h-9.5 pl-9 pr-8 w-full bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none"
+              />
+              {keyword && (
+                <button
+                  type="button"
+                  onClick={() => setKeyword('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* 거래처 드롭다운 */}
             <select
               value={selectedVendor}
               onChange={(e) => setSelectedVendor(e.target.value)}
-              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none max-w-[150px]"
+              className="h-9.5 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none max-w-[150px]"
             >
-              <option value="전체">전체 거래처</option>
+              <option value="전체">전체 거래처 ({vendors.length})</option>
               {vendors.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
               ))}
             </select>
-          </div>
 
-          {/* Stock Status */}
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="font-bold text-slate-700">상태:</span>
+            {/* 상태 드롭다운 */}
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-9.5 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              {['전체', '정상', '부족', '과잉', '품절'].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
+              <option value="전체">전체 상태</option>
+              <option value="정상">정상</option>
+              <option value="부족">부족</option>
+              <option value="과잉">과잉</option>
+              <option value="품절">품절</option>
             </select>
+
+            {/* 안전재고 미달만 필터 토글 버튼 */}
+            <button
+              type="button"
+              onClick={() => setOnlyShortage((prev) => !prev)}
+              className={`h-9.5 px-3 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                onlyShortage
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
+              }`}
+            >
+              <ShieldAlert size={14} />
+              <span>안전재고 미달만</span>
+              {shortageStats.shortageCount > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${onlyShortage ? 'bg-white/20 text-white' : 'bg-rose-200 text-rose-800'}`}>
+                  {shortageStats.shortageCount}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* Search keyword */}
-          <div className="relative w-64 min-w-[180px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="품명 / 품번 / 거래처 검색..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="h-8 pl-8 pr-3 w-full bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none"
-            />
-          </div>
+          {/* 우측: 글자크기 줌 & 필터 리셋 */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <span className="text-[11px] font-black text-slate-500 px-1">글자:</span>
+              {(['normal', 'spacious', 'large'] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDensity(d)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    density === d
+                      ? 'bg-blue-600 text-white font-black shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                >
+                  {d === 'normal' ? '보통' : d === 'spacious' ? '시원하게' : '크게'}
+                </button>
+              ))}
+            </div>
 
-          {/* Safety Shortage Filter */}
-          <label className="flex shrink-0 items-center gap-1.5 cursor-pointer text-rose-700 font-black text-xs bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl shadow-2xs hover:bg-rose-100 transition-colors">
-            <input
-              type="checkbox"
-              checked={onlyShortage}
-              onChange={(e) => setOnlyShortage(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-rose-400 text-rose-600 focus:ring-0 cursor-pointer"
-            />
-            <span>안전재고 미달만</span>
-          </label>
+            <button
+              type="button"
+              onClick={() => {
+                setKeyword('');
+                setSelectedWh('전체');
+                setSelectedType('전체');
+                setSelectedVendor('전체');
+                setSelectedStatus('전체');
+                setSelectedExpiry('전체');
+                setOnlyShortage(false);
+                void loadByDate(targetDate);
+              }}
+              title="필터 초기화 및 새로고침"
+              className="h-9.5 px-3 text-slate-700 hover:text-slate-900 bg-slate-100 border border-slate-300 rounded-xl hover:bg-slate-200 transition cursor-pointer flex items-center gap-1 font-bold text-xs"
+            >
+              <RotateCw size={13} />
+              <span>초기화</span>
+            </button>
+          </div>
         </div>
-
-        {/* 우측: 글자크기 줌 & 통계 카운트 & 리셋 */}
-        <div className="flex shrink-0 items-center gap-2.5 ml-auto">
-          {/* 글자크기 줌 선택 컨트롤 */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-300 rounded-xl p-0.5 shadow-2xs">
-            <span className="text-[11px] font-black text-slate-500 px-1">🔤 크기:</span>
-            <button
-              type="button"
-              onClick={() => setDensity('normal')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                density === 'normal' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              보통
-            </button>
-            <button
-              type="button"
-              onClick={() => setDensity('spacious')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                density === 'spacious' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              시원하게 (기본)
-            </button>
-            <button
-              type="button"
-              onClick={() => setDensity('large')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                density === 'large' ? 'bg-blue-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              크게
-            </button>
-          </div>
-
-          {dirtyRowIds.size > 0 && (
-            <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-1 rounded-xl text-xs font-black animate-pulse shadow-2xs">
-              수정 {dirtyRowIds.size}건
-            </span>
-          )}
-
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl" title={mergeInfo}>
-            <span>총 <strong className="text-blue-700 text-xs font-mono">{filteredData.length.toLocaleString()}</strong>건</span>
-          </span>
-
-          <button
-            onClick={() => {
-              setKeyword('');
-              setSelectedWh('전체');
-              setSelectedType('전체');
-              setSelectedVendor('전체');
-              setSelectedStatus('전체');
-              setSelectedExpiry('전체');
-              setOnlyShortage(false);
-              void loadByDate(targetDate);
-            }}
-            title="필터 초기화 및 새로고침"
-            className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-300 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer shadow-2xs"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+      </section>
 
       {/* 2-0. 당일 재고조사표 미등록 안내 슬림 배너 */}
       {!isCurrentDateUploaded && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-between text-amber-900 text-[12px] shrink-0 w-full">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+        <div className="mx-5 mt-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl px-4 py-2 flex items-center justify-between text-amber-900 text-xs shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
             <span>
               <strong>[재고조사표 미등록 안내]</strong> <strong>{targetDate}</strong> 일자의 현장 실사 재고조사표가 아직 업로드되지 않아,{' '}
-              <span className="text-amber-800 font-bold bg-amber-100 px-1 py-0.5 rounded">실시간 전산 추정치(LIVE 현재고)</span>가 표시되고 있습니다.
-              현장 재고조사표 엑셀을 업로드하시면 해당 일자의 확정 실사 재고로 영구 보관됩니다.
+              <span className="text-amber-900 font-black bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">실시간 전산 추정치(LIVE 현재고)</span>가 표시되고 있습니다.
+              현장 재고조사표 엑셀을 업로드하시면 해당 일자의 확정 실사 재고로 보관됩니다.
             </span>
           </div>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 py-0.5 rounded text-[11px] shrink-0 cursor-pointer transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-black px-3 py-1.5 rounded-lg text-xs shrink-0 cursor-pointer transition shadow-xs"
           >
-            <Upload className="w-3 h-3" />
+            <Upload size={13} />
             <span>재고조사표 엑셀 올리기</span>
           </button>
         </div>
@@ -2603,21 +2755,23 @@ export const StockLookupView: React.FC = () => {
 
       {/* 2-1. 빨간펜 확인필요 패널 (담당자 판단용, 클릭하면 해당 행으로 이동) */}
       {reviewOpen && reviewList.length > 0 && (
-        <div className="bg-red-50 border-b border-red-300 px-3 py-1.5 shrink-0 w-full">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-red-800 text-[12px]">
-              확인필요 {reviewList.length}건
-            </span>
-            <span className="text-[11px] text-red-600">클릭하면 해당 품목으로 이동 · 확인 후 저장하세요</span>
+        <div className="mx-5 mt-2.5 bg-rose-50 border border-rose-300 rounded-xl px-4 py-2.5 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-black text-rose-800 text-xs flex items-center gap-1">
+                <AlertCircle size={14} /> 확인필요 이상행 {reviewList.length}건
+              </span>
+              <span className="text-xs text-rose-600">클릭하면 해당 품목으로 이동 · 확인 후 저장하세요</span>
+            </div>
             <button
               type="button"
               onClick={() => setReviewOpen(false)}
-              className="ml-auto px-2 py-0.5 bg-white border border-gray-400 rounded text-[11px] hover:bg-gray-100"
+              className="px-2.5 py-0.5 bg-white border border-rose-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-rose-100 transition cursor-pointer"
             >
               닫기
             </button>
           </div>
-          <div className="mt-1 flex gap-1.5 flex-wrap max-h-[76px] overflow-auto">
+          <div className="mt-2 flex gap-1.5 flex-wrap max-h-[80px] overflow-auto">
             {reviewList.map((rv) => (
               <button
                 key={`${rv.kind}-${rv.id}`}
@@ -2627,13 +2781,13 @@ export const StockLookupView: React.FC = () => {
                   setSelectedRowId(rv.id);
                 }}
                 title="클릭하면 해당 품목만 표시"
-                className="px-2 py-0.5 bg-white border border-red-300 rounded text-[11px] hover:bg-red-100 text-left"
+                className="px-2.5 py-1 bg-white border border-rose-300 rounded-lg text-xs hover:bg-rose-100 text-left cursor-pointer transition flex items-center gap-1.5"
               >
-                <span className={`font-bold ${rv.kind === '신규' ? 'text-emerald-700' : 'text-red-700'}`}>
+                <span className={`font-black ${rv.kind === '신규' ? 'text-emerald-700' : 'text-rose-700'}`}>
                   [{rv.kind}]
-                </span>{' '}
-                <span className="text-gray-800">{rv.name}</span>{' '}
-                <span className="font-mono text-gray-600">
+                </span>
+                <span className="text-slate-800 font-bold">{rv.name}</span>
+                <span className="font-mono text-slate-500 text-[11px]">
                   {rv.oldQty.toLocaleString()} → {rv.curQty.toLocaleString()}
                 </span>
               </button>
@@ -2642,20 +2796,64 @@ export const StockLookupView: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Main Grid (여백 없이 전체 가로, 세로폭 100% 활용) */}
-      <div className="flex-1 w-full bg-white overflow-hidden flex flex-col">
-        <MasterDataGrid
-          columns={columns}
-          data={filteredData}
-          selectedRowId={selectedRowId}
-          onRowClick={(row) => setSelectedRowId(row.id)}
-          onCellChange={handleCellChange}
-          showRowIndex={true}
-          summaryRow={false}
-          enablePagination={false}
-          density={density}
-        />
-      </div>
+      {/* 4. [섹션 C] 메인 데이터 그리드 (라운드 카드 & 서브 툴바) */}
+      <main className="flex-1 px-5 pb-5 pt-3 min-h-0 flex flex-col">
+        <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
+          {/* 테이블 상단 요약 바 */}
+          <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+            <div className="flex items-center gap-3">
+              <span>표시 항목: <strong className="text-blue-700 text-sm font-black font-mono">{filteredData.length.toLocaleString()}</strong>개 품목</span>
+              <span className="text-slate-300">|</span>
+              <span>창고: <strong className="text-slate-900 font-bold">{selectedWh}</strong></span>
+              {selectedVendor !== '전체' && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span>거래처: <strong className="text-slate-900 font-bold">{selectedVendor}</strong></span>
+                </>
+              )}
+              {selectedStatus !== '전체' && (
+                <>
+                  <span className="text-slate-300">|</span>
+                  <span>상태: <strong className="text-slate-900 font-bold">{selectedStatus}</strong></span>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 text-xs">
+              <span className="flex items-center gap-1.5">
+                {locked ? (
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <Lock size={12} className="text-slate-400" /> 자동채움 셀 잠금중 (수정 시 상단 잠금 해제)
+                  </span>
+                ) : (
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Unlock size={12} className="text-emerald-600" /> 실시간 편집 모드 (셀 클릭하여 즉시 수정)
+                  </span>
+                )}
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="text-indigo-900 font-black">
+                합계 재고금액: ₩{summaries.totalAmount.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          {/* MasterDataGrid */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <MasterDataGrid
+              columns={columns}
+              data={filteredData}
+              selectedRowId={selectedRowId}
+              onRowClick={(row) => setSelectedRowId(row.id)}
+              onCellChange={handleCellChange}
+              showRowIndex={true}
+              summaryRow={false}
+              enablePagination={false}
+              density={density}
+            />
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
