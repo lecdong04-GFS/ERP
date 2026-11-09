@@ -103,9 +103,10 @@ export const OrderStatusCancelView: React.FC = () => {
           const price = Number(it.unitPrice) || 0;
           const dQ = Math.min(oQ, Number(delivMap.get(`${so.id}:${it.productId}`) || 0));
           const uQ = Math.max(0, oQ - dQ);
-          const oA = Math.round(oQ * price);
-          const dA = Math.round(dQ * price);
-          const uA = Math.round(uQ * price);
+          const rawAmt = Number(it.amount);
+          const oA = !isNaN(rawAmt) && rawAmt > 0 ? Math.round(rawAmt) : Math.round(oQ * price);
+          const dA = oQ > 0 ? Math.round(dQ * (oA / oQ)) : Math.round(dQ * price);
+          const uA = Math.max(0, oA - dA);
           hDelivAmt += dA;
           hUnDelivAmt += uA;
           return {
