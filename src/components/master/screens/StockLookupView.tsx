@@ -1946,7 +1946,9 @@ export const StockLookupView: React.FC = () => {
         if (!(num > 0)) return <span className="text-gray-400">-</span>;
         const pack = Number(row.packUnit) || 1;
         const disp = Number(num.toFixed(2)).toLocaleString();
-        const boxTxt = pack > 1 ? `(${Number((num / pack).toFixed(1))}박)` : '';
+        const rawBox = num / pack;
+        const boxVal = rawBox < 0.05 ? Number(rawBox.toFixed(3)) : rawBox < 0.1 ? Number(rawBox.toFixed(2)) : Number(rawBox.toFixed(1));
+        const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
         const isLive = row.usageSource === 'LIVE_ORDER';
         const diffPct = row.liveDiffPercent;
         const masterVal = row.masterDailyUsage;
@@ -2014,7 +2016,8 @@ export const StockLookupView: React.FC = () => {
 
         if (usage > 0) {
           const disp = Number(usage.toFixed(2)).toLocaleString();
-          const boxVal = pack > 1 ? Number((usage / pack).toFixed(1)) : 0;
+          const rawBox = usage / pack;
+          const boxVal = pack > 1 ? (rawBox < 0.05 ? Number(rawBox.toFixed(3)) : rawBox < 0.1 ? Number(rawBox.toFixed(2)) : Number(rawBox.toFixed(1))) : 0;
           const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
           return (
             <span
@@ -2058,7 +2061,8 @@ export const StockLookupView: React.FC = () => {
         if (!(num > 0)) return <span className="text-gray-400 font-mono text-xs">-</span>;
         const pack = Number(row.packUnit) || 1;
         const disp = Number(num.toFixed(1)).toLocaleString();
-        const boxVal = pack > 1 ? Number((num / pack).toFixed(1)) : 0;
+        const rawBox = num / pack;
+        const boxVal = pack > 1 ? (rawBox < 0.05 ? Number(rawBox.toFixed(3)) : rawBox < 0.1 ? Number(rawBox.toFixed(2)) : Number(rawBox.toFixed(1))) : 0;
         const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
         const samples = row.estSampleCount || 0;
         return (
