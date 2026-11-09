@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { getLiveBomUsageMap, LiveBomUsageMap } from '@/lib/gfs/liveUsage';
 
-// GET /api/gfs/order-sheet — 100% PostgreSQL DB 기반 정본 및 기발주 미입고(Pending PO) 실시간 연동
-export async function GET() {
+// GET /api/gfs/order-sheet — 100% PostgreSQL DB 기반 정본, 실시간 BOM 일사용량 및 기발주 미입고(Pending PO) 실시간 연동
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const targetDate = searchParams.get('date') || '';
     const errors: string[] = [];
 
     // 1. DB에서 활성 재고 및 품목 마스터 일괄 조회
@@ -31,6 +34,14 @@ export async function GET() {
         { productCode: 'asc' },
       ],
     });
+
+    // 2. 최신 GS25 완제품 수주량 x BOM 레시피 전개 실시간 일사용량 산출
+    let liveBomUsage: LiveBomUsageMap | null = null;
+    try {
+      liveBomUsage = await getLiveBomUsageMap(targetDate);
+    } catch (bomErr: any) {
+      errors.push(`실시간 BOM 일사용량 산출 연동 실패(기준 일사용량 폴백): ${bomErr?.message || bomErr}`);
+    }
 
     // 2. DB에서 현재 미입고 상태인 '기발주(Pending PO)' 내역 실시간 일괄 조회
     type PendingPoInfo = {
@@ -120,8 +131,19 @@ export async function GET() {
       const code = inv.productCode || p?.productCode || '';
       const pack = (Number(p?.boxQty) > 0 ? Number(p?.boxQty) : 1);
       const current = Number(inv.currentQty) || 0;
-      const dailyUsage = Number(inv.dailyUsage) || 0;
       const leadTime = p?.partner?.leadTime || 2;
+
+      // ── [실시간 BOM 일사용량 연동] ──
+      // 1순위: 당일 완제품 수주량 x BOM 레시피 전개 실소진량 (BOM 등록 자재)
+      // 2순위: 재고조사표 엑셀 업로드 기준 일사용량 (BOM 미등록 부자재/일반소모품 폴백)
+      const liveBomVal = liveBomUsage
+        ? (p?.id && liveBomUsage.byProductId.get(p.id))
+          ?? (code && liveBomUsage.byProductCode.get(code))
+          ?? (norm && liveBomUsage.byNormName.get(norm))
+        : undefined;
+
+      const isBomDriven = liveBomVal !== undefined && Number(liveBomVal) > 0;
+      const baseDailyUsage = isBomDriven ? Number(liveBomVal) : (Number(inv.dailyUsage) || 0);
 
       // 발주 거래처 / 공급자 명칭
       const supplier = p?.partner?.name || inv.warehouse || '기타';
@@ -139,12 +161,12 @@ export async function GET() {
         ? Number(inv.unitPrice)
         : (p?.prices?.[0]?.purchasePrice ? Number(p.prices[0].purchasePrice) : 0);
 
-      const stockDays = dailyUsage > 0 ? Math.round((current / dailyUsage) * 10) / 10 : null;
-
       // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료
       const isReplacedSpam = name.includes('스팸(340g*20캔)') || (name.includes('스팸') && supplier.includes('튀김실'));
-      const effectiveDailyUsage = isReplacedSpam ? 0 : dailyUsage;
+      const effectiveDailyUsage = isReplacedSpam ? 0 : Number(baseDailyUsage) || 0;
       const effectiveBoxesBase = isReplacedSpam ? 0 : Math.floor(current / pack);
+
+      const stockDays = effectiveDailyUsage > 0 ? Math.round((current / effectiveDailyUsage) * 10) / 10 : null;
 
       return {
         id: inv.id || idx + 1,
@@ -156,6 +178,10 @@ export async function GET() {
         packUnitAudit: pack,
         days: leadTime,
         dailyUsage: effectiveDailyUsage,
+        isBomDriven,
+        usageSource: isBomDriven ? 'BOM실시간' : '기준소진량',
+        liveBomUsage: liveBomVal ?? null,
+        surveyDailyUsage: Number(inv.dailyUsage) || 0,
         incoming: totalIncoming,
         baseIncoming,
         pendingBoxes,
@@ -182,9 +208,11 @@ export async function GET() {
         suppliers,
         auditCount: rows.length,
         rowCount: rows.length,
+        liveBomDate: liveBomUsage?.asOfDate || '',
+        liveBomCount: liveBomUsage?.rowCount || 0,
+        orderFile: 'PostgreSQL DB + 완제품 수주 x BOM 실시간 일사용량',
+        masterSource: 'db_live_bom',
         auditFile: null,
-        orderFile: 'PostgreSQL DB (100% 일원화)',
-        masterSource: 'db',
         errors,
       },
     });

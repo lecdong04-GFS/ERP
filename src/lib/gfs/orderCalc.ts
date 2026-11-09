@@ -20,6 +20,10 @@ export interface SheetRowInput {
   pendingOrderNos?: string[];
   latestOrderDate?: string;
   baseIncoming?: number;
+  isBomDriven?: boolean;
+  usageSource?: 'BOM실시간' | '기준소진량';
+  liveBomUsage?: number | null;
+  surveyDailyUsage?: number;
 }
 
 export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as const;

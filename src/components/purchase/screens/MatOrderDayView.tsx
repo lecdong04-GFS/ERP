@@ -259,6 +259,10 @@ export const MatOrderDayView: React.FC = () => {
             latestOrderDate: r.latestOrderDate || '',
             baseIncoming: r.baseIncoming || 0,
             orderDay: r.orderDay || '',
+            isBomDriven: r.isBomDriven,
+            usageSource: r.usageSource,
+            liveBomUsage: r.liveBomUsage,
+            surveyDailyUsage: r.surveyDailyUsage,
           };
         });
         setRows(loaded);
@@ -897,6 +901,9 @@ export const MatOrderDayView: React.FC = () => {
             </span>
             <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-1.5 whitespace-nowrap">
               요일별 자재발주 <span className="text-blue-600 font-extrabold">(스마트 발주)</span>
+              <span className="hidden sm:inline-flex items-center gap-1 ml-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                ⚡ 완제품 수주 × BOM 실시간 연동
+              </span>
             </h1>
           </div>
 
@@ -1717,10 +1724,20 @@ export const MatOrderDayView: React.FC = () => {
                           {/* 일소진량 */}
                           <td className="py-2.5 px-2.5 text-right font-mono text-[14px] whitespace-nowrap">
                             {m.dailyUsage > 0 ? (
-                              <span className="font-extrabold text-slate-800">
-                                {m.dailyUsage.toLocaleString()}
-                                <span className="text-xs text-slate-500 font-sans ml-0.5">봉/일</span>
-                              </span>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {r.isBomDriven && (
+                                  <span
+                                    className="text-[10px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-sans font-bold tracking-tight"
+                                    title={`오늘 GS25 수주 x 레시피 BOM 실시간 소요량: ${r.liveBomUsage?.toLocaleString()}봉/일 (엑셀 기준치: ${r.surveyDailyUsage?.toLocaleString()}봉/일)`}
+                                  >
+                                    BOM
+                                  </span>
+                                )}
+                                <span className="font-extrabold text-slate-800">
+                                  {m.dailyUsage.toLocaleString()}
+                                  <span className="text-xs text-slate-500 font-sans ml-0.5">봉/일</span>
+                                </span>
+                              </div>
                             ) : (
                               <span className="text-slate-400 font-bold">-</span>
                             )}
