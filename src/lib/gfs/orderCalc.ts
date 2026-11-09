@@ -172,6 +172,8 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '롯데) GS마요네즈',
   '롯데)GS마요네즈',
   '롯데마요네즈',
+  '참치(2kg*5봉)-사조대림',
+  '참치-사조대림',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
