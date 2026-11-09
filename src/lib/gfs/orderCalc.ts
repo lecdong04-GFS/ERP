@@ -163,9 +163,13 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '살사후실리샐러드',
   '살사후시리샐러드',
   '5찬도시락뚜껑C',
+  '6칸공용용기',
+  'DR-126',
+  '126호 용기',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
   if (!name) return false;
-  return EXCLUDED_ORDER_KEYWORDS.some((kw) => name.includes(kw));
+  const lower = name.toLowerCase();
+  return EXCLUDED_ORDER_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()));
 }
