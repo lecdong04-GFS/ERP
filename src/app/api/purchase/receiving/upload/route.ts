@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
+import { normName } from '@/lib/gfs/norm';
 
 function normalizeDate(val: any): string {
   if (!val) return '';
@@ -148,13 +149,30 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // [캐싱 2] 품목 사전 조회
-        const allProducts = await tx.product.findMany();
+        // [캐싱 2] 품목 사전 조회 (활성 품목·정규 품번 우선 정렬)
+        const rawProducts = await tx.product.findMany({
+          orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
+        });
+        const allProducts = [...rawProducts].sort((a, b) => {
+          if (a.isUsed !== b.isUsed) return a.isUsed ? -1 : 1;
+          const aMat = a.productCode.startsWith('MAT-') ? 1 : 0;
+          const bMat = b.productCode.startsWith('MAT-') ? 1 : 0;
+          if (aMat !== bMat) return aMat - bMat;
+          return a.id - b.id;
+        });
+        const activeProducts = allProducts.filter((p) => p.isUsed);
+        const searchPool = activeProducts.length > 0 ? activeProducts : allProducts;
+
         const productMap = new Map<string, any>();
+        const canonProductMap = new Map<string, any>();
         const normalizedProductMap = new Map<string, any>();
-        for (const p of allProducts) {
+        for (const p of searchPool) {
           productMap.set(p.name.trim(), p);
           productMap.set(p.name.replace(/\s+/g, ''), p);
+          const canon = normName(p.name);
+          if (canon && !canonProductMap.has(canon)) {
+            canonProductMap.set(canon, p);
+          }
           const norm = normalizeMaterialName(p.name);
           if (norm && !normalizedProductMap.has(norm)) {
             normalizedProductMap.set(norm, p);
@@ -212,14 +230,30 @@ export async function POST(req: NextRequest) {
               warehouse = '상온';
             }
 
-            // 품목(Product) 확인 (정확 일치 -> 정규화 매칭 -> 포함 매칭 -> 없을 때만 신규 생성)
+            // 품목(Product) 확인 (정확 일치 -> 정본 별칭(normName) -> 정규화 매칭 -> 포함 매칭 -> 없을 때만 신규 생성)
             let product = productMap.get(cleanName) || productMap.get(matchKey);
+            if (!product) {
+              const cleanSpec = (item.spec || '').trim();
+              const canonCandidates = [
+                normName(cleanName),
+                ...(cleanSpec && cleanSpec !== '-'
+                  ? [normName(`${cleanName}(${cleanSpec})`), normName(`${cleanName} ${cleanSpec}`)]
+                  : []),
+              ].filter(Boolean);
+              for (const ck of canonCandidates) {
+                const hit = canonProductMap.get(ck);
+                if (hit) {
+                  product = hit;
+                  break;
+                }
+              }
+            }
             if (!product) {
               const normKey = normalizeMaterialName(cleanName);
               if (normKey && normalizedProductMap.has(normKey)) {
                 product = normalizedProductMap.get(normKey);
               } else if (normKey && normKey.length >= 3) {
-                const found = allProducts.find((p) => {
+                const found = searchPool.find((p) => {
                   const pNorm = normalizeMaterialName(p.name);
                   return pNorm && (pNorm.includes(normKey) || normKey.includes(pNorm));
                 });
@@ -245,6 +279,9 @@ export async function POST(req: NextRequest) {
                 },
               });
               allProducts.push(product);
+              searchPool.push(product);
+              const newCanon = normName(cleanName);
+              if (newCanon) canonProductMap.set(newCanon, product);
               const newNorm = normalizeMaterialName(cleanName);
               if (newNorm) normalizedProductMap.set(newNorm, product);
             }

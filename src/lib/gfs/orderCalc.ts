@@ -221,6 +221,10 @@ export function isExcludedFromOrder(name?: string | null, targetDate?: string): 
   if (cleanNoTag.startsWith('피클랠리쉬')) {
     return true;
   }
+  // 중복 품목 방어: 단독 '[상온]흑미'만 제외 ('[상온] 흑미 10KG*1개입', '[냉동]흑미송편(2kg*4p)' 등 유지)
+  if (clean === '[상온]흑미') {
+    return true;
+  }
 
   if (
     EXCLUDED_ORDER_KEYWORDS.some((kw) => {
