@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { normName } from '@/lib/gfs/canonical';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -107,7 +108,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 2) BOM 전개 (1: DB bomHeader 기반)
+    const todayKst = kstToday();
     const headers = await prisma.bomHeader.findMany({
+      where: { isUsed: true },
       include: {
         parentProduct: true,
         details: true,
@@ -121,13 +124,21 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
-    // 자재 id -> productCode/name 조회용
+    // 자재 id -> productCode/name 조회용 (사용중이며 발주/사용 제외·단종 도래가 아닌 정본 자재만)
     const childIds = [...new Set(latestHeaders.flatMap((h) => h.details.map((d) => d.childProductId)))];
     const childProducts = await prisma.product.findMany({
-      where: { id: { in: childIds } },
-      select: { id: true, productCode: true, name: true, category: true, warehouse: true },
+      where: { id: { in: childIds }, isUsed: true },
+      select: { id: true, productCode: true, name: true, category: true, warehouse: true, discontinuedDate: true },
     });
-    const childMap = new Map(childProducts.map((p) => [p.id, p]));
+    const childMap = new Map(
+      childProducts
+        .filter((p) => {
+          if (isExcludedFromOrder(p.name, date)) return false;
+          if (p.discontinuedDate && (todayKst >= p.discontinuedDate || date >= p.discontinuedDate)) return false;
+          return true;
+        })
+        .map((p) => [p.id, p])
+    );
 
     // 3) 자재별 live 일사용량 = SUM(메뉴수량 x 단위소요량) / 1000 (엑셀 H열과 동일식)
     const acc = new Map<number, { daily: number; menus: { code: string; name: string; qty: number; unitQty: number }[] }>();
@@ -138,6 +149,7 @@ export async function GET(req: NextRequest) {
       }
       if (!mq || !(mq.qty > 0)) continue;
       for (const d of h.details) {
+        if (!childMap.has(d.childProductId)) continue;
         const unitQty = Number(d.unitQty) || 0;
         if (!(unitQty > 0)) continue;
         const u = (d.unit || '').trim();

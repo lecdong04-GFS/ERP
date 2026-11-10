@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { normName } from '@/lib/gfs/canonical';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 export function normalizeForBom(name: string): string {
   let s = (name || '').trim();
@@ -144,6 +145,7 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
   });
 
   // 3) 자재별 일사용량 집계 = SUM(메뉴수량 x 단위소요량) / 1000
+  const todayKst = kstToday();
   const acc = new Map<number, { daily: number; productCode: string; productName: string }>();
 
   for (const h of latestHeaders) {
@@ -160,9 +162,14 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
       // 다단계 배치 개봉용 더미 행(1통, 1box, 1캔 등) 필터링
       if (unitQty === 1 && (u === '통' || u === 'box' || u === '박스' || u === '캔')) continue;
 
+      const cp = d.childProduct;
+      if (!cp || !cp.isUsed) continue;
+      if (isExcludedFromOrder(cp.name, date)) continue;
+      if (cp.discontinuedDate && (todayKst >= cp.discontinuedDate || date >= cp.discontinuedDate)) continue;
+
       const childId = d.childProductId;
-      const code = d.childProduct?.productCode || '';
-      const name = d.childProduct?.name || '';
+      const code = cp.productCode || '';
+      const name = cp.name || '';
       const e = acc.get(childId) || { daily: 0, productCode: code, productName: name };
       e.daily += (mq.qty * unitQty) / 1000;
       if (code) e.productCode = code;

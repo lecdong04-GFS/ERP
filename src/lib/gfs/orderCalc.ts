@@ -183,6 +183,7 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '다진맛김치(10kg*2',
   '치킨난방용마요',
   '오이피클랠리쉬',
+  '순성)당근채',
 ];
 
 export interface ScheduledExclusion {
@@ -223,6 +224,10 @@ export function isExcludedFromOrder(name?: string | null, targetDate?: string): 
   }
   // 중복 품목 방어: 단독 '[상온]흑미'만 제외 ('[상온] 흑미 10KG*1개입', '[냉동]흑미송편(2kg*4p)' 등 유지)
   if (clean === '[상온]흑미') {
+    return true;
+  }
+  // 중복 품목 방어: '[냉동] 당근채(10kg/box)', 단독 '[냉장]당근채' 제외 ('[냉장] 당근채(4kg*3봉 - 1박스)', '[냉장] 당근(10kg*1box)' 유지)
+  if (clean.includes('냉동]당근채') || cleanNoTag.startsWith('당근채(10kg') || clean === '[냉장]당근채') {
     return true;
   }
 

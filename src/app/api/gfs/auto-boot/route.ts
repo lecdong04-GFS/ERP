@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { getEstimatedDailyUsageWithDb } from '@/lib/gfs/estimatedUsage';
 import { canonNormName } from '@/lib/gfs/norm';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 const MASTER_KEY = 'gfs_master_workbook';
 
@@ -188,7 +189,7 @@ export async function GET(req: NextRequest) {
         orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
       });
       stockItems = snapRows
-        .filter((s) => s.productName)
+        .filter((s) => s.productName && !isExcludedFromOrder(s.productName, usedStockDate))
         .map((s) => {
           const wh = String(s.warehouse || '');
           const est = lookupEst(wh, s.productName);
@@ -207,10 +208,11 @@ export async function GET(req: NextRequest) {
     } else {
       // 스냅샷이 없을 때 Inventory 테이블 폴백
       const invRows = await prisma.inventory.findMany({
+        where: { product: { isUsed: true } },
         include: { product: true },
       });
       stockItems = invRows
-        .filter((s) => s.productName || s.product?.name)
+        .filter((s) => (s.productName || s.product?.name) && !isExcludedFromOrder(s.productName || s.product?.name, usedStockDate))
         .map((s) => {
           const nm = String(s.productName || s.product?.name || '');
           const wh = String(s.warehouse || '');

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { buildAuditMap, getAuditFilePath, normName, readWorkbookFromFile } from '@/lib/gfs/canonical';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { kstToday } from '@/lib/kst';
 
 interface InItem {
@@ -45,15 +46,25 @@ export async function POST(req: NextRequest) {
     const created: any[] = [];
     const failed: any[] = [];
 
-    // 기존 품목 일괄 조회 (이름 기준) — 요청당 1회
-    const names = items.map((i) => String(i.name || '').trim()).filter(Boolean);
-    const existing = await prisma.product.findMany({
-      where: { name: { in: names } },
+    // 기존 활성 품목 일괄 조회 (정본 품번·낮은 ID 우선) — 별칭 매칭 및 비활성/중복 재생성 방지
+    const rawExisting = await prisma.product.findMany({
+      where: { isUsed: true },
       include: { partner: true },
+      orderBy: { id: 'asc' },
     });
-    const existingByName = new Map(existing.map((p) => [p.name, p]));
+    const existing = [...rawExisting].sort((a, b) => {
+      const aTemp = a.productCode.startsWith('MAT-') || a.productCode.startsWith('GFS-') ? 1 : 0;
+      const bTemp = b.productCode.startsWith('MAT-') || b.productCode.startsWith('GFS-') ? 1 : 0;
+      if (aTemp !== bTemp) return aTemp - bTemp;
+      return a.id - b.id;
+    });
+    const existingByName = new Map<string, any>();
     const existingByNorm = new Map<string, any>();
-    existing.forEach((p) => existingByNorm.set(normName(p.name), p));
+    existing.forEach((p) => {
+      if (!existingByName.has(p.name)) existingByName.set(p.name, p);
+      const k = normName(p.name);
+      if (k && !existingByNorm.has(k)) existingByNorm.set(k, p);
+    });
 
     // ── Phase A: 항목별 사전 계산 (DB 접근 없음) ──
     interface Prepared {
@@ -75,6 +86,8 @@ export async function POST(req: NextRequest) {
       existing: any | null;
     }
     const prepared: Prepared[] = [];
+    const checkOrderDate = orderDate || kstToday();
+    const todayKst = kstToday();
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       const rawName = String(it.name || '').trim();
@@ -85,6 +98,16 @@ export async function POST(req: NextRequest) {
       const boxes = Number(it.boxes) || 0;
       if (boxes <= 0) continue; // 발주수량 0은 스킵
       const norm = normName(rawName);
+      const matchedExisting = existingByName.get(rawName) || existingByNorm.get(norm) || null;
+      const targetNameForExclusion = matchedExisting?.name || rawName;
+      const targetDiscDate = matchedExisting?.discontinuedDate || '';
+      if (
+        isExcludedFromOrder(targetNameForExclusion, checkOrderDate) ||
+        (targetDiscDate && (todayKst >= targetDiscDate || checkOrderDate >= targetDiscDate))
+      ) {
+        failed.push({ name: rawName, reason: '발주 제외/단종 품목' });
+        continue;
+      }
       const ref: any = (auditMap as Map<string, any>).get(norm);
       const vendorName = (ref?.vendor || it.supplierHeader || '').trim();
       const packUnit = Number(it.packUnit) || Number(ref?.packUnit) || 1;
@@ -110,7 +133,7 @@ export async function POST(req: NextRequest) {
         warehouse:
           ref?.warehouse ||
           (/냉동/.test(rawName) ? '냉동' : /상온/.test(rawName) ? '상온' : /냉장/.test(rawName) ? '냉장1' : '상온'),
-        existing: existingByName.get(rawName) || existingByNorm.get(norm) || null,
+        existing: matchedExisting,
       });
     }
 
