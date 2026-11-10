@@ -180,6 +180,7 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '참치-사조대림',
   '다진맛김치(10kg*2pk)',
   '다진맛김치(10kg*2',
+  '치킨난방용마요',
 ];
 
 export function isExcludedFromOrder(name?: string | null): boolean {
