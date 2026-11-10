@@ -635,7 +635,7 @@ export const MatOrderDayView: React.FC = () => {
         .filter((m: any) => m.productCode)
         .map((m: any) => ({
           productCode: m.productCode,
-          productName: m.name,
+          productName: m.productName || m.name,
           orderQty: m.orderQty,
           unitPrice: m.boxPrice || 0,
           partnerId: m.partnerId || undefined,

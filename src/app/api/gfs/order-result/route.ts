@@ -136,12 +136,21 @@ export async function POST(req: NextRequest) {
       detail: string;
     }[] = [];
 
-    // 발주번호 채번 시퀀스 (당일 기존 번호 기준 중복 없이 연속 채번)
+    // 발주번호 채번 시퀀스 (당일 기존 번호 기준 중복 없이 연속 채번 - 최대 시퀀스 번호 추적)
     const prefix = `PO-${today.replace(/-/g, '')}`;
-    const baseCount = await prisma.purchaseOrder.count({
+    const existingOrders = await prisma.purchaseOrder.findMany({
       where: { orderNo: { startsWith: prefix } },
+      select: { orderNo: true },
     });
-    let orderSeq = baseCount;
+    let maxSeq = 0;
+    for (const o of existingOrders) {
+      const match = o.orderNo.match(/PO-\d{8}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxSeq) maxSeq = num;
+      }
+    }
+    let orderSeq = maxSeq;
 
     // 발주서 생성: 거래처별 순차 생성 (어떤 품목도 누락되지 않고 100% 저장)
     for (const [pid, groupItems] of groups) {
@@ -152,7 +161,11 @@ export async function POST(req: NextRequest) {
         resolvedDefaultPartner;
 
       orderSeq += 1;
-      const orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+      let orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+      while (await prisma.purchaseOrder.findUnique({ where: { orderNo }, select: { id: true } })) {
+        orderSeq += 1;
+        orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+      }
 
       // 품목 매칭 (productCode 기준, 일괄 조회 결과 사용)
       const detailData: {

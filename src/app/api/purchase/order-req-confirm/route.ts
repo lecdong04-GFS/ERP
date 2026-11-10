@@ -354,10 +354,24 @@ export async function POST(req: NextRequest) {
         });
 
         const prefix = `PO-${today.replace(/-/g, '')}`;
-        const countToday = await tx.purchaseOrder.count({
+        const existingOrders = await tx.purchaseOrder.findMany({
           where: { orderNo: { startsWith: prefix } },
+          select: { orderNo: true },
         });
-        const poNo = `${prefix}-${String(countToday + 1).padStart(3, '0')}`;
+        let maxSeq = 0;
+        for (const o of existingOrders) {
+          const match = o.orderNo.match(/PO-\d{8}-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxSeq) maxSeq = num;
+          }
+        }
+        let poSeq = maxSeq + 1;
+        let poNo = `${prefix}-${String(poSeq).padStart(3, '0')}`;
+        while (await tx.purchaseOrder.findUnique({ where: { orderNo: poNo }, select: { id: true } })) {
+          poSeq += 1;
+          poNo = `${prefix}-${String(poSeq).padStart(3, '0')}`;
+        }
 
         let poTotalAmount = 0;
         const detailRecords = [];
