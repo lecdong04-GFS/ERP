@@ -47,12 +47,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const today = orderDate || kstToday();
+    const todayKst = kstToday();
+    const today = orderDate || todayKst;
 
     // 발주 제외 요청 품목 필터링
     const targetItems = items.filter((it) => {
       const nm = it.productName || '';
-      return !isExcludedFromOrder(nm);
+      return !isExcludedFromOrder(nm, today);
     });
 
     if (targetItems.length === 0) {
@@ -152,6 +153,8 @@ export async function POST(req: NextRequest) {
     }
     let orderSeq = maxSeq;
 
+    let skippedExcludedCount = 0;
+
     // 발주서 생성: 거래처별 순차 생성 (어떤 품목도 누락되지 않고 100% 저장)
     for (const [pid, groupItems] of groups) {
       const usePartnerId = pid === '__DEFAULT__' ? resolvedDefaultPartner.id : pid;
@@ -159,13 +162,6 @@ export async function POST(req: NextRequest) {
         partnerById.get(usePartnerId) ??
         (groupNames.has(pid) ? partnerByName.get(groupNames.get(pid)!) : undefined) ??
         resolvedDefaultPartner;
-
-      orderSeq += 1;
-      let orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
-      while (await prisma.purchaseOrder.findUnique({ where: { orderNo }, select: { id: true } })) {
-        orderSeq += 1;
-        orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
-      }
 
       // 품목 매칭 (productCode 기준, 일괄 조회 결과 사용)
       const detailData: {
@@ -184,6 +180,14 @@ export async function POST(req: NextRequest) {
         const code = String(it.productCode || '').trim();
         const product = code ? productByCode.get(code) : undefined;
         if (!product) continue; // 미등록 품목은 스킵
+        const itemName = it.productName || product.name;
+        const isPastDisc =
+          Boolean(product.discontinuedDate) &&
+          (todayKst >= product.discontinuedDate! || today >= product.discontinuedDate!);
+        if (!product.isUsed || isPastDisc || isExcludedFromOrder(itemName, today)) {
+          skippedExcludedCount += 1;
+          continue;
+        }
         const qty = Number(it.orderQty) || 0;
         if (qty <= 0) continue;
         const price = Number(it.unitPrice) || 0;
@@ -194,7 +198,7 @@ export async function POST(req: NextRequest) {
         detailData.push({
           productId: product.id,
           productCode: product.productCode,
-          productName: it.productName || product.name,
+          productName: itemName,
           category: product.category,
           unit: it.unit || product.unit || 'box',
           orderQty: qty,
@@ -205,7 +209,14 @@ export async function POST(req: NextRequest) {
       }
 
       if (detailData.length === 0) {
-        continue; // 매칭 품목 없음 → 해당 그룹 스킵
+        continue; // 매칭 품목 없음 → 해당 그룹 스킵 (불필요한 채번 방지)
+      }
+
+      orderSeq += 1;
+      let orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+      while (await prisma.purchaseOrder.findUnique({ where: { orderNo }, select: { id: true } })) {
+        orderSeq += 1;
+        orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
       }
 
       const totalAmount = detailData.reduce((a, d) => a + d.amount, 0);
@@ -241,13 +252,37 @@ export async function POST(req: NextRequest) {
       await prisma.systemLog.createMany({ data: logRows }).catch(() => {});
     }
 
+    if (createdOrders.length === 0) {
+      if (skippedExcludedCount > 0) {
+        return NextResponse.json({
+          success: true,
+          message: '발주 제외 또는 삭제예정일 도래 품목만 포함되어 발주서가 생성되지 않았습니다.',
+          count: 0,
+          orders: [],
+        });
+      }
+      return NextResponse.json(
+        { success: false, error: 'ERP에 등록된 품목과 매칭되는 발주 항목이 없습니다.' },
+        { status: 400 }
+      );
+    }
+
     // ── MaterialRequirement 테이블에 자재발주 확정 내역 동기화 (파이프라인 연계) ──
     try {
       await prisma.materialRequirement.deleteMany({
         where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
       });
-      const matReqData = items
-        .filter((it) => Number(it.orderQty) > 0)
+      const matReqData = targetItems
+        .filter((it) => {
+          if (!(Number(it.orderQty) > 0)) return false;
+          const product = productByCode.get(String(it.productCode || '').trim());
+          if (!product || !product.isUsed) return false;
+          const isPastDisc =
+            Boolean(product.discontinuedDate) &&
+            (todayKst >= product.discontinuedDate! || today >= product.discontinuedDate!);
+          if (isPastDisc || isExcludedFromOrder(it.productName || product.name, today)) return false;
+          return true;
+        })
         .map((it) => {
           const product = productByCode.get(String(it.productCode || '').trim());
           return {
@@ -273,13 +308,6 @@ export async function POST(req: NextRequest) {
       }
     } catch (mrErr) {
       console.warn('MaterialRequirement sync warning in order-result:', mrErr);
-    }
-
-    if (createdOrders.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'ERP에 등록된 품목과 매칭되는 발주 항목이 없습니다.' },
-        { status: 400 }
-      );
     }
 
     return NextResponse.json({

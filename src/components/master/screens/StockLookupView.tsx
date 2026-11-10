@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { normName } from '@/lib/gfs/norm';
+import { getScheduledExclusion } from '@/lib/gfs/orderCalc';
 
 function getKoreanDayOfWeek(dateStr: string): string {
   if (!dateStr) return '';
@@ -96,6 +97,7 @@ interface StockItem {
   unitPrice: number;
   totalAmount: number; // currentQty * unitPrice
   snapId?: number; // 스냅샷 조회 행이면 InventorySnapshot.id (저장 라우팅용)
+  discontinuedDate?: string; // 단종/삭제예정일 (YYYY-MM-DD)
 }
 
 /** 재고상태 판정: 품절(0) / 부족(안전미달) / 과잉(3배 이상) / 정상 */
@@ -978,6 +980,7 @@ export const StockLookupView: React.FC = () => {
               fefoWarn: false,
               unitPrice: uprice,
               totalAmount: current * uprice,
+              discontinuedDate: inv.product?.discontinuedDate || '',
             });
           });
           const freshIds = new Set<number>();
@@ -1830,16 +1833,30 @@ export const StockLookupView: React.FC = () => {
       sortable: true,
       filterable: true,
       editable: false,
-      render: (v) => (
-        <span
-          className={`font-black text-slate-900 tracking-tight block truncate ${
-            density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
-          }`}
-          title={String(v || '')}
-        >
-          {v}
-        </span>
-      ),
+      render: (v, row) => {
+        const scheduled = getScheduledExclusion(String(v || ''));
+        const discDate = row.discontinuedDate || scheduled?.effectiveDate || '';
+        const discLabel =
+          scheduled?.label ||
+          (discDate ? `${Number(discDate.slice(5, 7))}/${Number(discDate.slice(8, 10))} 삭제예정` : '');
+        return (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`font-black text-slate-900 tracking-tight truncate ${
+                density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
+              }`}
+              title={discLabel ? `${String(v || '')} (${discLabel})` : String(v || '')}
+            >
+              {v}
+            </span>
+            {discLabel && (
+              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
+                {discLabel}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'unit',

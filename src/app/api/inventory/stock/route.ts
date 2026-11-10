@@ -31,12 +31,21 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 단종/미사용(isUsed=false) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A)
+    // 단종/미사용(isUsed=false) 또는 삭제예정일 도래(discontinuedDate <= targetDate) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A)
     const includeDiscontinued = searchParams.get('includeDiscontinued') === 'true';
     if (!includeDiscontinued) {
       andConditions.push({
         OR: [
-          { product: { isUsed: true } },
+          {
+            product: {
+              isUsed: true,
+              OR: [
+                { discontinuedDate: null },
+                { discontinuedDate: '' },
+                { discontinuedDate: { gt: targetDate } },
+              ],
+            },
+          },
           { currentQty: { gt: 0 } },
         ],
       });

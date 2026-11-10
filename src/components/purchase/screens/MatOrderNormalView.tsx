@@ -21,7 +21,7 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
-import { DAY_CHARS, calcRow, splitWeek, type SheetRowInput } from '@/lib/gfs/orderCalc';
+import { DAY_CHARS, calcRow, splitWeek, getScheduledExclusion, type SheetRowInput } from '@/lib/gfs/orderCalc';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -59,7 +59,7 @@ export const MatOrderNormalView: React.FC = () => {
   const loadOrderSheet = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/gfs/order-sheet', { cache: 'no-store' });
+      const res = await fetch(`/api/gfs/order-sheet?date=${encodeURIComponent(orderDate)}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data?.rows)) {
         const loaded: SheetRow[] = json.data.rows.map((r: any) => {
@@ -83,6 +83,7 @@ export const MatOrderNormalView: React.FC = () => {
             vendor: r.vendor || '',
             finalBoxes: suggest,
             manual: false,
+            discontinuedDate: r.discontinuedDate || '',
           };
         });
         setRows(loaded);
@@ -93,7 +94,7 @@ export const MatOrderNormalView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [orderDate]);
 
   useEffect(() => {
     loadOrderSheet();
@@ -662,7 +663,17 @@ export const MatOrderNormalView: React.FC = () => {
                               row.warehouse ? ` [${row.warehouse}]` : ''
                             }`}
                           >
-                            {row.name}
+                            <span>{row.name}</span>
+                            {(() => {
+                              const s = getScheduledExclusion(row.name);
+                              const d = row.discontinuedDate || s?.effectiveDate || '';
+                              const lbl = s?.label || (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} 삭제예정` : '');
+                              return lbl ? (
+                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                                  {lbl}
+                                </span>
+                              ) : null;
+                            })()}
                           </td>
                           <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">
                             {Number.isFinite(c.boxesStd) ? Math.round(c.boxesStd * 10) / 10 : '-'}

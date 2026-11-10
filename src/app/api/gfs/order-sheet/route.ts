@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { kstToday } from '@/lib/kst';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { getLiveBomUsageMap, LiveBomUsageMap } from '@/lib/gfs/liveUsage';
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const targetDate = searchParams.get('date') || '';
+    const todayKst = kstToday();
+    const checkDate = targetDate || todayKst;
     const errors: string[] = [];
 
     // 1. DB에서 활성 재고 및 품목 마스터 일괄 조회
@@ -119,7 +122,11 @@ export async function GET(req: NextRequest) {
     const rows = inventories
       .filter((inv) => {
         const name = inv.product?.name || inv.productCode;
-        if (isExcludedFromOrder(name)) {
+        if (isExcludedFromOrder(name, checkDate)) {
+          return false;
+        }
+        const discDate = inv.product?.discontinuedDate;
+        if (discDate && (todayKst >= discDate || checkDate >= discDate)) {
           return false;
         }
         return true;
@@ -194,6 +201,7 @@ export async function GET(req: NextRequest) {
         vendor: p?.partner?.name || '',
         orderDay: p?.partner?.orderDay || '월화수목금',
         itemId: code,
+        discontinuedDate: p?.discontinuedDate || '',
         isReplaced: isReplacedSpam,
         replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,
       };

@@ -44,6 +44,7 @@ import {
   calcRow,
   splitWeek,
   classifyPattern,
+  getScheduledExclusion,
   type SheetRowInput,
 } from '@/lib/gfs/orderCalc';
 
@@ -86,6 +87,7 @@ const DISCONTINUED_CAUTION_MAP: Record<string, string> = {
   '혜자)등심돈까스용기 (150ea*4pk/box)': '11/10 등심돈까스 단종 전용',
   '[냉동] 맥적구이용양념육(종이BOX) 2KG*7팩': '11/17 맥적구이 단종 전용',
   '더큰)오징어&제육깻잎쌈밥': '11/17 깻잎쌈밥 단종 전용',
+  '[상온] 늘푸른피클랠리쉬 (3KG*6캔)': '11/11 삭제예정',
 };
 
 interface SheetRow extends SheetRowInput {}
@@ -263,6 +265,7 @@ export const MatOrderDayView: React.FC = () => {
             usageSource: r.usageSource,
             liveBomUsage: r.liveBomUsage,
             surveyDailyUsage: r.surveyDailyUsage,
+            discontinuedDate: r.discontinuedDate || '',
           };
         });
         setRows(loaded);
@@ -406,13 +409,24 @@ export const MatOrderDayView: React.FC = () => {
       const isCriticalShortage = stockDays < 1.2 && (r.incoming || 0) <= 0 && dailyUsage > 0;
       const isSafetyShortage = stockDays < baseTargetDays && dailyUsage > 0 && !isCriticalShortage;
       const isReplacedItem = r.name.includes('스팸(340g*20캔)') || (r as any).isReplaced;
-      const isDiscontinuedItem = !!DISCONTINUED_CAUTION_MAP[r.name];
+      const targetDayDate = weekDates[targetDayIdx] || currentDayDate || kstToday();
+      const scheduledExcl = getScheduledExclusion(r.name);
+      const scheduledDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
+      const isPastScheduledDeletion = Boolean(scheduledDate && targetDayDate >= scheduledDate);
+      const scheduledLabel = scheduledDate
+        ? `${Number(scheduledDate.slice(5, 7))}/${Number(scheduledDate.slice(8, 10))} 삭제예정`
+        : '';
+      const cautionLabel = DISCONTINUED_CAUTION_MAP[r.name] || scheduledExcl?.label || scheduledLabel;
+      const isDiscontinuedItem = Boolean(cautionLabel);
 
       let auditStatus: 'critical' | 'warning' | 'normal' | 'overstock' | 'pending_overlap' = 'normal';
       let auditLabel = '정상 재고';
       if (isReplacedItem) {
         auditStatus = 'overstock';
         auditLabel = '🔄 고미트 대체완료 (발주 0b)';
+      } else if (isPastScheduledDeletion) {
+        auditStatus = 'warning';
+        auditLabel = '🚫 삭제예정일 도래';
       } else if (isDiscontinuedItem) {
         auditStatus = 'warning';
         auditLabel = '🚨 단종 불용주의';
@@ -430,9 +444,9 @@ export const MatOrderDayView: React.FC = () => {
         auditLabel = '⚠️ 안전미달';
       }
 
-      // 추천 박스수: 대체 완료 품목, 과잉재고, 입고중복, 일소진량 0인 경우 0박스 완벽 차단
+      // 추천 박스수: 대체 완료 품목, 삭제예정일 도래 품목, 과잉재고, 입고중복, 일소진량 0인 경우 0박스 완벽 차단
       const suggestedBoxes =
-        isOverstocked || isPendingOverlap || isReplacedItem || dailyUsage <= 0
+        isOverstocked || isPendingOverlap || isReplacedItem || isPastScheduledDeletion || dailyUsage <= 0
           ? 0
           : pack > 0 && shortageBags > 0
           ? Math.ceil(shortageBags / pack)
@@ -440,7 +454,7 @@ export const MatOrderDayView: React.FC = () => {
 
       // 요일 분할
       const week = splitWeek(r, suggestedBoxes);
-      const override = overrides[targetDayIdx]?.[r.id];
+      const override = isPastScheduledDeletion ? 0 : overrides[targetDayIdx]?.[r.id];
       const dayQty = override !== undefined ? override : week[targetDayIdx];
       const amount = dayQty * pack * r.bagPrice;
 
@@ -457,13 +471,16 @@ export const MatOrderDayView: React.FC = () => {
         shortageBags,
         auditStatus,
         auditLabel,
+        cautionLabel,
+        isPastScheduledDeletion,
+        scheduledDate,
         suggestedBoxes,
         week,
         dayQty,
         amount,
       };
     },
-    [strategyMode, itemTargetDaysOverrides, overrides]
+    [strategyMode, itemTargetDaysOverrides, overrides, weekDates, currentDayDate]
   );
 
   // 품목별 목표 안전일수 미세조정 핸들러 (±0.5일)
@@ -1664,9 +1681,9 @@ export const MatOrderDayView: React.FC = () => {
                           <td className="py-2.5 px-4 font-black text-slate-900 text-[15px] whitespace-nowrap">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span title={r.name}>{r.name}</span>
-                              {DISCONTINUED_CAUTION_MAP[r.name] && (
+                              {m.cautionLabel && (
                                 <span className="inline-flex items-center gap-0.5 text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap shadow-xs">
-                                  🚨 {DISCONTINUED_CAUTION_MAP[r.name]}
+                                  🚨 {m.cautionLabel}
                                 </span>
                               )}
                             </div>
@@ -1745,7 +1762,11 @@ export const MatOrderDayView: React.FC = () => {
 
                           {/* 재고유지일 (Runway) */}
                           <td className="py-2.5 px-3 text-center bg-blue-50/30 border-x border-blue-100 whitespace-nowrap">
-                            {(r.pendingBoxes || 0) > 0 && m.suggestedBoxes === 0 ? (
+                            {m.isPastScheduledDeletion ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
+                                🚫 삭제예정일 도래 (발주제외)
+                              </span>
+                            ) : (r.pendingBoxes || 0) > 0 && m.suggestedBoxes === 0 ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
                                 ✅ {m.stockDays.toFixed(1)}일 (기발주 {r.pendingBoxes}box 확보)
                               </span>
@@ -1820,8 +1841,9 @@ export const MatOrderDayView: React.FC = () => {
                                 type="number"
                                 min={0}
                                 value={m.dayQty}
+                                disabled={m.isPastScheduledDeletion}
                                 onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
-                                className={`w-20 text-right px-2 py-1 bg-white border rounded-lg text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs ${
+                                className={`w-20 text-right px-2 py-1 bg-white border rounded-lg text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
                                   (r.pendingBoxes || 0) > 0
                                     ? 'border-emerald-300 text-emerald-950 focus:ring-emerald-500'
                                     : 'border-amber-300 text-amber-950 focus:ring-amber-500'

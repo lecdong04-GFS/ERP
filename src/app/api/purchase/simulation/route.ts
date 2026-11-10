@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') || kstToday();
+    const todayKst = kstToday();
+    const date = searchParams.get('date') || todayKst;
 
     // 1. 활성 BOM 헤더 및 하위 자재 명세 로드
     const bomHeaders = await prisma.bomHeader.findMany({
@@ -126,7 +127,11 @@ export async function GET(req: NextRequest) {
             .filter((d) => {
               const cp = d.childProduct;
               const name = cp?.name || '';
-              if (isExcludedFromOrder(name) || (cp && !cp.isUsed)) {
+              const disc = cp?.discontinuedDate;
+              if (
+                isExcludedFromOrder(name, date) ||
+                (cp && (!cp.isUsed || (disc && (todayKst >= disc || date >= disc))))
+              ) {
                 return false;
               }
               return true;
@@ -183,9 +188,15 @@ export async function GET(req: NextRequest) {
       pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + (Number(po.remainQty) || 0));
     }
 
-    // 6. 자재 메타데이터 맵 빌드
+    // 6. 자재 메타데이터 맵 빌드 (발주 제외 및 삭제예정일 도래 품목 제외)
+    const activeMaterials = materials.filter((m) => {
+      if (isExcludedFromOrder(m.name, date)) return false;
+      if (m.discontinuedDate && (todayKst >= m.discontinuedDate || date >= m.discontinuedDate)) return false;
+      return true;
+    });
+
     const materialMap: Record<string, any> = {};
-    for (const m of materials) {
+    for (const m of activeMaterials) {
       const invStock = m.inventories.reduce((acc, inv) => acc + (Number(inv.currentQty) || 0), 0);
       const invPrice = m.inventories.find((inv) => (Number(inv.unitPrice) || 0) > 0)?.unitPrice || 0;
       const invUsage = m.inventories.find((inv) => (Number(inv.dailyUsage) || 0) > 0)?.dailyUsage || 0;
@@ -217,7 +228,7 @@ export async function GET(req: NextRequest) {
       queryDate: date,
       seasonality: currentSeasonality,
       totalFinishedCount: finishedProducts.length,
-      totalMaterialCount: materials.length,
+      totalMaterialCount: activeMaterials.length,
       finishedProducts,
       materials: materialMap,
     });

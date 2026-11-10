@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') || kstToday();
+    const todayKst = kstToday();
+    const date = searchParams.get('date') || todayKst;
     const supplierParam = searchParams.get('supplier') || 'ALL';
     const searchParam = (searchParams.get('search') || '').trim().toLowerCase();
 
@@ -115,8 +116,13 @@ export async function GET(req: NextRequest) {
               if (bd.level === 3 || bd.level === 2) {
                 const childCode = bd.childProduct.productCode;
                 const childName = bd.childProduct.name || '';
-                // 발주 제외 요청 품목 및 비활성 품목 스킵
-                if (isExcludedFromOrder(childName) || !bd.childProduct.isUsed) {
+                // 발주 제외 요청 품목 및 비활성/단종예정 도래 품목 스킵
+                const childDisc = bd.childProduct.discontinuedDate;
+                if (
+                  isExcludedFromOrder(childName, date) ||
+                  !bd.childProduct.isUsed ||
+                  (childDisc && (todayKst >= childDisc || date >= childDisc))
+                ) {
                   return;
                 }
                 const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
@@ -132,7 +138,7 @@ export async function GET(req: NextRequest) {
                 const rawComponents = comp.subComponents || [comp];
                 rawComponents.forEach((raw) => {
                   if (raw.level === 3 || raw.level === 2) {
-                    if (isExcludedFromOrder(raw.componentName)) {
+                    if (isExcludedFromOrder(raw.componentName, date)) {
                       return;
                     }
                     const rawFactor = raw.unitQty / ((raw.yieldRate || 100) / 100);
@@ -180,8 +186,14 @@ export async function GET(req: NextRequest) {
       orderBy: { productCode: 'asc' },
     });
 
-    // 6. 데이터 병합 및 행 생성
-    const allRows = materials.map((m, index) => {
+    // 6. 데이터 병합 및 행 생성 (발주 제외 및 삭제예정일 도래 품목 제외)
+    const activeMaterials = materials.filter((m) => {
+      if (isExcludedFromOrder(m.name, date)) return false;
+      if (m.discontinuedDate && (todayKst >= m.discontinuedDate || date >= m.discontinuedDate)) return false;
+      return true;
+    });
+
+    const allRows = activeMaterials.map((m, index) => {
       const currentStock = m.inventories.reduce((acc, inv) => acc + inv.currentQty, 0);
       const reqQty = reqMap.get(m.productCode) || 0;
       const incomingScheduled = pendingMap.get(m.productCode) || 0;

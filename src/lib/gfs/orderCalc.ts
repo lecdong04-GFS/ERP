@@ -24,6 +24,7 @@ export interface SheetRowInput {
   usageSource?: 'BOM실시간' | '기준소진량';
   liveBomUsage?: number | null;
   surveyDailyUsage?: number;
+  discontinuedDate?: string;
 }
 
 export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as const;
@@ -182,15 +183,63 @@ export const EXCLUDED_ORDER_KEYWORDS = [
   '다진맛김치(10kg*2',
   '치킨난방용마요',
   '오이피클랠리쉬',
-  '피클랠리쉬',
 ];
 
-export function isExcludedFromOrder(name?: string | null): boolean {
+export interface ScheduledExclusion {
+  keyword: string;
+  effectiveDate: string; // YYYY-MM-DD (해당 일자부터 발주 자동 제외)
+  label: string;
+}
+
+/** 삭제 예정 일자별 자동 발주 제외 목록 */
+export const SCHEDULED_ORDER_EXCLUSIONS: ScheduledExclusion[] = [
+  { keyword: '늘푸른피클랠리쉬', effectiveDate: '2026-11-11', label: '11/11 삭제예정' },
+];
+
+function kstTodayStr(): string {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+export function getScheduledExclusion(name?: string | null): ScheduledExclusion | null {
+  if (!name) return null;
+  const lower = name.toLowerCase();
+  const clean = lower.replace(/\s+/g, '');
+  return (
+    SCHEDULED_ORDER_EXCLUSIONS.find((s) => {
+      const k = s.keyword.toLowerCase();
+      return lower.includes(k) || clean.includes(k.replace(/\s+/g, ''));
+    }) || null
+  );
+}
+
+export function isExcludedFromOrder(name?: string | null, targetDate?: string): boolean {
   if (!name) return false;
   const lower = name.toLowerCase();
   const clean = lower.replace(/\s+/g, '');
-  return EXCLUDED_ORDER_KEYWORDS.some((kw) => {
-    const k = kw.toLowerCase();
-    return lower.includes(k) || clean.includes(k.replace(/\s+/g, ''));
-  });
+  // '[상온] 피클랠리쉬 (3KG * 6캔)' 등 단독 피클랠리쉬만 즉시 제외 ('늘푸른피클랠리쉬' 오매칭 방지)
+  const cleanNoTag = clean.replace(/^\[[^\]]+\]/, '');
+  if (cleanNoTag.startsWith('피클랠리쉬')) {
+    return true;
+  }
+
+  if (
+    EXCLUDED_ORDER_KEYWORDS.some((kw) => {
+      const k = kw.toLowerCase();
+      return lower.includes(k) || clean.includes(k.replace(/\s+/g, ''));
+    })
+  ) {
+    return true;
+  }
+
+  const scheduled = getScheduledExclusion(name);
+  if (scheduled) {
+    const todayStr = kstTodayStr();
+    const normTarget = targetDate ? targetDate.trim().replace(/\./g, '-').slice(0, 10) : '';
+    const validTarget = /^\d{4}-\d{2}-\d{2}$/.test(normTarget) ? normTarget : '';
+    if (todayStr >= scheduled.effectiveDate || (validTarget !== '' && validTarget >= scheduled.effectiveDate)) {
+      return true;
+    }
+  }
+
+  return false;
 }
