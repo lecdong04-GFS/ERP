@@ -112,6 +112,8 @@ interface PrintReportContextType {
   setWorkOrderPayload: (payload: WorkOrderPrintPayload | null) => void;
   poPayload: PurchaseOrderPrintPayload | null;
   setPoPayload: (payload: PurchaseOrderPrintPayload | null) => void;
+  poPayloadList: PurchaseOrderPrintPayload[] | null;
+  setPoPayloadList: (payload: PurchaseOrderPrintPayload[] | null) => void;
 }
 
 const PrintReportContext = createContext<PrintReportContextType | null>(null);
@@ -124,6 +126,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [matReqPayload, setMatReqPayload] = useState<MatReqPrintPayload | null>(null);
   const [workOrderPayload, setWorkOrderPayload] = useState<WorkOrderPrintPayload | null>(null);
   const [poPayload, setPoPayload] = useState<PurchaseOrderPrintPayload | null>(null);
+  const [poPayloadList, setPoPayloadList] = useState<PurchaseOrderPrintPayload[] | null>(null);
 
   const openPrintModal = (docType?: PrintDocumentType) => {
     if (docType) {
@@ -139,6 +142,7 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
     setMatReqPayload(null);
     setWorkOrderPayload(null);
     setPoPayload(null);
+    setPoPayloadList(null);
   };
 
   return (
@@ -159,6 +163,8 @@ export const PrintReportProvider: React.FC<{ children: ReactNode }> = ({ childre
         setWorkOrderPayload,
         poPayload,
         setPoPayload,
+        poPayloadList,
+        setPoPayloadList,
       }}
     >
       {children}

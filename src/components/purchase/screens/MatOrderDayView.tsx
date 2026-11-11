@@ -34,6 +34,8 @@ import {
   Plus,
   Minus,
   Lock,
+  Trash2,
+  Undo2,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -124,6 +126,28 @@ interface InboundInspectItem {
   checked: boolean;
 }
 
+interface DeletedProductItem {
+  id: number;
+  productCode: string;
+  name: string;
+  category: string;
+  warehouse: string;
+  spec: string;
+  unit: string;
+  boxQty: number;
+  targetOrderDays: number;
+  orderCycle: string;
+  status: string;
+  isUsed: boolean;
+  isSoftDeleted: boolean;
+  isUiDeleted?: boolean;
+  discontinuedDate: string;
+  partnerName: string;
+  currentStock: number;
+  deletedAt: string;
+  deletedBy: string;
+}
+
 export const MatOrderDayView: React.FC = () => {
   const { openTab } = useTabs();
 
@@ -176,6 +200,23 @@ export const MatOrderDayView: React.FC = () => {
   const [isLoadingInbound, setIsLoadingInbound] = useState<boolean>(false);
   const [isReceivingSaving, setIsReceivingSaving] = useState<boolean>(false);
   const [inboundStatusFilter, setInboundStatusFilter] = useState<string>('전체');
+
+  // ── 품목 삭제 & 복구 상태 ──
+  const [deletedCount, setDeletedCount] = useState<number>(0);
+  const [totalInactiveCount, setTotalInactiveCount] = useState<number>(0);
+  const [showDeletedModal, setShowDeletedModal] = useState<boolean>(false);
+  const [deletedScope, setDeletedScope] = useState<'ui' | 'all'>('ui');
+  const [deletedItems, setDeletedItems] = useState<DeletedProductItem[]>([]);
+  const [isLoadingDeleted, setIsLoadingDeleted] = useState<boolean>(false);
+  const [deletedKeyword, setDeletedKeyword] = useState<string>('');
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<SheetRow | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
+  const [restoringId, setRestoringId] = useState<number | 'ALL' | null>(null);
+  const [recentDeletedNotice, setRecentDeletedNotice] = useState<{
+    id: number;
+    name: string;
+    partner: string;
+  } | null>(null);
 
   // 전표 드롭다운 바깥 클릭 시 닫기
   useEffect(() => {
@@ -307,6 +348,152 @@ export const MatOrderDayView: React.FC = () => {
   useEffect(() => {
     loadOrderSheet();
   }, [loadOrderSheet]);
+
+  // 삭제·비활성 품목 목록 및 개수 조회
+  const loadDeletedProducts = useCallback(
+    async (scopeOverride?: 'ui' | 'all') => {
+      const targetScope = scopeOverride ?? deletedScope;
+      setIsLoadingDeleted(true);
+      try {
+        const res = await fetch(`/api/master/product/lifecycle?scope=${targetScope}`, {
+          cache: 'no-store',
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setDeletedItems(Array.isArray(json.data.items) ? json.data.items : []);
+          setDeletedCount(Number(json.data.uiDeletedCount) || 0);
+          setTotalInactiveCount(Number(json.data.totalInactiveCount) || 0);
+        }
+      } catch (err) {
+        console.error('Failed to load deleted products', err);
+      } finally {
+        setIsLoadingDeleted(false);
+      }
+    },
+    [deletedScope]
+  );
+
+  useEffect(() => {
+    void loadDeletedProducts();
+  }, [loadDeletedProducts]);
+
+  // 재고조회 등 타 탭에서 품목 복구/삭제 시 발주 시트 및 삭제 건수 실시간 동기화
+  useEffect(() => {
+    const onLifecycleChanged = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.source === 'order') return;
+      void loadOrderSheet();
+      void loadDeletedProducts();
+    };
+    window.addEventListener('gfs-product-lifecycle-changed', onLifecycleChanged);
+    return () => window.removeEventListener('gfs-product-lifecycle-changed', onLifecycleChanged);
+  }, [loadOrderSheet, loadDeletedProducts]);
+
+  // 품목 소프트 삭제 확정 (발주화면 + 재고조회 동시 제외, DB 이력 보존)
+  const handleConfirmDeleteProduct = async () => {
+    if (!confirmDeleteRow || deletingProductId !== null) return;
+    const targetRow = confirmDeleteRow;
+    const productId = targetRow.productId ?? targetRow.id;
+    setDeletingProductId(productId);
+    try {
+      const res = await fetch('/api/master/product/lifecycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: productId,
+          action: 'delete',
+          reason: '스마트 자재발주 화면에서 담당자 삭제',
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('품목 삭제 실패: ' + (json.error || `HTTP ${res.status}`));
+        return;
+      }
+
+      setRows((prev) => prev.filter((item) => (item.productId ?? item.id) !== productId));
+      setItemTargetDaysOverrides((prev) => {
+        if (prev[targetRow.id] === undefined) return prev;
+        const next = { ...prev };
+        delete next[targetRow.id];
+        return next;
+      });
+      setOverrides((prev) => {
+        const next: Record<number, Record<number, number>> = {};
+        Object.entries(prev).forEach(([k, map]) => {
+          if (map[targetRow.id] !== undefined) {
+            const copy = { ...map };
+            delete copy[targetRow.id];
+            next[Number(k)] = copy;
+          } else {
+            next[Number(k)] = map;
+          }
+        });
+        return next;
+      });
+      if (activeBriefingId === targetRow.id) setActiveBriefingId(null);
+
+      setConfirmDeleteRow(null);
+      setRecentDeletedNotice({
+        id: productId,
+        name: targetRow.name,
+        partner: targetRow.supplier || targetRow.vendor || '',
+      });
+      void loadDeletedProducts();
+      window.dispatchEvent(
+        new CustomEvent('gfs-product-lifecycle-changed', {
+          detail: { source: 'order', action: 'delete', ids: [productId] },
+        })
+      );
+    } catch (err: any) {
+      alert('품목 삭제 중 통신 오류: ' + (err?.message || String(err)));
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
+  // 삭제 품목 복구 (단건 또는 일괄)
+  const handleRestoreProducts = async (ids: number[], isBatch = false) => {
+    if (ids.length === 0 || restoringId !== null) return;
+    setRestoringId(isBatch ? 'ALL' : ids[0]);
+    try {
+      const res = await fetch('/api/master/product/lifecycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'restore' }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('품목 복구 실패: ' + (json.error || `HTTP ${res.status}`));
+        return;
+      }
+      if (recentDeletedNotice && ids.includes(recentDeletedNotice.id)) {
+        setRecentDeletedNotice(null);
+      }
+      await Promise.all([loadOrderSheet(), loadDeletedProducts()]);
+      window.dispatchEvent(
+        new CustomEvent('gfs-product-lifecycle-changed', {
+          detail: { source: 'order', action: 'restore', ids },
+        })
+      );
+    } catch (err: any) {
+      alert('품목 복구 중 통신 오류: ' + (err?.message || String(err)));
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const filteredDeletedItems = useMemo(() => {
+    const kw = deletedKeyword.trim().toLowerCase();
+    if (!kw) return deletedItems;
+    return deletedItems.filter(
+      (it) =>
+        it.name.toLowerCase().includes(kw) ||
+        it.partnerName.toLowerCase().includes(kw) ||
+        it.warehouse.toLowerCase().includes(kw) ||
+        it.productCode.toLowerCase().includes(kw)
+    );
+  }, [deletedItems, deletedKeyword]);
 
   // 2. 현재 선택된 요일 날짜의 ERP 발주서(PO) 전표 조회
   const loadConfirmedPo = useCallback(async () => {
@@ -1163,7 +1350,7 @@ export const MatOrderDayView: React.FC = () => {
         </div>
 
         {/* 우측 상단 액션 버튼 모음 */}
-        <div className="flex items-center gap-1.5 whitespace-nowrap">
+        <div className="flex flex-wrap items-center gap-1.5 whitespace-nowrap">
           {mainMode === 'order' ? (
             <>
               <button
@@ -1197,6 +1384,27 @@ export const MatOrderDayView: React.FC = () => {
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600" />
                 <span>엑셀</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeletedModal(true);
+                  void loadDeletedProducts();
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                  deletedCount > 0
+                    ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                }`}
+                title="발주/재고조회에서 삭제된 품목 목록을 확인하고 복구합니다."
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>삭제복구</span>
+                {deletedCount > 0 && (
+                  <span className="px-1.5 py-[1px] rounded-full bg-rose-600 text-white text-[11px] font-mono font-bold">
+                    {deletedCount}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -1286,7 +1494,7 @@ export const MatOrderDayView: React.FC = () => {
               </div>
 
               {/* 7개 요일 탭 버튼 */}
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1">
                 {DAY_CHARS.map((d, i) => {
                   const isActive = dayIdx === i;
                   const st = dayStats[i];
@@ -1477,7 +1685,7 @@ export const MatOrderDayView: React.FC = () => {
               </select>
 
               {/* 납품패턴 필터 */}
-              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
+              <div className="flex flex-wrap items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
                 {['전체', '월수금', '화목토', '수금', '화금', '주5일', '매일', '기타'].map((pat) => (
                   <button
                     key={pat}
@@ -1727,6 +1935,41 @@ export const MatOrderDayView: React.FC = () => {
         )}
       </div>
 
+      {/* ── 방금 삭제한 품목 즉시 되돌리기(Undo) 알림 배너 ── */}
+      {mainMode === 'order' && recentDeletedNotice && (
+        <div className="bg-slate-900 text-white px-4 py-2 rounded-xl shadow-sm shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs border border-slate-700">
+          <div className="flex items-center gap-2">
+            <Trash2 className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>
+              <strong className="font-black text-rose-200">[{recentDeletedNotice.name}]</strong>
+              {recentDeletedNotice.partner ? ` (${recentDeletedNotice.partner})` : ''} 품목이{' '}
+              <strong className="text-white">발주 화면과 재고조회 목록에서 삭제</strong>되었습니다.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={restoringId !== null}
+              onClick={() => void handleRestoreProducts([recentDeletedNotice.id])}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black cursor-pointer transition disabled:opacity-50"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+              <span>
+                {restoringId === recentDeletedNotice.id ? '복구 중...' : '방금 삭제 되돌리기(복구)'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRecentDeletedNotice(null)}
+              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              title="알림 닫기"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── 3-1. 요일별 통계 기반 스마트 수요 가중치 안내 배너 ── */}
       {mainMode === 'order' && WEEKDAY_DEMAND_FACTORS[dayIdx] && (
         <div
@@ -1810,10 +2053,10 @@ export const MatOrderDayView: React.FC = () => {
       )}
 
       {/* ── 4. 메인 데이터 테이블 (발주 테이블 or 입고 검수 테이블) ── */}
-      <div className="flex-1 min-h-[420px] bg-white rounded-xl border border-slate-300 overflow-hidden shadow-xs flex flex-col">
+      <div className="flex-1 min-h-[420px] min-w-0 bg-white rounded-xl border border-slate-300 overflow-hidden shadow-xs flex flex-col">
         {mainMode === 'order' ? (
           /* ──────── ① 오늘 발주할 양 테이블 ──────── */
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {isLoading ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-16 gap-3 text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
@@ -1822,47 +2065,65 @@ export const MatOrderDayView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse min-w-[1500px]">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[13.5px] font-black border-b border-slate-300 uppercase tracking-tight select-none">
+              <table className="w-full table-fixed text-left border-collapse">
+                <colgroup>
+                  <col className="w-[2.5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[24.2%]" />
+                  <col className="w-[5.5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[6%]" />
+                  <col className="w-[7.5%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[7.5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[4.8%]" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[12.5px] 2xl:text-[13.5px] font-black border-b border-slate-300 tracking-tight select-none">
                   <tr>
-                    <th className="py-3 px-2 text-center w-12 whitespace-nowrap">No</th>
-                    <th className="py-3 px-3 min-w-[160px] w-44 whitespace-nowrap">거래처명</th>
-                    <th className="py-3 px-4 min-w-[300px] whitespace-nowrap">품목명</th>
-                    <th className="py-3 px-2.5 w-24 text-center whitespace-nowrap">패턴</th>
-                    <th className="py-3 px-2 w-20 text-center whitespace-nowrap">창고</th>
-                    <th className="py-3 px-3 min-w-[130px] text-right bg-slate-50 text-slate-800 whitespace-nowrap">
-                      현장 가용재고
-                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">실재고 + 입고예정</span>
+                    <th className="py-2.5 px-1 text-center">No</th>
+                    <th className="py-2.5 px-1.5">거래처</th>
+                    <th className="py-2.5 px-2">품목명</th>
+                    <th className="py-2.5 px-0.5 text-center">
+                      패턴·창고
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">납품·보관</span>
                     </th>
-                    <th className="py-3 px-2.5 min-w-[110px] text-right whitespace-nowrap">
-                      일소진량
-                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">Daily Usage</span>
+                    <th className="py-2.5 px-1.5 text-right bg-slate-50 text-slate-800">
+                      가용재고
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">실+입고</span>
                     </th>
-                    <th className="py-3 px-3 min-w-[160px] text-center bg-blue-50/70 text-blue-950 font-black border-x border-blue-100 whitespace-nowrap">
-                      재고유지일 (Runway)
-                      <span className="block text-[11px] text-blue-700 font-bold leading-tight">보유일수 · 상태</span>
+                    <th className="py-2.5 px-1.5 text-right">
+                      일소진
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">봉/일</span>
                     </th>
-                    <th className="py-3 px-3 min-w-[165px] text-center whitespace-nowrap">
+                    <th className="py-2.5 px-1 text-center bg-blue-50/70 text-blue-950 font-black border-x border-blue-100">
+                      유지일
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-blue-700 font-bold leading-tight">Runway</span>
+                    </th>
+                    <th className="py-2.5 px-1 text-center">
                       발주일수
-                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">기준 · 필요량 (±0.5일)</span>
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">기준·필요</span>
                     </th>
-                    <th className="py-3 px-3 min-w-[170px] text-right bg-amber-50/70 text-amber-950 border-x border-amber-200 whitespace-nowrap">
+                    <th className="py-2.5 px-1.5 text-right bg-amber-50/70 text-amber-950 border-x border-amber-200">
                       {DAY_CHARS[dayIdx]}요일 발주(✏️)
-                      <span className="block text-[11px] text-amber-800 font-bold leading-tight">추천치 대비 확정</span>
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-amber-800 font-bold leading-tight">추천·확정</span>
                     </th>
-                    <th className="py-3 px-2.5 w-24 text-right whitespace-nowrap">입수량</th>
-                    <th className="py-3 px-2.5 w-32 text-right whitespace-nowrap">
-                      단가
-                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">봉단가 / 박스단가</span>
+                    <th className="py-2.5 px-1.5 text-right">
+                      단가·입수
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">봉 / 박스</span>
                     </th>
-                    <th className="py-3 px-3 w-36 text-right font-black whitespace-nowrap">발주금액</th>
-                    <th className="py-3 px-2.5 w-24 text-center whitespace-nowrap">계산근거</th>
+                    <th className="py-2.5 px-1.5 text-right font-black">발주금액</th>
+                    <th className="py-2.5 px-0.5 text-center">
+                      관리
+                      <span className="block text-[10px] 2xl:text-[10.5px] text-slate-500 font-bold leading-tight">근거·삭제</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-[14px]">
+                <tbody className="divide-y divide-slate-100 text-[13.5px] 2xl:text-[14.5px]">
                   {dayRows.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="py-20 text-center">
+                      <td colSpan={12} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           <Package className="w-12 h-12 text-slate-300" />
                           <div className="text-[15px] font-black text-slate-700">
@@ -1894,42 +2155,50 @@ export const MatOrderDayView: React.FC = () => {
                           }`}
                         >
                           {/* No */}
-                          <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[13px] whitespace-nowrap">
+                          <td className="py-2 px-1 text-center text-slate-400 font-mono text-[12.5px] 2xl:text-[13px]">
                             {idx + 1}
                           </td>
 
                           {/* 거래처명 */}
-                          <td className="py-2.5 px-3 font-bold text-slate-800 whitespace-nowrap">
-                            <span
-                              className="inline-block px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-[13.5px] font-black border border-slate-200"
+                          <td className="py-2 px-1">
+                            <div
+                              className="text-[12.5px] 2xl:text-[13.5px] font-black text-slate-800 tracking-tight truncate"
                               title={r.supplier}
                             >
                               {r.supplier}
-                            </span>
-                          </td>
-
-                          {/* 품목명 */}
-                          <td className="py-2.5 px-4 font-black text-slate-900 text-[15px] whitespace-nowrap">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span title={r.name}>{r.name}</span>
-                              <ProductLifecycleBadge
-                                status={r.status}
-                                discontinuedDate={r.discontinuedDate}
-                                name={r.name}
-                                refDate={currentDayDate || orderDate}
-                              />
-                              {m.cautionLabel && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 shadow-xs whitespace-nowrap">
-                                  {m.cautionLabel}
-                                </span>
-                              )}
                             </div>
                           </td>
 
-                          {/* 납품패턴 */}
-                          <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                          {/* 품목명 */}
+                          <td className="py-2 px-1.5 font-bold text-slate-900 min-w-0 overflow-hidden">
+                            <div className="flex items-center gap-1 min-w-0 w-full">
+                              <span
+                                className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-tight truncate min-w-0"
+                                title={r.name}
+                              >
+                                {r.name}
+                              </span>
+                              <span className="shrink-0 flex items-center gap-0.5">
+                                <ProductLifecycleBadge
+                                  status={r.status}
+                                  discontinuedDate={r.discontinuedDate}
+                                  name={r.name}
+                                  refDate={currentDayDate || orderDate}
+                                  compact
+                                />
+                                {m.cautionLabel && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10.5px] 2xl:text-[11px] font-black px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 shadow-xs whitespace-nowrap">
+                                    {m.cautionLabel}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* 납품패턴 · 보관창고 */}
+                          <td className="py-1.5 px-1 text-center">
                             <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black border ${
+                              className={`inline-block px-1.5 py-0.5 rounded-full text-[11.5px] 2xl:text-[12px] font-black border leading-tight ${
                                 pattern === '월수금'
                                   ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                                   : pattern === '화목토'
@@ -1942,16 +2211,15 @@ export const MatOrderDayView: React.FC = () => {
                               {pattern}
                             </span>
                             {r.orderCycle && r.orderCycle !== pattern && (
-                              <span className="block text-[10.5px] font-bold text-slate-500 mt-0.5">
+                              <span
+                                className="block text-[10.5px] font-bold text-slate-500 mt-0.5 truncate"
+                                title={r.orderCycle}
+                              >
                                 {r.orderCycle}
                               </span>
                             )}
-                          </td>
-
-                          {/* 보관창고 */}
-                          <td className="py-2.5 px-2 text-center whitespace-nowrap">
                             <span
-                              className={`inline-block px-2 py-0.5 rounded text-xs font-black ${
+                              className={`inline-block mt-0.5 px-1.5 py-[1px] rounded text-[11px] 2xl:text-[11.5px] font-black ${
                                 (r.warehouse || '').includes('냉동')
                                   ? 'bg-cyan-50 text-cyan-700'
                                   : (r.warehouse || '').includes('냉장')
@@ -1964,38 +2232,40 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 현장 가용재고 (실재고 + 입고예정) */}
-                          <td className="py-2.5 px-3 text-right bg-slate-50/70 font-mono text-[14px] whitespace-nowrap">
-                            <div className="font-black text-slate-900">
+                          <td
+                            className="py-1.5 px-1.5 text-right bg-slate-50/70 font-mono"
+                            title={`실재고 ${r.currentStock.toLocaleString()}봉 + 입고예정 ${r.incoming.toLocaleString()}봉${
+                              (r.pendingBoxes || 0) > 0 ? ` (기발주 ${r.pendingBoxes}box 포함)` : ''
+                            }`}
+                          >
+                            <div className="font-black text-slate-900 text-[13.5px] 2xl:text-[14.5px] tabular-nums leading-tight">
                               {m.totalStock.toLocaleString()}
-                              <span className="text-xs text-slate-500 font-sans ml-0.5">봉</span>
+                              <span className="text-[11.5px] text-slate-500 font-sans ml-0.5">봉</span>
                             </div>
-                            <div className="text-[11.5px] text-slate-500 font-sans font-medium whitespace-nowrap">
-                              (재고 {r.currentStock} + 입고 {r.incoming}
-                              {(r.pendingBoxes || 0) > 0 ? (
-                                <span className="ml-1 text-emerald-700 font-bold">
-                                  [기발주 {r.pendingBoxes}box 포함]
-                                </span>
-                              ) : null}
-                              )
+                            <div className="text-[11px] 2xl:text-[11.5px] text-slate-500 font-sans font-medium truncate leading-tight mt-0.5">
+                              재{r.currentStock.toLocaleString()}+입{r.incoming.toLocaleString()}
+                              {(r.pendingBoxes || 0) > 0 && (
+                                <span className="ml-0.5 text-emerald-700 font-bold">[기{r.pendingBoxes}]</span>
+                              )}
                             </div>
                           </td>
 
                           {/* 일소진량 */}
-                          <td className="py-2.5 px-2.5 text-right font-mono text-[14px] whitespace-nowrap">
+                          <td className="py-1.5 px-1.5 text-right font-mono">
                             {m.dailyUsage > 0 ? (
-                              <div className="flex items-center justify-end gap-1.5">
+                              <div className="flex flex-col items-end leading-tight">
+                                <span className="font-extrabold text-slate-800 text-[13.5px] 2xl:text-[14.5px] tabular-nums">
+                                  {m.dailyUsage.toLocaleString()}
+                                  <span className="text-[11.5px] text-slate-500 font-sans ml-0.5">봉</span>
+                                </span>
                                 {r.isBomDriven && (
                                   <span
-                                    className="text-[10px] px-1 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-sans font-bold tracking-tight"
+                                    className="mt-0.5 text-[10.5px] px-1 py-[1px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-sans font-bold tracking-tight"
                                     title={`오늘 GS25 수주 x 레시피 BOM 실시간 소요량: ${r.liveBomUsage?.toLocaleString()}봉/일 (엑셀 기준치: ${r.surveyDailyUsage?.toLocaleString()}봉/일)`}
                                   >
                                     BOM
                                   </span>
                                 )}
-                                <span className="font-extrabold text-slate-800">
-                                  {m.dailyUsage.toLocaleString()}
-                                  <span className="text-xs text-slate-500 font-sans ml-0.5">봉/일</span>
-                                </span>
                               </div>
                             ) : (
                               <span className="text-slate-400 font-bold">-</span>
@@ -2003,51 +2273,60 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 재고유지일 (Runway) */}
-                          <td className="py-2.5 px-3 text-center bg-blue-50/30 border-x border-blue-100 whitespace-nowrap">
+                          <td className="py-1.5 px-1 text-center bg-blue-50/30 border-x border-blue-100">
                             {m.isPastScheduledDeletion ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
-                                🚫 삭제예정일 도래 (발주제외)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-black bg-rose-100 text-rose-800 border border-rose-300 leading-tight">
+                                <span>🚫 삭제도래</span>
+                                <span className="text-[10.5px] font-bold">발주제외</span>
+                              </div>
                             ) : (r.pendingBoxes || 0) > 0 && m.suggestedBoxes === 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
-                                ✅ {m.stockDays.toFixed(1)}일 (기발주 {r.pendingBoxes}box 확보)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 leading-tight">
+                                <span>✅ {m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-bold">기발주 {r.pendingBoxes}b</span>
+                              </div>
                             ) : m.auditStatus === 'critical' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300 animate-pulse whitespace-nowrap">
-                                🚨 {m.stockDays.toFixed(1)}일 (임박)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-rose-100 text-rose-700 border border-rose-300 animate-pulse leading-tight">
+                                <span>🚨 {m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-bold">임박</span>
+                              </div>
                             ) : m.auditStatus === 'warning' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
-                                ⚠️ {m.stockDays.toFixed(1)}일 (미달)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-amber-100 text-amber-800 border border-amber-300 leading-tight">
+                                <span>⚠️ {m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-bold">미달</span>
+                              </div>
                             ) : m.auditStatus === 'overstock' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-slate-100 text-slate-600 border border-slate-300 whitespace-nowrap">
-                                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                                {Math.round(m.stockDays)}일 (과잉)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-slate-100 text-slate-600 border border-slate-300 leading-tight">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Lock className="w-3 h-3 text-slate-500" />
+                                  {Math.round(m.stockDays)}일
+                                </span>
+                                <span className="text-[10.5px] font-bold">과잉</span>
+                              </div>
                             ) : m.auditStatus === 'pending_overlap' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
-                                📦 {m.stockDays.toFixed(1)}일 (입고대기)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 leading-tight">
+                                <span>📦 {m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-bold">입고대기</span>
+                              </div>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
-                                ✅ {m.stockDays.toFixed(1)}일 (적정)
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 leading-tight">
+                                <span>✅ {m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-bold">적정</span>
+                              </div>
                             )}
                           </td>
 
                           {/* 발주일수 (마스터 기준 · ±0.5일 / 직접입력 / DB저장) */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1">
+                          <td className="py-1.5 px-1 text-center">
+                            <div className="flex items-center justify-center gap-0.5">
                               <button
                                 type="button"
                                 onClick={() =>
                                   handleStepTargetDays(r.id, m.targetDays, -0.5, m.masterOrderDays)
                                 }
-                                className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer"
+                                className="w-[18px] h-[18px] 2xl:w-5 2xl:h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer shrink-0"
                                 title="발주일수 0.5일 축소"
                               >
-                                <Minus size={12} />
+                                <Minus size={10} />
                               </button>
                               {editingOrderDays?.id === r.id ? (
                                 <input
@@ -2077,7 +2356,7 @@ export const MatOrderDayView: React.FC = () => {
                                       setEditingOrderDays(null);
                                     }
                                   }}
-                                  className="w-14 text-center px-1 py-0.5 text-[13px] font-mono font-black border border-blue-400 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  className="w-11 text-center px-0.5 py-0.5 text-[13px] font-mono font-black border border-blue-400 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                               ) : (
                                 <button
@@ -2088,7 +2367,7 @@ export const MatOrderDayView: React.FC = () => {
                                       value: m.targetDays > 0 ? String(m.targetDays) : '0',
                                     })
                                   }
-                                  className={`font-mono font-black text-[13.5px] min-w-[42px] text-center px-1 rounded hover:bg-blue-50 transition cursor-pointer ${
+                                  className={`font-mono font-black text-[13px] 2xl:text-[14px] min-w-[30px] text-center px-0.5 rounded hover:bg-blue-50 transition cursor-pointer ${
                                     m.targetDays > 0 ? 'text-slate-800' : 'text-slate-400'
                                   }`}
                                   title="클릭하여 발주일수 직접 입력"
@@ -2101,22 +2380,22 @@ export const MatOrderDayView: React.FC = () => {
                                 onClick={() =>
                                   handleStepTargetDays(r.id, m.targetDays, 0.5, m.masterOrderDays)
                                 }
-                                className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer"
+                                className="w-[18px] h-[18px] 2xl:w-5 2xl:h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer shrink-0"
                                 title="발주일수 0.5일 가산"
                               >
-                                <Plus size={12} />
+                                <Plus size={10} />
                               </button>
                             </div>
-                            <div className="flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
-                              <span className="text-[11px] text-slate-500 font-mono font-bold">
-                                {m.targetDays > 0 ? `필요 ${m.targetStock.toLocaleString()}봉` : '미설정'}
+                            <div className="flex flex-wrap items-center justify-center gap-0.5 mt-0.5 leading-tight">
+                              <span className="text-[11px] 2xl:text-[11.5px] text-slate-500 font-mono font-bold">
+                                {m.targetDays > 0 ? `목${m.targetStock.toLocaleString()}봉` : '미설정'}
                               </span>
                               {m.targetDays !== m.masterOrderDays && (
                                 <span
-                                  className="text-[10px] text-indigo-600 font-mono font-bold"
+                                  className="text-[10.5px] text-indigo-600 font-mono font-bold"
                                   title="품목 마스터(DB) 기준 발주일수"
                                 >
-                                  (기준 {formatOrderDays(m.masterOrderDays)})
+                                  (기{formatOrderDays(m.masterOrderDays)})
                                 </span>
                               )}
                               {itemTargetDaysOverrides[r.id] !== undefined &&
@@ -2125,7 +2404,7 @@ export const MatOrderDayView: React.FC = () => {
                                     type="button"
                                     disabled={savingOrderDaysId === r.id}
                                     onClick={() => handleSaveOrderDays(r, m.targetDays)}
-                                    className="px-1.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-[10px] font-black transition cursor-pointer"
+                                    className="px-1 py-[1px] rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-[10.5px] font-black transition cursor-pointer"
                                     title="수정한 발주일수를 품목 마스터(DB)에 영구 저장"
                                   >
                                     {savingOrderDaysId === r.id ? '저장중' : 'DB저장'}
@@ -2135,72 +2414,95 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 요일 발주수량 (추천치 대비 확정) */}
-                          <td className="py-1.5 px-2.5 text-right bg-amber-50/40 border-x border-amber-200 whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                          <td className="py-1.5 px-1.5 text-right bg-amber-50/40 border-x border-amber-200">
+                            <div className="flex flex-col items-end gap-0.5">
                               {(r.pendingBoxes || 0) > 0 ? (
                                 <span
-                                  className="text-[11px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full font-sans whitespace-nowrap shadow-xs"
+                                  className="text-[11px] 2xl:text-[11.5px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-[1px] rounded-full font-sans leading-tight truncate max-w-full"
                                   title={`발주번호: ${(r.pendingOrderNos || []).join(', ') || '전표발행완료'}`}
                                 >
-                                  ✅ 기발주 {r.pendingBoxes}box
+                                  ✅ 기발주 {r.pendingBoxes}b
                                 </span>
                               ) : m.week[dayIdx] > 0 ? (
-                                <span className="text-[11.5px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
-                                  추천 {m.week[dayIdx]}
+                                <span className="text-[11px] 2xl:text-[11.5px] font-bold text-amber-800 bg-amber-100 px-1.5 py-[1px] rounded font-mono leading-tight">
+                                  추천 {m.week[dayIdx]}b
                                 </span>
                               ) : null}
-                              <input
-                                type="number"
-                                min={0}
-                                value={m.dayQty}
-                                disabled={m.isPastScheduledDeletion}
-                                onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
-                                className={`w-20 text-right px-2 py-1 bg-white border rounded-lg text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
-                                  (r.pendingBoxes || 0) > 0
-                                    ? 'border-emerald-300 text-emerald-950 focus:ring-emerald-500'
-                                    : 'border-amber-300 text-amber-950 focus:ring-amber-500'
-                                }`}
-                              />
-                              <span className="text-xs font-black text-amber-950">box</span>
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={m.dayQty}
+                                  disabled={m.isPastScheduledDeletion}
+                                  onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
+                                  className={`w-12 xl:w-14 2xl:w-16 text-right px-1.5 py-0.5 bg-white border rounded-md text-[14px] 2xl:text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
+                                    (r.pendingBoxes || 0) > 0
+                                      ? 'border-emerald-300 text-emerald-950 focus:ring-emerald-500'
+                                      : 'border-amber-300 text-amber-950 focus:ring-amber-500'
+                                  }`}
+                                />
+                                <span className="text-[11.5px] font-black text-amber-950">b</span>
+                              </div>
                             </div>
                           </td>
 
-                          {/* 입수량 */}
-                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-800 text-[13.5px] font-bold whitespace-nowrap">
-                            {m.pack > 0 ? `${m.pack.toLocaleString()}` : '-'}
-                          </td>
-
-                          {/* 봉단가 / 박스단가 */}
-                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-800 text-[13.5px] font-bold whitespace-nowrap">
-                            {r.bagPrice > 0 ? (
-                              <>
-                                <div>₩{r.bagPrice.toLocaleString()}</div>
-                                <div className="text-[11px] font-medium text-slate-500">
-                                  박스 ₩{calcBoxPrice(r.bagPrice, m.pack).toLocaleString()}
-                                </div>
-                              </>
-                            ) : '-'}
+                          {/* 봉단가 / 박스단가 + 입수량 */}
+                          <td
+                            className="py-1.5 px-1.5 text-right font-mono text-slate-800 font-bold leading-tight"
+                            title={`봉단가: ₩${r.bagPrice.toLocaleString()} / 입수: ${m.pack}봉 / 박스단가: ₩${calcBoxPrice(r.bagPrice, m.pack).toLocaleString()}`}
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-[13px] 2xl:text-[14px] tabular-nums">
+                                {r.bagPrice > 0 ? (
+                                  `₩${r.bagPrice.toLocaleString()}`
+                                ) : (
+                                  <span className="text-[11.5px] font-sans text-amber-600">미등록</span>
+                                )}
+                              </span>
+                              <span className="text-[10.5px] 2xl:text-[11px] font-sans font-bold px-1 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                {m.pack > 0 ? `${m.pack}입` : '-'}
+                              </span>
+                            </div>
+                            {r.bagPrice > 0 && m.pack > 0 && (
+                              <div className="text-[11px] 2xl:text-[11.5px] font-medium text-slate-500 mt-0.5 tabular-nums">
+                                박 ₩{calcBoxPrice(r.bagPrice, m.pack).toLocaleString()}
+                              </div>
+                            )}
                           </td>
 
                           {/* 발주금액 */}
-                          <td className="py-2.5 px-3 text-right font-black font-mono text-[14.5px] text-slate-900 whitespace-nowrap">
+                          <td
+                            className="py-2 px-1.5 text-right font-black font-mono text-[13.5px] 2xl:text-[14.5px] text-slate-900 tabular-nums truncate"
+                            title={`₩${Math.round(m.amount).toLocaleString()}`}
+                          >
                             ₩{Math.round(m.amount).toLocaleString()}
                           </td>
 
-                          {/* 계산근거 팝오버 버튼 */}
-                          <td className="py-2.5 px-2.5 text-center relative whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => setActiveBriefingId(isBriefingOpen ? null : r.id)}
-                              className={`px-2.5 py-1 rounded-md text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                                isBriefingOpen
-                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
-                              }`}
-                              title="클릭하여 4줄 정밀 계산 근거를 확인합니다."
-                            >
-                              💡 근거
-                            </button>
+                          {/* 계산근거 팝오버 + 품목 삭제 버튼 */}
+                          <td className="py-2 px-0.5 text-center relative">
+                            <div className="inline-flex items-center justify-center gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setActiveBriefingId(isBriefingOpen ? null : r.id)}
+                                className={`px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black transition cursor-pointer border ${
+                                  isBriefingOpen
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
+                                }`}
+                                title="클릭하여 4줄 정밀 계산 근거를 확인합니다."
+                              >
+                                💡
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteRow(r)}
+                                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer"
+                                title={`[${r.name}] 발주 및 재고조회 목록에서 삭제`}
+                                aria-label={`${r.name} 삭제`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 2xl:w-4 2xl:h-4" />
+                              </button>
+                            </div>
 
                             {/* 4줄 계산 근거 팝오버 카드 */}
                             {isBriefingOpen && (
@@ -2279,7 +2581,7 @@ export const MatOrderDayView: React.FC = () => {
           </div>
         ) : (
           /* ──────── ② 오늘 회사창고에 들어올 양 (입고 검수 & 재고 반영) 테이블 ──────── */
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {isLoadingInbound ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-16 gap-3 text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin text-emerald-500" />
@@ -2288,10 +2590,23 @@ export const MatOrderDayView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse min-w-[1400px]">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[13.5px] font-black border-b border-slate-300 uppercase tracking-tight select-none">
+              <table className="w-full table-fixed text-left border-collapse">
+                <colgroup>
+                  <col className="w-[3%]" />
+                  <col className="w-[2.5%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[25.5%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[9.5%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[8.5%]" />
+                  <col className="w-[10%]" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[12.5px] 2xl:text-[13.5px] font-black border-b border-slate-300 tracking-tight select-none">
                   <tr>
-                    <th className="py-3 px-3 text-center w-12 whitespace-nowrap">
+                    <th className="py-2.5 px-1 text-center">
                       <input
                         type="checkbox"
                         checked={isAllInboundChecked}
@@ -2300,34 +2615,38 @@ export const MatOrderDayView: React.FC = () => {
                         title="전체 선택"
                       />
                     </th>
-                    <th className="py-3 px-2 text-center w-12 whitespace-nowrap">No</th>
-                    <th className="py-3 px-3 w-32 text-center whitespace-nowrap">발주번호</th>
-                    <th className="py-3 px-3.5 min-w-[160px] w-44 whitespace-nowrap">거래처명</th>
-                    <th className="py-3 px-4 min-w-[300px] whitespace-nowrap">품목명</th>
-                    <th className="py-3 px-3 w-24 text-center whitespace-nowrap">보관창고</th>
-                    <th className="py-3 px-3 w-36 text-right bg-slate-200/60 font-black whitespace-nowrap">
-                      오기로 한 수량 (발주량)
+                    <th className="py-2.5 px-1 text-center">No</th>
+                    <th className="py-2.5 px-1.5 text-center">발주번호</th>
+                    <th className="py-2.5 px-1.5">거래처</th>
+                    <th className="py-2.5 px-2">품목명</th>
+                    <th className="py-2.5 px-1 text-center">창고</th>
+                    <th className="py-2.5 px-1.5 text-right bg-slate-200/60 font-black">
+                      발주량
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">예정</span>
                     </th>
-                    <th className="py-3 px-3 w-40 text-right bg-emerald-50/70 text-emerald-900 border-x border-emerald-200 whitespace-nowrap">
-                      실제 도착 수량 (✏️검수)
+                    <th className="py-2.5 px-1.5 text-right bg-emerald-50/70 text-emerald-900 border-x border-emerald-200">
+                      실도착(✏️)
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-emerald-700 font-bold leading-tight">검수입력</span>
                     </th>
-                    <th className="py-3 px-3 w-32 text-center whitespace-nowrap">미납 / 차이</th>
-                    <th className="py-3 px-3 w-36 text-center whitespace-nowrap">입고 검수 판정</th>
-                    <th className="py-3 px-3.5 w-36 text-right font-black whitespace-nowrap">입고금액</th>
-                    <th className="py-3 px-3.5 min-w-[160px] whitespace-nowrap">차량/검수메모</th>
+                    <th className="py-2.5 px-1 text-center">
+                      판정 · 차이
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">미납/상태</span>
+                    </th>
+                    <th className="py-2.5 px-1.5 text-right font-black">입고금액</th>
+                    <th className="py-2.5 px-1.5">차량/검수메모</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-[14px]">
+                <tbody className="divide-y divide-slate-100 text-[13.5px] 2xl:text-[14.5px]">
                   {filteredInboundItems.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-20 text-center">
+                      <td colSpan={11} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           <Truck className="w-12 h-12 text-slate-300" />
                           <div className="text-[15px] font-black text-slate-700">
                             현재 입고 대기 중인 발주 물량이 없습니다.
                           </div>
                           <p className="text-[13px] text-slate-500">
-                            이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 상단 [오늘 발주할 양] 탭에서 발주서를 먼저 생성해 주세요.
+                            이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 상단 [오늘 발주 주문서] 탭에서 발주서를 먼저 생성해 주세요.
                           </p>
                         </div>
                       </td>
@@ -2337,7 +2656,6 @@ export const MatOrderDayView: React.FC = () => {
                       const diff = item.orderQty - item.actualRecvQty;
                       const isShort = diff > 0;
                       const isZero = item.actualRecvQty === 0;
-                      const isFull = diff === 0;
                       const actualAmount = Math.round(item.actualRecvQty * item.unitPrice);
 
                       return (
@@ -2354,7 +2672,7 @@ export const MatOrderDayView: React.FC = () => {
                           }`}
                         >
                           {/* 선택 체크박스 */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-1 text-center">
                             <input
                               type="checkbox"
                               checked={item.checked}
@@ -2364,14 +2682,14 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* No */}
-                          <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[13px] whitespace-nowrap">
+                          <td className="py-2 px-1 text-center text-slate-400 font-mono text-[12.5px] 2xl:text-[13px]">
                             {idx + 1}
                           </td>
 
                           {/* 발주번호 뱃지 */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-1 text-center">
                             <span
-                              className="inline-block px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-mono text-xs font-bold border border-slate-200"
+                              className="inline-block max-w-full truncate px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11.5px] 2xl:text-[12px] font-bold border border-slate-200"
                               title={item.orderNo}
                             >
                               {item.orderNo}
@@ -2379,26 +2697,34 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 거래처명 */}
-                          <td className="py-2.5 px-3.5 font-bold text-slate-800 whitespace-nowrap">
-                            <span className="inline-block px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 text-[13.5px] font-black border border-slate-200">
+                          <td className="py-2 px-1">
+                            <div
+                              className="text-[12.5px] 2xl:text-[13.5px] font-black text-slate-800 tracking-tight truncate"
+                              title={item.partnerName}
+                            >
                               {item.partnerName}
-                            </span>
+                            </div>
                           </td>
 
                           {/* 품목명 */}
-                          <td className="py-2.5 px-4 font-black text-slate-900 text-[15px] whitespace-nowrap">
-                            <span title={item.productName}>{item.productName}</span>
+                          <td className="py-2 px-1.5 font-bold text-slate-900 min-w-0 overflow-hidden">
+                            <div
+                              className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-tight truncate"
+                              title={item.productName}
+                            >
+                              {item.productName}
+                            </div>
                             {item.spec && (
-                              <span className="block text-xs font-medium text-slate-500 whitespace-nowrap">
+                              <span className="block text-[11px] 2xl:text-[11.5px] font-medium text-slate-500 truncate mt-0.5">
                                 {item.spec}
                               </span>
                             )}
                           </td>
 
                           {/* 보관창고 */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-1 text-center">
                             <span
-                              className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold border ${
+                              className={`inline-block px-1.5 py-0.5 rounded text-[11.5px] 2xl:text-[12px] font-bold border ${
                                 item.warehouse.includes('냉동')
                                   ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
                                   : item.warehouse.includes('냉장')
@@ -2411,16 +2737,16 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 오기로 한 수량 (발주량) */}
-                          <td className="py-2.5 px-3 text-right font-mono font-black text-[14px] text-slate-800 bg-slate-100/50 whitespace-nowrap">
+                          <td className="py-2 px-1.5 text-right font-mono font-black text-[13.5px] 2xl:text-[14.5px] text-slate-800 bg-slate-100/50 tabular-nums">
                             {item.orderQty.toLocaleString()}{' '}
-                            <span className="text-xs font-sans text-slate-500 font-normal">
+                            <span className="text-[11.5px] font-sans text-slate-500 font-normal">
                               {item.unit}
                             </span>
                           </td>
 
                           {/* 실제 도착 수량 (인라인 수정 인풋!) */}
-                          <td className="py-1.5 px-2.5 text-right bg-emerald-50/60 border-x border-emerald-200 whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                          <td className="py-1.5 px-1.5 text-right bg-emerald-50/60 border-x border-emerald-200">
+                            <div className="flex items-center justify-end gap-1">
                               <input
                                 type="number"
                                 min={0}
@@ -2429,67 +2755,74 @@ export const MatOrderDayView: React.FC = () => {
                                 onChange={(e) =>
                                   handleInboundQtyChange(item.detailId, e.target.value)
                                 }
-                                className={`w-22 text-right px-2 py-1 bg-white border rounded-lg text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs ${
+                                className={`w-12 xl:w-14 2xl:w-16 text-right px-1.5 py-0.5 bg-white border rounded-md text-[14px] 2xl:text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs ${
                                   isShort
                                     ? 'border-rose-400 text-rose-700 focus:ring-rose-500'
                                     : 'border-emerald-300 text-emerald-900 focus:ring-emerald-500'
                                 }`}
                               />
-                              <span className="text-xs font-bold text-emerald-800">
+                              <span className="text-[11.5px] font-bold text-emerald-800 shrink-0">
                                 {item.unit}
                               </span>
                             </div>
                           </td>
 
-                          {/* 미납 / 차이 표시 (10개 중 5개만 온 경우 -5 표시) */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          {/* 입고 검수 판정 · 미납/차이 */}
+                          <td className="py-1.5 px-1 text-center">
                             {isZero ? (
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-700 border border-rose-300 whitespace-nowrap">
-                                ▼ {item.orderQty} {item.unit} 결품
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 leading-tight">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  미입고/결품
+                                </span>
+                                <span className="text-[10.5px] 2xl:text-[11px] font-black text-rose-800">
+                                  ▼ {item.orderQty} {item.unit}
+                                </span>
+                              </div>
                             ) : isShort ? (
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
-                                ▼ {diff} {item.unit} 미납
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 leading-tight">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Clock className="w-3 h-3" />
+                                  부분입고
+                                </span>
+                                <span className="text-[10.5px] 2xl:text-[11px] font-black text-amber-900">
+                                  ▼ {diff} {item.unit} 미납
+                                </span>
+                              </div>
                             ) : diff < 0 ? (
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-300 whitespace-nowrap">
-                                ▲ +{Math.abs(diff)} {item.unit} 초과
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 leading-tight">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  초과입고
+                                </span>
+                                <span className="text-[10.5px] 2xl:text-[11px] font-black text-blue-800">
+                                  ▲ +{Math.abs(diff)} {item.unit}
+                                </span>
+                              </div>
                             ) : (
-                              <span className="text-xs font-bold text-slate-400 whitespace-nowrap">0 (정상)</span>
-                            )}
-                          </td>
-
-                          {/* 입고 검수 상태 뱃지 */}
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            {isZero ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-extrabold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-                                <AlertTriangle className="w-3.5 h-3.5" />
-                                🚨 미입고 / 결품
-                              </span>
-                            ) : isShort ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
-                                <Clock className="w-3.5 h-3.5" />
-                                ⚠️ 부분입고 ({diff}개 미납)
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                ✅ 정상 입고
-                              </span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 leading-tight">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  정상입고
+                                </span>
+                                <span className="text-[10.5px] 2xl:text-[11px] font-bold text-slate-400">차이 0</span>
+                              </div>
                             )}
                           </td>
 
                           {/* 입고금액 (실제 들어온 수량 기준 연산) */}
-                          <td className="py-2.5 px-3.5 text-right font-black font-mono text-[14.5px] text-slate-900 whitespace-nowrap">
+                          <td
+                            className="py-2 px-1.5 text-right font-black font-mono text-[13.5px] 2xl:text-[14.5px] text-slate-900 tabular-nums truncate"
+                            title={`₩${Math.round(actualAmount).toLocaleString()}`}
+                          >
                             ₩{Math.round(actualAmount).toLocaleString()}
                           </td>
 
                           {/* 차량/검수메모 */}
-                          <td className="py-1.5 px-3.5 whitespace-nowrap">
+                          <td className="py-1.5 px-1.5">
                             <input
                               type="text"
-                              placeholder="차량번호 / 메모"
+                              placeholder="차량 / 메모"
                               value={item.remark}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -2499,7 +2832,7 @@ export const MatOrderDayView: React.FC = () => {
                                   )
                                 );
                               }}
-                              className="w-full px-2.5 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-blue-400 rounded-md text-xs sm:text-[13px] text-slate-700 outline-none"
+                              className="w-full px-2 py-1 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-blue-400 rounded-md text-[12.5px] 2xl:text-[13px] text-slate-700 outline-none"
                             />
                           </td>
                         </tr>
@@ -2630,6 +2963,265 @@ export const MatOrderDayView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* ── 품목 삭제 확인 모달 ── */}
+      {confirmDeleteRow && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => {
+            if (deletingProductId === null) setConfirmDeleteRow(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4 select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">품목 삭제 확인</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    발주 화면 및 재고조회 목록에서 동시에 제외됩니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={deletingProductId !== null}
+                onClick={() => setConfirmDeleteRow(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-3.5 space-y-1.5 text-xs">
+              <div className="font-black text-sm text-slate-900">{confirmDeleteRow.name}</div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600 font-bold">
+                <span>거래처: {confirmDeleteRow.supplier || confirmDeleteRow.vendor || '-'}</span>
+                <span>창고: {confirmDeleteRow.warehouse || '-'}</span>
+                <span>현재고: {(confirmDeleteRow.currentStock || 0).toLocaleString()}봉</span>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 font-medium leading-relaxed">
+              💡 기존 발주/입고/수불부 이력과 단가 데이터는 안전하게 보존되며, 잘못 삭제한 경우 상단{' '}
+              <strong className="font-black">[삭제복구]</strong> 버튼에서 언제든지 즉시 복구할 수 있습니다.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={deletingProductId !== null}
+                onClick={() => setConfirmDeleteRow(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={deletingProductId !== null}
+                onClick={() => void handleConfirmDeleteProduct()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs cursor-pointer transition shadow-xs disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deletingProductId !== null ? '삭제 처리 중...' : '예, 발주·재고에서 삭제'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 삭제 품목 복구 관리 모달 ── */}
+      {showDeletedModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => setShowDeletedModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-[18px] h-[18px]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">삭제 품목 복구 관리</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    복구하면 발주 화면과 재고조회 페이지에 기존 설정(발주일수·입수·재고) 그대로 즉시 복원됩니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeletedModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 필터/검색/일괄복구 툴바 */}
+            <div className="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setDeletedScope('ui')}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                    deletedScope === 'ui'
+                      ? 'bg-rose-600 text-white font-black shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                >
+                  발주화면 삭제 ({deletedCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeletedScope('all')}
+                  className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                    deletedScope === 'all'
+                      ? 'bg-slate-800 text-white font-black shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                >
+                  전체 비활성·기존 삭제·이관 ({totalInactiveCount})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex items-center">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={deletedKeyword}
+                    onChange={(e) => setDeletedKeyword(e.target.value)}
+                    placeholder="품명 / 거래처 / 창고 검색..."
+                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-56"
+                  />
+                </div>
+                {deletedScope === 'ui' && deletedItems.some((it) => it.isUiDeleted) && (
+                  <button
+                    type="button"
+                    disabled={restoringId !== null}
+                    onClick={() => {
+                      const targetIds = deletedItems
+                        .filter((it) => it.isUiDeleted)
+                        .map((it) => it.id);
+                      void handleRestoreProducts(targetIds, true);
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer transition shadow-2xs disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{restoringId === 'ALL' ? '일괄 복구중...' : '직접 삭제 품목 전체 복구'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 목록 본문 */}
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
+              {isLoadingDeleted ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-500 text-xs font-bold">
+                  <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                  <span>삭제된 품목 목록을 불러오는 중입니다...</span>
+                </div>
+              ) : filteredDeletedItems.length === 0 ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm font-bold">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                  <span>
+                    {deletedScope === 'ui'
+                      ? '발주 화면에서 삭제한 품목이 없습니다.'
+                      : '조건에 일치하는 비활성 품목이 없습니다.'}
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-100 text-slate-700 font-black border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">품목명</th>
+                        <th className="py-2.5 px-2.5">거래처</th>
+                        <th className="py-2.5 px-2 text-center">창고</th>
+                        <th className="py-2.5 px-2 text-right">현재고</th>
+                        <th className="py-2.5 px-2 text-center">발주일수</th>
+                        <th className="py-2.5 px-2 text-center">상태</th>
+                        <th className="py-2.5 px-2.5">삭제일시 / 담당자</th>
+                        <th className="py-2.5 px-3 text-center">복구</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredDeletedItems.map((it) => (
+                        <tr key={it.id} className="hover:bg-blue-50/40 transition">
+                          <td className="py-2.5 px-3">
+                            <div className="font-black text-slate-900">{it.name}</div>
+                            {it.spec && (
+                              <div className="text-[11px] text-slate-500 font-medium">{it.spec}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 font-bold text-slate-700">
+                            {it.partnerName || '-'}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200 text-[11px]">
+                              {it.warehouse || '-'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-800">
+                            {it.currentStock.toLocaleString()}봉
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-mono font-bold text-indigo-700">
+                            {it.targetOrderDays > 0 ? `${it.targetOrderDays}일` : '-'}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full font-black text-[11px] border ${
+                                it.status === '삭제'
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-slate-100 text-slate-600 border-slate-300'
+                              }`}
+                            >
+                              {it.status || '비활성'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2.5 text-[11px] text-slate-500 font-mono">
+                            {it.deletedAt ? (
+                              <div>
+                                <div>{it.deletedAt}</div>
+                                {it.deletedBy && (
+                                  <div className="font-sans text-slate-600 font-bold">{it.deletedBy}</div>
+                                )}
+                              </div>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              type="button"
+                              disabled={restoringId !== null}
+                              onClick={() => void handleRestoreProducts([it.id])}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11.5px] cursor-pointer transition shadow-2xs disabled:opacity-50 whitespace-nowrap"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>{restoringId === it.id ? '복구중' : '복구'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

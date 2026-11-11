@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Printer,
@@ -32,6 +32,19 @@ import { useSession } from 'next-auth/react';
 import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
 import { DeliveryStatementPrint } from './DeliveryStatementPrint';
+import { PurchaseOrderPrint } from './PurchaseOrderPrint';
+
+const SHOPFLOOR_DOC_LABELS: Record<PrintDocumentType, string> = {
+  WORK_ORDER: '공정별 작업지시서',
+  PURCHASE_ORDER: '원부자재 발주서',
+  HACCP_INSPECTION: 'HACCP 입고검수일지',
+  DELIVERY_STATEMENT: '출하 거래명세표',
+  DELIVERY_BOX_LABEL: 'GS25 납품 박스 라벨',
+  LOT_LABEL: 'LOT 품질 바코드 라벨',
+  MATERIAL_LEDGER: '일일 자재수불부',
+  MATERIAL_REQUIREMENT: '자재소요량 명세서',
+  COST_SHEET: '원가 및 손익계산서',
+};
 
 interface StandardTemplateCenterProps {
   onClose?: () => void;
@@ -46,13 +59,47 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
     matReqPayload,
     workOrderPayload,
     poPayload,
+    poPayloadList,
   } = usePrintReport();
   const { dispatchedWorkOrders, depletedMaterials, pipelineCostResults } = usePipeline();
   const { data: session } = useSession();
   const writerName = (session?.user as any)?.name || '관리자';
 
   // ── 3대 핵심 허브 탭 ──
-  const [mainHubTab, setMainHubTab] = useState<'audit' | 'templates' | 'shopfloor'>('audit');
+  const hasShopfloorTarget = Boolean(
+    poPayload ||
+      (poPayloadList && poPayloadList.length > 0) ||
+      printPayload ||
+      boxPayload ||
+      matReqPayload ||
+      workOrderPayload ||
+      activeDocType !== 'WORK_ORDER'
+  );
+  const [mainHubTab, setMainHubTab] = useState<'audit' | 'templates' | 'shopfloor'>(() =>
+    hasShopfloorTarget ? 'shopfloor' : 'audit'
+  );
+
+  useEffect(() => {
+    if (
+      poPayload ||
+      (poPayloadList && poPayloadList.length > 0) ||
+      printPayload ||
+      boxPayload ||
+      matReqPayload ||
+      workOrderPayload ||
+      activeDocType !== 'WORK_ORDER'
+    ) {
+      setMainHubTab('shopfloor');
+    }
+  }, [
+    poPayload,
+    poPayloadList,
+    printPayload,
+    boxPayload,
+    matReqPayload,
+    workOrderPayload,
+    activeDocType,
+  ]);
 
   // ── 1. HACCP & GS25 공인 감사 패키지 상태 ──
   const [auditDate, setAuditDate] = useState<string>('2026-11-04');
@@ -380,7 +427,7 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
   const activeAuditDoc = AUDIT_DOCS[activeAuditDocIndex] || AUDIT_DOCS[0];
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] text-slate-800">
+    <div className="flex flex-col h-full bg-[#f8fafc] text-slate-800 print:block print:h-auto print:bg-white">
       {/* ── Top Master Header ── */}
       <div className="bg-[#0f172a] text-white px-5 py-3 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3 shrink-0 no-print shadow-md">
         <div className="flex items-center gap-3">
@@ -446,12 +493,12 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
       </div>
 
       {/* ── Main Tab Content ── */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden flex flex-col print:block print:h-auto print:overflow-visible">
         {/* ============================================================== */}
         {/* TAB 1: HACCP & GS25 공인 감사 패키지 (Audit Express)          */}
         {/* ============================================================== */}
         {mainHubTab === 'audit' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden print:block print:h-auto print:overflow-visible">
             {/* Top Audit Filter Bar */}
             <div className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between shrink-0 no-print gap-4 shadow-2xs">
               <div className="flex items-center gap-4">
@@ -507,7 +554,7 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
             </div>
 
             {/* Split View: Left Document Navigator + Right A4 Paper Preview */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden print:block print:h-auto print:overflow-visible">
               {/* Left Document Selector */}
               <div className="w-80 bg-slate-50 border-r border-slate-200 overflow-y-auto p-3 flex flex-col gap-2 shrink-0 no-print">
                 <div className="text-[11px] font-black text-slate-400 px-1 uppercase tracking-wider">
@@ -963,7 +1010,7 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
         {/* TAB 3: 현장 라벨 & 단일 전표 인쇄 (Shopfloor)                */}
         {/* ============================================================== */}
         {mainHubTab === 'shopfloor' && (
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden print:block print:h-auto print:overflow-visible">
             {/* Document Navigation Sidebar */}
             <aside className="w-64 shrink-0 bg-white border-r border-slate-200 overflow-y-auto p-3 space-y-3 no-print">
               <div className="text-[11px] font-black text-slate-400 uppercase tracking-wider px-1">
@@ -1007,15 +1054,23 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
             </aside>
 
             {/* Document Viewer Toolbar & Paper Canvas */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:block print:h-auto print:overflow-visible">
               <div className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between text-xs shrink-0 no-print shadow-2xs">
                 <div className="flex items-center gap-2">
                   <span className="font-extrabold text-slate-900 text-xs">
-                    {activeDocType === 'WORK_ORDER' ? '공정별 작업지시서' : activeDocType}
+                    {SHOPFLOOR_DOC_LABELS[activeDocType] || activeDocType}
                   </span>
                   <span className="text-slate-500 font-mono text-[11.5px] bg-slate-100 px-2 py-0.5 rounded">
-                    기준일: {printDate}
+                    기준일:{' '}
+                    {activeDocType === 'PURCHASE_ORDER'
+                      ? poPayloadList?.[0]?.orderDate || poPayload?.orderDate || printDate
+                      : printDate}
                   </span>
+                  {activeDocType === 'PURCHASE_ORDER' && (poPayloadList?.length || 0) > 1 && (
+                    <span className="text-blue-800 font-bold text-[11px] bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                      총 {poPayloadList?.length}건 일괄 인쇄 (거래처별 1페이지)
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1031,21 +1086,32 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
               </div>
 
               {/* Single Document Canvas */}
-              <div className="flex-1 overflow-y-auto p-6 bg-slate-200 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-200 flex justify-center print:p-0 print:bg-white print:overflow-visible print:block print:h-auto">
                 <div
                   id="printable-report-area"
-                  className="bg-white w-[210mm] min-h-[297mm] p-8 shadow-xl border border-slate-300 text-slate-900 font-sans print:w-full print:border-0 print:shadow-none print:p-6"
+                  className="bg-white w-[210mm] min-h-[297mm] p-8 shadow-xl border border-slate-300 text-slate-900 font-sans print:w-full print:min-h-0 print:border-0 print:shadow-none print:p-0"
                 >
-                  <div className="text-center pb-4 mb-4 border-b-2 border-slate-900">
-                    <h1 className="text-xl font-black text-slate-900">
-                      {activeDocType === 'WORK_ORDER' ? '공정별 표준 제조작업지시서' : activeDocType === 'PURCHASE_ORDER' ? '원부자재 정식 발주서' : '공인 표준 업무 전표'}
-                    </h1>
-                    <p className="text-xs text-slate-500 mt-1 font-mono">
-                      (주)지에프에스 · FRESH FOOD MANUFACTURING · 일자: {printDate}
-                    </p>
-                  </div>
+                  {activeDocType !== 'PURCHASE_ORDER' &&
+                    activeDocType !== 'DELIVERY_STATEMENT' && (
+                      <div className="text-center pb-4 mb-4 border-b-2 border-slate-900">
+                        <h1 className="text-xl font-black text-slate-900">
+                          {activeDocType === 'WORK_ORDER'
+                            ? '공정별 표준 제조작업지시서'
+                            : '공인 표준 업무 전표'}
+                        </h1>
+                        <p className="text-xs text-slate-500 mt-1 font-mono">
+                          (주)지에프에스 · FRESH FOOD MANUFACTURING · 일자: {printDate}
+                        </p>
+                      </div>
+                    )}
 
-                  {activeDocType === 'LOT_LABEL' ? (
+                  {activeDocType === 'PURCHASE_ORDER' ? (
+                    <PurchaseOrderPrint
+                      payload={poPayload}
+                      payloads={poPayloadList}
+                      writerName={writerName}
+                    />
+                  ) : activeDocType === 'LOT_LABEL' ? (
                     <LotLabelPrint />
                   ) : activeDocType === 'DELIVERY_BOX_LABEL' ? (
                     <DeliveryBoxLabel items={boxPayload || undefined} />

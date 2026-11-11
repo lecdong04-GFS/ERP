@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { SalesFilterBar } from '@/components/sales/common/SalesFilterBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '../common/PurchaseDataGrid';
-import { usePrintReport } from '@/context/PrintReportContext';
+import { usePrintReport, PurchaseOrderPrintPayload } from '@/context/PrintReportContext';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
@@ -94,7 +94,7 @@ const DETAIL_COLUMNS: PurchaseGridColumnDef[] = [
 ];
 
 export const OrderPrintView: React.FC = () => {
-  const { openPrintModal, setPoPayload } = usePrintReport();
+  const { openPrintModal, setPoPayload, setPoPayloadList } = usePrintReport();
   const { openTab } = useTabs();
 
   const [startDate, setStartDate] = useState<string>(kstDaysAgo(7));
@@ -197,10 +197,9 @@ export const OrderPrintView: React.FC = () => {
     setSummaryList((prev) => prev.map((s) => (s.id === id ? { ...s, [key]: val } : s)));
   };
 
-  // Launch single print modal with exact payload
-  const handlePrintSingle = (order: any) => {
+  const toPoPrintPayload = (order: any): PurchaseOrderPrintPayload => {
     const details = detailMap[order.id] || [];
-    setPoPayload({
+    return {
       orderNo: order.orderNo,
       orderDate: order.orderDate,
       deliveryDate: order.deliveryDate || order.orderDate,
@@ -221,19 +220,30 @@ export const OrderPrintView: React.FC = () => {
         recvDate: d.recvDate,
         remark: d.remark,
       })),
-    });
+    };
+  };
+
+  // Launch single print modal with exact payload
+  const handlePrintSingle = (order: any) => {
+    const payload = toPoPrintPayload(order);
+    setPoPayload(payload);
+    setPoPayloadList([payload]);
     openPrintModal('PURCHASE_ORDER');
   };
 
   // Launch batch print
   const handleBatchPrint = () => {
     const checkedOrders = summaryList.filter((s) => s.checked);
-    const target = checkedOrders.length > 0 ? checkedOrders[0] : selectedOrder;
-    if (!target) {
+    const targets =
+      checkedOrders.length > 0 ? checkedOrders : selectedOrder ? [selectedOrder] : [];
+    if (targets.length === 0) {
       alert('인쇄할 발주서를 선택해주세요.');
       return;
     }
-    handlePrintSingle(target);
+    const payloads = targets.map(toPoPrintPayload);
+    setPoPayload(payloads[0]);
+    setPoPayloadList(payloads);
+    openPrintModal('PURCHASE_ORDER');
   };
 
   // Excel Export

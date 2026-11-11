@@ -19,12 +19,15 @@ import {
   Package,
   Calendar,
   Sparkles,
+  Maximize2,
+  X,
+  ArrowLeft,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
-import { usePrintReport } from '@/context/PrintReportContext';
+import { usePrintReport, PurchaseOrderPrintPayload } from '@/context/PrintReportContext';
 import {
   normalizePackUnit,
   calcBoxPrice,
@@ -93,6 +96,47 @@ export interface OrderMasterRow {
   details: FlatOrderItemRow[];
 }
 
+type OrderPopupState =
+  | null
+  | { mode: 'all' }
+  | { mode: 'po'; orderId: number };
+
+function computeUpdatedOrderItem(
+  item: FlatOrderItemRow,
+  field: 'orderQty' | 'unitPrice' | 'bagPrice' | 'remark',
+  value: any
+): FlatOrderItemRow {
+  const updated: FlatOrderItemRow = { ...item, isModified: true };
+  const isBox = isBoxUnitLabel(item.unit);
+  const pack = normalizePackUnit(item.packUnit);
+  if (field === 'orderQty') {
+    const qty = Math.max(0, Number(value) || 0);
+    updated.orderQty = qty;
+    updated.amount = Math.round(qty * updated.unitPrice);
+    updated.remainQty = Math.max(0, qty - updated.receivedQty);
+  } else if (field === 'unitPrice') {
+    const price = Math.max(0, Number(value) || 0);
+    updated.unitPrice = price;
+    if (isBox && pack > 1) {
+      updated.boxPrice = price;
+      updated.bagPrice = calcBagPriceFromBox(price, pack);
+    } else {
+      updated.bagPrice = price;
+      updated.boxPrice = calcBoxPrice(price, pack);
+    }
+    updated.amount = Math.round(updated.orderQty * price);
+  } else if (field === 'bagPrice') {
+    const bag = Math.max(0, Number(value) || 0);
+    updated.bagPrice = bag;
+    updated.boxPrice = calcBoxPrice(bag, pack);
+    updated.unitPrice = isBox ? updated.boxPrice : bag;
+    updated.amount = Math.round(updated.orderQty * updated.unitPrice);
+  } else if (field === 'remark') {
+    updated.remark = String(value || '');
+  }
+  return updated;
+}
+
 // 모듈 레벨 메모리 캐시 (탭 재진입 시 0ms 즉시 표시)
 let memoryOrdersData: any[] = [];
 let memoryLoaded = false;
@@ -100,7 +144,7 @@ let memorySavedDates = { start: '', end: '' };
 
 export const OrderStatusEditView: React.FC = () => {
   const { openTab } = useTabs();
-  const { openPrintModal, setPoPayload } = usePrintReport();
+  const { openPrintModal, setPoPayload, setPoPayloadList, isPrintModalOpen } = usePrintReport();
 
   // 빠른 조회 기간 (기본값: 최근 7일간 발주 내역 자동 탐색)
   const today = useMemo(() => kstToday(), []);
@@ -127,6 +171,20 @@ export const OrderStatusEditView: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(() => !memoryLoaded);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+
+  // 발주내용 크게보기 팝업 상태
+  const [orderPopup, setOrderPopup] = useState<OrderPopupState>(null);
+  const [popupFontSize, setPopupFontSize] = useState<'normal' | 'large' | 'xlarge'>('large');
+  const [popupKeyword, setPopupKeyword] = useState('');
+
+  useEffect(() => {
+    if (!orderPopup || isPrintModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOrderPopup(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [orderPopup, isPrintModalOpen]);
 
   // 1) 서버에서 발주 내역 로드
   const loadData = useCallback(async (sDate: string, eDate: string, silent = false) => {
@@ -326,46 +384,36 @@ export const OrderStatusEditView: React.FC = () => {
     return flatItems.filter((x) => x.isModified).length;
   }, [flatItems]);
 
-  // 3) 전체 품목 인라인 수정 핸들러 (수량 or 봉단가/박스단가 변경 시 금액 및 상호 단가 자동 재계산)
+  // 3) 전체 품목 인라인 수정 핸들러 (수량 or 봉단가/박스단가 변경 시 금액·마스터 전표 동기 재계산)
   const handleItemFieldChange = (detailId: number, field: 'orderQty' | 'unitPrice' | 'bagPrice' | 'remark', value: any) => {
     setFlatItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== detailId) return item;
-        const updated = { ...item, isModified: true };
-        const isBox = isBoxUnitLabel(item.unit);
-        const pack = normalizePackUnit(item.packUnit);
-        if (field === 'orderQty') {
-          const qty = Math.max(0, Number(value) || 0);
-          updated.orderQty = qty;
-          updated.amount = Math.round(qty * updated.unitPrice);
-          updated.remainQty = Math.max(0, qty - updated.receivedQty);
-        } else if (field === 'unitPrice') {
-          const price = Math.max(0, Number(value) || 0);
-          updated.unitPrice = price;
-          if (isBox && pack > 1) {
-            updated.boxPrice = price;
-            updated.bagPrice = calcBagPriceFromBox(price, pack);
-          } else {
-            updated.bagPrice = price;
-            updated.boxPrice = calcBoxPrice(price, pack);
-          }
-          updated.amount = Math.round(updated.orderQty * price);
-        } else if (field === 'bagPrice') {
-          const bag = Math.max(0, Number(value) || 0);
-          updated.bagPrice = bag;
-          updated.boxPrice = calcBoxPrice(bag, pack);
-          updated.unitPrice = isBox ? updated.boxPrice : bag;
-          updated.amount = Math.round(updated.orderQty * updated.unitPrice);
-        } else if (field === 'remark') {
-          updated.remark = String(value || '');
-        }
-        return updated;
+      prev.map((item) => (item.id === detailId ? computeUpdatedOrderItem(item, field, value) : item))
+    );
+    setMasterList((prev) =>
+      prev.map((m) => {
+        if (!m.details.some((d) => d.id === detailId)) return m;
+        const nextDetails = m.details.map((d) =>
+          d.id === detailId ? computeUpdatedOrderItem(d, field, value) : d
+        );
+        const nextOrderAmt = nextDetails.reduce((sum, d) => sum + (d.amount || 0), 0);
+        return {
+          ...m,
+          details: nextDetails,
+          orderAmt: nextOrderAmt,
+          unreceivedAmt: Math.max(0, nextOrderAmt - m.receivedAmt),
+        };
       })
     );
   };
 
   // 4) 체크박스 선택/해제 핸들러
-  const handleToggleSelectAll = (checked: boolean) => {
+  const handleToggleSelectAll = (checked: boolean, visibleItemIds?: Set<number>) => {
+    if (visibleItemIds) {
+      setFlatItems((prev) =>
+        prev.map((x) => (visibleItemIds.has(x.id) ? { ...x, checked } : x))
+      );
+      return;
+    }
     if (viewTab === 'items') {
       const visibleIds = new Set(filteredItems.map((x) => x.id));
       setFlatItems((prev) =>
@@ -444,10 +492,13 @@ export const OrderStatusEditView: React.FC = () => {
     }
   };
 
-  // 6) 선택 삭제 핸들러 (품목 뷰 or 발주서 뷰)
-  const handleDeleteChecked = async () => {
-    if (viewTab === 'items') {
-      const checkedDetails = flatItems.filter((x) => x.checked);
+  // 6) 선택 삭제 핸들러 (품목 뷰 / 팝업 품목 단위 / 발주서 마스터 뷰)
+  const handleDeleteChecked = async (overrideItemIds?: number[]) => {
+    const useItemMode = Array.isArray(overrideItemIds) || viewTab === 'items';
+    if (useItemMode) {
+      const checkedDetails = Array.isArray(overrideItemIds)
+        ? flatItems.filter((x) => overrideItemIds.includes(x.id))
+        : flatItems.filter((x) => x.checked);
       if (checkedDetails.length === 0) {
         alert('삭제할 발주 품목을 먼저 체크박스로 선택해주세요.');
         return;
@@ -612,14 +663,15 @@ export const OrderStatusEditView: React.FC = () => {
   };
 
   // 8) 엑셀 다운로드
-  const handleExcelExport = () => {
-    if (viewTab === 'items') {
-      if (filteredItems.length === 0) {
+  const handleExcelExport = (customRows?: FlatOrderItemRow[], customLabel?: string) => {
+    const itemRowsToExport = Array.isArray(customRows) ? customRows : filteredItems;
+    if (Array.isArray(customRows) || viewTab === 'items') {
+      if (itemRowsToExport.length === 0) {
         alert('다운로드할 발주 내역이 없습니다.');
         return;
       }
       exportGridToExcel({
-        filename: `발주현황_품목별_${startDate}_${endDate}`,
+        filename: customLabel ? `발주내역_${customLabel}` : `발주현황_품목별_${startDate}_${endDate}`,
         sheetName: '발주품목목록',
         columns: [
           { key: 'orderDate', label: '발주일자', format: 'date' },
@@ -637,7 +689,7 @@ export const OrderStatusEditView: React.FC = () => {
           { key: 'status', label: '발주상태' },
           { key: 'remark', label: '비고' },
         ],
-        data: filteredItems,
+        data: itemRowsToExport,
       });
     } else {
       if (filteredMasters.length === 0) {
@@ -662,33 +714,74 @@ export const OrderStatusEditView: React.FC = () => {
     }
   };
 
+  const buildPoPayload = (master: OrderMasterRow): PurchaseOrderPrintPayload => {
+    const liveDetails = flatItems.filter((item) => item.orderId === master.id);
+    const details = liveDetails.length > 0 ? liveDetails : master.details;
+    const totalAmount = details.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    return {
+      orderNo: master.orderNo,
+      orderDate: master.orderDate,
+      deliveryDate: master.expectedDate || master.orderDate,
+      supplierName: master.supplier,
+      manager: master.manager,
+      tel: master.tel,
+      remark: master.remark,
+      totalAmount: totalAmount > 0 ? totalAmount : master.orderAmt,
+      items: details.map((d, i) => ({
+        no: i + 1,
+        name: d.productName,
+        spec: d.spec,
+        unit: d.unit,
+        qty: d.orderQty,
+        price: d.unitPrice,
+        amt: d.amount,
+        recvDate: master.expectedDate || master.orderDate,
+        remark: d.remark,
+      })),
+    };
+  };
+
   // 9) 표준 발주서 인쇄
-  const handlePrintOrder = () => {
+  const handlePrintOrder = (explicitTarget?: OrderMasterRow | null) => {
     if (masterList.length === 0) {
       alert('인쇄할 발주서 내역이 없습니다.');
       return;
     }
-    const target = masterList.find((m) => m.checked) || masterList[0];
-    if (target) {
-      setPoPayload({
-        orderNo: target.orderNo,
-        orderDate: target.orderDate,
-        supplierName: target.supplier,
-        items: target.details.map((d, i) => ({
-          no: i + 1,
-          name: d.productName,
-          spec: d.spec,
-          unit: d.unit,
-          qty: d.orderQty,
-          price: d.unitPrice,
-          amt: d.amount,
-          remark: d.remark,
-        })),
-        totalAmount: target.orderAmt,
-        remark: target.remark,
-      });
-      openPrintModal('PURCHASE_ORDER');
+
+    let targets: OrderMasterRow[] = [];
+
+    if (explicitTarget) {
+      targets = [explicitTarget];
+    } else if (orderPopup?.mode === 'all' || viewTab === 'items') {
+      const sourceItems = orderPopup?.mode === 'all' ? popupItems : filteredItems;
+      const checkedRows = sourceItems.filter((x) => x.checked);
+      const targetOrderIds = Array.from(
+        new Set((checkedRows.length > 0 ? checkedRows : sourceItems).map((x) => x.orderId))
+      );
+      targets = targetOrderIds
+        .map((oid) => masterList.find((m) => m.id === oid))
+        .filter((m): m is OrderMasterRow => Boolean(m));
+    } else {
+      const checkedMasters = filteredMasters.filter((m) => m.checked);
+      if (checkedMasters.length > 0) {
+        targets = checkedMasters;
+      } else if (selectedMasterId != null) {
+        const selected = masterList.find((m) => m.id === selectedMasterId);
+        if (selected) targets = [selected];
+      } else {
+        targets = filteredMasters;
+      }
     }
+
+    if (targets.length === 0) {
+      alert('인쇄할 발주서를 선택하거나 조회해주세요.');
+      return;
+    }
+
+    const payloads = targets.map(buildPoPayload);
+    setPoPayload(payloads[0]);
+    setPoPayloadList(payloads);
+    openPrintModal('PURCHASE_ORDER');
   };
 
   // 10) 자체발주(요일별) 화면 즉시 이동
@@ -697,15 +790,394 @@ export const OrderStatusEditView: React.FC = () => {
     if (item) openTab(item);
   };
 
-  const isAllChecked =
-    viewTab === 'items'
-      ? filteredItems.length > 0 && filteredItems.every((x) => x.checked)
-      : filteredMasters.length > 0 && filteredMasters.every((x) => x.checked);
-
   const selectedCount =
     viewTab === 'items'
       ? filteredItems.filter((x) => x.checked).length
       : filteredMasters.filter((x) => x.checked).length;
+
+  // 팝업 전용 상태 파생값
+  const popupMaster = useMemo(() => {
+    if (!orderPopup || orderPopup.mode !== 'po') return null;
+    return masterList.find((m) => m.id === orderPopup.orderId) || null;
+  }, [orderPopup, masterList]);
+
+  const popupItems = useMemo(() => {
+    if (!orderPopup) return [];
+    const base =
+      orderPopup.mode === 'po'
+        ? flatItems.filter((item) => item.orderId === orderPopup.orderId)
+        : filteredItems;
+    const kw = popupKeyword.trim().toLowerCase();
+    if (!kw) return base;
+    return base.filter(
+      (item) =>
+        item.productName.toLowerCase().includes(kw) ||
+        item.partnerName.toLowerCase().includes(kw) ||
+        item.orderNo.toLowerCase().includes(kw) ||
+        item.productCode.toLowerCase().includes(kw)
+    );
+  }, [orderPopup, flatItems, filteredItems, popupKeyword]);
+
+  const popupTotals = useMemo(() => {
+    return popupItems.reduce(
+      (acc, it) => {
+        acc.boxes += it.orderQty || 0;
+        acc.amt += it.amount || 0;
+        if (it.checked) acc.checkedIds.push(it.id);
+        return acc;
+      },
+      { boxes: 0, amt: 0, checkedIds: [] as number[] }
+    );
+  }, [popupItems]);
+
+  const openLargePopup = (nextPopup?: OrderPopupState) => {
+    setPopupKeyword('');
+    if (nextPopup) {
+      setOrderPopup(nextPopup);
+      return;
+    }
+    if (viewTab === 'suppliers' && selectedMasterId) {
+      setOrderPopup({ mode: 'po', orderId: selectedMasterId });
+    } else {
+      setOrderPopup({ mode: 'all' });
+    }
+  };
+
+  // 공용 발주 품목 편집 테이블 렌더러 (기본 화면 + 크게보기 팝업 공용)
+  const renderOrderItemsTable = (
+    rowsToRender: FlatOrderItemRow[],
+    fontScale: 'normal' | 'large' | 'xlarge' = 'normal'
+  ) => {
+    const visibleIdSet = new Set(rowsToRender.map((x) => x.id));
+    const isAllVisibleChecked =
+      rowsToRender.length > 0 && rowsToRender.every((x) => x.checked);
+
+    const headTextCls =
+      fontScale === 'xlarge'
+        ? 'text-[15px]'
+        : fontScale === 'large'
+        ? 'text-[14px]'
+        : 'text-[13px]';
+    const bodyTextCls =
+      fontScale === 'xlarge'
+        ? 'text-[16px]'
+        : fontScale === 'large'
+        ? 'text-[15px]'
+        : 'text-[13.5px]';
+    const nameTextCls =
+      fontScale === 'xlarge'
+        ? 'text-[17.5px]'
+        : fontScale === 'large'
+        ? 'text-[16px]'
+        : 'text-[14.5px]';
+    const qtyInputCls =
+      fontScale === 'xlarge'
+        ? 'w-24 px-2.5 py-1.5 text-[16.5px]'
+        : fontScale === 'large'
+        ? 'w-[88px] px-2 py-1 text-[15.5px]'
+        : 'w-20 px-2 py-1 text-[14px]';
+    const priceInputCls =
+      fontScale === 'xlarge'
+        ? 'w-28 px-2.5 py-1.5 text-[16px]'
+        : fontScale === 'large'
+        ? 'w-[104px] px-2 py-1 text-[15px]'
+        : 'w-24 px-2 py-1 text-[13.5px]';
+    const bagInputCls =
+      fontScale === 'xlarge'
+        ? 'w-[104px] px-2.5 py-1.5 text-[15.5px]'
+        : fontScale === 'large'
+        ? 'w-24 px-2 py-1 text-[14.5px]'
+        : 'w-20 px-2 py-1 text-[13px]';
+    const amtTextCls =
+      fontScale === 'xlarge'
+        ? 'text-[17.5px]'
+        : fontScale === 'large'
+        ? 'text-[16px]'
+        : 'text-[14.5px]';
+    const cellPadCls =
+      fontScale === 'xlarge' ? 'py-3 px-3.5' : fontScale === 'large' ? 'py-3 px-3' : 'py-2.5 px-3';
+
+    return (
+      <table className="w-full text-left border-collapse min-w-[1100px]">
+        <thead
+          className={`sticky top-0 z-10 bg-slate-100 text-slate-700 ${headTextCls} font-black border-b border-slate-200 uppercase tracking-tight select-none`}
+        >
+          <tr>
+            <th className="py-3 px-3 text-center w-12">
+              <input
+                type="checkbox"
+                checked={isAllVisibleChecked}
+                onChange={(e) => handleToggleSelectAll(e.target.checked, visibleIdSet)}
+                className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                title="현재 목록 전체 선택"
+              />
+            </th>
+            <th className="py-3 px-2 text-center w-14">No</th>
+            <th className="py-3 px-3 w-28 text-center">발주일자</th>
+            <th className="py-3 px-3 w-36 text-center">발주번호</th>
+            <th className="py-3 px-3 w-40">거래처명</th>
+            <th className="py-3 px-4 min-w-[220px]">품명</th>
+            <th className="py-3 px-3 w-28 text-center">규격/단위</th>
+            <th className="py-3 px-2.5 w-20 text-right">입수량</th>
+            <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
+              발주박스수 (✏️)
+            </th>
+            <th className="py-3 px-3 w-28 text-right bg-emerald-50/60 text-emerald-900 border-r border-blue-100">
+              봉단가 (✏️)
+            </th>
+            <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-r border-blue-100">
+              박스단가 (✏️)
+            </th>
+            <th className="py-3 px-3 w-36 text-right">발주금액(합계)</th>
+            <th className="py-3 px-3 w-28 text-center">상태</th>
+            <th className="py-3 px-3 min-w-[140px]">비고(✏️)</th>
+            <th className="py-3 px-3 text-center w-16">삭제</th>
+          </tr>
+        </thead>
+        <tbody className={`divide-y divide-slate-100 ${bodyTextCls}`}>
+          {rowsToRender.length === 0 ? (
+            <tr>
+              <td colSpan={15} className="py-16 text-center">
+                <div className="max-w-md mx-auto flex flex-col items-center gap-3">
+                  <Package className="w-12 h-12 text-slate-300" />
+                  <div className="text-[15px] font-black text-slate-700">
+                    선택하신 기간({startDate} ~ {endDate})에 등록된 발주 내역이 없습니다.
+                  </div>
+                  <p className="text-[13px] text-slate-500">
+                    [자재발주(요일별)]에서 발주를 확정하시면 해당 내역이 이곳에 실시간으로 표시됩니다.
+                  </p>
+                  {!orderPopup && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPeriod('yesterday')}
+                        className="px-3.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+                      >
+                        📅 어제 발주내역 확인
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectPeriod('7days')}
+                        className="px-3.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold hover:bg-slate-200 transition cursor-pointer"
+                      >
+                        📊 최근 7일 전체 보기
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ) : (
+            rowsToRender.map((item, idx) => {
+              const isMod = item.isModified;
+              return (
+                <tr
+                  key={item.id}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('input') || target.closest('button') || target.closest('select')) return;
+                    handleToggleItemCheck(item.id);
+                  }}
+                  className={`transition duration-100 cursor-pointer ${
+                    item.checked
+                      ? 'bg-blue-50/90 font-medium'
+                      : isMod
+                      ? 'bg-amber-50/80 border-l-4 border-l-amber-500'
+                      : idx % 2 === 1
+                      ? 'bg-slate-50/40 hover:bg-slate-100/60'
+                      : 'bg-white hover:bg-slate-50'
+                  }`}
+                >
+                  {/* 체크박스 */}
+                  <td className={`${cellPadCls} text-center`}>
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={() => handleToggleItemCheck(item.id)}
+                      className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                    />
+                  </td>
+
+                  {/* No */}
+                  <td className={`${cellPadCls} px-2 text-center text-slate-400 font-mono text-[12px]`}>
+                    {idx + 1}
+                  </td>
+
+                  {/* 발주일자 */}
+                  <td className={`${cellPadCls} text-center font-mono text-slate-600`}>
+                    {item.orderDate}
+                  </td>
+
+                  {/* 발주번호 (클릭 시 해당 발주서 큰 팝업 열기) */}
+                  <td className={`${cellPadCls} text-center`}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openLargePopup({ mode: 'po', orderId: item.orderId });
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-100 text-slate-800 hover:text-blue-800 font-mono text-[12px] font-bold border border-slate-200 hover:border-blue-300 shadow-2xs transition cursor-pointer"
+                      title="클릭하여 이 발주서 품목 전체를 큰 팝업으로 보기/수정"
+                    >
+                      <span>{item.orderNo}</span>
+                      <Maximize2 className="w-2.5 h-2.5 opacity-60" />
+                    </button>
+                  </td>
+
+                  {/* 거래처명 */}
+                  <td className={`${cellPadCls} font-extrabold text-slate-800`}>
+                    {item.partnerName}
+                  </td>
+
+                  {/* 품명 */}
+                  <td className={`${cellPadCls} px-4 font-black ${nameTextCls} text-slate-900 tracking-tight`}>
+                    {item.productName}
+                  </td>
+
+                  {/* 규격/단위 */}
+                  <td className={`${cellPadCls} text-center text-slate-500 text-[12.5px] font-medium`}>
+                    {item.spec} / {item.unit}
+                  </td>
+
+                  {/* 입수량 */}
+                  <td className={`${cellPadCls} px-2.5 text-right font-mono font-bold text-slate-700`}>
+                    {item.packUnit.toLocaleString()}
+                  </td>
+
+                  {/* 발주박스수 (인라인 수정) */}
+                  <td className="py-1.5 px-2 text-right bg-blue-50/40 border-x border-blue-100">
+                    <div className="flex items-center justify-end gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        value={item.orderQty}
+                        onChange={(e) =>
+                          handleItemFieldChange(item.id, 'orderQty', e.target.value)
+                        }
+                        className={`${qtyInputCls} text-right bg-white border border-blue-300 rounded-lg font-black font-mono text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs`}
+                      />
+                      <span className="text-[12px] font-bold text-blue-700">{item.unit || 'box'}</span>
+                    </div>
+                  </td>
+
+                  {/* 봉단가 (양방향 연동) */}
+                  <td className="py-1.5 px-2 text-right bg-emerald-50/30 border-r border-blue-100">
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-[12px] text-slate-400 font-mono">₩</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        value={item.bagPrice}
+                        onChange={(e) =>
+                          handleItemFieldChange(item.id, 'bagPrice', e.target.value)
+                        }
+                        className={`${bagInputCls} text-right bg-white border border-emerald-300 rounded-lg font-bold font-mono text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs`}
+                      />
+                    </div>
+                  </td>
+
+                  {/* 박스단가 (인라인 수정 + 마스터 동기화) */}
+                  <td className="py-1.5 px-2 text-right bg-blue-50/40 border-r border-blue-100">
+                    <div className="flex items-center justify-end gap-1">
+                      <span className="text-[12px] text-slate-400 font-mono">₩</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={item.unitPrice}
+                        onChange={(e) =>
+                          handleItemFieldChange(item.id, 'unitPrice', e.target.value)
+                        }
+                        className={`${priceInputCls} text-right bg-white border border-blue-300 rounded-lg font-black font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs`}
+                      />
+                    </div>
+                    {item.masterBoxPrice != null &&
+                      item.masterBoxPrice > 0 &&
+                      Math.abs(
+                        item.unitPrice -
+                          (isBoxUnitLabel(item.unit)
+                            ? item.masterBoxPrice
+                            : item.masterBagPrice || item.masterBoxPrice)
+                      ) > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleItemFieldChange(
+                              item.id,
+                              'unitPrice',
+                              isBoxUnitLabel(item.unit)
+                                ? item.masterBoxPrice
+                                : item.masterBagPrice || item.masterBoxPrice
+                            )
+                          }
+                          className="mt-0.5 text-[10.5px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
+                          title="마스터 기준단가로 동기화"
+                        >
+                          마스터 ₩
+                          {(isBoxUnitLabel(item.unit)
+                            ? item.masterBoxPrice
+                            : item.masterBagPrice || item.masterBoxPrice
+                          ).toLocaleString()}{' '}
+                          적용
+                        </button>
+                      )}
+                  </td>
+
+                  {/* 발주금액 (수량 x 단가 자동 연산) */}
+                  <td className={`${cellPadCls} text-right font-black font-mono ${amtTextCls} text-slate-900`}>
+                    ₩{Math.round(item.amount).toLocaleString()}
+                  </td>
+
+                  {/* 발주상태 뱃지 */}
+                  <td className={`${cellPadCls} text-center`}>
+                    <span
+                      className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-extrabold border ${
+                        item.status === '입고완료'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                          : item.status === '부분입고'
+                          ? 'bg-amber-50 text-amber-700 border-amber-300'
+                          : item.status === '발주취소'
+                          ? 'bg-rose-50 text-rose-700 border-rose-300'
+                          : 'bg-blue-50 text-blue-700 border-blue-300'
+                      }`}
+                    >
+                      {item.status === '발주' ? '미입고(발주)' : item.status}
+                    </span>
+                  </td>
+
+                  {/* 비고 인라인 수정 */}
+                  <td className="py-1.5 px-2">
+                    <input
+                      type="text"
+                      value={item.remark}
+                      onChange={(e) =>
+                        handleItemFieldChange(item.id, 'remark', e.target.value)
+                      }
+                      placeholder="비고 입력..."
+                      className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-400 rounded-lg text-[13px] outline-none"
+                    />
+                  </td>
+
+                  {/* 삭제 버튼 */}
+                  <td className={`${cellPadCls} text-center`}>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSingleItem(item)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer hover:bg-rose-50"
+                      title="이 품목만 발주서에서 삭제"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    );
+  };
 
   return (
     <div className="flex flex-col w-full h-full bg-[#f8fafc] overflow-hidden text-slate-800">
@@ -982,8 +1454,19 @@ export const OrderStatusEditView: React.FC = () => {
           </button>
         </div>
 
-        {/* 액션 버튼 그룹: 저장, 선택 삭제, 취소, 엑셀, 인쇄 */}
-        <div className="flex items-center gap-2">
+        {/* 액션 버튼 그룹: 크게보기, 저장, 선택 삭제, 엑셀, 인쇄 */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 발주내용 크게보기 팝업 버튼 */}
+          <button
+            type="button"
+            onClick={() => openLargePopup()}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[13px] font-black shadow-xs transition cursor-pointer"
+            title="상단 헤더·카드를 가리지 않고 발주내역 상자를 큰 팝업창으로 넓게 봅니다."
+          >
+            <Maximize2 className="w-4 h-4" />
+            <span>발주내용 크게보기</span>
+          </button>
+
           {/* 변경사항 저장 버튼 (수정 건이 있을 때 강조 활성화) */}
           <button
             type="button"
@@ -1008,7 +1491,7 @@ export const OrderStatusEditView: React.FC = () => {
           {/* 선택 삭제 버튼 */}
           <button
             type="button"
-            onClick={handleDeleteChecked}
+            onClick={() => void handleDeleteChecked()}
             disabled={selectedCount === 0}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-bold border transition cursor-pointer ${
               selectedCount > 0
@@ -1023,7 +1506,7 @@ export const OrderStatusEditView: React.FC = () => {
           {/* 엑셀 다운로드 */}
           <button
             type="button"
-            onClick={handleExcelExport}
+            onClick={() => handleExcelExport()}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-[13px] font-bold shadow-2xs transition cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-600" />
@@ -1033,7 +1516,7 @@ export const OrderStatusEditView: React.FC = () => {
           {/* 발주서 인쇄 */}
           <button
             type="button"
-            onClick={handlePrintOrder}
+            onClick={() => handlePrintOrder()}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-[13px] font-bold shadow-2xs transition cursor-pointer"
           >
             <Printer className="w-4 h-4 text-blue-600" />
@@ -1056,266 +1539,29 @@ export const OrderStatusEditView: React.FC = () => {
           /* 탭 1: 전체 발주 품목별 모아보기 (한눈에 시원시원하게 정렬되는 추천 뷰) */
           /* ─────────────────────────────────────────────────────────────────── */
           <div className="w-full h-full flex flex-col border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            {/* 상자 헤더 바 (제목 + 크게보기 팝업 버튼) */}
+            <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 text-xs font-extrabold text-slate-700">
+                <span className="text-slate-900">📋 발주 내역 ({filteredItems.length}개 품목)</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-500 font-medium">
+                  수량·단가 셀을 클릭하여 바로 수정하거나, <strong className="text-blue-700">발주번호</strong>를 클릭해 해당 거래처 발주서만 크게 볼 수 있습니다.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => openLargePopup({ mode: 'all' })}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-black transition cursor-pointer"
+                title="이 발주내역 상자를 화면 가득 큰 팝업으로 띄웁니다."
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>큰 팝업으로 보기</span>
+              </button>
+            </div>
+
             {/* 테이블 스크롤 컨테이너 */}
             <div className="flex-1 overflow-auto">
-              <table className="w-full text-left border-collapse min-w-[1100px]">
-                <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 text-[13px] font-black border-b border-slate-200 uppercase tracking-tight select-none">
-                  <tr>
-                    <th className="py-3 px-3 text-center w-12">
-                      <input
-                        type="checkbox"
-                        checked={isAllChecked}
-                        onChange={(e) => handleToggleSelectAll(e.target.checked)}
-                        className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
-                        title="전체 선택"
-                      />
-                    </th>
-                    <th className="py-3 px-2 text-center w-14">No</th>
-                    <th className="py-3 px-3 w-28 text-center">발주일자</th>
-                    <th className="py-3 px-3 w-36 text-center">발주번호</th>
-                    <th className="py-3 px-3 w-40">거래처명</th>
-                    <th className="py-3 px-4 min-w-[200px]">품명</th>
-                    <th className="py-3 px-3 w-28 text-center">규격/단위</th>
-                    <th className="py-3 px-2.5 w-20 text-right">입수량</th>
-                    <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
-                      발주박스수 (✏️)
-                    </th>
-                    <th className="py-3 px-3 w-28 text-right bg-emerald-50/60 text-emerald-900 border-r border-blue-100">
-                      봉단가 (✏️)
-                    </th>
-                    <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-r border-blue-100">
-                      박스단가 (✏️)
-                    </th>
-                    <th className="py-3 px-3 w-36 text-right">발주금액(합계)</th>
-                    <th className="py-3 px-3 w-28 text-center">상태</th>
-                    <th className="py-3 px-3 min-w-[140px]">비고(✏️)</th>
-                    <th className="py-3 px-3 text-center w-16">삭제</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-[13.5px]">
-                  {filteredItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={15} className="py-16 text-center">
-                        <div className="max-w-md mx-auto flex flex-col items-center gap-3">
-                          <Package className="w-12 h-12 text-slate-300" />
-                          <div className="text-[15px] font-black text-slate-700">
-                            선택하신 기간({startDate} ~ {endDate})에 등록된 발주 내역이 없습니다.
-                          </div>
-                          <p className="text-[13px] text-slate-500">
-                            [자재발주(요일별)]에서 발주를 확정하시면 해당 내역이 이곳에 실시간으로 표시됩니다.
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectPeriod('yesterday')}
-                              className="px-3.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
-                            >
-                              📅 어제 발주내역 확인
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectPeriod('7days')}
-                              className="px-3.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-300 text-xs font-bold hover:bg-slate-200 transition cursor-pointer"
-                            >
-                              📊 최근 7일 전체 보기
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredItems.map((item, idx) => {
-                      const isMod = item.isModified;
-                      return (
-                        <tr
-                          key={item.id}
-                          onClick={(e) => {
-                            const target = e.target as HTMLElement;
-                            if (target.closest('input') || target.closest('button') || target.closest('select')) return;
-                            handleToggleItemCheck(item.id);
-                          }}
-                          className={`transition duration-100 cursor-pointer ${
-                            item.checked
-                              ? 'bg-blue-50/90 font-medium'
-                              : isMod
-                              ? 'bg-amber-50/80 border-l-4 border-l-amber-500'
-                              : idx % 2 === 1
-                              ? 'bg-slate-50/40 hover:bg-slate-100/60'
-                              : 'bg-white hover:bg-slate-50'
-                          }`}
-                        >
-                          {/* 체크박스 */}
-                          <td className="py-2.5 px-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={item.checked}
-                              onChange={() => handleToggleItemCheck(item.id)}
-                              className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
-                            />
-                          </td>
-
-                          {/* No */}
-                          <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[12px]">
-                            {idx + 1}
-                          </td>
-
-                          {/* 발주일자 */}
-                          <td className="py-2.5 px-3 text-center font-mono text-[13px] text-slate-600">
-                            {item.orderDate}
-                          </td>
-
-                          {/* 발주번호 */}
-                          <td className="py-2.5 px-3 text-center">
-                            <span
-                              className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[12px] font-bold border border-slate-200 shadow-2xs"
-                              title={item.orderNo}
-                            >
-                              {item.orderNo}
-                            </span>
-                          </td>
-
-                          {/* 거래처명 */}
-                          <td className="py-2.5 px-3 font-extrabold text-slate-800">
-                            {item.partnerName}
-                          </td>
-
-                          {/* 품명 (시원하게 큰 글씨) */}
-                          <td className="py-2.5 px-4 font-black text-[14.5px] text-slate-900 tracking-tight">
-                            {item.productName}
-                          </td>
-
-                          {/* 규격/단위 */}
-                          <td className="py-2.5 px-3 text-center text-slate-500 text-[12.5px] font-medium">
-                            {item.spec} / {item.unit}
-                          </td>
-
-                          {/* 입수량 */}
-                          <td className="py-2.5 px-2.5 text-right font-mono font-bold text-slate-700 text-[12.5px]">
-                            {item.packUnit.toLocaleString()}
-                          </td>
-
-                          {/* 발주박스수 (인라인 수정 가능 인풋) */}
-                          <td className="py-1.5 px-2 text-right bg-blue-50/40 border-x border-blue-100">
-                            <div className="flex items-center justify-end gap-1">
-                              <input
-                                type="number"
-                                min={0}
-                                value={item.orderQty}
-                                onChange={(e) =>
-                                  handleItemFieldChange(item.id, 'orderQty', e.target.value)
-                                }
-                                className="w-20 text-right px-2 py-1 bg-white border border-blue-300 rounded-lg text-[14px] font-black font-mono text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                              />
-                              <span className="text-[12px] font-bold text-blue-700">{item.unit || 'box'}</span>
-                            </div>
-                          </td>
-
-                          {/* 봉단가 (양방향 자동 연동) */}
-                          <td className="py-1.5 px-2 text-right bg-emerald-50/30 border-r border-blue-100">
-                            <div className="flex items-center justify-end gap-1">
-                              <span className="text-[12px] text-slate-400 font-mono">₩</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={10}
-                                value={item.bagPrice}
-                                onChange={(e) =>
-                                  handleItemFieldChange(item.id, 'bagPrice', e.target.value)
-                                }
-                                className="w-20 text-right px-2 py-1 bg-white border border-emerald-300 rounded-lg text-[13px] font-bold font-mono text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
-                              />
-                            </div>
-                          </td>
-
-                          {/* 박스단가 (인라인 수정 가능 인풋 + 마스터 동기화) */}
-                          <td className="py-1.5 px-2 text-right bg-blue-50/40 border-r border-blue-100">
-                            <div className="flex items-center justify-end gap-1">
-                              <span className="text-[12px] text-slate-400 font-mono">₩</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step={100}
-                                value={item.unitPrice}
-                                onChange={(e) =>
-                                  handleItemFieldChange(item.id, 'unitPrice', e.target.value)
-                                }
-                                className="w-24 text-right px-2 py-1 bg-white border border-blue-300 rounded-lg text-[13.5px] font-black font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                              />
-                            </div>
-                            {item.masterBoxPrice != null &&
-                              item.masterBoxPrice > 0 &&
-                              Math.abs(item.unitPrice - (isBoxUnitLabel(item.unit) ? item.masterBoxPrice : (item.masterBagPrice || item.masterBoxPrice))) > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleItemFieldChange(
-                                      item.id,
-                                      'unitPrice',
-                                      isBoxUnitLabel(item.unit)
-                                        ? item.masterBoxPrice
-                                        : item.masterBagPrice || item.masterBoxPrice
-                                    )
-                                  }
-                                  className="mt-0.5 text-[10.5px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
-                                  title="마스터 기준단가로 동기화"
-                                >
-                                  마스터 ₩{(isBoxUnitLabel(item.unit) ? item.masterBoxPrice : (item.masterBagPrice || item.masterBoxPrice)).toLocaleString()} 적용
-                                </button>
-                              )}
-                          </td>
-
-                          {/* 발주금액 (수량 x 단가 자동 연산) */}
-                          <td className="py-2.5 px-3 text-right font-black font-mono text-[14.5px] text-slate-900">
-                            ₩{Math.round(item.amount).toLocaleString()}
-                          </td>
-
-                          {/* 발주상태 뱃지 */}
-                          <td className="py-2.5 px-3 text-center">
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-extrabold border ${
-                                item.status === '입고완료'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                  : item.status === '부분입고'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-300'
-                                  : item.status === '발주취소'
-                                  ? 'bg-rose-50 text-rose-700 border-rose-300'
-                                  : 'bg-blue-50 text-blue-700 border-blue-300'
-                              }`}
-                            >
-                              {item.status === '발주' ? '미입고(발주)' : item.status}
-                            </span>
-                          </td>
-
-                          {/* 비고 인라인 수정 */}
-                          <td className="py-1.5 px-2">
-                            <input
-                              type="text"
-                              value={item.remark}
-                              onChange={(e) =>
-                                handleItemFieldChange(item.id, 'remark', e.target.value)
-                              }
-                              placeholder="비고 입력..."
-                              className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-400 rounded-lg text-[12.5px] outline-none"
-                            />
-                          </td>
-
-                          {/* 삭제 버튼 */}
-                          <td className="py-2.5 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSingleItem(item)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition cursor-pointer hover:bg-rose-50"
-                              title="이 품목만 발주서에서 삭제"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+              {renderOrderItemsTable(filteredItems, 'normal')}
             </div>
 
             {/* 하단 총합계 고정 바 */}
@@ -1366,11 +1612,12 @@ export const OrderStatusEditView: React.FC = () => {
                       <div
                         key={m.id}
                         onClick={() => setSelectedMasterId(m.id)}
-                        className={`p-3.5 transition cursor-pointer flex items-center justify-between ${
+                        onDoubleClick={() => openLargePopup({ mode: 'po', orderId: m.id })}
+                        className={`p-3.5 transition cursor-pointer flex items-center justify-between gap-2 ${
                           isSelected ? 'bg-blue-50/80 border-l-4 border-l-blue-600' : 'hover:bg-slate-50'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <input
                             type="checkbox"
                             checked={m.checked}
@@ -1378,10 +1625,10 @@ export const OrderStatusEditView: React.FC = () => {
                               e.stopPropagation();
                               handleToggleMasterCheck(m.id);
                             }}
-                            className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                            className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600 shrink-0"
                           />
-                          <div>
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-[14.5px] text-slate-900">{m.supplier}</span>
                               <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
                                 {m.orderNo}
@@ -1396,10 +1643,24 @@ export const OrderStatusEditView: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-[15px] font-black font-mono text-slate-900">
-                            ₩{Math.round(m.orderAmt).toLocaleString()}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-right">
+                            <div className="text-[15px] font-black font-mono text-slate-900">
+                              ₩{Math.round(m.orderAmt).toLocaleString()}
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedMasterId(m.id);
+                              openLargePopup({ mode: 'po', orderId: m.id });
+                            }}
+                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer"
+                            title="이 발주서 상세내용을 큰 팝업창으로 보기"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -1421,13 +1682,24 @@ export const OrderStatusEditView: React.FC = () => {
                 }
                 return (
                   <>
-                    <div className="px-4 py-3 bg-slate-100 border-b border-slate-200 font-black text-[13.5px] text-slate-800 flex items-center justify-between">
+                    <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 font-black text-[13.5px] text-slate-800 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className="text-blue-700">[{activeMaster.supplier}]</span>
                         <span>{activeMaster.orderNo} 품목 상세 ({activeMaster.details.length}개)</span>
                       </div>
-                      <div className="text-sm font-mono font-black text-slate-900">
-                        발주총액: ₩{Math.round(activeMaster.orderAmt).toLocaleString()}원
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-mono font-black text-slate-900">
+                          발주총액: ₩{Math.round(activeMaster.orderAmt).toLocaleString()}원
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openLargePopup({ mode: 'po', orderId: activeMaster.id })}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-2xs transition cursor-pointer"
+                          title="이 발주서 상세 상자를 큰 팝업으로 확대해 보고 수정합니다."
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                          <span>큰 팝업으로 보기</span>
+                        </button>
                       </div>
                     </div>
                     <div className="flex-1 overflow-auto">
@@ -1503,6 +1775,246 @@ export const OrderStatusEditView: React.FC = () => {
           기준 발주일: {startDate} ~ {endDate} | 단위: 박스(Box) / 원(KRW)
         </div>
       </footer>
+
+      {/* ===================================================================== */}
+      {/* 6. 발주내용 크게보기 (전체화면 확대·수정·인쇄 팝업창) */}
+      {/* ===================================================================== */}
+      {orderPopup && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
+          onClick={() => setOrderPopup(null)}
+        >
+          <div
+            className="w-[96vw] h-[92vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 팝업 상단 헤더 바 */}
+            <div className="px-5 py-3.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                {orderPopup.mode === 'po' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPopupKeyword('');
+                      setOrderPopup({ mode: 'all' });
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-extrabold transition cursor-pointer"
+                    title="조회기간 전체 발주 품목 목록으로 돌아가기"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>전체 발주목록</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-500 text-white text-xs font-black shrink-0">
+                    {orderPopup.mode === 'po' ? '거래처 발주서 상세' : '전체 발주내용 크게보기'}
+                  </span>
+                  {orderPopup.mode === 'po' && popupMaster ? (
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <h2 className="text-lg sm:text-xl font-black tracking-tight text-white truncate">
+                        [{popupMaster.supplier}] {popupMaster.orderNo}
+                      </h2>
+                      <span className="text-xs font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded">
+                        발주일 {popupMaster.orderDate} • {popupItems.length}개 품목 • {popupMaster.status}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                        조회 발주내역 전체 ({popupItems.length}개 품목)
+                      </h2>
+                      <span className="text-xs font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded">
+                        {startDate} ~ {endDate}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 우측: 다른 거래처 빠른 이동 + 글자 크기 + 닫기 */}
+              <div className="flex flex-wrap items-center gap-2">
+                {filteredMasters.length > 0 && (
+                  <select
+                    value={orderPopup.mode === 'po' ? String(orderPopup.orderId) : 'ALL'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPopupKeyword('');
+                      if (val === 'ALL') {
+                        setOrderPopup({ mode: 'all' });
+                      } else {
+                        const oid = Number(val);
+                        setSelectedMasterId(oid);
+                        setOrderPopup({ mode: 'po', orderId: oid });
+                      }
+                    }}
+                    className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 rounded-xl px-3 py-1.5 text-xs font-bold outline-none cursor-pointer max-w-[260px]"
+                    title="전체 또는 특정 거래처 발주서로 빠르게 전환합니다."
+                  >
+                    <option value="ALL">📋 전체 품목 보기 ({filteredItems.length}건)</option>
+                    {filteredMasters.map((m) => (
+                      <option key={m.id} value={String(m.id)}>
+                        🏢 {m.supplier} — {m.orderNo} ({m.itemCount}품목)
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* 글자 크기 조절 */}
+                <div className="flex items-center gap-1 bg-slate-700/80 p-1 rounded-xl border border-slate-600 text-xs">
+                  <span className="text-slate-300 font-bold px-1.5">글자:</span>
+                  {(['normal', 'large', 'xlarge'] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setPopupFontSize(sz)}
+                      className={`px-2.5 py-1 rounded-lg font-black transition cursor-pointer ${
+                        popupFontSize === sz
+                          ? 'bg-blue-500 text-white shadow-2xs'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                      }`}
+                    >
+                      {sz === 'normal' ? '보통' : sz === 'large' ? '크게' : '특대'}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setOrderPopup(null)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-rose-500 text-white text-xs font-black transition cursor-pointer"
+                  title="팝업 닫기 (ESC)"
+                >
+                  <X className="w-4 h-4" />
+                  <span>닫기</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 팝업 액션 & 검색 툴바 */}
+            <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={popupKeyword}
+                    onChange={(e) => setPopupKeyword(e.target.value)}
+                    placeholder="팝업 내 품명 / 거래처 / 발주번호 검색..."
+                    className="pl-9 pr-3 py-1.5 w-64 sm:w-80 bg-white border border-slate-300 rounded-xl text-[13px] font-medium outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+                {popupKeyword && (
+                  <button
+                    type="button"
+                    onClick={() => setPopupKeyword('')}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold cursor-pointer"
+                  >
+                    검색 초기화
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAllChanges}
+                  disabled={modifiedCount === 0 || isSaving}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[13px] font-black shadow-xs transition cursor-pointer ${
+                    modifiedCount > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white animate-pulse'
+                      : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {isSaving
+                      ? '저장 중...'
+                      : modifiedCount > 0
+                      ? `수정내용 DB 영구저장 (${modifiedCount}건)`
+                      : '변경사항 저장'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteChecked(popupTotals.checkedIds)}
+                  disabled={popupTotals.checkedIds.length === 0}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[13px] font-bold border transition cursor-pointer ${
+                    popupTotals.checkedIds.length > 0
+                      ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
+                      : 'bg-white border-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>선택 삭제 ({popupTotals.checkedIds.length}건)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleExcelExport(
+                      popupItems,
+                      popupMaster ? `${popupMaster.supplier}_${popupMaster.orderNo}` : `${startDate}_${endDate}`
+                    )
+                  }
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-[13px] font-bold transition cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-emerald-600" />
+                  <span>엑셀</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrintOrder(popupMaster)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[13px] font-black shadow-2xs transition cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>{popupMaster ? '이 발주서 인쇄' : '발주서 인쇄'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 팝업 테이블 본문 */}
+            <div className="flex-1 overflow-auto bg-white">
+              {renderOrderItemsTable(popupItems, popupFontSize)}
+            </div>
+
+            {/* 팝업 하단 큰 합계 바 */}
+            <div className="px-6 py-3.5 bg-slate-100 border-t border-slate-300 flex flex-wrap items-center justify-between gap-4 shrink-0">
+              <div className="flex flex-wrap items-center gap-3 text-sm font-extrabold">
+                <span className="text-slate-600">
+                  표시 품목: <strong className="text-slate-900 font-mono">{popupItems.length}건</strong>
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-600">
+                  선택됨: <strong className="text-blue-700 font-mono">{popupTotals.checkedIds.length}건</strong>
+                </span>
+                {modifiedCount > 0 && (
+                  <span className="text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full text-xs font-black">
+                    ✏️ 수정됨: {modifiedCount}건 (상단 저장 버튼을 눌러 DB에 반영하세요)
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-6">
+                <div>
+                  <span className="text-slate-600 font-bold text-sm mr-2">총 발주 박스수:</span>
+                  <span className="text-emerald-700 font-mono text-xl font-black">
+                    {popupTotals.boxes.toLocaleString()} box
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-600 font-bold text-sm mr-2">총 발주 금액:</span>
+                  <span className="text-blue-800 font-mono text-2xl font-black">
+                    ₩{Math.round(popupTotals.amt).toLocaleString()}원
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

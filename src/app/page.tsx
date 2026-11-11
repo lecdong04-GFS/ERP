@@ -123,79 +123,84 @@ function ErpApp() {
   const { openPrintModal } = usePrintReport();
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#e2e8f0]">
-      {/* 1. Top Bar: Header */}
-      <TopHeader
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-        isSidebarOpen={isSidebarOpen}
-      />
-
-      {/* 2. Top Menu Bar (10 대분류 메뉴 드롭다운) */}
-      <TopMenuBar
-        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
-        isSidebarOpen={isSidebarOpen}
-      />
-
-      {/* 2-1. 알림바 (GNB 바로 아래 실시간 롤링 알림 & 3대 핵심 퀵 액션) */}
-      <div className="h-[38px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[13px] select-none shadow-2xs shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-4">
-          {/* 안정적인 이중 레이어 LED 인디케이터 (절대 잘리거나 깜빡임으로 사라지지 않고 영롱하게 반짝임) */}
-          <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
-            <span
-              className={`absolute inline-flex h-3.5 w-3.5 rounded-full opacity-60 animate-ping ${tickerStyle.pingBg}`}
-            />
-            <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${tickerStyle.dotBg} shadow-xs`}
-            />
-          </div>
-
-          {/* 텍스트 영역 (텍스트만 안전하게 말줄임 처리되어 LED 인디케이터를 절대 침범하거나 자르지 않음) */}
-          <div className="overflow-hidden min-w-0 flex-1">
-            <span
-              className={`font-bold truncate block transition-all duration-300 text-[13px] ${tickerStyle.textColor}`}
-            >
-              {currentTicker.text}
-            </span>
-          </div>
-        </div>
-        <div className="hidden md:flex items-center gap-2">
-          <button
-            onClick={openExcelOrderModal}
-            className="h-7.5 flex items-center gap-1.5 px-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 text-blue-900 rounded-lg text-[12.5px] font-black cursor-pointer transition-all shadow-2xs"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-            <span>엑셀 수주 업로드</span>
-          </button>
-          <button
-            onClick={openPipelineModal}
-            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
-          >
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
-            <span>자동 파이프라인</span>
-          </button>
-          <button
-            onClick={() => openPrintModal()}
-            className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
-          >
-            <Printer className="w-4 h-4 text-blue-600" />
-            <span>표준 양식 센터</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 3. Multi-Tab (MDI) Bar */}
-      <TabBar />
-
-      {/* 4. Body Area: Left Sidebar (Optional) + Main Workspace */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Collapsible Left SideNav */}
-        <SideNav
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#e2e8f0] print:h-auto print:min-h-0 print:w-full print:overflow-visible print:block print:bg-white">
+      {/* 1~3. Top Chrome Bars (인쇄 시 숨김) */}
+      <div className="print:hidden shrink-0">
+        {/* 1. Top Bar: Header */}
+        <TopHeader
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          isSidebarOpen={isSidebarOpen}
         />
 
+        {/* 2. Top Menu Bar (10 대분류 메뉴 드롭다운) */}
+        <TopMenuBar
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          isSidebarOpen={isSidebarOpen}
+        />
+
+        {/* 2-1. 알림바 (GNB 바로 아래 실시간 롤링 알림 & 3대 핵심 퀵 액션) */}
+        <div className="h-[38px] bg-white border-b border-gray-300 px-3.5 flex items-center justify-between text-[13px] select-none shadow-2xs shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-4">
+            {/* 안정적인 이중 레이어 LED 인디케이터 (절대 잘리거나 깜빡임으로 사라지지 않고 영롱하게 반짝임) */}
+            <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
+              <span
+                className={`absolute inline-flex h-3.5 w-3.5 rounded-full opacity-60 animate-ping ${tickerStyle.pingBg}`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${tickerStyle.dotBg} shadow-xs`}
+              />
+            </div>
+
+            {/* 텍스트 영역 (텍스트만 안전하게 말줄임 처리되어 LED 인디케이터를 절대 침범하거나 자르지 않음) */}
+            <div className="overflow-hidden min-w-0 flex-1">
+              <span
+                className={`font-bold truncate block transition-all duration-300 text-[13px] ${tickerStyle.textColor}`}
+              >
+                {currentTicker.text}
+              </span>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              onClick={openExcelOrderModal}
+              className="h-7.5 flex items-center gap-1.5 px-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 text-blue-900 rounded-lg text-[12.5px] font-black cursor-pointer transition-all shadow-2xs"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+              <span>엑셀 수주 업로드</span>
+            </button>
+            <button
+              onClick={openPipelineModal}
+              className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
+              <span>자동 파이프라인</span>
+            </button>
+            <button
+              onClick={() => openPrintModal()}
+              className="h-7.5 flex items-center gap-1.5 px-3 bg-white hover:bg-[#f8fafc] border border-slate-300 text-slate-800 rounded-md text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
+            >
+              <Printer className="w-4 h-4 text-blue-600" />
+              <span>표준 양식 센터</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Multi-Tab (MDI) Bar */}
+        <TabBar />
+      </div>
+
+      {/* 4. Body Area: Left Sidebar (Optional) + Main Workspace */}
+      <div className="flex-1 flex overflow-hidden relative print:block print:h-auto print:overflow-visible">
+        {/* Collapsible Left SideNav */}
+        <div className="print:hidden">
+          <SideNav
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+          />
+        </div>
+
         {/* Main Work Area */}
-        <main className="flex-1 h-full overflow-hidden flex flex-col bg-white">
+        <main className="flex-1 h-full overflow-hidden flex flex-col bg-white print:hidden">
           <ErrorBoundary>
             {activeTabId === DASHBOARD_TAB_ID ? (
               <Dashboard />
@@ -227,7 +232,9 @@ function ErpApp() {
       </div>
 
       {/* 5. Bottom Status Bar */}
-      <StatusBar />
+      <div className="print:hidden shrink-0">
+        <StatusBar />
+      </div>
 
       {/* 6. Modals & Engines */}
       <PipelineModal />

@@ -19,6 +19,7 @@ import {
   Sparkles,
   Lock,
   Unlock,
+  RotateCcw,
   X,
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
@@ -628,6 +629,9 @@ export const StockLookupView: React.FC = () => {
   const [selectedExpiry, setSelectedExpiry] = useState('전체');
   const [onlyShortage, setOnlyShortage] = useState(false);
   const [includeDiscontinued, setIncludeDiscontinued] = useState(false);
+  const [restoringProductId, setRestoringProductId] = useState<number | null>(null);
+  const lifecycleSyncRef = useRef({ targetDate, includeDiscontinued });
+  lifecycleSyncRef.current = { targetDate, includeDiscontinued };
   const [keyword, setKeyword] = useState('');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
@@ -1054,6 +1058,52 @@ export const StockLookupView: React.FC = () => {
     void loadByDate(today);
     void loadAvailableSnapDates();
   }, []);
+
+  // 발주 화면 등 타 탭에서 품목 삭제/복구 시 현재 재고조회 테이블 실시간 동기화
+  useEffect(() => {
+    const onLifecycleChanged = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.source === 'stock') return;
+      const { targetDate: td, includeDiscontinued: showDisc } = lifecycleSyncRef.current;
+      void loadByDate(td || kstToday(), showDisc);
+    };
+    window.addEventListener('gfs-product-lifecycle-changed', onLifecycleChanged);
+    return () => window.removeEventListener('gfs-product-lifecycle-changed', onLifecycleChanged);
+  }, []);
+
+  const handleRestoreProduct = async (row: StockItem) => {
+    if (!row.productId || restoringProductId) return;
+    setRestoringProductId(row.productId);
+    try {
+      const res = await fetch('/api/master/product/lifecycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.productId, action: 'restore' }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('품목 복구 실패: ' + (json.error || `HTTP ${res.status}`));
+        return;
+      }
+      setData((prev) =>
+        prev.map((item) =>
+          item.productId === row.productId
+            ? { ...item, productStatus: '정상', isUsed: true }
+            : item
+        )
+      );
+      setSaveStatusMsg(`✅ [${row.itemName}] 품목이 정상 복구되어 발주 및 재고조회에 다시 표시됩니다.`);
+      window.dispatchEvent(
+        new CustomEvent('gfs-product-lifecycle-changed', {
+          detail: { source: 'stock', action: 'restore', ids: [row.productId] },
+        })
+      );
+    } catch (err: any) {
+      alert('품목 복구 중 통신 오류: ' + (err?.message || String(err)));
+    } finally {
+      setRestoringProductId(null);
+    }
+  };
 
   // 단축키 Ctrl+S / Cmd+S 로 저장 지원
   useEffect(() => {
@@ -1891,12 +1941,14 @@ export const StockLookupView: React.FC = () => {
 
   const filteredData = useMemo(() => {
     return data.filter((item) => {
-      if (
-        !includeDiscontinued &&
-        item.currentStock <= 0 &&
-        (isTerminalProductStatus(item.productStatus) || item.isUsed === false)
-      ) {
-        return false;
+      if (!includeDiscontinued) {
+        // 명시적으로 삭제(status='삭제')되었거나 미사용(isUsed=false) 처리된 품목은 잔여 재고가 있더라도 숨김
+        if (item.productStatus === '삭제' || item.isUsed === false) {
+          return false;
+        }
+        if (item.currentStock <= 0 && isTerminalProductStatus(item.productStatus)) {
+          return false;
+        }
       }
       if (selectedWh !== '전체' && item.whName !== selectedWh) return false;
       if (selectedType !== '전체' && item.itemType !== selectedType) return false;
@@ -2043,25 +2095,45 @@ export const StockLookupView: React.FC = () => {
       sortable: true,
       filterable: true,
       editable: false,
-      render: (v, row) => (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span
-            className={`font-black text-slate-900 tracking-tight truncate ${
-              density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
-            }`}
-            title={String(v || '')}
-          >
-            {v}
-          </span>
-          <ProductLifecycleBadge
-            status={row.productStatus}
-            discontinuedDate={row.discontinuedDate}
-            isUsed={row.isUsed}
-            name={String(v || '')}
-            refDate={targetDate}
-          />
-        </div>
-      ),
+      render: (v, row) => {
+        const isDeletedRow = row.productStatus === '삭제' || row.isUsed === false;
+        return (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={`font-black tracking-tight truncate ${
+                isDeletedRow ? 'line-through text-slate-400' : 'text-slate-900'
+              } ${
+                density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
+              }`}
+              title={String(v || '')}
+            >
+              {v}
+            </span>
+            <ProductLifecycleBadge
+              status={row.productStatus}
+              discontinuedDate={row.discontinuedDate}
+              isUsed={row.isUsed}
+              name={String(v || '')}
+              refDate={targetDate}
+            />
+            {isDeletedRow && row.productId && (
+              <button
+                type="button"
+                disabled={restoringProductId === row.productId}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleRestoreProduct(row);
+                }}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-black shrink-0 cursor-pointer transition shadow-2xs disabled:opacity-50"
+                title="잘못 삭제된 품목을 즉시 복구하여 발주 및 재고조회에 다시 표시합니다."
+              >
+                <RotateCcw size={10} />
+                <span>{restoringProductId === row.productId ? '복구중' : '복구'}</span>
+              </button>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'unit',
@@ -2853,7 +2925,7 @@ export const StockLookupView: React.FC = () => {
                   ? 'bg-slate-800 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200'
               }`}
-              title="삭제·이관·불용·출고정지(0재고 포함) 품목 표시"
+              title="삭제·이관·불용·출고정지 품목 표시 (표시된 삭제 품목은 품명 옆 [복구] 버튼으로 복원 가능)"
             >
               <span>삭제·이관 포함</span>
             </button>

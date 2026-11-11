@@ -55,6 +55,13 @@ export async function GET(req: NextRequest) {
     // 삭제/이관/불용/출고정지/미사용 또는 삭제예정일 도래(discontinuedDate <= targetDate) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A3)
     const includeDiscontinued = searchParams.get('includeDiscontinued') === 'true';
     if (!includeDiscontinued) {
+      // 명시적으로 삭제(status='삭제')되었거나 미사용(isUsed=false) 처리된 품목은 잔여 재고가 있더라도 숨김
+      andConditions.push({
+        product: {
+          isUsed: true,
+          status: { not: '삭제' },
+        },
+      });
       andConditions.push({
         OR: [
           {
