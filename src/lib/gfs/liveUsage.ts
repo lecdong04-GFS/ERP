@@ -3,6 +3,7 @@ import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
   normalizeForBom,
   menuKey,
@@ -30,26 +31,24 @@ export interface LiveBomUsageMap {
  * - 각 수주 메뉴(품목)는 ReprProduct → menuKey → matchBomHeader 우선순위로 **정확히 1개의 대표 BOM 헤더**에만 매칭 (중복 곱셈 차단)
  */
 export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUsageMap> {
-  let date = targetDate || '';
-  if (!date) {
+  const exclusionDate = targetDate || kstToday();
+
+  const resolveLatestOrderDate = async (lteDate?: string) => {
+    if (lteDate) {
+      const prior = await prisma.salesOrder.findFirst({
+        where: { orderDate: { lte: lteDate }, status: { not: '취소' } },
+        orderBy: { orderDate: 'desc' },
+        select: { orderDate: true },
+      });
+      if (prior?.orderDate) return prior.orderDate;
+    }
     const latest = await prisma.salesOrder.findFirst({
+      where: { status: { not: '취소' } },
       orderBy: { orderDate: 'desc' },
       select: { orderDate: true },
     });
-    date = latest?.orderDate || kstToday();
-  }
-
-  // 1) 당일 완제품 수주량 합산
-  const orders = await prisma.salesOrder.findMany({
-    where: { orderDate: date },
-    include: {
-      details: {
-        include: { product: true },
-      },
-    },
-  });
-
-  const uniqueOrders = dedupSalesOrders(orders);
+    return latest?.orderDate || '';
+  };
 
   interface MenuDemand {
     productId: number | null;
@@ -57,52 +56,79 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
     code: string;
     qty: number;
   }
-  const demandByKey = new Map<string, MenuDemand>();
 
-  for (const o of uniqueOrders) {
-    for (const d of o.details as any[]) {
-      const pid = Number(d.productId) || null;
-      const qty = Number(d.totalQty) || 0;
-      if (qty <= 0) continue;
-      const pName = d.product?.name || d.productName || '';
-      const code = String(d.productCode || d.product?.productCode || '');
-      const key = pid ? `PID:${pid}` : `NAME:${normalizeForBom(pName)}`;
-      const cur = demandByKey.get(key) || { productId: pid, name: pName, code, qty: 0 };
-      cur.qty += qty;
-      demandByKey.set(key, cur);
-    }
-  }
-
-  // 1-1) 수주 전표 부재 시 생산일보 폴백
-  if (demandByKey.size === 0 && CANONICAL_DAILY_REPORTS[date]) {
-    const canonical = CANONICAL_DAILY_REPORTS[date];
-    for (const item of canonical.items) {
-      if (item.totalQty > 0) {
-        const key = `NAME:${normalizeForBom(item.productName)}`;
-        const cur = demandByKey.get(key) || { productId: null, name: item.productName, code: '', qty: 0 };
-        cur.qty += item.totalQty;
-        demandByKey.set(key, cur);
-      }
-    }
-  }
-
-  if (demandByKey.size === 0) {
-    const prodResults = await prisma.productionResult.findMany({
-      where: { resultDate: date },
+  const loadDemandForDate = async (d: string) => {
+    const orders = await prisma.salesOrder.findMany({
+      where: { orderDate: d, status: { not: '취소' } },
+      include: {
+        details: {
+          include: { product: true },
+        },
+      },
     });
-    for (const pr of prodResults) {
-      const qty = Number(pr.prodQty) || 0;
-      if (qty > 0) {
-        const key = pr.productId ? `PID:${pr.productId}` : `NAME:${normalizeForBom(pr.productName)}`;
-        const cur = demandByKey.get(key) || {
-          productId: pr.productId || null,
-          name: pr.productName,
-          code: pr.productCode || '',
-          qty: 0,
-        };
+
+    const uniqueOrders = dedupSalesOrders(orders);
+    const demandByKey = new Map<string, MenuDemand>();
+
+    for (const o of uniqueOrders) {
+      for (const det of o.details as any[]) {
+        const pid = Number(det.productId) || null;
+        const qty = Number(det.totalQty) || 0;
+        if (qty <= 0) continue;
+        const pName = det.product?.name || det.productName || '';
+        const code = String(det.productCode || det.product?.productCode || '');
+        const key = pid ? `PID:${pid}` : `NAME:${normalizeForBom(pName)}`;
+        const cur = demandByKey.get(key) || { productId: pid, name: pName, code, qty: 0 };
         cur.qty += qty;
         demandByKey.set(key, cur);
       }
+    }
+
+    // 수주 전표 부재 시 생산일보 / 생산실적 폴백
+    if (demandByKey.size === 0 && CANONICAL_DAILY_REPORTS[d]) {
+      const canonical = CANONICAL_DAILY_REPORTS[d];
+      for (const item of canonical.items) {
+        if (item.totalQty > 0) {
+          const key = `NAME:${normalizeForBom(item.productName)}`;
+          const cur = demandByKey.get(key) || { productId: null, name: item.productName, code: '', qty: 0 };
+          cur.qty += item.totalQty;
+          demandByKey.set(key, cur);
+        }
+      }
+    }
+
+    if (demandByKey.size === 0) {
+      const prodResults = await prisma.productionResult.findMany({
+        where: { resultDate: d },
+      });
+      for (const pr of prodResults) {
+        const qty = Number(pr.prodQty) || 0;
+        if (qty > 0) {
+          const key = pr.productId ? `PID:${pr.productId}` : `NAME:${normalizeForBom(pr.productName)}`;
+          const cur = demandByKey.get(key) || {
+            productId: pr.productId || null,
+            name: pr.productName,
+            code: pr.productCode || '',
+            qty: 0,
+          };
+          cur.qty += qty;
+          demandByKey.set(key, cur);
+        }
+      }
+    }
+
+    return { uniqueOrders, demandByKey };
+  };
+
+  let date = targetDate || (await resolveLatestOrderDate()) || exclusionDate;
+  let { uniqueOrders, demandByKey } = await loadDemandForDate(date);
+
+  // 당일/미래일 수주가 아직 미등록된 경우 기준일 이하 최근 수주(예: 전일 확정 수주)로 자동 폴백
+  if (demandByKey.size === 0) {
+    const fallbackDate = await resolveLatestOrderDate(targetDate || undefined);
+    if (fallbackDate && fallbackDate !== date) {
+      date = fallbackDate;
+      ({ uniqueOrders, demandByKey } = await loadDemandForDate(date));
     }
   }
 
@@ -225,9 +251,10 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
       const cp = d.childProduct as any;
       if (!cp || !cp.isUsed) continue;
       if (cp.category === '완성품' || cp.category === '반제품') continue;
-      if (isExcludedFromOrder(cp.name, date)) continue;
-      // 동적 기준일: 조회 대상일(date) 기준으로만 단종 판정
-      if (cp.discontinuedDate && date >= cp.discontinuedDate) continue;
+      if (isTerminalProductStatus(cp.status)) continue;
+      if (isExcludedFromOrder(cp.name, exclusionDate)) continue;
+      // 동적 기준일: 조회 대상일(targetDate) 기준으로만 단종 판정
+      if (cp.discontinuedDate && exclusionDate >= cp.discontinuedDate) continue;
 
       // 단위 정규화: 만약 단위가 'Kg' / 'kg' 이고 bomDivisor >= 100 이면 g으로 환산
       const u = (d.unit || '').trim().toLowerCase();

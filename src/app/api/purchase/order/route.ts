@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+  calcBagPriceFromBox,
+  isBoxUnitLabel,
+  unitPriceForOrderUnit,
+} from '@/lib/gfs/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +87,15 @@ export async function GET(req: NextRequest) {
                 name: true,
                 spec: true,
                 warehouse: true,
+                boxQty: true,
+                prices: {
+                  orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+                  take: 10,
+                  select: { effectiveDate: true, purchasePrice: true },
+                },
+                inventories: {
+                  select: { unitPrice: true },
+                },
               },
             },
           },
@@ -87,7 +105,58 @@ export async function GET(req: NextRequest) {
       take: 200,
     });
 
-    return NextResponse.json({ success: true, data: orders });
+    const enrichedOrders = orders.map((po) => {
+      const enrichedDetails = po.details.map((d) => {
+        const packUnit = normalizePackUnit(d.product?.boxQty);
+        const invValidPrice = (d.product?.inventories || []).reduce(
+          (best, inv) => (best > 0 ? best : Number(inv.unitPrice) || 0),
+          0
+        );
+        const masterBagPrice = resolveBagPrice({
+          masterBagPrice: pickLatestValidPurchasePrice(d.product?.prices as any),
+          invUnitPrice: invValidPrice,
+        });
+        const masterBoxPrice = calcBoxPrice(masterBagPrice, packUnit);
+        const isBox = isBoxUnitLabel(d.unit);
+        const lineRaw = Number(d.unitPrice) || 0;
+        const fallbackLinePrice = unitPriceForOrderUnit(masterBagPrice, d.unit, packUnit);
+        const effectiveUnitPrice = lineRaw > 0 ? lineRaw : fallbackLinePrice;
+        const bagPrice =
+          masterBagPrice > 0
+            ? masterBagPrice
+            : isBox && packUnit > 1
+              ? calcBagPriceFromBox(effectiveUnitPrice, packUnit)
+              : effectiveUnitPrice;
+        const boxPrice = masterBoxPrice > 0 ? masterBoxPrice : calcBoxPrice(bagPrice, packUnit);
+        const amount =
+          Number(d.amount) > 0
+            ? Number(d.amount)
+            : Math.round((Number(d.orderQty) || 0) * effectiveUnitPrice);
+
+        const { prices: _prices, inventories: _inventories, ...productMeta } = (d.product || {}) as any;
+        return {
+          ...d,
+          unitPrice: effectiveUnitPrice,
+          amount,
+          packUnit,
+          bagPrice,
+          boxPrice,
+          masterBagPrice,
+          masterBoxPrice,
+          product: d.product ? productMeta : null,
+        };
+      });
+      const computedTotal = Math.round(
+        enrichedDetails.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+      );
+      return {
+        ...po,
+        totalAmount: Number(po.totalAmount) > 0 ? Number(po.totalAmount) : computedTotal,
+        details: enrichedDetails,
+      };
+    });
+
+    return NextResponse.json({ success: true, data: enrichedOrders });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch purchase orders' },
@@ -158,15 +227,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: '발주서를 찾을 수 없습니다.' }, { status: 404 });
       }
 
-      let newTotalAmount = 0;
-
       await prisma.$transaction(async (tx) => {
         for (const dt of details) {
           const dtId = Number(dt.id);
           const orderQty = Math.max(0, Number(dt.orderQty) || 0);
           const unitPrice = Math.max(0, Number(dt.unitPrice) || 0);
-          const amount = orderQty * unitPrice;
-          newTotalAmount += amount;
+          const amount = Math.round(orderQty * unitPrice);
 
           const existingDetail = po.details.find((d) => d.id === dtId);
           const receivedQty = existingDetail?.receivedQty || 0;
@@ -176,6 +242,7 @@ export async function POST(req: NextRequest) {
             await tx.purchaseOrderDetail.update({
               where: { id: dtId },
               data: {
+                ...(dt.unit !== undefined ? { unit: String(dt.unit) } : {}),
                 orderQty,
                 unitPrice,
                 amount,
@@ -185,6 +252,14 @@ export async function POST(req: NextRequest) {
             });
           }
         }
+
+        const allDetails = await tx.purchaseOrderDetail.findMany({
+          where: { purchaseOrderId: po.id },
+          select: { amount: true },
+        });
+        const newTotalAmount = Math.round(
+          allDetails.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+        );
 
         await tx.purchaseOrder.update({
           where: { id: po.id },

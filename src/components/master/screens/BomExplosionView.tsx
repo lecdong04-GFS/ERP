@@ -1,20 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
-import { ChevronRight, ChevronDown, Plus, Layers } from 'lucide-react';
+import { Layers } from 'lucide-react';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 
 interface BomTreeNode {
   id: string;
   name: string;
   code: string;
   count: number;
+  category?: string;
+  parentBomId?: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
   children?: BomTreeNode[];
 }
 
 interface ExplosionRow {
   id: number;
+  bomId: string;
+  detailNodeId?: string;
+  parentCategory: string;
   partId: string;
   category: string;
   partName: string;
@@ -28,165 +37,226 @@ interface ExplosionRow {
   lv5: string;
   lv6: string;
   lv7: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
 }
 
-const BOM_TREE_DATA: BomTreeNode[] = [
-  {
-    id: 'TOP-1',
-    name: '더큰)스팸2배계란볶음밥',
-    code: '10003080',
-    count: 9,
-    children: [
-      {
-        id: 'MID-11',
-        name: '스팸계란 볶음밥(반제품)',
-        code: '20005010',
-        count: 5,
-        children: [
-          { id: 'RAW-111', name: '국내산 경기미 햅쌀', code: '20000010', count: 0 },
-          { id: 'RAW-112', name: '스팸 런천미트 큐브', code: '20194002', count: 0 },
-          { id: 'RAW-113', name: '가공 전란액(계란)', code: '20194015', count: 0 },
-          { id: 'RAW-114', name: '대파 슬라이스', code: '20194020', count: 0 },
-          { id: 'RAW-115', name: '조미 볶음유지', code: '20194030', count: 0 },
-        ],
-      },
-      {
-        id: 'MID-12',
-        name: '토핑용 계란후라이 포션',
-        code: '20005020',
-        count: 2,
-        children: [
-          { id: 'RAW-121', name: '계란후라이 반제', code: '20194018', count: 0 },
-          { id: 'RAW-122', name: '식용유', code: '20194035', count: 0 },
-        ],
-      },
-      { id: 'PKG-13', name: '사각 볶음밥용기 ET-25', code: '30000110', count: 0 },
-      { id: 'PKG-14', name: '상단 수축 탑실링 필름', code: '30000120', count: 0 },
-    ],
-  },
-  {
-    id: 'TOP-2',
-    name: '흑미밥 건강도시락',
-    code: '10003090',
-    count: 6,
-    children: [
-      {
-        id: 'MID-21',
-        name: '흑미밥(반제품)',
-        code: '20005050',
-        count: 3,
-        children: [
-          { id: 'RAW-211', name: '국내산 경기미 햅쌀', code: '20000010', count: 0 },
-          { id: 'RAW-212', name: '찰흑미 원맥', code: '20000025', count: 0 },
-          { id: 'RAW-213', name: '정제수', code: '20000099', count: 0 },
-        ],
-      },
-      { id: 'PKG-22', name: '도시락 ET-30 용기', code: '30000101', count: 0 },
-    ],
-  },
-];
-
-const SAMPLE_EXPLOSION_DATA: ExplosionRow[] = [
-  { id: 1, partId: '10003080', category: '완성품', partName: '더큰)스팸2배계란볶음밥', partSpec: '420g*1팩', partUnit: 'ea', level: 0, lv1: '10003080', lv2: '', lv3: '', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 2, partId: '20005010', category: '반제품', partName: '스팸계란 볶음밥(반제품)', partSpec: '300g/포션', partUnit: 'kg', level: 1, lv1: '', lv2: '20005010', lv3: '', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 3, partId: '20000010', category: '원재료', partName: '국내산 경기미 햅쌀', partSpec: '20kg/포', partUnit: 'kg', level: 2, lv1: '', lv2: '', lv3: '20000010', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 4, partId: '20194002', category: '원재료', partName: '스팸 런천미트 큐브', partSpec: '2kg*5팩', partUnit: 'kg', level: 2, lv1: '', lv2: '', lv3: '20194002', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 5, partId: '20194015', category: '원재료', partName: '가공 전란액(계란)', partSpec: '10kg/통', partUnit: 'kg', level: 2, lv1: '', lv2: '', lv3: '20194015', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 6, partId: '20194020', category: '원재료', partName: '대파 슬라이스', partSpec: '5kg/봉', partUnit: 'kg', level: 2, lv1: '', lv2: '', lv3: '20194020', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 7, partId: '20005020', category: '반제품', partName: '토핑용 계란후라이 포션', partSpec: '60g*1ea', partUnit: 'ea', level: 1, lv1: '', lv2: '20005020', lv3: '', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 8, partId: '20194018', category: '원재료', partName: '계란후라이 반제', partSpec: '50ea*4줄', partUnit: 'ea', level: 2, lv1: '', lv2: '', lv3: '20194018', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 9, partId: '30000110', category: '부재료', partName: '사각 볶음밥용기 ET-25', partSpec: '50ea*2줄', partUnit: 'box', level: 1, lv1: '', lv2: '30000110', lv3: '', lv4: '', lv5: '', lv6: '', lv7: '' },
-  { id: 10, partId: '30000120', category: '부재료', partName: '상단 수축 탑실링 필름', partSpec: '1000m/롤', partUnit: '롤', level: 1, lv1: '', lv2: '30000120', lv3: '', lv4: '', lv5: '', lv6: '', lv7: '' },
-];
-
 export const BomExplosionView: React.FC = () => {
-  const [varietyFilter, setVarietyFilter] = useState('완성품');
+  const [varietyFilter, setVarietyFilter] = useState('ALL');
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [treeData, setTreeData] = useState<BomTreeNode[]>(BOM_TREE_DATA);
-  const [explosionRows, setExplosionRows] = useState<ExplosionRow[]>(SAMPLE_EXPLOSION_DATA);
-  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
-    'TOP-1': true,
-    'MID-11': true,
-    'MID-12': true,
-    'TOP-2': false,
-  });
-  const [selectedNodeId, setSelectedNodeId] = useState<string>('TOP-1');
+  const [treeData, setTreeData] = useState<BomTreeNode[]>([]);
+  const [explosionRows, setExplosionRows] = useState<ExplosionRow[]>([]);
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  const [selectedNodeId, setSelectedNodeId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  useEffect(() => {
-    fetch('/api/master/bom')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
-          const newTrees: BomTreeNode[] = json.data.map((b: any, idx: number) => ({
-            id: `BOM-${b.id || idx}`,
+  const loadBomExplosion = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/master/bom');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const newTrees: BomTreeNode[] = json.data.map((b: any, idx: number) => {
+          const bomKey = `BOM-${b.id || idx}`;
+          return {
+            id: bomKey,
             name: b.parentProduct?.name || '제품',
             code: b.parentProduct?.productCode || '',
+            category: b.parentProduct?.category || '완성품',
+            parentBomId: bomKey,
             count: b.details?.length || 0,
+            status: b.parentProduct?.status || '정상',
+            discontinuedDate: b.parentProduct?.discontinuedDate || '',
+            isUsed: b.parentProduct?.isUsed !== false,
             children: (b.details || []).map((d: any, dIdx: number) => ({
-              id: `MAT-${d.id || dIdx}`,
+              id: `MAT-${b.id || idx}-${d.id || dIdx}`,
               name: d.childProduct?.name || '자재',
               code: d.childProduct?.productCode || '',
+              category: d.childProduct?.category || '원재료',
+              parentBomId: bomKey,
               count: 0,
+              status: d.childProduct?.status || '정상',
+              discontinuedDate: d.childProduct?.discontinuedDate || '',
+              isUsed: d.childProduct?.isUsed !== false,
             })),
-          }));
-          if (newTrees.length > 0) {
-            setTreeData(newTrees);
-            setSelectedNodeId(newTrees[0].id);
-            setExpandedNodes({ [newTrees[0].id]: true });
-          }
+          };
+        });
+        setTreeData(newTrees);
+        if (newTrees.length > 0) {
+          setSelectedNodeId((prev) =>
+            prev && newTrees.some((t) => t.id === prev || t.children?.some((c) => c.id === prev))
+              ? prev
+              : newTrees[0].id,
+          );
+          setExpandedNodes((prev) =>
+            Object.keys(prev).length > 0 ? prev : { [newTrees[0].id]: true },
+          );
+        } else {
+          setSelectedNodeId('');
+        }
 
-          const dynamicRows: ExplosionRow[] = [];
-          let rowSeq = 1;
-          for (const b of json.data) {
-            const p = b.parentProduct;
-            if (!p) continue;
-            const pCode = p.productCode || `FG-${p.id}`;
+        const dynamicRows: ExplosionRow[] = [];
+        let rowSeq = 1;
+        json.data.forEach((b: any, idx: number) => {
+          const p = b.parentProduct;
+          if (!p) return;
+          const bomKey = `BOM-${b.id || idx}`;
+          const pCat = p.category || '완성품';
+          const pCode = p.productCode || `FG-${p.id}`;
+          dynamicRows.push({
+            id: rowSeq++,
+            bomId: bomKey,
+            parentCategory: pCat,
+            partId: pCode,
+            category: pCat,
+            partName: p.name || '',
+            partSpec: p.spec || '1ea',
+            partUnit: p.unit || 'ea',
+            level: 0,
+            lv1: pCode,
+            lv2: '',
+            lv3: '',
+            lv4: '',
+            lv5: '',
+            lv6: '',
+            lv7: '',
+            status: p.status || '정상',
+            discontinuedDate: p.discontinuedDate || '',
+            isUsed: p.isUsed !== false,
+          });
+          (b.details || []).forEach((d: any, dIdx: number) => {
+            const cp = d.childProduct;
+            if (!cp) return;
+            const cCode = cp.productCode || `MAT-${cp.id}`;
+            const lvl = Number(d.level) || 3;
             dynamicRows.push({
               id: rowSeq++,
-              partId: pCode,
-              category: p.category || '완성품',
-              partName: p.name || '',
-              partSpec: p.spec || '1ea',
-              partUnit: p.unit || 'ea',
-              level: 0,
-              lv1: pCode,
-              lv2: '',
-              lv3: '',
+              bomId: bomKey,
+              detailNodeId: `MAT-${b.id || idx}-${d.id || dIdx}`,
+              parentCategory: pCat,
+              partId: cCode,
+              category: cp.category || '원재료',
+              partName: cp.name || '',
+              partSpec: cp.spec || `${d.unitQty}${d.unit || 'g'}`,
+              partUnit: d.unit || cp.unit || 'g',
+              level: lvl,
+              lv1: '',
+              lv2: lvl <= 2 ? cCode : '',
+              lv3: lvl >= 3 ? cCode : '',
               lv4: '',
               lv5: '',
               lv6: '',
               lv7: '',
+              status: cp.status || '정상',
+              discontinuedDate: cp.discontinuedDate || '',
+              isUsed: cp.isUsed !== false,
             });
-            for (const d of b.details || []) {
-              const cp = d.childProduct;
-              if (!cp) continue;
-              const cCode = cp.productCode || `MAT-${cp.id}`;
-              const lvl = Number(d.level) || 3;
-              dynamicRows.push({
-                id: rowSeq++,
-                partId: cCode,
-                category: cp.category || '원재료',
-                partName: cp.name || '',
-                partSpec: cp.spec || `${d.unitQty}${d.unit || 'g'}`,
-                partUnit: d.unit || cp.unit || 'g',
-                level: lvl,
-                lv1: '',
-                lv2: lvl <= 2 ? cCode : '',
-                lv3: lvl >= 3 ? cCode : '',
-                lv4: '',
-                lv5: '',
-                lv6: '',
-                lv7: '',
-              });
-            }
-          }
-          if (dynamicRows.length > 0) {
-            setExplosionRows(dynamicRows);
-          }
-        }
-      })
-      .catch((err) => console.error('Failed to load BOM explosion data', err));
+          });
+        });
+        setExplosionRows(dynamicRows);
+      }
+    } catch (err) {
+      console.error('Failed to load BOM explosion data', err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadBomExplosion();
+  }, [loadBomExplosion]);
+
+  const filteredTreeData = useMemo(() => {
+    const q = searchKeyword.trim().toLowerCase();
+    return treeData
+      .filter((node) => {
+        if (varietyFilter !== 'ALL' && (node.category || '완성품') !== varietyFilter) {
+          return false;
+        }
+        if (!q) return true;
+        const parentMatch =
+          node.name.toLowerCase().includes(q) || node.code.toLowerCase().includes(q);
+        const childMatch = (node.children || []).some(
+          (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+        );
+        return parentMatch || childMatch;
+      })
+      .map((node) => {
+        if (!q) return node;
+        const parentMatch =
+          node.name.toLowerCase().includes(q) || node.code.toLowerCase().includes(q);
+        if (parentMatch) return node;
+        return {
+          ...node,
+          children: (node.children || []).filter(
+            (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+          ),
+        };
+      });
+  }, [treeData, varietyFilter, searchKeyword]);
+
+  const { selectedBomKey, selectedDetailKey, selectedLabel } = useMemo(() => {
+    if (!selectedNodeId) {
+      return { selectedBomKey: '', selectedDetailKey: '', selectedLabel: '전체 BOM' };
+    }
+    const parentNode = treeData.find((t) => t.id === selectedNodeId);
+    if (parentNode) {
+      return {
+        selectedBomKey: parentNode.id,
+        selectedDetailKey: '',
+        selectedLabel: parentNode.name,
+      };
+    }
+    for (const parent of treeData) {
+      const child = parent.children?.find((c) => c.id === selectedNodeId);
+      if (child) {
+        return {
+          selectedBomKey: parent.id,
+          selectedDetailKey: child.id,
+          selectedLabel: `${parent.name} > ${child.name}`,
+        };
+      }
+    }
+    return { selectedBomKey: '', selectedDetailKey: '', selectedLabel: '전체 BOM' };
+  }, [treeData, selectedNodeId]);
+
+  const filteredExplosionRows = useMemo(() => {
+    const q = searchKeyword.trim().toLowerCase();
+    const validBomIds = new Set(filteredTreeData.map((n) => n.id));
+    return explosionRows.filter((row) => {
+      if (varietyFilter !== 'ALL' && row.parentCategory !== varietyFilter) {
+        return false;
+      }
+      if (selectedBomKey) {
+        if (row.bomId !== selectedBomKey) return false;
+        if (selectedDetailKey && row.level > 0 && row.detailNodeId !== selectedDetailKey) {
+          return false;
+        }
+      } else if (!validBomIds.has(row.bomId)) {
+        return false;
+      }
+      if (q && row.level > 0 && !selectedBomKey) {
+        return (
+          row.partName.toLowerCase().includes(q) ||
+          row.partId.toLowerCase().includes(q)
+        );
+      }
+      if (q && selectedBomKey) {
+        const parentNode = filteredTreeData.find((t) => t.id === selectedBomKey);
+        const parentMatch =
+          parentNode &&
+          (parentNode.name.toLowerCase().includes(q) || parentNode.code.toLowerCase().includes(q));
+        if (!parentMatch && row.level > 0) {
+          return (
+            row.partName.toLowerCase().includes(q) ||
+            row.partId.toLowerCase().includes(q)
+          );
+        }
+      }
+      return true;
+    });
+  }, [explosionRows, filteredTreeData, varietyFilter, searchKeyword, selectedBomKey, selectedDetailKey]);
 
   const toggleNode = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -225,6 +295,13 @@ export const BomExplosionView: React.FC = () => {
                     <span className="w-3.5 inline-block text-center text-gray-400">•</span>
                   )}
                   <span className="truncate">{node.name}</span>
+                  <ProductLifecycleBadge
+                    status={node.status}
+                    discontinuedDate={node.discontinuedDate}
+                    isUsed={node.isUsed}
+                    name={node.name}
+                    compact
+                  />
                 </div>
                 {node.count > 0 && (
                   <span className="text-[10px] font-mono text-gray-500 font-semibold bg-gray-100 px-1 rounded">
@@ -248,7 +325,24 @@ export const BomExplosionView: React.FC = () => {
   const COLUMNS: MasterGridColumnDef[] = [
     { key: 'partId', label: '파트id', width: '90px', align: 'center' },
     { key: 'category', label: '구분', width: '65px', align: 'center' },
-    { key: 'partName', minWidth: '260px', label: '파트명', align: 'left' },
+    {
+      key: 'partName',
+      minWidth: '260px',
+      label: '파트명',
+      align: 'left',
+      render: (val, row) => (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="truncate font-medium text-gray-900">{String(val ?? '')}</span>
+          <ProductLifecycleBadge
+            status={row.status}
+            discontinuedDate={row.discontinuedDate}
+            isUsed={row.isUsed}
+            name={String(val ?? '')}
+            compact
+          />
+        </div>
+      ),
+    },
     { key: 'partSpec', label: '파트규격', width: '100px', align: 'center' },
     { key: 'partUnit', label: '파트단위', width: '60px', align: 'center' },
     { key: 'level', label: '레벨', width: '50px', align: 'center', format: 'number' },
@@ -266,8 +360,17 @@ export const BomExplosionView: React.FC = () => {
       <MasterActionBar
         title="BOM(전개)"
         buttons={[
-          { key: 'search', label: '조회', icon: 'search', onClick: () => alert('BOM 다단계 전개 조회 완료') },
-          { key: 'reset', label: '초기화', icon: 'reset', onClick: () => alert('초기화 완료') },
+          { key: 'search', label: isLoading ? '조회중...' : '조회', icon: 'search', onClick: () => void loadBomExplosion() },
+          {
+            key: 'reset',
+            label: '초기화',
+            icon: 'reset',
+            onClick: () => {
+              setVarietyFilter('ALL');
+              setSearchKeyword('');
+              setSelectedNodeId('');
+            },
+          },
         ]}
         helpContent="완성품에서 시작하여 중간 반제품, 하위 원부자재까지 다단계 BOM 레벨(Lv1~Lv7)을 계층형 트리 및 매트릭스로 전개합니다."
       />
@@ -278,9 +381,13 @@ export const BomExplosionView: React.FC = () => {
             <span className="font-semibold text-gray-700">품종:</span>
             <select
               value={varietyFilter}
-              onChange={(e) => setVarietyFilter(e.target.value)}
+              onChange={(e) => {
+                setVarietyFilter(e.target.value);
+                setSelectedNodeId('');
+              }}
               className="bg-white border border-gray-400 px-1.5 py-0.5 text-[12px] rounded-xs shadow-2xs focus:outline-blue-500 font-medium"
             >
+              <option value="ALL">전체</option>
               <option value="완성품">완성품</option>
               <option value="반제품">반제품</option>
             </select>
@@ -299,7 +406,7 @@ export const BomExplosionView: React.FC = () => {
         </div>
 
         <span className="text-[11px] text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-300 font-semibold shadow-2xs">
-          전개 품목수: <span className="text-blue-700 font-bold">{explosionRows.length}</span> 건
+          전개 품목수: <span className="text-blue-700 font-bold">{filteredExplosionRows.length}</span> 건
         </span>
       </div>
 
@@ -309,33 +416,37 @@ export const BomExplosionView: React.FC = () => {
           <div className="bg-[#dfe3ec] px-2.5 py-1 flex items-center justify-between border-b border-[#b0b8c8]">
             <span className="font-bold text-gray-800 flex items-center gap-1.5">
               <Layers size={13} className="text-blue-700" />
-              제품 계층 트리
+              제품 계층 트리 ({filteredTreeData.length})
             </span>
             <span className="text-[10px] text-gray-500 font-sans">⊞/⊟ 확장</span>
           </div>
 
           <div className="flex-1 min-h-0 overflow-auto p-1 bg-white">
-            {renderTree(treeData)}
+            {renderTree(filteredTreeData)}
           </div>
         </div>
 
         {/* Right: Multi-Level Explosion Grid (75%) */}
         <div className="flex-1 flex flex-col min-h-0 bg-white border border-[#94a3b8] rounded shadow-xs">
           <div className="bg-[#dfe3ec] px-2.5 py-1 flex items-center justify-between border-b border-[#b0b8c8]">
-            <span className="font-bold text-gray-800">소요원부자재 (다단계 전개 매트릭스)</span>
-            <button
-              type="button"
-              onClick={() => alert('소요 원자재 추가')}
-              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded text-[11px] flex items-center gap-0.5 shadow-2xs"
-            >
-              <Plus size={11} /> 추가
-            </button>
+            <span className="font-bold text-gray-800 truncate">
+              소요원부자재 (다단계 전개 매트릭스) — {selectedLabel}
+            </span>
+            {selectedNodeId && (
+              <button
+                type="button"
+                onClick={() => setSelectedNodeId('')}
+                className="px-2 py-0.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-medium rounded text-[11px] shrink-0"
+              >
+                전체 보기
+              </button>
+            )}
           </div>
 
           <div className="flex-1 min-h-0">
             <MasterDataGrid
               columns={COLUMNS}
-              data={explosionRows}
+              data={filteredExplosionRows}
               summaryRow={false}
             />
           </div>

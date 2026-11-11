@@ -5,6 +5,14 @@ import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { exportGridToExcel, downloadExcelTemplate } from '@/lib/excelExport';
 import { Plus, Trash2, Copy, Save, ChevronDown, ChevronUp, Search, X, Check, Layers, AlertCircle, RefreshCw } from 'lucide-react';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
+import {
+  calcBagPriceFromBox,
+  calcBomEffectiveUnitPrice,
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+} from '@/lib/gfs/pricing';
 
 interface ProductItem {
   id: number;
@@ -16,6 +24,11 @@ interface ProductItem {
   itemName: string;
   spec: string;
   unit: string;
+  boxQty?: number;
+  boxPrice?: number;
+  deliveryPrice?: number;
+  bomDivisor?: number;
+  bomMultiplier?: number;
   gyeName: string;
   vendor: string;
   safetyStock: number;
@@ -23,6 +36,10 @@ interface ProductItem {
   connectedCount: number;
   remark: string;
   unitPrice?: number;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
+  orderCycle?: string;
 }
 
 export interface BomDetailItem {
@@ -33,12 +50,19 @@ export interface BomDetailItem {
   partName: string;
   spec: string;
   unit: string;
+  boxQty?: number;
   unitQty: number;
   yieldRate: number;
   unitPrice: number;
+  boxPrice?: number;
+  bomDivisor?: number;
+  bomMultiplier?: number;
   calcCost: number;
   gyeName: string;
   remark: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
 }
 
 const SAMPLE_PRODUCTS: ProductItem[] = [
@@ -57,6 +81,7 @@ export const ProductRegView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('완성품');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [vendorFilter, setVendorFilter] = useState('ALL');
+  const [includeDiscontinued, setIncludeDiscontinued] = useState(false);
   const [audit, setAudit] = useState<any>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -85,39 +110,60 @@ export const ProductRegView: React.FC = () => {
 
   // Load Products from API
   useEffect(() => {
-    fetch('/api/master/product')
+    fetch(`/api/master/product${includeDiscontinued ? '?includeInactive=true' : ''}`)
       .then((res) => res.json())
       .then((res) => {
         if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-          const mapped: ProductItem[] = res.data.map((p: any, idx: number) => ({
-            id: p.id || idx + 1,
-            used: '사용',
-            autoVendor: true,
-            itemCode: p.productCode,
-            category: p.category || '완성품',
-            variety: p.kind || '김밥',
-            itemName: p.name,
-            spec: p.spec || '230g*1줄',
-            unit: p.unit || 'ea',
-            gyeName: p.gyeName || '성형장(김밥)',
-            vendor: p.partnerName || '지에스리테일',
-            safetyStock: p.safetyStockQty || 100,
-            moq: p.minOrderQty || 50,
-            connectedCount: p.bomCount ?? 0,
-            remark: '',
-            unitPrice: p.prices?.[0]?.unitPrice || 0,
-          }));
+          const mapped: ProductItem[] = res.data.map((p: any, idx: number) => {
+            const pack = normalizePackUnit(p.boxQty);
+            const bagPrice =
+              Number(p.bagPrice ?? p.purchasePrice) ||
+              pickLatestValidPurchasePrice(p.prices) ||
+              0;
+            const boxPrice =
+              Number(p.boxPrice) || calcBoxPrice(bagPrice, pack);
+            return {
+              id: p.id || idx + 1,
+              used: p.isUsed === false ? '미사용' : '사용',
+              autoVendor: true,
+              itemCode: p.productCode,
+              category: p.category || '완성품',
+              variety: p.kind || '김밥',
+              itemName: p.name,
+              spec: p.spec || '230g*1줄',
+              unit: p.unit || 'ea',
+              boxQty: pack,
+              unitPrice: bagPrice,
+              boxPrice,
+              deliveryPrice: Number(p.deliveryPrice) || 0,
+              bomDivisor: Number(p.bomDivisor) || 1000,
+              bomMultiplier: Number(p.bomMultiplier) || 1,
+              gyeName: p.gyeName || '성형장(김밥)',
+              vendor: p.partnerName || '지에스리테일',
+              safetyStock: p.safetyStockQty || 100,
+              moq: p.minOrderQty || 50,
+              connectedCount: p.bomCount ?? 0,
+              remark: '',
+              status: p.status || (p.isUsed === false ? '삭제' : '정상'),
+              discontinuedDate: p.discontinuedDate || '',
+              isUsed: p.isUsed !== false,
+              orderCycle: p.orderCycle || '',
+            };
+          });
           setProducts(mapped);
-          // Auto select first finished or semi product
-          const firstTarget = mapped.find((m) => m.category === '완성품' || m.category === '반제품') || mapped[0];
-          if (firstTarget) {
-            setSelectedProduct(firstTarget);
-            void loadBomForProduct(firstTarget.id, firstTarget.itemCode);
-          }
+          // Auto select first finished or semi product only if none selected yet
+          setSelectedProduct((prev) => {
+            if (prev && mapped.some((m) => m.id === prev.id)) return prev;
+            const firstTarget = mapped.find((m) => m.category === '완성품' || m.category === '반제품') || mapped[0];
+            if (firstTarget) {
+              void loadBomForProduct(firstTarget.id, firstTarget.itemCode);
+            }
+            return firstTarget || null;
+          });
         }
       })
       .catch((err) => console.error('Failed to load products from API:', err));
-  }, []);
+  }, [includeDiscontinued]);
 
   // Fetch BOM for a given product
   const loadBomForProduct = async (productId: number, productCode?: string) => {
@@ -131,10 +177,17 @@ export const ProductRegView: React.FC = () => {
         const header = json.data[0];
         const details: BomDetailItem[] = (header.details || []).map((d: any, idx: number) => {
           const child = d.childProduct;
-          const price = child?.prices?.[0]?.unitPrice || 0;
+          const pack = normalizePackUnit(child?.boxQty);
+          const price =
+            Number(child?.bagPrice ?? child?.purchasePrice) ||
+            pickLatestValidPurchasePrice(child?.prices) ||
+            0;
+          const bPrice = Number(child?.boxPrice) || calcBoxPrice(price, pack);
+          const unit = d.unit || child?.unit || 'g';
           const uQty = Number(d.unitQty) || 0;
           const yRate = Number(d.yieldRate) || 100;
-          const cost = Math.round(uQty * (yRate > 0 ? 100 / yRate : 1) * price * 10) / 10;
+          const effPrice = calcBomEffectiveUnitPrice(unit, price, child?.bomDivisor, child?.bomMultiplier);
+          const cost = Math.round(uQty * (yRate > 0 ? 100 / yRate : 1) * effPrice * 10) / 10;
           return {
             id: d.id || -(idx + 1),
             childProductId: d.childProductId,
@@ -142,13 +195,20 @@ export const ProductRegView: React.FC = () => {
             category: child?.category || '원재료',
             partName: child?.name || '자재',
             spec: child?.spec || '',
-            unit: d.unit || child?.unit || 'g',
+            unit,
+            boxQty: pack,
             unitQty: uQty,
             yieldRate: yRate,
             unitPrice: price,
+            boxPrice: bPrice,
+            bomDivisor: child?.bomDivisor,
+            bomMultiplier: child?.bomMultiplier,
             calcCost: cost,
             gyeName: d.gye?.name || child?.gye?.name || '성형장',
             remark: d.remark || '',
+            status: child?.status || '정상',
+            discontinuedDate: child?.discontinuedDate || '',
+            isUsed: child?.isUsed !== false,
           };
         });
         setBomDetails(details);
@@ -234,12 +294,36 @@ export const ProductRegView: React.FC = () => {
   const handleCellChange = (id: any, key: string, val: any) => {
     setProducts((prev) =>
       prev.map((p) => {
-        if (p.id === id) {
-          const numKeys = ['safetyStock', 'moq'];
-          const finalVal = numKeys.includes(key) ? Number(val) || 0 : val;
-          return { ...p, [key]: finalVal };
+        if (p.id !== id) return p;
+        const numKeys = ['safetyStock', 'moq', 'boxQty', 'unitPrice', 'boxPrice'];
+        const numVal = Number(val) || 0;
+        const finalVal = numKeys.includes(key) ? numVal : val;
+        if (key === 'boxQty') {
+          const pack = normalizePackUnit(numVal);
+          return {
+            ...p,
+            boxQty: pack,
+            boxPrice: calcBoxPrice(p.unitPrice || 0, pack),
+          };
         }
-        return p;
+        if (key === 'unitPrice') {
+          const pack = normalizePackUnit(p.boxQty);
+          return {
+            ...p,
+            unitPrice: numVal,
+            boxPrice: calcBoxPrice(numVal, pack),
+          };
+        }
+        if (key === 'boxPrice') {
+          const pack = normalizePackUnit(p.boxQty);
+          const bagPrice = calcBagPriceFromBox(numVal, pack);
+          return {
+            ...p,
+            unitPrice: bagPrice,
+            boxPrice: numVal,
+          };
+        }
+        return { ...p, [key]: finalVal };
       })
     );
     setDirtyRowIds((prev) => new Set(prev).add(Number(id)));
@@ -257,6 +341,9 @@ export const ProductRegView: React.FC = () => {
       itemName: '신규 제품(입력)',
       spec: '규격입력',
       unit: 'ea',
+      boxQty: 1,
+      unitPrice: 0,
+      boxPrice: 0,
       gyeName: '성형장(도시락)',
       vendor: '지에스리테일',
       safetyStock: 50,
@@ -292,11 +379,17 @@ export const ProductRegView: React.FC = () => {
             name: p.itemName,
             spec: p.spec,
             unit: p.unit,
+            boxQty: normalizePackUnit(p.boxQty),
+            purchasePrice: Number(p.unitPrice) || 0,
             category: p.category,
             kind: p.variety,
             safetyStockQty: p.safetyStock,
             minOrderQty: p.moq,
             remark: p.remark,
+            isUsed: p.used !== '미사용',
+            status: p.used === '미사용' ? (p.status && p.status !== '정상' ? p.status : '삭제') : (p.status || '정상'),
+            discontinuedDate: p.discontinuedDate || null,
+            orderCycle: p.orderCycle || '',
           }),
         });
         const json = await res.json().catch(() => null);
@@ -341,11 +434,12 @@ export const ProductRegView: React.FC = () => {
       prev.map((d) => {
         if (d.id === rowId) {
           const updated = { ...d, [columnKey]: newValue };
-          if (columnKey === 'unitQty' || columnKey === 'yieldRate') {
+          if (columnKey === 'unitQty' || columnKey === 'yieldRate' || columnKey === 'unit') {
             const q = Number(columnKey === 'unitQty' ? newValue : updated.unitQty) || 0;
             const y = Number(columnKey === 'yieldRate' ? newValue : updated.yieldRate) || 100;
-            const price = updated.unitPrice || 0;
-            updated.calcCost = Math.round(q * (y > 0 ? 100 / y : 1) * price * 10) / 10;
+            const unitStr = String(columnKey === 'unit' ? newValue : updated.unit || 'g');
+            const effPrice = calcBomEffectiveUnitPrice(unitStr, updated.unitPrice || 0, updated.bomDivisor, updated.bomMultiplier);
+            updated.calcCost = Math.round(q * (y > 0 ? 100 / y : 1) * effPrice * 10) / 10;
           }
           return updated;
         }
@@ -447,6 +541,10 @@ export const ProductRegView: React.FC = () => {
     let nextId = Date.now();
     const newItems: BomDetailItem[] = toAdd.map((m) => {
       const price = m.unitPrice || 0;
+      const pack = normalizePackUnit(m.boxQty);
+      const bPrice = Number(m.boxPrice) || calcBoxPrice(price, pack);
+      const unitStr = m.unit || 'g';
+      const effPrice = calcBomEffectiveUnitPrice(unitStr, price, m.bomDivisor, m.bomMultiplier);
       return {
         id: nextId++,
         childProductId: m.id,
@@ -454,11 +552,15 @@ export const ProductRegView: React.FC = () => {
         category: m.category,
         partName: m.itemName,
         spec: m.spec,
-        unit: m.unit || 'g',
+        unit: unitStr,
+        boxQty: pack,
         unitQty: 1,
         yieldRate: 100,
         unitPrice: price,
-        calcCost: price,
+        boxPrice: bPrice,
+        bomDivisor: m.bomDivisor,
+        bomMultiplier: m.bomMultiplier,
+        calcCost: Math.round(effPrice * 10) / 10,
         gyeName: m.gyeName || '성형장',
         remark: '',
       };
@@ -501,10 +603,17 @@ export const ProductRegView: React.FC = () => {
     let nextId = Date.now();
     const copied: BomDetailItem[] = copyPreviewDetails.map((d: any) => {
       const child = d.childProduct;
-      const price = child?.prices?.[0]?.unitPrice || 0;
+      const pack = normalizePackUnit(child?.boxQty);
+      const price =
+        Number(child?.bagPrice ?? child?.purchasePrice) ||
+        pickLatestValidPurchasePrice(child?.prices) ||
+        0;
+      const bPrice = Number(child?.boxPrice) || calcBoxPrice(price, pack);
+      const unitStr = d.unit || child?.unit || 'g';
       const uQty = Number(d.unitQty) || 0;
       const yRate = Number(d.yieldRate) || 100;
-      const cost = Math.round(uQty * (yRate > 0 ? 100 / yRate : 1) * price * 10) / 10;
+      const effPrice = calcBomEffectiveUnitPrice(unitStr, price, child?.bomDivisor, child?.bomMultiplier);
+      const cost = Math.round(uQty * (yRate > 0 ? 100 / yRate : 1) * effPrice * 10) / 10;
       return {
         id: nextId++,
         childProductId: d.childProductId,
@@ -512,10 +621,14 @@ export const ProductRegView: React.FC = () => {
         category: child?.category || '원재료',
         partName: child?.name || '',
         spec: child?.spec || '',
-        unit: d.unit || child?.unit || 'g',
+        unit: unitStr,
+        boxQty: pack,
         unitQty: uQty,
         yieldRate: yRate,
         unitPrice: price,
+        boxPrice: bPrice,
+        bomDivisor: child?.bomDivisor,
+        bomMultiplier: child?.bomMultiplier,
         calcCost: cost,
         gyeName: d.gye?.name || child?.gye?.name || '성형장',
         remark: `[${srcProduct?.itemName || ''}] 복사`,
@@ -548,8 +661,15 @@ export const ProductRegView: React.FC = () => {
       render: (val, row) => {
         const isDup = dupNorms.has(normOf(String(row.itemName || '')));
         return (
-          <span className="flex items-center gap-1.5">
-            <span className="font-medium text-gray-800">{String(val ?? '')}</span>
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="font-medium text-gray-800 truncate">{String(val ?? '')}</span>
+            <ProductLifecycleBadge
+              status={row.status}
+              discontinuedDate={row.discontinuedDate}
+              isUsed={row.isUsed}
+              name={String(val ?? '')}
+              compact
+            />
             {isDup && (
               <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap" title="같은 이름이 다른 구분에도 있음">
                 중복
@@ -561,6 +681,9 @@ export const ProductRegView: React.FC = () => {
     },
     { key: 'spec', label: '규격', width: '90px', align: 'center', editable: true },
     { key: 'unit', label: '단위', width: '50px', align: 'center', editable: true },
+    { key: 'boxQty', label: '입수량', width: '60px', align: 'right', format: 'number', editable: true },
+    { key: 'unitPrice', label: '봉단가(원)', width: '85px', align: 'right', format: 'currency', editable: true },
+    { key: 'boxPrice', label: '박스단가(원)', width: '95px', align: 'right', format: 'currency', editable: true },
     {
       key: 'connectedCount',
       label: 'BOM구성',
@@ -616,13 +739,26 @@ export const ProductRegView: React.FC = () => {
       label: '투입 자재명',
       align: 'left',
       editable: false,
-      render: (val) => <span className="font-semibold text-gray-800">{String(val ?? '')}</span>,
+      render: (val, row) => (
+        <span className="flex items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-gray-800 truncate">{String(val ?? '')}</span>
+          <ProductLifecycleBadge
+            status={row.status}
+            discontinuedDate={row.discontinuedDate}
+            isUsed={row.isUsed}
+            name={String(val ?? '')}
+            compact
+          />
+        </span>
+      ),
     },
     { key: 'spec', label: '규격', width: '85px', align: 'center', editable: false },
     { key: 'unit', label: '단위', width: '50px', align: 'center', editable: true },
     { key: 'unitQty', label: '단위투입량', width: '90px', align: 'right', format: 'number', editable: true },
     { key: 'yieldRate', label: '수율(%)', width: '75px', align: 'right', format: 'number', editable: true },
-    { key: 'unitPrice', label: '자재단가(원)', width: '85px', align: 'right', format: 'number', editable: false },
+    { key: 'boxQty', label: '입수량', width: '55px', align: 'right', format: 'number', editable: false },
+    { key: 'unitPrice', label: '봉단가(원)', width: '85px', align: 'right', format: 'currency', editable: false },
+    { key: 'boxPrice', label: '박스단가(원)', width: '95px', align: 'right', format: 'currency', editable: false },
     {
       key: 'calcCost',
       label: '투입원가(원)',
@@ -746,6 +882,19 @@ export const ProductRegView: React.FC = () => {
               <option value="지에스리테일">지에스리테일</option>
             </select>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIncludeDiscontinued((prev) => !prev)}
+            className={`px-2 py-0.5 text-[11px] font-bold rounded border transition cursor-pointer ${
+              includeDiscontinued
+                ? 'bg-rose-600 text-white border-rose-700'
+                : 'bg-white text-gray-700 border-gray-400 hover:bg-gray-100'
+            }`}
+            title="삭제·이관·미사용 품목 포함 조회"
+          >
+            삭제·이관 포함
+          </button>
         </div>
 
         <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { nextCutoff } from './cutoff';
 import prisma from '@/lib/prisma';
+import { pickLatestValidPurchasePrice, unitPriceForOrderUnit } from '@/lib/gfs/pricing';
 import {
   ActionItem,
   ChartPoint,
@@ -163,7 +164,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
             include: {
               product: {
                 include: {
-                  prices: { take: 1, orderBy: { effectiveDate: 'desc' } },
+                  prices: { take: 10, orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }] },
                 },
               },
             },
@@ -350,7 +351,11 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     for (const po of todayPurchaseOrders) {
       todayPurchaseItemCount += po.details.length;
       for (const d of po.details) {
-        const p = d.unitPrice || d.product?.prices?.[0]?.purchasePrice || 0;
+        const masterBag = pickLatestValidPurchasePrice(d.product?.prices);
+        const p =
+          Number(d.unitPrice) > 0
+            ? Number(d.unitPrice)
+            : unitPriceForOrderUnit(masterBag, d.unit, d.product?.boxQty);
         todayPurchaseAmount += (d.orderQty || 1) * p;
       }
     }
@@ -363,7 +368,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     // ── 5.5. 금일 입고 현황 ────────────────────────────────
     const todayReceivingTotal = todayReceivingRows.length;
     const todayReceivingDone = todayReceivingRows.filter(
-      (r) => r.status === '검수완료' || r.status === '입고'
+      (r) => r.status === '검수완료' || r.status === '입고' || r.status === '입고완료'
     ).length;
     const todayReceivingAmount = todayReceivingRows.reduce((s, r) => s + (r.totalAmount || 0), 0);
     const todayReceivingPending = todayReceivingRows.filter(

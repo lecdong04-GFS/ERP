@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { normName } from '@/lib/gfs/norm';
+import {
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+} from '@/lib/gfs/pricing';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -72,10 +79,32 @@ export async function GET(req: NextRequest) {
     }
     const rows = await prisma.inventorySnapshot.findMany({
       where: { snapshotDate: date },
-      include: { product: { include: { partner: true } } },
+      include: {
+        product: {
+          include: {
+            partner: true,
+            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+          },
+        },
+      },
       orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
     });
-    return NextResponse.json({ success: true, data: { date, exists: rows.length > 0, rows } });
+    const enrichedRows = rows.map((r) => {
+      const packUnit = normalizePackUnit(r.packUnit || r.product?.boxQty);
+      const bagPrice = resolveBagPrice({
+        snapshotUnitPrice: r.unitPrice,
+        masterBagPrice: pickLatestValidPurchasePrice(r.product?.prices),
+      });
+      return {
+        ...r,
+        packUnit,
+        targetOrderDays: Number(r.product?.targetOrderDays) || 0,
+        unitPrice: bagPrice,
+        bagPrice,
+        boxPrice: calcBoxPrice(bagPrice, packUnit),
+      };
+    });
+    return NextResponse.json({ success: true, data: { date, exists: enrichedRows.length > 0, rows: enrichedRows } });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || '스냅샷 조회 실패' },
@@ -106,8 +135,11 @@ export async function POST(req: NextRequest) {
     });
     const prodByCode = new Map(allProducts.map((p) => [p.productCode, p]));
     const prodByName = new Map<string, (typeof allProducts)[number]>();
+    const prodByNorm = new Map<string, (typeof allProducts)[number]>();
     allProducts.forEach((p) => {
       if (!prodByName.has(p.name)) prodByName.set(p.name, p);
+      const nk = normName(p.name);
+      if (nk && !prodByNorm.has(nk)) prodByNorm.set(nk, p);
     });
 
     const createdBy = String(body.createdBy || `${me.name || me.loginId || '담당자'}`);
@@ -119,7 +151,12 @@ export async function POST(req: NextRequest) {
       const rawCode = String(r.productCode || r.itemCode || '').trim();
       const productName = String(r.productName || r.itemName || '').trim();
       if (!rawCode && !productName) continue;
-      const product = (rawCode ? prodByCode.get(rawCode) : undefined) || (productName ? prodByName.get(productName) : undefined) || null;
+      const nmNorm = productName ? normName(productName) : '';
+      const product =
+        (productName ? prodByName.get(productName) : undefined) ||
+        (nmNorm ? prodByNorm.get(nmNorm) : undefined) ||
+        (rawCode ? prodByCode.get(rawCode) : undefined) ||
+        null;
       const qty = Number(r.currentQty) || 0;
       const price = Number(r.unitPrice) || 0;
       const warehouse = String(r.warehouse || r.whName || product?.warehouse || '상온');

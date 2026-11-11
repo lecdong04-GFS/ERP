@@ -47,7 +47,7 @@ export interface BomImportResult {
 
 interface ParsedBundle {
   mats: BomMaterial[];
-  menuMap: Map<string, { menu: string; links: { mat: BomMaterial; perUnit: number }[] }>;
+  menuMap: Map<string, { menu: string; links: { mat: BomMaterial; perUnit: number; orderBuffer: number }[] }>;
   skippedMemo: string[];
   auditMap: Map<string, any>;
   today: string;
@@ -67,7 +67,7 @@ export async function loadBomBundle(orderFile: string | null, auditFile: string 
   const mats = parseOrderSheetBom(wb);
   void today;
 
-  const menuMap = new Map<string, { menu: string; links: { mat: BomMaterial; perUnit: number }[] }>();
+  const menuMap = new Map<string, { menu: string; links: { mat: BomMaterial; perUnit: number; orderBuffer: number }[] }>();
   const skippedMemo: string[] = [];
   for (const m of mats) {
     for (const link of m.menus) {
@@ -77,7 +77,7 @@ export async function loadBomBundle(orderFile: string | null, auditFile: string 
         continue;
       }
       const e = menuMap.get(link.normMenu) || { menu: link.menu, links: [] };
-      e.links.push({ mat: m, perUnit: link.perUnit });
+      e.links.push({ mat: m, perUnit: link.perUnit, orderBuffer: link.orderBuffer ?? 1 });
       menuMap.set(link.normMenu, e);
     }
   }
@@ -278,6 +278,7 @@ export async function executeImport(
             unitQty: link.perUnit,
             unit: inferBomUnit(link.mat.name),
             yieldRate: 100,
+            orderBuffer: link.orderBuffer,
             sortOrder: ++sortOrder,
             remark: 'GFS 일괄적재',
           },

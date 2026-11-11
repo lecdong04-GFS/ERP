@@ -69,6 +69,9 @@ export async function GET(req: NextRequest) {
               otherUsageCount,
               totalStock,
               warehouse: ch.warehouse || '상온',
+              status: ch.status || '정상',
+              discontinuedDate: ch.discontinuedDate || '',
+              isUsed: ch.isUsed !== false,
             });
           }
         }

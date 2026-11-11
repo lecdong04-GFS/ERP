@@ -23,6 +23,7 @@ import { getMenuItemById } from '@/config/menuConfig';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
+import { calcBoxPrice, calcBagPriceFromBox, isBoxUnitLabel } from '@/lib/gfs/pricing';
 
 export interface OrderReqConfirmItem {
   id: number;
@@ -37,6 +38,9 @@ export interface OrderReqConfirmItem {
   minOrderQty: number; // 최소발주수량
   orderQty: number; // 발주수량 (확정량 또는 추천량)
   unitPrice: number; // 발주단가
+  bagPrice?: number; // 봉단가
+  boxPrice?: number; // 박스단가
+  packUnit?: number; // 입수량
   orderAmt: number; // 발주금액
   calcQty: number; // 발주계산수량 (순부족량)
   unitQty: number; // Unit 수량
@@ -154,6 +158,16 @@ export const OrderReqConfirmView: React.FC = () => {
             const q = Number(updated.orderQty) || 0;
             const p = Number(updated.unitPrice) || 0;
             updated.orderAmt = Math.round(q * p);
+            if (field === 'unitPrice') {
+              const pack = Number(updated.packUnit || updated.unitQty) || 1;
+              if (isBoxUnitLabel(updated.orderUnit) && updated.isConfirmed && pack > 1) {
+                updated.boxPrice = p;
+                updated.bagPrice = calcBagPriceFromBox(p, pack);
+              } else {
+                updated.bagPrice = p;
+                updated.boxPrice = calcBoxPrice(p, pack);
+              }
+            }
           }
           return updated;
         }
@@ -284,7 +298,7 @@ export const OrderReqConfirmView: React.FC = () => {
         return {
           ...r,
           orderQty: targetQty,
-          orderAmt: targetQty * r.unitPrice,
+          orderAmt: Math.round(targetQty * r.unitPrice),
         };
       })
     );
@@ -371,8 +385,11 @@ export const OrderReqConfirmView: React.FC = () => {
       { key: 'unit', label: '단위' },
       { key: 'supplier', label: '거래처' },
       { key: 'orderUnit', label: '발주단위' },
+      { key: 'packUnit', label: '입수량', format: 'number' },
       { key: 'minOrderQty', label: '최소발주수량', format: 'number' },
       { key: 'orderQty', label: '발주수량', format: 'number' },
+      { key: 'bagPrice', label: '봉단가', format: 'currency' },
+      { key: 'boxPrice', label: '박스단가', format: 'currency' },
       { key: 'unitPrice', label: '발주단가', format: 'currency' },
       { key: 'orderAmt', label: '발주금액', format: 'currency' },
       { key: 'calcQty', label: '순부족량', format: 'number' },
@@ -782,7 +799,12 @@ export const OrderReqConfirmView: React.FC = () => {
                         {renderEditableCell(row, 'orderQty', 'right', true)}
                       </td>
                       <td className="border border-[#cbd5e1] px-2 py-1 text-right font-mono text-gray-800">
-                        {renderEditableCell(row, 'unitPrice', 'right', true)}
+                        <div>{renderEditableCell(row, 'unitPrice', 'right', true)}</div>
+                        {(row.bagPrice || row.boxPrice) ? (
+                          <div className="text-[10.5px] text-slate-500 whitespace-nowrap">
+                            입수 {row.packUnit || row.unitQty || 1} · 봉 {(row.bagPrice || row.unitPrice || 0).toLocaleString()} / 박스 {(row.boxPrice || calcBoxPrice(row.bagPrice || row.unitPrice, row.packUnit || row.unitQty || 1)).toLocaleString()}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="border border-[#cbd5e1] px-2.5 py-1 text-right font-mono font-black text-slate-900 text-[13.5px]">
                         {row.orderAmt.toLocaleString()}

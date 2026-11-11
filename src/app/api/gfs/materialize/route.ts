@@ -4,7 +4,15 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { buildAuditMap, getAuditFilePath, normName, readWorkbookFromFile } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import { kstToday } from '@/lib/kst';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+  calcBagPriceFromBox,
+} from '@/lib/gfs/pricing';
 
 interface InItem {
   productId?: number;
@@ -24,7 +32,7 @@ interface InItem {
 function isDiscontinuedOrJunkForMaterialize(rawName: string, expiryDate?: string): boolean {
   if (/[\r\n]/.test(rawName)) return true; // 부자재 다중행 메뉴 라벨 (예: '슈퍼핫도그\n2종')
   const exp = String(expiryDate || '').trim();
-  if (/삭제|불용|이관|단종/.test(exp)) return true;
+  if (/삭제|불용|이관|단종|출고정지|발주제외/.test(exp)) return true;
   if (/^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(exp)) return true;
   return false;
 }
@@ -59,7 +67,14 @@ export async function POST(req: NextRequest) {
 
     // 기존 활성 및 비활성 품목 일괄 조회 (정본 품번·낮은 ID 우선) — 별칭 매칭 및 비활성/중복 재생성 방지
     const allProductsRaw = await prisma.product.findMany({
-      include: { partner: true },
+      include: {
+        partner: true,
+        prices: {
+          orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+          take: 10,
+          select: { effectiveDate: true, purchasePrice: true },
+        },
+      },
       orderBy: { id: 'asc' },
     });
     const sortCanonFirst = (arr: typeof allProductsRaw) =>
@@ -162,18 +177,31 @@ export async function POST(req: NextRequest) {
       const targetNameForExclusion = matchedExisting?.name || rawName;
       const targetDiscDate = matchedExisting?.discontinuedDate || '';
       if (
+        isTerminalProductStatus(matchedExisting?.status) ||
         isExcludedFromOrder(targetNameForExclusion, checkOrderDate) ||
         (targetDiscDate && checkOrderDate >= targetDiscDate)
       ) {
-        failed.push({ name: rawName, reason: '발주 제외/단종 품목' });
+        failed.push({ name: rawName, reason: '발주 제외/단종/삭제·이관 품목' });
         continue;
       }
       const ref: any = (auditMap as Map<string, any>).get(norm);
       const vendorName = (ref?.vendor || it.supplierHeader || '').trim();
-      const packUnit = Number(it.packUnit) || Number(ref?.packUnit) || 1;
-      const bagPrice = Number(it.bagPrice) || Number(ref?.bagPrice) || 0;
-      const boxPrice = Number(it.boxPrice) || bagPrice * packUnit;
-      const totalAmount = Number(it.totalAmount) || boxes * boxPrice;
+      const callerPack = Number(it.packUnit) > 0 ? Number(it.packUnit) : 0;
+      const dbPack = matchedExisting && Number(matchedExisting.boxQty) > 0 ? Number(matchedExisting.boxQty) : 0;
+      const packUnit = normalizePackUnit(callerPack > 0 ? callerPack : dbPack > 0 ? dbPack : Number(ref?.packUnit));
+      const inputBag = Number(it.bagPrice) || 0;
+      const inputBox = Number(it.boxPrice) || 0;
+      const derivedBagFromInput = inputBag > 0 ? inputBag : inputBox > 0 ? calcBagPriceFromBox(inputBox, packUnit) : 0;
+      const dbBagPrice = matchedExisting ? pickLatestValidPurchasePrice(matchedExisting.prices) : 0;
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: derivedBagFromInput > 0 ? derivedBagFromInput : dbBagPrice,
+        invUnitPrice: dbBagPrice,
+        snapshotUnitPrice: Number(ref?.bagPrice),
+      });
+      const boxPrice = calcBoxPrice(bagPrice, packUnit);
+      const totalAmount = Number(it.totalAmount) > 0 && boxPrice > 0
+        ? Math.round(Number(it.totalAmount))
+        : Math.round(boxes * boxPrice);
 
       prepared.push({
         idx,
@@ -269,6 +297,7 @@ export async function POST(req: NextRequest) {
           boxQty: p.packUnit,
           warehouse: p.warehouse,
           safetyStockQty: p.safetyStock,
+          orderCycle: p.ref?.orderCycle || '',
           partnerId: p.cleanVendor ? (partnerByName.get(p.cleanVendor)?.id as string) ?? null : null,
           remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
         }));
@@ -299,7 +328,7 @@ export async function POST(req: NextRequest) {
             productId: (createdByNorm.get(p.norm) as any).id as number,
             purchasePrice: p.bagPrice,
             deliveryPrice: 0,
-            effectiveDate: kstToday(),
+            effectiveDate: checkOrderDate,
             remark: 'GFS 자동생성 단가(봉단가)',
           }));
         if (priceRows.length > 0) {
@@ -350,11 +379,18 @@ export async function POST(req: NextRequest) {
       }
       const wasCreated = createdByNorm.has(p.norm);
       // GFS 원본 입수를 최우선 (ERP 기본값 boxQty=1에 의한 단가 왜곡 방지)
-      const packUnit = (p.packUnit && p.packUnit > 0)
+      const dbPack = Number(product.boxQty) > 0 ? Number(product.boxQty) : 0;
+      const packUnit = p.packUnit > 1
         ? p.packUnit
-        : (Number(product.boxQty) > 0 ? Number(product.boxQty) : Number(p.ref?.packUnit) || 1);
-      const boxPrice = p.boxPrice > 0 ? p.boxPrice : p.bagPrice * packUnit;
-      const totalAmount = p.totalAmount > 0 ? p.totalAmount : p.boxes * boxPrice;
+        : (dbPack > 0 ? dbPack : normalizePackUnit(p.ref?.packUnit));
+      const dbBagPrice = pickLatestValidPurchasePrice(product.prices);
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: p.bagPrice > 0 ? p.bagPrice : dbBagPrice,
+        invUnitPrice: dbBagPrice,
+        snapshotUnitPrice: Number(p.ref?.bagPrice),
+      });
+      const boxPrice = calcBoxPrice(bagPrice, packUnit);
+      const totalAmount = boxPrice > 0 ? Math.round(p.boxes * boxPrice) : Math.round(p.totalAmount || 0);
       const partner = (product as any).partner;
       matched.push({
         productId: product.id,
@@ -363,7 +399,7 @@ export async function POST(req: NextRequest) {
         orderQty: p.boxes,
         unit: 'box',
         packUnit,
-        bagPrice: p.bagPrice,
+        bagPrice,
         boxPrice,
         totalAmount,
         partnerId: (product as any).partnerId ?? null,

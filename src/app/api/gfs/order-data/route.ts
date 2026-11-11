@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { calcBoxPrice, normalizePackUnit, pickLatestValidPurchasePrice } from '@/lib/gfs/pricing';
 
 // GET /api/gfs/order-data
 // GFS 스마트발주에서 사용할 ERP 기준정보 일괄 제공 (품목/재고/단가)
@@ -22,10 +23,14 @@ export async function GET() {
           category: true,
           kind: true,
           warehouse: true,
+          boxQty: true,
           safetyStockQty: true,
           orderUnitQty: true,
           minOrderQty: true,
+          orderCycle: true,
+          targetOrderDays: true,
           partnerId: true,
+          prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
         },
         orderBy: { productCode: 'asc' },
       }),
@@ -36,6 +41,8 @@ export async function GET() {
           warehouse: true,
           currentQty: true,
           unit: true,
+          unitPrice: true,
+          stockAmount: true,
           expiryDate: true,
           lotNo: true,
         },
@@ -48,14 +55,26 @@ export async function GET() {
           deliveryPrice: true,
           effectiveDate: true,
         },
-        orderBy: { effectiveDate: 'desc' },
+        orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
       }),
     ]);
+
+    const enrichedProducts = products.map(({ prices: pPrices, ...p }) => {
+      const packUnit = normalizePackUnit(p.boxQty);
+      const bagPrice = pickLatestValidPurchasePrice(pPrices);
+      return {
+        ...p,
+        boxQty: packUnit,
+        bagPrice,
+        purchasePrice: bagPrice,
+        boxPrice: calcBoxPrice(bagPrice, packUnit),
+      };
+    });
 
     return NextResponse.json({
       success: true,
       data: {
-        products,
+        products: enrichedProducts,
         inventory,
         prices: prices.map((p) => ({
           productCode: p.product.productCode,

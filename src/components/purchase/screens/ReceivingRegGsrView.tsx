@@ -8,6 +8,14 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import {
+  calcBagPriceFromBox,
+  calcBoxPrice,
+  isBagUnitLabel,
+  isBoxUnitLabel,
+  normalizePackUnit,
+  unitPriceForOrderUnit,
+} from '@/lib/gfs/pricing';
+import {
   ExternalLink,
   Printer,
   CheckCircle2,
@@ -68,7 +76,7 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'clientOutQty', label: '(거래처)출고량', width: '90px', align: 'right', format: 'number' },
   { key: 'carNo', label: '차량번호', width: '95px', align: 'center', editable: true },
   { key: 'recvQty', label: '입고수량', width: '75px', align: 'right', format: 'number', editable: true },
-  { key: 'unitQty', label: 'unit 수량', width: '70px', align: 'right', format: 'number', dangerIfNegative: true },
+  { key: 'unitQty', label: '입수량', width: '65px', align: 'right', format: 'number', dangerIfNegative: true },
   { key: 'pieceQty', label: '낱개수량', width: '65px', align: 'right', format: 'number', editable: true },
   { key: 'warehouse', label: '창고명', width: '100px', align: 'center', warehouseDropdown: true },
   { key: 'expiryDate', label: '유통기한', width: '95px', align: 'center', datePicker: true },
@@ -77,6 +85,9 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'lookStatus', label: '외관상태', width: '60px', align: 'center', haccpToggle: true },
   { key: 'carClean', label: '차량청결', width: '60px', align: 'center', haccpToggle: true },
   { key: 'totalJudge', label: '종합판정', width: '60px', align: 'center', haccpToggle: true },
+  { key: 'bagPrice', label: '봉단가', width: '90px', align: 'right', format: 'currency', editable: true },
+  { key: 'boxPrice', label: '박스단가', width: '95px', align: 'right', format: 'currency', editable: true },
+  { key: 'unitPrice', label: '적용단가', width: '95px', align: 'right', format: 'currency', editable: true },
   { key: 'recvAmt', label: '입고금액(합계)', width: '110px', align: 'right', format: 'currency' },
   { key: 'diffQty', label: '차이수량', width: '70px', align: 'right', format: 'number', dangerIfNegative: true },
   { key: 'lotNo', label: 'LOT no.', width: '120px', align: 'center', editable: true },
@@ -119,7 +130,25 @@ export const ReceivingRegGsrView: React.FC = () => {
           const defaultTemp = isFrozen ? '-18.0℃' : isCold ? '3.0℃' : '18.0℃';
 
           const remainQty = Number(dt.remainQty) > 0 ? Number(dt.remainQty) : Number(dt.orderQty) - Number(dt.receivedQty || 0);
-          const unitPrice = Number(dt.unitPrice || dt.product?.unitPrice || 0);
+          const packUnit = normalizePackUnit(dt.packUnit || dt.product?.boxQty || dt.orderUnitQty);
+          const unitStr = dt.unit || 'box';
+          const isBox = isBoxUnitLabel(unitStr) || (!isBagUnitLabel(unitStr) && packUnit > 1);
+          const rawUnitPrice = Number(dt.unitPrice || 0);
+          const derivedBagPrice =
+            Number(dt.bagPrice) > 0
+              ? Number(dt.bagPrice)
+              : isBox && packUnit > 1 && rawUnitPrice > 0
+                ? calcBagPriceFromBox(rawUnitPrice, packUnit)
+                : rawUnitPrice;
+          const bagPrice = derivedBagPrice;
+          const boxPrice =
+            Number(dt.boxPrice) > 0
+              ? Number(dt.boxPrice)
+              : calcBoxPrice(bagPrice, packUnit);
+          const unitPrice =
+            rawUnitPrice > 0
+              ? rawUnitPrice
+              : unitPriceForOrderUnit(bagPrice, unitStr, packUnit);
 
           const normOrderDate = normalizeYmd(po.orderDate || kstToday());
 
@@ -139,13 +168,13 @@ export const ReceivingRegGsrView: React.FC = () => {
             type: dt.category || (dt.productCode?.startsWith('R') ? '부자재' : '원재료'),
             name: dt.productName || dt.product?.name,
             spec: dt.product?.spec || '-',
-            unit: dt.unit || 'box',
+            unit: unitStr,
             orderQty: Number(dt.orderQty || 0),
             prevRecvQty: Number(dt.receivedQty || 0),
             clientOutQty: remainQty,
             carNo: '경기88바1234',
             recvQty: remainQty, // 기본값: 잔량 전량 입고 제안
-            unitQty: Number(dt.product?.boxQty || dt.orderUnitQty || 1),
+            unitQty: packUnit,
             pieceQty: 0,
             warehouse: dt.product?.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(dt.product.warehouse)
               ? dt.product.warehouse
@@ -156,8 +185,10 @@ export const ReceivingRegGsrView: React.FC = () => {
             lookStatus: 'O',
             carClean: 'O',
             totalJudge: 'O',
+            bagPrice,
+            boxPrice,
             unitPrice,
-            recvAmt: remainQty * unitPrice,
+            recvAmt: Math.round(remainQty * unitPrice),
             diffQty: 0,
             lotNo: `LOT-${normOrderDate.replace(/-/g, '').slice(2)}-${(dt.productCode || 'MAT').slice(-4)}`,
             remark: po.remark ? `[발주연계] ${po.remark}` : '스마트발주(GFS) 정상입고',
@@ -206,16 +237,44 @@ export const ReceivingRegGsrView: React.FC = () => {
       prev.map((r) => {
         if (r.id === id) {
           const updated = { ...r, [key]: val };
+          const pack = normalizePackUnit(updated.unitQty);
+          const isBox =
+            isBoxUnitLabel(updated.unit) ||
+            (!isBagUnitLabel(updated.unit) && pack > 1);
           // 입고수량 변경 시 차이수량 및 입고금액 즉시 자동 재계산
           if (key === 'recvQty') {
             const inQty = Number(val) || 0;
             const diff = inQty - updated.clientOutQty;
             updated.diffQty = diff;
-            updated.recvAmt = inQty * (updated.unitPrice || 0);
+            updated.recvAmt = Math.round(inQty * (updated.unitPrice || 0));
+          }
+          if (key === 'bagPrice') {
+            const bag = Number(val) || 0;
+            const box = calcBoxPrice(bag, pack);
+            updated.bagPrice = bag;
+            updated.boxPrice = box;
+            updated.unitPrice = isBox && pack > 1 ? box : bag;
+            updated.recvAmt = Math.round((updated.recvQty || 0) * updated.unitPrice);
+          }
+          if (key === 'boxPrice') {
+            const box = Number(val) || 0;
+            const bag = calcBagPriceFromBox(box, pack);
+            updated.boxPrice = box;
+            updated.bagPrice = bag;
+            updated.unitPrice = isBox && pack > 1 ? box : bag;
+            updated.recvAmt = Math.round((updated.recvQty || 0) * updated.unitPrice);
           }
           if (key === 'unitPrice') {
             const price = Number(val) || 0;
-            updated.recvAmt = (updated.recvQty || 0) * price;
+            updated.unitPrice = price;
+            if (isBox && pack > 1) {
+              updated.boxPrice = price;
+              updated.bagPrice = calcBagPriceFromBox(price, pack);
+            } else {
+              updated.bagPrice = price;
+              updated.boxPrice = calcBoxPrice(price, pack);
+            }
+            updated.recvAmt = Math.round((updated.recvQty || 0) * price);
           }
           return updated;
         }

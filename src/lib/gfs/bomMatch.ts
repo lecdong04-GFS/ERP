@@ -264,8 +264,10 @@ export function calcBomEffectiveUnitCost(
   unitQtyGrams: number,
   bagPrice: number,
   divisor: number,
+  bomMultiplier: number = 1,
 ): number {
   const d = divisor > 0 ? divisor : 1000;
-  return (unitQtyGrams / d) * bagPrice;
+  const m = bomMultiplier > 0 ? bomMultiplier : 1;
+  return (unitQtyGrams / d) * bagPrice * m;
 }
 

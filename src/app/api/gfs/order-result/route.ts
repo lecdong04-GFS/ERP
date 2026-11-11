@@ -4,6 +4,14 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  isBoxUnitLabel,
+  unitPriceForOrderUnit,
+} from '@/lib/gfs/pricing';
 
 interface OrderResultItem {
   productId?: number;
@@ -72,7 +80,22 @@ export async function POST(req: NextRequest) {
     const prodOr: any[] = [];
     if (allIds.length > 0) prodOr.push({ id: { in: allIds } });
     if (allCodes.length > 0) prodOr.push({ productCode: { in: allCodes } });
-    const foundProducts = prodOr.length > 0 ? await prisma.product.findMany({ where: { OR: prodOr } }) : [];
+    const foundProducts =
+      prodOr.length > 0
+        ? await prisma.product.findMany({
+            where: { OR: prodOr },
+            include: {
+              prices: {
+                orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+                take: 10,
+                select: { effectiveDate: true, purchasePrice: true },
+              },
+              inventories: {
+                select: { unitPrice: true },
+              },
+            },
+          })
+        : [];
     const productById = new Map(foundProducts.map((p) => [p.id, p]));
     const productByCode = new Map(foundProducts.map((p) => [p.productCode, p]));
     const resolveProduct = (it: OrderResultItem) =>
@@ -183,23 +206,51 @@ export async function POST(req: NextRequest) {
         if (!product) continue; // 미등록 품목은 스킵
         const itemName = it.productName || product.name;
         const isPastDisc = Boolean(product.discontinuedDate) && today >= product.discontinuedDate!;
-        if (!product.isUsed || isPastDisc || isExcludedFromOrder(itemName, today)) {
+        if (!product.isUsed || isTerminalProductStatus(product.status) || isPastDisc || isExcludedFromOrder(itemName, today)) {
           skippedExcludedCount += 1;
           continue;
         }
         const qty = Number(it.orderQty) || 0;
         if (qty <= 0) continue;
-        const price = Number(it.unitPrice) || 0;
-        const lineAmount = it.totalAmount != null && it.totalAmount > 0
-          ? Number(it.totalAmount)
-          : Math.round(qty * price);
+        const unit = it.unit || 'box';
+        const pack = normalizePackUnit(product.boxQty);
+        const invValidPrice = (product.inventories || []).reduce(
+          (best, inv) => (best > 0 ? best : Number(inv.unitPrice) || 0),
+          0
+        );
+        const masterBagPrice = resolveBagPrice({
+          masterBagPrice: pickLatestValidPurchasePrice(product.prices as any),
+          invUnitPrice: invValidPrice,
+        });
+        const expectedUnitPrice = unitPriceForOrderUnit(masterBagPrice, unit, pack);
+
+        let price = Number(it.unitPrice) || 0;
+        if (price <= 0) {
+          price = expectedUnitPrice > 0
+            ? expectedUnitPrice
+            : it.totalAmount && it.totalAmount > 0
+              ? Math.round(Number(it.totalAmount) / qty)
+              : 0;
+        } else if (isBoxUnitLabel(unit) && pack > 1 && expectedUnitPrice > 0) {
+          // 이중 입수량 곱셈(박스단가 × 입수량) 또는 박스 발주에 봉단가 오입력 방어
+          if (price >= expectedUnitPrice * pack * 0.85 && price > expectedUnitPrice * 1.8) {
+            price = expectedUnitPrice;
+          } else if (
+            masterBagPrice > 0 &&
+            Math.abs(price - masterBagPrice) < 0.01 &&
+            Math.abs(expectedUnitPrice - masterBagPrice) > 1
+          ) {
+            price = expectedUnitPrice;
+          }
+        }
+        const lineAmount = Math.round(qty * price);
 
         detailData.push({
           productId: product.id,
           productCode: product.productCode,
           productName: itemName,
           category: product.category,
-          unit: it.unit || 'box',
+          unit,
           orderQty: qty,
           unitPrice: price,
           amount: lineAmount,
@@ -218,7 +269,7 @@ export async function POST(req: NextRequest) {
         orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
       }
 
-      const totalAmount = detailData.reduce((a, d) => a + d.amount, 0);
+      const totalAmount = Math.round(detailData.reduce((a, d) => a + d.amount, 0));
 
       await prisma.purchaseOrder.create({
         data: {
@@ -275,7 +326,7 @@ export async function POST(req: NextRequest) {
         .filter((it) => {
           if (!(Number(it.orderQty) > 0)) return false;
           const product = resolveProduct(it);
-          if (!product || !product.isUsed) return false;
+          if (!product || !product.isUsed || isTerminalProductStatus(product.status)) return false;
           const isPastDisc = Boolean(product.discontinuedDate) && today >= product.discontinuedDate!;
           if (isPastDisc || isExcludedFromOrder(it.productName || product.name, today)) return false;
           return true;

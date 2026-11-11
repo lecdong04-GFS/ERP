@@ -5,6 +5,19 @@ import prisma from '@/lib/prisma';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
 import { normName } from '@/lib/gfs/norm';
+import { pickLatestValidPrice } from '@/lib/gfs/bomMatch';
+import {
+  normalizeOrderCycleText,
+  parseExcelLifecycle,
+} from '@/lib/gfs/productStatus';
+import { kstToday } from '@/lib/kst';
+import {
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  toBagQty,
+} from '@/lib/gfs/pricing';
 
 // GET /api/inventory/stock?category=원재료&warehouse=상온보관고&targetDate=2026-11-09
 export async function GET(req: NextRequest) {
@@ -21,7 +34,13 @@ export async function GET(req: NextRequest) {
     const where: any = {};
     const andConditions: any[] = [];
 
-    if (category) andConditions.push({ category });
+    if (category) {
+      andConditions.push({ category });
+    } else {
+      andConditions.push({
+        product: { category: { notIn: ['완성품', '반제품'] } },
+      });
+    }
     if (warehouse) andConditions.push({ warehouse });
     if (search) {
       andConditions.push({
@@ -33,7 +52,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 단종/미사용(isUsed=false) 또는 삭제예정일 도래(discontinuedDate <= targetDate) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A)
+    // 삭제/이관/불용/출고정지/미사용 또는 삭제예정일 도래(discontinuedDate <= targetDate) 품목 중 현재고가 0인 항목은 기본 목록에서 숨김 처리 (방안 A3)
     const includeDiscontinued = searchParams.get('includeDiscontinued') === 'true';
     if (!includeDiscontinued) {
       andConditions.push({
@@ -41,6 +60,7 @@ export async function GET(req: NextRequest) {
           {
             product: {
               isUsed: true,
+              status: { notIn: ['삭제', '이관', '불용', '출고정지', '단종', '발주제외'] },
               OR: [
                 { discontinuedDate: null },
                 { discontinuedDate: '' },
@@ -63,6 +83,7 @@ export async function GET(req: NextRequest) {
         product: {
           include: {
             partner: true,
+            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
           },
         },
       },
@@ -118,11 +139,8 @@ export async function GET(req: NextRequest) {
           }
         }
         if (target) {
-          const packUnit = Math.max(1, Number(d.product?.boxQty || d.boxQty || 1));
-          const isBagUnit = d.unit === '봉' || d.unit === 'ea' || d.unit === 'pk';
-          const recvBags = isBagUnit
-            ? Number(d.receivedQty) || 0
-            : (Number(d.receivedQty) || 0) * packUnit;
+          const packUnit = normalizePackUnit(d.product?.boxQty || d.boxQty);
+          const recvBags = toBagQty(Number(d.receivedQty) || 0, d.unit, packUnit);
           inQtyByInvId.set(
             target.id,
             (inQtyByInvId.get(target.id) || 0) + recvBags
@@ -131,10 +149,28 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const responseItems = items.map((inv) => ({
-      ...inv,
-      inQty: inQtyByInvId.get(inv.id) || 0,
-    }));
+    const responseItems = items.map((inv) => {
+      const packUnit = normalizePackUnit(inv.product?.boxQty);
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: pickLatestValidPurchasePrice(inv.product?.prices),
+        invUnitPrice: inv.unitPrice,
+      });
+      const boxPrice = calcBoxPrice(bagPrice, packUnit);
+      const stockAmount =
+        bagPrice > 0
+          ? Math.round((Number(inv.currentQty) || 0) * bagPrice)
+          : (Number(inv.stockAmount) || 0);
+      return {
+        ...inv,
+        unitPrice: bagPrice,
+        bagPrice,
+        boxPrice,
+        packUnit,
+        targetOrderDays: Number(inv.product?.targetOrderDays) || 0,
+        stockAmount,
+        inQty: inQtyByInvId.get(inv.id) || 0,
+      };
+    });
 
     return NextResponse.json({ success: true, data: responseItems });
   } catch (error: any) {
@@ -159,6 +195,16 @@ export async function PUT(req: NextRequest) {
       safetyStock?: number;
       expiryDate?: string;
       productId?: number;
+      packUnit?: number;
+      boxQty?: number;
+      orderCycle?: string;
+      targetOrderDays?: number;
+      productName?: string;
+      status?: string;
+      discontinuedDate?: string | null;
+      isUsed?: boolean;
+      effectiveDate?: string;
+      priceEdited?: boolean;
     }> = body.updates || (body.id ? [body] : []);
 
     if (!updates || updates.length === 0) {
@@ -201,6 +247,9 @@ export async function PUT(req: NextRequest) {
             }
             if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
             if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
+            if (item.productName !== undefined && String(item.productName).trim()) {
+              data.productName = String(item.productName).trim();
+            }
 
             return prisma.inventory.update({
               where: { id: Number(item.id) },
@@ -213,19 +262,131 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // 3) 안전재고(Product.safetyStockQty) 업데이트가 있는 경우 별도 반영
-    const safetyUpdates = updates.filter(
-      (u) => u.safetyStock !== undefined && (u.productId || existingIdSet.has(Number(u.id)))
+    // 3) 안전재고·입수량·발주주기·품명·상태·매입단가(ProductPrice) 동기화 반영
+    const masterSyncUpdates = updates.filter(
+      (u) =>
+        (u.safetyStock !== undefined ||
+          u.packUnit !== undefined ||
+          u.boxQty !== undefined ||
+          u.orderCycle !== undefined ||
+          u.targetOrderDays !== undefined ||
+          u.productName !== undefined ||
+          u.status !== undefined ||
+          u.discontinuedDate !== undefined ||
+          u.isUsed !== undefined ||
+          (u.priceEdited === true && u.unitPrice !== undefined && Number(u.unitPrice) > 0)) &&
+        (u.productId || existingIdSet.has(Number(u.id)))
     );
-    if (safetyUpdates.length > 0) {
+    if (masterSyncUpdates.length > 0) {
+      const todayKst = kstToday();
+      const targetPids = [
+        ...new Set(
+          masterSyncUpdates
+            .map((u) => u.productId || prodIdMap.get(Number(u.id)))
+            .filter((n): n is number => Number(n) > 0)
+        ),
+      ];
+      const existingMasterPrices = targetPids.length
+        ? await prisma.productPrice.findMany({
+            where: { productId: { in: targetPids } },
+            orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+          })
+        : [];
+      const pricesByPid = new Map<number, typeof existingMasterPrices>();
+      for (const pr of existingMasterPrices) {
+        const list = pricesByPid.get(pr.productId) || [];
+        list.push(pr);
+        pricesByPid.set(pr.productId, list);
+      }
+
       await Promise.all(
-        safetyUpdates.map(async (u) => {
+        masterSyncUpdates.map(async (u) => {
           const pId = u.productId || prodIdMap.get(Number(u.id));
-          if (pId) {
-            await prisma.product.update({
-              where: { id: pId },
-              data: { safetyStockQty: Number(u.safetyStock) },
-            }).catch(() => {});
+          if (!pId) return;
+          const pData: any = {};
+          if (u.safetyStock !== undefined) pData.safetyStockQty = Number(u.safetyStock);
+          const nextBoxQty = Number(u.boxQty ?? u.packUnit ?? 0);
+          if (nextBoxQty > 0 && !(pId === 265 && nextBoxQty === 30)) pData.boxQty = nextBoxQty;
+          if (u.orderCycle !== undefined) {
+            const normCycle = normalizeOrderCycleText(u.orderCycle);
+            if (normCycle || u.orderCycle === '') pData.orderCycle = normCycle;
+          }
+          if (u.targetOrderDays !== undefined) {
+            const nextDays = Number(u.targetOrderDays);
+            if (Number.isFinite(nextDays) && nextDays >= 0) {
+              pData.targetOrderDays = Math.round(nextDays * 100) / 100;
+            }
+          }
+          if (u.productName !== undefined && String(u.productName).trim()) {
+            pData.name = String(u.productName).trim();
+          }
+          if (u.status !== undefined && String(u.status).trim()) {
+            pData.status = String(u.status).trim();
+          }
+          if (u.isUsed !== undefined) {
+            pData.isUsed = Boolean(u.isUsed);
+          } else if (pData.status) {
+            if (['삭제', '이관', '불용', '출고정지', '단종', '발주제외'].includes(pData.status)) {
+              pData.isUsed = false;
+            } else if (pData.status === '정상' || pData.status === '삭제예정') {
+              pData.isUsed = true;
+            }
+          }
+          if (u.discontinuedDate !== undefined) {
+            pData.discontinuedDate = u.discontinuedDate || null;
+          }
+          if (u.warehouse !== undefined && String(u.warehouse).trim()) {
+            pData.warehouse = String(u.warehouse).trim();
+          }
+          if (Object.keys(pData).length > 0) {
+            await prisma.product.update({ where: { id: pId }, data: pData }).catch(() => {});
+          }
+
+          const nextPrice = Number(u.unitPrice) || 0;
+          if (u.priceEdited === true && nextPrice > 0) {
+            const pPrices = pricesByPid.get(pId) || [];
+            const latestValid = pickLatestValidPrice(pPrices as any);
+            const effDate = u.effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(u.effectiveDate) ? u.effectiveDate : todayKst;
+            if ((Number(latestValid?.purchasePrice) || 0) !== nextPrice) {
+              const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === effDate);
+              if (sameDay) {
+                await prisma.productPrice
+                  .update({
+                    where: { id: sameDay.id },
+                    data: { purchasePrice: nextPrice, remark: '재고조회 봉단가 동기화' },
+                  })
+                  .catch(() => {});
+              } else {
+                await prisma.productPrice
+                  .create({
+                    data: {
+                      productId: pId,
+                      purchasePrice: nextPrice,
+                      deliveryPrice: 0,
+                      effectiveDate: effDate,
+                      remark: '재고조회 봉단가 동기화',
+                    },
+                  })
+                  .catch(() => {});
+              }
+            }
+            // 동일 품목의 모든 LOT 재고 row에도 봉단가 및 재고금액 동기화
+            const siblingLots = await prisma.inventory.findMany({
+              where: { productId: pId },
+              select: { id: true, currentQty: true, productName: true },
+            });
+            for (const lot of siblingLots) {
+              await prisma.inventory
+                .update({
+                  where: { id: lot.id },
+                  data: {
+                    unitPrice: nextPrice,
+                    stockAmount: Math.round((Number(lot.currentQty) || 0) * nextPrice),
+                    ...(pData.name ? { productName: pData.name } : {}),
+                  },
+                })
+                .catch(() => {});
+            }
           }
         })
       );
@@ -263,29 +424,60 @@ export async function POST(req: NextRequest) {
       expiryDate?: string;
       vendor?: string;
       safetyStock?: number;
+      packUnit?: number;
+      boxQty?: number;
+      orderCycle?: string;
+      targetOrderDays?: number;
+      status?: string;
+      discontinuedDate?: string | null;
+      isUsed?: boolean;
+      effectiveDate?: string;
+      preserveZeroStock?: boolean;
+      priceEdited?: boolean;
     }>;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: '생성할 재고 내역이 없습니다.' }, { status: 400 });
     }
 
-    // N+1 순차 쿼리 제거: 전체 품목 및 기존 재고 1회 일괄 조회 후 메모리 매칭 (30초 타임아웃 원천 방지)
+    // N+1 순차 쿼리 제거: 전체 원·부자재 품목 및 기존 재고 1회 일괄 조회 후 메모리 매칭 (완성품/반제품 오매칭 차단)
     const allProducts = await prisma.product.findMany({
+      where: { category: { notIn: ['완성품', '반제품'] } },
       orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
-      select: { id: true, productCode: true, name: true, category: true, warehouse: true, unit: true, safetyStockQty: true, isUsed: true },
+      select: {
+        id: true,
+        productCode: true,
+        name: true,
+        category: true,
+        warehouse: true,
+        unit: true,
+        boxQty: true,
+        safetyStockQty: true,
+        orderCycle: true,
+        targetOrderDays: true,
+        status: true,
+        discontinuedDate: true,
+        isUsed: true,
+      },
     });
     const prodByCode = new Map<string, (typeof allProducts)[number]>();
     const prodByName = new Map<string, (typeof allProducts)[number]>();
+    const prodByNameWh = new Map<string, (typeof allProducts)[number]>();
     const prodByNorm = new Map<string, (typeof allProducts)[number]>();
+    const prodByNormWh = new Map<string, (typeof allProducts)[number]>();
     allProducts.forEach((p) => {
       if (!prodByCode.has(p.productCode)) prodByCode.set(p.productCode, p);
       if (!prodByName.has(p.name)) prodByName.set(p.name, p);
+      if (p.warehouse && !prodByNameWh.has(`${p.warehouse}||${p.name}`)) prodByNameWh.set(`${p.warehouse}||${p.name}`, p);
       const nk = normName(p.name);
-      if (nk && !prodByNorm.has(nk)) prodByNorm.set(nk, p);
+      if (nk) {
+        if (!prodByNorm.has(nk)) prodByNorm.set(nk, p);
+        if (p.warehouse && !prodByNormWh.has(`${p.warehouse}||${nk}`)) prodByNormWh.set(`${p.warehouse}||${nk}`, p);
+      }
     });
 
     const allInventories = await prisma.inventory.findMany({
       orderBy: { id: 'asc' },
-      select: { id: true, productId: true, warehouse: true, expiryDate: true },
+      select: { id: true, productId: true, warehouse: true, expiryDate: true, currentQty: true, unitPrice: true },
     });
     const invByProdAndWh = new Map<string, (typeof allInventories)[number]>();
     const invByProdId = new Map<number, (typeof allInventories)[number]>();
@@ -294,72 +486,163 @@ export async function POST(req: NextRequest) {
       if (!invByProdId.has(inv.productId)) invByProdId.set(inv.productId, inv);
     });
 
+    const allPrices = await prisma.productPrice.findMany({
+      orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+    });
+    const pricesByPid = new Map<number, typeof allPrices>();
+    for (const pr of allPrices) {
+      const list = pricesByPid.get(pr.productId) || [];
+      list.push(pr);
+      pricesByPid.set(pr.productId, list);
+    }
+
+    const todayKst = kstToday();
     const toUpdateByInvId = new Map<
       number,
-      { id: number; currentQty: number; unitPrice: number; stockAmount: number; expiryDate?: string; isDeletedRow: boolean }
+      { id: number; currentQty: number; unitPrice: number; stockAmount: number; expiryDate?: string; productName?: string; isDeletedRow: boolean }
     >();
     const toCreate: any[] = [];
-    const prodSafetyUpdates: { id: number; safetyStockQty: number }[] = [];
+    const prodMasterUpdates = new Map<number, any>();
+    const priceSyncTargets: Array<{ productId: number; price: number; effectiveDate: string }> = [];
     const created: { productCode: string; warehouse: string }[] = [];
 
     for (const it of items) {
       if (!it.productName && !it.productCode) continue;
       if (/[\r\n]/.test(String(it.productName || ''))) continue;
       const expStr = String(it.expiryDate || '').trim();
-      const isDeletedRow = /삭제|불용|이관|단종/.test(expStr);
+      const lifecycle = parseExcelLifecycle(expStr, it.effectiveDate || todayKst);
+      const isDeletedRow = lifecycle.isTerminal || /삭제|불용|이관|단종|출고정지/.test(expStr);
       const qty = Number(it.currentQty) || 0;
       if (isDeletedRow && qty <= 0) continue;
       const nmNorm = it.productName ? normName(it.productName) : '';
-      // 이름 우선 매칭 후 코드 폴백 (동일 품번을 공유하는 삭제/타창고 행의 오덮어쓰기 방지)
+      const whKey = String(it.warehouse || '').trim();
+      // 품명+창고 → 품명 → 품번 → 정규화명+창고 → 정규화명 순 (동일 품번 타창고·삭제행 오덮어쓰기 및 [상온]/[냉동] 충돌 방지)
       const product =
+        (it.productName && whKey ? prodByNameWh.get(`${whKey}||${it.productName}`) : undefined) ||
         (it.productName ? prodByName.get(it.productName) : undefined) ||
-        (nmNorm ? prodByNorm.get(nmNorm) : undefined) ||
-        (!isDeletedRow && it.productCode ? prodByCode.get(it.productCode) : undefined);
-      if (!product || !product.isUsed) continue;
+        (!isDeletedRow && it.productCode ? prodByCode.get(it.productCode) : undefined) ||
+        (nmNorm && whKey ? prodByNormWh.get(`${whKey}||${nmNorm}`) : undefined) ||
+        (nmNorm ? prodByNorm.get(nmNorm) : undefined);
+      if (!product || (!product.isUsed && !lifecycle.isScheduled)) continue;
 
+      const patch: any = prodMasterUpdates.get(product.id) || {};
       // 안전재고가 비어 있으면 자동계산값으로 채움 (수기값 유지)
       const wantSafety = Math.max(0, Math.round(Number(it.safetyStock) || 0));
       if (wantSafety > 0 && !(Number(product.safetyStockQty) > 0)) {
-        prodSafetyUpdates.push({ id: product.id, safetyStockQty: wantSafety });
-        product.safetyStockQty = wantSafety; // 중복 업데이트 방지
+        patch.safetyStockQty = wantSafety;
+        product.safetyStockQty = wantSafety;
+      }
+      // 입수량(K열) 반영 (9개입/9개 품목 K=1 오기 및 혜자도시락김 300봉/box 보호)
+      const wantBoxQty = Number(it.boxQty ?? it.packUnit ?? 0);
+      if (wantBoxQty > 0 && wantBoxQty !== product.boxQty) {
+        const isSpecialPackTypo =
+          (wantBoxQty === 1 && /9개/.test(product.name) && product.boxQty === 9) ||
+          (product.id === 265 && wantBoxQty === 30 && product.boxQty === 300);
+        if (!isSpecialPackTypo) {
+          patch.boxQty = wantBoxQty;
+          product.boxQty = wantBoxQty;
+        }
+      }
+      // 발주주기(E열) 반영
+      const wantCycle = normalizeOrderCycleText(it.orderCycle);
+      if (wantCycle && wantCycle !== product.orderCycle) {
+        patch.orderCycle = wantCycle;
+        product.orderCycle = wantCycle;
+      }
+      if (it.targetOrderDays !== undefined) {
+        const wantDays = Math.round(Number(it.targetOrderDays) * 100) / 100;
+        if (Number.isFinite(wantDays) && wantDays > 0 && wantDays !== Number(product.targetOrderDays || 0)) {
+          patch.targetOrderDays = wantDays;
+          product.targetOrderDays = wantDays;
+        }
+      }
+      // 상태/삭제예정일(G열) 반영
+      if (it.status && String(it.status).trim()) {
+        patch.status = String(it.status).trim();
+      } else if (lifecycle.isScheduled || lifecycle.isTerminal) {
+        patch.status = lifecycle.status;
+      }
+      if (it.isUsed !== undefined) {
+        patch.isUsed = Boolean(it.isUsed);
+      } else if (patch.status) {
+        if (['삭제', '이관', '불용', '출고정지', '단종', '발주제외'].includes(patch.status)) {
+          patch.isUsed = false;
+        } else if (patch.status === '정상' || patch.status === '삭제예정') {
+          patch.isUsed = true;
+        }
+      }
+      if (it.discontinuedDate !== undefined) {
+        patch.discontinuedDate = it.discontinuedDate || null;
+      } else if (lifecycle.discontinuedDate) {
+        patch.discontinuedDate = lifecycle.discontinuedDate;
+      }
+      if (Object.keys(patch).length > 0) {
+        prodMasterUpdates.set(product.id, patch);
       }
 
       const warehouse = product.warehouse || it.warehouse || '상온';
-      const price = Number(it.unitPrice) || 0;
+      const priceInput = Number(it.unitPrice) || 0;
       const key = `${product.id}||${warehouse}`;
       const existInv = invByProdAndWh.get(key) || invByProdId.get(product.id);
+
+      const pPrices = pricesByPid.get(product.id) || [];
+      const latestValid = pickLatestValidPrice(pPrices as any);
+      const existingMasterPrice = Number(latestValid?.purchasePrice) || 0;
+      const shouldUpdatePrice = Boolean(it.priceEdited) || (existingMasterPrice <= 0 && (Number(existInv?.unitPrice) || 0) <= 0);
+
+      const finalQty = it.preserveZeroStock && qty === 0 && existInv ? existInv.currentQty : qty;
+      const finalPrice =
+        priceInput > 0 && shouldUpdatePrice
+          ? priceInput
+          : (existingMasterPrice || existInv?.unitPrice || 0);
+
+      if (priceInput > 0 && shouldUpdatePrice && existingMasterPrice !== priceInput) {
+        priceSyncTargets.push({
+          productId: product.id,
+          price: priceInput,
+          effectiveDate: it.effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(it.effectiveDate) ? it.effectiveDate : todayKst,
+        });
+      }
 
       if (existInv) {
         const prev = toUpdateByInvId.get(existInv.id);
         // 같은 배치 내 0수량/삭제행이 기존 유수량 정본 행을 0으로 덮어쓰는 사고 차단
-        if (prev && (isDeletedRow || (qty === 0 && prev.currentQty > 0))) {
+        if (prev && (isDeletedRow || (finalQty === 0 && prev.currentQty > 0))) {
           continue;
         }
         toUpdateByInvId.set(existInv.id, {
           id: existInv.id,
-          currentQty: qty,
-          unitPrice: price,
-          stockAmount: qty * price,
+          currentQty: finalQty,
+          unitPrice: finalPrice,
+          stockAmount: finalQty * finalPrice,
           expiryDate: it.expiryDate !== undefined && !isDeletedRow ? expStr : existInv.expiryDate,
+          productName: product.name,
           isDeletedRow,
         });
       } else {
-        if (qty <= 0 && isDeletedRow) continue;
+        if (finalQty <= 0 && isDeletedRow) continue;
         toCreate.push({
           productId: product.id,
           productCode: product.productCode,
-          productName: it.productName || product.name,
+          productName: product.name,
           category: product.category,
           warehouse,
-          currentQty: qty,
+          currentQty: finalQty,
           unit: product.unit,
-          unitPrice: price,
-          stockAmount: qty * price,
+          unitPrice: finalPrice,
+          stockAmount: finalQty * finalPrice,
           expiryDate: it.expiryDate ? expStr : '',
           remark: '재고조사표 업로드 생성',
         });
         // 동일 요청 내 중복 생성 방지를 위해 임시 키 등록
-        invByProdAndWh.set(key, { id: -1, productId: product.id, warehouse, expiryDate: '' });
+        invByProdAndWh.set(key, {
+          id: -1,
+          productId: product.id,
+          warehouse,
+          expiryDate: '',
+          currentQty: finalQty,
+          unitPrice: finalPrice,
+        });
       }
       created.push({ productCode: product.productCode, warehouse });
     }
@@ -383,8 +666,9 @@ export async function POST(req: NextRequest) {
             where: { id: u.id },
             data: {
               currentQty: u.currentQty,
-              unitPrice: u.unitPrice,
+              ...(u.unitPrice > 0 ? { unitPrice: u.unitPrice } : {}),
               stockAmount: u.stockAmount,
+              ...(u.productName ? { productName: u.productName } : {}),
               ...(u.expiryDate !== undefined ? { expiryDate: u.expiryDate } : {}),
             },
           })
@@ -392,16 +676,66 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 품목 마스터 안전재고 보강 병렬 실행
-    if (prodSafetyUpdates.length > 0) {
+    // 품목 마스터(안전재고·입수량·발주주기·상태) 보강 병렬 실행
+    const masterEntries = Array.from(prodMasterUpdates.entries());
+    for (let i = 0; i < masterEntries.length; i += 50) {
+      const slice = masterEntries.slice(i, i + 50);
       await Promise.all(
-        prodSafetyUpdates.slice(0, 50).map((ps) =>
-          prisma.product.update({
-            where: { id: ps.id },
-            data: { safetyStockQty: ps.safetyStockQty },
-          }).catch(() => {})
+        slice.map(([pid, data]) =>
+          prisma.product.update({ where: { id: pid }, data }).catch(() => {})
         )
       );
+    }
+
+    // 봉단가(ProductPrice) 동기화 (중복 피하면서 변동분만 반영)
+    if (priceSyncTargets.length > 0) {
+      const dedupPriceTargets = new Map<number, { productId: number; price: number; effectiveDate: string }>();
+      for (const pt of priceSyncTargets) dedupPriceTargets.set(pt.productId, pt);
+      const priceEntries = Array.from(dedupPriceTargets.values());
+      for (let i = 0; i < priceEntries.length; i += 50) {
+        const slice = priceEntries.slice(i, i + 50);
+        await Promise.all(
+          slice.map(async (pt) => {
+            const pPrices = pricesByPid.get(pt.productId) || [];
+            const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === pt.effectiveDate);
+            if (sameDay) {
+              await prisma.productPrice
+                .update({
+                  where: { id: sameDay.id },
+                  data: { purchasePrice: pt.price, remark: '재고조사표 업로드 단가 동기화' },
+                })
+                .catch(() => {});
+            } else {
+              await prisma.productPrice
+                .create({
+                  data: {
+                    productId: pt.productId,
+                    purchasePrice: pt.price,
+                    deliveryPrice: 0,
+                    effectiveDate: pt.effectiveDate,
+                    remark: '재고조사표 업로드 단가 동기화',
+                  },
+                })
+                .catch(() => {});
+            }
+            const lots = await prisma.inventory.findMany({
+              where: { productId: pt.productId },
+              select: { id: true, currentQty: true },
+            });
+            for (const lot of lots) {
+              await prisma.inventory
+                .update({
+                  where: { id: lot.id },
+                  data: {
+                    unitPrice: pt.price,
+                    stockAmount: Math.round((Number(lot.currentQty) || 0) * pt.price),
+                  },
+                })
+                .catch(() => {});
+            }
+          })
+        );
+      }
     }
 
     await prisma.systemLog

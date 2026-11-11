@@ -23,7 +23,17 @@ import {
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { normName } from '@/lib/gfs/norm';
-import { getScheduledExclusion } from '@/lib/gfs/orderCalc';
+import {
+  isTerminalProductStatus,
+  normalizeOrderCycleText,
+  parseExcelLifecycle,
+} from '@/lib/gfs/productStatus';
+import {
+  calcBagPriceFromBox,
+  calcBoxPrice,
+  normalizePackUnit,
+} from '@/lib/gfs/pricing';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 
 function getKoreanDayOfWeek(dateStr: string): string {
   if (!dateStr) return '';
@@ -74,12 +84,9 @@ interface StockItem {
   liveMenuCount?: number; // 반영된 완제품 수
   liveDiffPercent?: number; // 마스터 기준치 대비 변동률 (%)
   actualDailyUsage?: number; // 당일 실사용량 (전일재고 + 입고량 - 현재고)
-  avg20DailyUsage?: number; // 실사용 평균(20일) (최근 20일간의 실제 일평균 소진량)
-  avg7DailyUsage?: number; // 하위 호환
   hasPrevStock?: boolean; // 전일 재고 실사 존재 여부
   prevSnapDate?: string; // 비교 기준 전일 실사 일자 (YYYY-MM-DD)
   estDailyUsage?: number; // 추정일사용량 (1개월 재고조사표 실소진량 기반, 현재고 기준 봉/낱개/롤 단위)
-  estSampleCount?: number; // 소진 관측 구간 수
   packUnit: number; // 입수량
   boxQty: number; // 박스
   pieceQty: number; // 낱개(봉)
@@ -94,9 +101,13 @@ interface StockItem {
   stockDays: number | null; // 재고유지일 — 발주서 엑셀 N열 보이는 숫자 그대로 (없으면 null)
   gfsDays: number | null; // GFS 버팀일 스냅샷 (산출 시점 live 값)
   gfsAsOf: string; // 스냅샷 기준일
-  unitPrice: number;
+  unitPrice: number; // 봉단가
+  boxPrice?: number; // 박스단가 (= 봉단가 × 입수량)
   totalAmount: number; // currentQty * unitPrice
   snapId?: number; // 스냅샷 조회 행이면 InventorySnapshot.id (저장 라우팅용)
+  productId?: number;
+  productStatus?: string; // 생애주기 상태 (정상/삭제/삭제예정/이관/불용/출고정지)
+  isUsed?: boolean;
   discontinuedDate?: string; // 단종/삭제예정일 (YYYY-MM-DD)
 }
 
@@ -616,15 +627,18 @@ export const StockLookupView: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState('전체');
   const [selectedExpiry, setSelectedExpiry] = useState('전체');
   const [onlyShortage, setOnlyShortage] = useState(false);
+  const [includeDiscontinued, setIncludeDiscontinued] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
+  const [priceEditedIds, setPriceEditedIds] = useState<Set<number>>(new Set());
   const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLiving, setIsLiving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const justUploadedRef = useRef(false);
   // 빨간펜: 업로드 시 이상행(급변·신규) 목록 — 사람은 보고 판단, 저장은 직접
   const [reviewList, setReviewList] = useState<{ id: number; name: string; kind: string; oldQty: number; curQty: number }[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -762,8 +776,9 @@ export const StockLookupView: React.FC = () => {
     byKeyOnly: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
   }>({ byWhAndKey: {}, byKeyOnly: {} });
 
-  const loadStockData = (baseRows?: any[] | null, snapDate?: string) => {
+  const loadStockData = (baseRows?: any[] | null, snapDate?: string, discOverride?: boolean) => {
     const isSnap = !!snapDate && !!baseRows;
+    const showDisc = discOverride ?? includeDiscontinued;
     const targetDay = snapDate || targetDate || kstToday();
     const d = new Date(targetDay + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() - 1);
@@ -773,7 +788,7 @@ export const StockLookupView: React.FC = () => {
     Promise.all([
       baseRows
         ? Promise.resolve({ success: true, data: baseRows })
-        : fetch(`/api/inventory/stock?targetDate=${targetDay}`).then((res) => res.json()),
+        : fetch(`/api/inventory/stock?targetDate=${targetDay}${showDisc ? '&includeDiscontinued=true' : ''}`).then((res) => res.json()),
       fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
       fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
@@ -843,9 +858,10 @@ export const StockLookupView: React.FC = () => {
           const loaded: StockItem[] = [];
           const seen = new Set<string>();
           json.data.forEach((inv: any, idx: number) => {
-            const price = Number(inv.unitPrice) > 0
-              ? Number(inv.unitPrice)
-              : (inv.currentQty > 0 ? inv.stockAmount / inv.currentQty : 2000);
+            const rawUnitPrice = Number(inv.bagPrice ?? inv.unitPrice) || 0;
+            const price = rawUnitPrice > 0
+              ? rawUnitPrice
+              : (inv.currentQty > 0 && Number(inv.stockAmount) > 0 ? Number(inv.stockAmount) / Number(inv.currentQty) : 0);
             const name = inv.productName || inv.product?.name || '';
             const wh = inv.warehouse || '상온';
             const norm = normName(name);
@@ -875,7 +891,6 @@ export const StockLookupView: React.FC = () => {
             const dailyU = Math.round(normalizedDailyU * 100) / 100;
             const estEntry = lookupEst(wh, norm);
             const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
-            const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
             if (estDaily > 0) estMatched += 1;
             const cleanCode = String(inv.itemCode || inv.productCode || inv.product?.productCode || '').split('#')[0];
 
@@ -898,13 +913,12 @@ export const StockLookupView: React.FC = () => {
             const fallbackDays = (usageMode === 'LIVE' && liveDailyVal != null && liveDailyVal > 0)
               ? null
               : (snapEntry && snapEntry.stockDays != null ? Number(snapEntry.stockDays) : null);
-            const inbound = inv.lastInDate
-              ? String(inv.lastInDate).slice(5)
-              : inv.inboundDate
-              ? String(inv.inboundDate)
-              : inv.product?.partner?.leadTime
-              ? `D+${inv.product.partner.leadTime}`
-              : 'D+2';
+            const cycleFromProduct = normalizeOrderCycleText(inv.product?.orderCycle);
+            const inbound =
+              cycleFromProduct ||
+              (inv.inboundDate ? String(inv.inboundDate) : '') ||
+              (inv.lastInDate ? String(inv.lastInDate).slice(5) : '') ||
+              (inv.product?.partner?.leadTime ? `D+${inv.product.partner.leadTime}` : 'D+2');
             const autoSafety = calcSafetyStock(effectiveDaily, pack, parseLeadDays(inbound));
             const safety =
               isSnap && Number(inv.safetyStock) > 0
@@ -935,7 +949,7 @@ export const StockLookupView: React.FC = () => {
               whName: wh,
               vendor: inv.vendor || inv.product?.partner?.name || inv.product?.partnerId || '',
               orderSupplier: '',
-              orderDays: 0,
+              orderDays: Number(inv.product?.targetOrderDays ?? inv.targetOrderDays) || 0,
               itemCode: cleanCode,
               lotNo: inv.lotNo || '',
               lotDate: inv.lastInDate || '',
@@ -956,12 +970,9 @@ export const StockLookupView: React.FC = () => {
               liveMenuCount: liveMenus,
               liveDiffPercent: liveDiffPct,
               actualDailyUsage: actualUsageVal,
-              avg20DailyUsage: estDaily > 0 ? estDaily : 0,
-              avg7DailyUsage: estDaily > 0 ? estDaily : 0,
               hasPrevStock,
               prevSnapDate,
               estDailyUsage: estDaily,
-              estSampleCount: estSamples,
               packUnit: pack,
               boxQty: box,
               pieceQty: piece,
@@ -979,13 +990,18 @@ export const StockLookupView: React.FC = () => {
               burnRank: 0,
               fefoWarn: false,
               unitPrice: uprice,
-              totalAmount: current * uprice,
-              discontinuedDate: inv.product?.discontinuedDate || '',
+              boxPrice: Number(inv.boxPrice) || calcBoxPrice(uprice, pack),
+              totalAmount: Math.round(current * uprice),
+              productId: inv.productId || inv.product?.id || undefined,
+              productStatus: inv.productStatus || inv.product?.status || (inv.product?.isUsed === false ? '삭제' : '정상'),
+              isUsed: inv.product?.isUsed !== false,
+              discontinuedDate: inv.discontinuedDate || inv.product?.discontinuedDate || '',
             });
           });
           const freshIds = new Set<number>();
           setData(applyBurnRank(loaded));
           setDirtyRowIds(new Set());
+          setPriceEditedIds(new Set());
           setNewRowIds(freshIds);
           setSnapshotMode(isSnap);
           const prevLabel = prevSnapDate ? `전일(${prevSnapDate.slice(5)}) 대비 ` : '';
@@ -1003,18 +1019,19 @@ export const StockLookupView: React.FC = () => {
   };
 
   // 날짜별 로드: 해당 날짜 스냅샷이 있으면 확정분, 없으면 현재고 LIVE
-  const loadByDate = async (date: string) => {
+  const loadByDate = async (date: string, discOverride?: boolean) => {
+    const showDisc = discOverride ?? includeDiscontinued;
     try {
       const res = await fetch(`/api/inventory/snapshot?date=${date}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && json.data?.exists && Array.isArray(json.data.rows)) {
-        loadStockData(json.data.rows, date);
+        loadStockData(json.data.rows, date, showDisc);
         return;
       }
     } catch {
       /* 스냅샷 조회 실패 시 현재고로 폴백 */
     }
-    loadStockData(null, date);
+    loadStockData(null, date, showDisc);
   };
 
   // DB에 보관된 전체 실사 일자 목록 로드
@@ -1058,13 +1075,51 @@ export const StockLookupView: React.FC = () => {
         if (!match) return item;
 
         const updated: StockItem = { ...item, [columnKey]: newValue };
+        if (columnKey === 'inboundDate') {
+          const normalizedCycle = normalizeOrderCycleText(newValue);
+          if (normalizedCycle) updated.inboundDate = normalizedCycle;
+        }
+        if (columnKey === 'orderDays') {
+          const parsedDays = parseFloat(String(newValue ?? '').replace(/[^0-9.]/g, ''));
+          updated.orderDays =
+            Number.isFinite(parsedDays) && parsedDays >= 0
+              ? Math.round(parsedDays * 100) / 100
+              : 0;
+        }
 
-        // 박스/낱개/입수량 수정 시 현재고 연동 계산 (엑셀 수식: 박스×입수+낱개)
-        if (columnKey === 'boxQty' || columnKey === 'pieceQty' || columnKey === 'packUnit') {
+        // 박스/낱개 수정 시 현재고 연동 계산 (엑셀 수식: 박스×입수+낱개)
+        if (columnKey === 'boxQty' || columnKey === 'pieceQty') {
           const box = Number(columnKey === 'boxQty' ? newValue : updated.boxQty) || 0;
           const piece = Number(columnKey === 'pieceQty' ? newValue : updated.pieceQty) || 0;
-          const pack = Number(columnKey === 'packUnit' ? newValue : updated.packUnit) || 0;
+          const pack = Number(updated.packUnit) || 0;
           updated.currentStock = box * pack + piece;
+        }
+
+        // 입수량 수정 시: 현재고가 있으면 박스/낱개 재산출, 없으면 0 유지 + 박스단가 재계산
+        if (columnKey === 'packUnit') {
+          const pack = Number(newValue) || 0;
+          const cur = Number(updated.currentStock) || 0;
+          if (pack > 0 && cur > 0) {
+            updated.boxQty = Math.floor(cur / pack);
+            updated.pieceQty = Math.round((cur % pack) * 10) / 10;
+          } else {
+            const box = Number(updated.boxQty) || 0;
+            const piece = Number(updated.pieceQty) || 0;
+            updated.currentStock = box * pack + piece;
+          }
+          updated.boxPrice = calcBoxPrice(Number(updated.unitPrice) || 0, normalizePackUnit(pack));
+        }
+
+        // 봉단가 <-> 박스단가 양방향 동기화
+        if (columnKey === 'unitPrice') {
+          const nextBag = Number(newValue) || 0;
+          updated.unitPrice = nextBag;
+          updated.boxPrice = calcBoxPrice(nextBag, normalizePackUnit(updated.packUnit));
+        }
+        if (columnKey === 'boxPrice') {
+          const nextBox = Number(newValue) || 0;
+          updated.boxPrice = nextBox;
+          updated.unitPrice = calcBagPriceFromBox(nextBox, normalizePackUnit(updated.packUnit));
         }
 
         // 이월재고, 입출고 수정 시 현재고 연동 계산
@@ -1101,7 +1156,7 @@ export const StockLookupView: React.FC = () => {
         const estDaily = Number(updated.estDailyUsage) || 0;
         const effectiveDaily = dailyUsage > 0 ? dailyUsage : estDaily;
 
-        if (columnKey === 'dailyUsage') {
+        if (columnKey === 'dailyUsage' || columnKey === 'packUnit' || columnKey === 'inboundDate') {
           updated.safetyStock = calcSafetyStock(
             effectiveDaily,
             Number(updated.packUnit) || 1,
@@ -1117,7 +1172,7 @@ export const StockLookupView: React.FC = () => {
           ? Math.round((currentStock / effectiveDaily) * 10) / 10
           : (updated.stockDays ?? null);
         updated.gfsDays = updated.stockDays;
-        updated.totalAmount = currentStock * unitPrice;
+        updated.totalAmount = Math.round(currentStock * unitPrice);
 
         return updated;
       });
@@ -1128,6 +1183,9 @@ export const StockLookupView: React.FC = () => {
       return next;
     });
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
+    if (columnKey === 'unitPrice' || columnKey === 'boxPrice') {
+      setPriceEditedIds((prev) => new Set(prev).add(Number(rowId)));
+    }
   };
 
   // ERP LIVE 재계산: 금일 수주 x BOM = 자재별 일사용량 → 재고유지일 스냅샷 갱신
@@ -1200,20 +1258,38 @@ export const StockLookupView: React.FC = () => {
 
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
-      // 시트별 행 수집: R3 헤더, R4~ 데이터 (1거래처 2ID 3제품명 4입고일 5일사용량 7박스 8낱개 9현재고 10입수량 12봉단가)
-      const byNorm = new Map<string, StockItem>();
-      data.forEach((d) => {
-        const k = normName(d.itemName);
-        if (k && !byNorm.has(k)) byNorm.set(k, d);
-      });
+      // 시트별 행 수집: R3 헤더, R4~ 데이터 (1거래처 2ID 3제품명 4발주주기 5일사용량 6유통기한/상태 7박스 8낱개 9현재고 10입수량 12봉단가)
+      const cleanCodeOf = (s: unknown) => String(s ?? '').split('#')[0].trim();
       const next = data.map((d) => ({ ...d }));
+      const nextByCodeName = new Map<string, StockItem>();
+      const nextByWhName = new Map<string, StockItem>();
+      const nextByName = new Map<string, StockItem>();
+      const nextByWhNorm = new Map<string, StockItem>();
       const nextByNorm = new Map<string, StockItem>();
-      next.forEach((d) => {
-        const k = normName(d.itemName);
-        if (k && !nextByNorm.has(k)) nextByNorm.set(k, d);
-      });
+      const registerRow = (d: StockItem) => {
+        const cc = cleanCodeOf(d.itemCode);
+        if (cc && d.itemName && !nextByCodeName.has(`${cc}|${d.itemName}`)) {
+          nextByCodeName.set(`${cc}|${d.itemName}`, d);
+        }
+        if (d.whName && d.itemName && !nextByWhName.has(`${d.whName}|${d.itemName}`)) {
+          nextByWhName.set(`${d.whName}|${d.itemName}`, d);
+        }
+        if (d.itemName && !nextByName.has(d.itemName)) {
+          nextByName.set(d.itemName, d);
+        }
+        const nk = normName(d.itemName);
+        if (nk) {
+          if (d.whName && !nextByWhNorm.has(`${d.whName}|${nk}`)) {
+            nextByWhNorm.set(`${d.whName}|${nk}`, d);
+          }
+          if (!nextByNorm.has(nk)) nextByNorm.set(nk, d);
+        }
+      };
+      next.forEach(registerRow);
       const dirtyIds = new Set<number>(dirtyRowIds);
+      const priceEdited = new Set<number>(priceEditedIds);
       const freshIds = new Set<number>(newRowIds);
+      const seenInUpload = new Map<number, { code: string; isTerminal: boolean; qty: number }>();
       const review: { id: number; name: string; kind: string; oldQty: number; curQty: number }[] = [];
       let added = 0;
       let updated = 0;
@@ -1288,6 +1364,29 @@ export const StockLookupView: React.FC = () => {
         }
 
         const startRow = headerIdx >= 0 ? headerIdx + 1 : 4;
+        // 부자재 시트가 전량 0재고인 경우 기존 DB 부자재 재고 보존(A2 정책)
+        let sheetHasNonZeroStock = false;
+        if (sheetName === '부자재') {
+          for (let i = startRow; i < rows.length; i++) {
+            const r = rows[i];
+            if (!r) continue;
+            const nm = String(r[colMap.name] ?? '').trim();
+            if (nm.length < 2 || nm === 'None' || nm === 'undefined' || /[\r\n]/.test(nm)) continue;
+            const bx = colMap.box >= 0 ? Number(r[colMap.box]) || 0 : 0;
+            const pc = colMap.piece >= 0 ? Number(r[colMap.piece]) || 0 : 0;
+            const pk = colMap.pack >= 0 ? Number(r[colMap.pack]) || 0 : 0;
+            const rc = colMap.current >= 0 && r[colMap.current] != null && !isNaN(Number(r[colMap.current]))
+              ? Number(r[colMap.current])
+              : null;
+            const cq = rc !== null ? rc : (bx * pk + pc);
+            if (cq > 0) {
+              sheetHasNonZeroStock = true;
+              break;
+            }
+          }
+        }
+        const preserveSheetStock = sheetName === '부자재' && !sheetHasNonZeroStock;
+
         for (let i = startRow; i < rows.length; i++) {
           const r = rows[i];
           if (!r) continue;
@@ -1301,40 +1400,67 @@ export const StockLookupView: React.FC = () => {
           const box = colMap.box >= 0 ? Number(r[colMap.box]) || 0 : 0;
           const piece = colMap.piece >= 0 ? Number(r[colMap.piece]) || 0 : 0;
           const pack = colMap.pack >= 0 ? Number(r[colMap.pack]) || 0 : 0;
-          const rawCurrent = colMap.current >= 0 && r[colMap.current] != null && !isNaN(Number(r[colMap.current]))
-            ? Number(r[colMap.current])
-            : null;
-          const current = rawCurrent !== null ? rawCurrent : (box * (pack || 0) + piece);
-
-          // 박스/낱개 역산출 보정 (현재고는 있으나 박스/낱개가 비어있는 경우)
-          let resolvedBox = box;
-          let resolvedPiece = piece;
-          if (current > 0 && box === 0 && piece === 0 && pack > 0) {
-            resolvedBox = Math.floor(current / pack);
-            resolvedPiece = Math.round((current % pack) * 100) / 100;
-          }
 
           const price = colMap.price >= 0 ? Number(r[colMap.price]) || 0 : 0;
           const vendor = colMap.vendor >= 0 ? String(r[colMap.vendor] ?? '').trim() : '';
           const itemId = colMap.code >= 0 && r[colMap.code] != null && String(r[colMap.code]).trim() !== '' ? String(r[colMap.code]).trim() : '';
-          const inbound = colMap.inbound >= 0 ? String(r[colMap.inbound] ?? '').trim() : '';
+          const cleanItemId = cleanCodeOf(itemId);
+          const inboundRaw = colMap.inbound >= 0 ? String(r[colMap.inbound] ?? '').trim() : '';
+          const inbound = normalizeOrderCycleText(inboundRaw) || inboundRaw;
           const expiry = colMap.expiry >= 0 && r[colMap.expiry] != null && String(r[colMap.expiry]).trim() !== '' ? String(r[colMap.expiry]).trim() : '';
-          const isDeletedRow = /삭제|불용|이관|단종/.test(expiry);
-          const exist = nextByNorm.get(norm);
+          const lifecycle = parseExcelLifecycle(expiry, uploadTargetDate);
+          const isDeletedRow = lifecycle.isTerminal || lifecycle.isScheduled || /삭제|불용|이관|단종/.test(expiry);
+
+          // 창고명 우선 결정 (표준 시트명 우선 → 열 데이터)
+          let wh = defaultWh;
+          if (!wh && colMap.wh >= 0 && r[colMap.wh]) {
+            wh = String(r[colMap.wh]).trim();
+          }
+
+          let exist =
+            (cleanItemId ? nextByCodeName.get(`${cleanItemId}|${name}`) : undefined) ||
+            (wh ? nextByWhName.get(`${wh}|${name}`) : undefined) ||
+            nextByName.get(name) ||
+            (wh ? nextByWhNorm.get(`${wh}|${norm}`) : undefined) ||
+            nextByNorm.get(norm);
+
+          const hasNinePieceTypo =
+            (pack === 1 && /9개입|9개/.test(name) && (exist?.packUnit || 0) === 9) ||
+            (pack === 30 && /혜자도시락김/.test(name) && (exist?.packUnit || 0) === 300);
+          const effectivePack = hasNinePieceTypo ? (exist?.packUnit || pack) : pack;
+
+          const rawCurrent = colMap.current >= 0 && r[colMap.current] != null && !isNaN(Number(r[colMap.current]))
+            ? Number(r[colMap.current])
+            : null;
+          const current = rawCurrent !== null ? rawCurrent : (box * (effectivePack || 0) + piece);
+
+          if (exist && seenInUpload.has(exist.id)) {
+            const prev = seenInUpload.get(exist.id)!;
+            if (isDeletedRow && current <= 0) {
+              parsed += 1;
+              continue;
+            }
+            if (!isDeletedRow && !prev.isTerminal && prev.code && cleanItemId && prev.code !== cleanItemId) {
+              exist = undefined;
+            }
+          }
+
+          // 박스/낱개 역산출 보정 (현재고는 있으나 박스/낱개가 비어있는 경우)
+          let resolvedBox = box;
+          let resolvedPiece = piece;
+          if (current > 0 && box === 0 && piece === 0 && effectivePack > 0) {
+            resolvedBox = Math.floor(current / effectivePack);
+            resolvedPiece = Math.round((current % effectivePack) * 100) / 100;
+          }
+
           // 기존에 없는 0재고 삭제/부자재 라벨행은 신규 품목으로 생성하지 않음
           if (!exist && current <= 0 && (isDeletedRow || /^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(expiry))) {
             continue;
           }
 
-          // 창고명 자동 판별 (기본 시트창고 -> 열 데이터 -> 기존 품목 창고 -> 제품명 접두사 -> 기본값)
-          let wh = defaultWh;
-          if (!wh && colMap.wh >= 0 && r[colMap.wh]) {
-            wh = String(r[colMap.wh]).trim();
-          }
           if (!wh) {
-            const existItem = nextByNorm.get(norm);
-            if (existItem?.whName) {
-              wh = existItem.whName;
+            if (exist?.whName) {
+              wh = exist.whName;
             } else if (name.startsWith('[냉장]')) {
               wh = '냉장1';
             } else if (name.startsWith('[냉동]')) {
@@ -1355,35 +1481,52 @@ export const StockLookupView: React.FC = () => {
           }
           const rawDaily = colMap.daily >= 0 ? Number(r[colMap.daily]) || 0 : 0;
           const daily =
-            rawDaily > 0 && (wh !== '부자재' || fFormula.includes('/K')) && pack > 0
-              ? Math.round(rawDaily * pack * 100) / 100
+            rawDaily > 0 && (wh !== '부자재' || fFormula.includes('/K')) && effectivePack > 0
+              ? Math.round(rawDaily * effectivePack * 100) / 100
               : Math.round(rawDaily * 100) / 100;
           const estEntry = estMapRef.current.byWhAndKey[`${wh}|${norm}`] || estMapRef.current.byKeyOnly[norm] || null;
           const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
-          const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
           // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
-          const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, parseLeadDays(inbound));
+          const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, effectivePack, parseLeadDays(inbound));
           if (exist) {
             // 동일 norm의 삭제/0재고 중복행이 활성 재고(>0)를 0으로 덮어쓰지 않도록 보호
-            if (isDeletedRow && current <= 0 && exist.currentStock > 0) {
+            if (isDeletedRow && current <= 0 && exist.currentStock > 0 && exist.itemName !== name) {
               parsed += 1;
               continue;
             }
             const oldStock = exist.currentStock;
+            const nextCurrent = preserveSheetStock ? exist.currentStock : current;
+            const nextBox = preserveSheetStock ? exist.boxQty : resolvedBox;
+            const nextPiece = preserveSheetStock ? exist.pieceQty : resolvedPiece;
+            const matchedStrictly =
+              (wh && exist.whName === wh) ||
+              (cleanItemId && cleanCodeOf(exist.itemCode) === cleanItemId) ||
+              exist.itemName === name;
+            const nextName = matchedStrictly && name ? name : exist.itemName;
+            const nextProductStatus = lifecycle.status;
+            const nextDiscDate = lifecycle.discontinuedDate || '';
+            const nextIsUsed = !lifecycle.isTerminal;
+            const shouldBackfillPrice = price > 0 && (exist.unitPrice || 0) <= 0;
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
             // 유지일: 현재고 ÷ 일사용량 실시간 계산
             const fallbackDays = exist.stockDays;
             const effDaily = daily || exist.dailyUsage || estDaily;
-            const nDays = calcStockDays(current, effDaily, fallbackDays);
+            const nDays = calcStockDays(nextCurrent, effDaily, fallbackDays);
             const changed =
+              exist.itemName !== nextName ||
               exist.whName !== wh ||
               (vendor && exist.vendor !== vendor) ||
-              exist.currentStock !== current ||
-              (price > 0 && exist.unitPrice !== price) ||
+              (inbound && exist.inboundDate !== inbound) ||
+              exist.currentStock !== nextCurrent ||
+              shouldBackfillPrice ||
               (expiry && exist.expiryDate !== expiry) ||
-              (pack > 0 && exist.packUnit !== pack) ||
+              (effectivePack > 0 && exist.packUnit !== effectivePack) ||
+              (exist.productStatus || '정상') !== nextProductStatus ||
+              (exist.discontinuedDate || '') !== nextDiscDate ||
               newSafety !== exist.safetyStock ||
               nDays !== exist.stockDays;
+            seenInUpload.set(exist.id, { code: cleanItemId, isTerminal: isDeletedRow, qty: nextCurrent });
+            exist.itemName = nextName;
             exist.whName = wh;
             if (vendor) exist.vendor = vendor;
             if (!exist.itemCode && itemId) exist.itemCode = itemId;
@@ -1392,26 +1535,34 @@ export const StockLookupView: React.FC = () => {
               exist.dailyUsage = daily;
             }
             exist.estDailyUsage = estDaily;
-            exist.estSampleCount = estSamples;
             if (expiry) exist.expiryDate = expiry;
-            if (pack > 0) exist.packUnit = pack;
-            exist.boxQty = resolvedBox;
-            exist.pieceQty = resolvedPiece;
-            exist.currentStock = current;
-            exist.prevStock = oldStock;
-            exist.diffStock = Math.round((current - oldStock) * 10) / 10;
-            const netUse = (oldStock + (exist.inQty || 0)) - current;
-            exist.actualDailyUsage = netUse > 0 ? Math.round(netUse * 100) / 100 : 0;
-            exist.hasPrevStock = true;
-            if (price > 0) exist.unitPrice = price;
-            exist.totalAmount = current * exist.unitPrice;
+            if (effectivePack > 0) exist.packUnit = effectivePack;
+            exist.productStatus = nextProductStatus;
+            exist.discontinuedDate = nextDiscDate;
+            exist.isUsed = nextIsUsed;
+            if (!preserveSheetStock) {
+              exist.boxQty = nextBox;
+              exist.pieceQty = nextPiece;
+              exist.currentStock = nextCurrent;
+              exist.prevStock = oldStock;
+              exist.diffStock = Math.round((nextCurrent - oldStock) * 10) / 10;
+              const netUse = (oldStock + (exist.inQty || 0)) - nextCurrent;
+              exist.actualDailyUsage = netUse > 0 ? Math.round(netUse * 100) / 100 : 0;
+              exist.hasPrevStock = true;
+            }
+            if (shouldBackfillPrice) {
+              exist.unitPrice = price;
+              priceEdited.add(exist.id);
+            }
+            exist.boxPrice = calcBoxPrice(exist.unitPrice, normalizePackUnit(exist.packUnit));
+            exist.totalAmount = Math.round(exist.currentStock * exist.unitPrice);
             exist.safetyStock = newSafety;
-            exist.shortage = current - newSafety;
-            exist.status = calcStockStatus(current, newSafety);
+            exist.shortage = exist.currentStock - newSafety;
+            exist.status = calcStockStatus(exist.currentStock, newSafety);
             exist.stockDays = nDays;
-            // 빨간펜: 기존 대비 ±50% 이상 급변 행 표시
-            if (oldStock > 0 && Math.abs(current - oldStock) / oldStock >= 0.5) {
-              review.push({ id: exist.id, name: exist.itemName, kind: current > oldStock ? '급증' : '급감', oldQty: oldStock, curQty: current });
+            // 빨간펜: 기존 대비 ±50% 이상 급변 행 표시 (부자재 0재고 보존 시 제외)
+            if (!preserveSheetStock && oldStock > 0 && Math.abs(nextCurrent - oldStock) / oldStock >= 0.5) {
+              review.push({ id: exist.id, name: exist.itemName, kind: nextCurrent > oldStock ? '급증' : '급감', oldQty: oldStock, curQty: nextCurrent });
             }
             if (changed) {
               updated += 1;
@@ -1448,8 +1599,7 @@ export const StockLookupView: React.FC = () => {
               actualDailyUsage: 0,
               hasPrevStock: false,
               estDailyUsage: estDaily,
-              estSampleCount: estSamples,
-              packUnit: pack,
+              packUnit: effectivePack || 1,
               boxQty: resolvedBox,
               pieceQty: resolvedPiece,
               prevStock: current,
@@ -1463,12 +1613,18 @@ export const StockLookupView: React.FC = () => {
               gfsDays: null,
               gfsAsOf: '',
               unitPrice: price,
-              totalAmount: current * price,
+              boxPrice: calcBoxPrice(price, normalizePackUnit(effectivePack || 1)),
+              totalAmount: Math.round(current * price),
+              productStatus: lifecycle.status,
+              discontinuedDate: lifecycle.discontinuedDate || '',
+              isUsed: !lifecycle.isTerminal,
             };
             next.push(row);
-            nextByNorm.set(norm, row);
+            registerRow(row);
+            seenInUpload.set(row.id, { code: cleanItemId, isTerminal: isDeletedRow, qty: current });
             freshIds.add(row.id);
             dirtyIds.add(row.id);
+            if (price > 0) priceEdited.add(row.id);
             added += 1;
             if (current > 0) {
               review.push({ id: row.id, name, kind: '신규', oldQty: 0, curQty: current });
@@ -1481,8 +1637,10 @@ export const StockLookupView: React.FC = () => {
         alert('엑셀에서 품목 행을 찾지 못했습니다. 일일 재고조사표 양식인지 확인하세요.');
         return;
       }
+      justUploadedRef.current = true;
       setData(applyBurnRank(next));
       setDirtyRowIds(dirtyIds);
+      setPriceEditedIds(priceEdited);
       setNewRowIds(freshIds);
       setReviewList(review);
       setReviewOpen(review.length > 0);
@@ -1609,6 +1767,9 @@ export const StockLookupView: React.FC = () => {
             category: d.category || '',
             itemType: d.itemType || '',
             spec: d.spec || '',
+            productStatus: d.productStatus || '정상',
+            discontinuedDate: d.discontinuedDate || '',
+            orderCycle: normalizeOrderCycleText(d.inboundDate) || '',
           })),
         }),
       });
@@ -1618,8 +1779,8 @@ export const StockLookupView: React.FC = () => {
         return;
       }
 
-      // 3) 오늘분이거나 명시적 LIVE 현재고 수정일 때만 현재고(Inventory)에 동기화
-      const isTodayOrFuture = targetDate >= kstToday();
+      // 3) 오늘분, 명시적 LIVE 현재고 수정, 또는 엑셀 업로드 직후에는 현재고(Inventory) + 마스터(입수량/발주주기/생애주기/단가)까지 동기화
+      const isTodayOrFuture = targetDate >= kstToday() || justUploadedRef.current;
       let liveSyncSuccess = false;
       if (shouldSyncLive && isTodayOrFuture) {
         try {
@@ -1632,10 +1793,19 @@ export const StockLookupView: React.FC = () => {
               warehouse: d.whName,
               currentQty: d.currentStock,
               dailyUsage: d.dailyUsage,
-              unitPrice: d.unitPrice,
+              ...(priceEditedIds.has(d.id) ? { unitPrice: d.unitPrice, priceEdited: true } : { priceEdited: false }),
               stockAmount: d.totalAmount,
               safetyStock: d.safetyStock,
               expiryDate: d.expiryDate,
+              packUnit: d.packUnit,
+              boxQty: d.boxQty,
+              orderCycle: normalizeOrderCycleText(d.inboundDate) || d.inboundDate,
+              targetOrderDays: d.orderDays,
+              productName: d.itemName,
+              status: d.productStatus,
+              discontinuedDate: d.discontinuedDate,
+              isUsed: d.isUsed,
+              effectiveDate: targetDate,
             }));
 
             await fetch('/api/inventory/stock', {
@@ -1645,17 +1815,23 @@ export const StockLookupView: React.FC = () => {
             });
           }
 
-          // 3-2) 변경된 행(dirty) 중심 고속 동기화 (불필요한 650건 전송 제거 및 150건 청크 분할)
+          // 3-2) 변경된 행(dirty) 중심 고속 동기화 (입수량/발주주기/생애주기/단가 포함, 150건 청크)
           const syncRows = dirty.length > 0 ? dirty : data;
           const syncItems = syncRows.map((d) => ({
             productCode: codeOf(d) || undefined,
             productName: d.itemName,
             warehouse: d.whName,
             currentQty: d.currentStock,
-            unitPrice: d.unitPrice,
+            ...(priceEditedIds.has(d.id) ? { unitPrice: d.unitPrice, priceEdited: true } : { priceEdited: false }),
             expiryDate: d.expiryDate,
             vendor: d.vendor,
             safetyStock: d.safetyStock,
+            packUnit: d.packUnit,
+            orderCycle: normalizeOrderCycleText(d.inboundDate) || d.inboundDate,
+            targetOrderDays: d.orderDays,
+            status: d.productStatus,
+            discontinuedDate: d.discontinuedDate,
+            isUsed: d.isUsed,
           }));
 
           const CHUNK = 150;
@@ -1664,7 +1840,11 @@ export const StockLookupView: React.FC = () => {
             await fetch('/api/inventory/stock', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items: chunk }),
+              body: JSON.stringify({
+                items: chunk,
+                preserveZeroStock: true,
+                effectiveDate: targetDate,
+              }),
             });
           }
           liveSyncSuccess = true;
@@ -1673,7 +1853,9 @@ export const StockLookupView: React.FC = () => {
         }
       }
 
+      justUploadedRef.current = false;
       setDirtyRowIds(new Set());
+      setPriceEditedIds(new Set());
       setNewRowIds(new Set());
       alert(
         `저장 완료 (${targetDate} 실사 확정 ${snapJson.count}건 저장됨${
@@ -1709,6 +1891,13 @@ export const StockLookupView: React.FC = () => {
 
   const filteredData = useMemo(() => {
     return data.filter((item) => {
+      if (
+        !includeDiscontinued &&
+        item.currentStock <= 0 &&
+        (isTerminalProductStatus(item.productStatus) || item.isUsed === false)
+      ) {
+        return false;
+      }
       if (selectedWh !== '전체' && item.whName !== selectedWh) return false;
       if (selectedType !== '전체' && item.itemType !== selectedType) return false;
       if (selectedVendor !== '전체' && item.vendor !== selectedVendor) return false;
@@ -1731,7 +1920,7 @@ export const StockLookupView: React.FC = () => {
       }
       return true;
     });
-  }, [data, selectedWh, selectedType, selectedVendor, selectedStatus, selectedExpiry, targetDate, onlyShortage, keyword]);
+  }, [data, includeDiscontinued, selectedWh, selectedType, selectedVendor, selectedStatus, selectedExpiry, targetDate, onlyShortage, keyword]);
 
   // Summaries
   const summaries = useMemo(() => {
@@ -1819,7 +2008,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'vendor',
       label: '거래처',
-      width: '6.6%',
+      width: '6.8%',
       minWidth: '88px',
       align: 'left',
       sortable: true,
@@ -1849,35 +2038,30 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'itemName',
       label: '품명',
-      width: '15.0%',
+      width: '15.5%',
       minWidth: '180px',
       sortable: true,
       filterable: true,
       editable: false,
-      render: (v, row) => {
-        const scheduled = getScheduledExclusion(String(v || ''));
-        const discDate = row.discontinuedDate || scheduled?.effectiveDate || '';
-        const discLabel =
-          scheduled?.label ||
-          (discDate ? `${Number(discDate.slice(5, 7))}/${Number(discDate.slice(8, 10))} 삭제예정` : '');
-        return (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              className={`font-black text-slate-900 tracking-tight truncate ${
-                density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
-              }`}
-              title={discLabel ? `${String(v || '')} (${discLabel})` : String(v || '')}
-            >
-              {v}
-            </span>
-            {discLabel && (
-              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
-                {discLabel}
-              </span>
-            )}
-          </div>
-        );
-      },
+      render: (v, row) => (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span
+            className={`font-black text-slate-900 tracking-tight truncate ${
+              density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
+            }`}
+            title={String(v || '')}
+          >
+            {v}
+          </span>
+          <ProductLifecycleBadge
+            status={row.productStatus}
+            discontinuedDate={row.discontinuedDate}
+            isUsed={row.isUsed}
+            name={String(v || '')}
+            refDate={targetDate}
+          />
+        </div>
+      ),
     },
     {
       key: 'unit',
@@ -1888,17 +2072,31 @@ export const StockLookupView: React.FC = () => {
       editable: false,
     },
     {
+      key: 'orderDays',
+      label: locked ? '발주일수 🔒' : '발주일수',
+      width: '3.8%',
+      minWidth: '54px',
+      align: 'right',
+      sortable: true,
+      editable: !locked,
+      render: (val: number) => {
+        const num = Number(val) || 0;
+        if (num <= 0) return <span className="text-slate-300">-</span>;
+        return <span className="font-semibold text-indigo-700">{Number(num.toFixed(2))}일</span>;
+      },
+    },
+    {
       key: 'inboundDate',
-      label: '입고일',
-      width: '3.1%',
-      minWidth: '44px',
+      label: locked ? '발주주기 🔒' : '발주주기',
+      width: '3.6%',
+      minWidth: '52px',
       align: 'center',
-      editable: false,
+      editable: !locked,
     },
     {
       key: 'dailyUsage',
       label: usageMode === 'LIVE' ? 'BOM 일사용량 ⚡' : (locked ? 'BOM 일사용량 🔒' : 'BOM 일사용량'),
-      width: '5.5%',
+      width: '5.7%',
       minWidth: '85px',
       align: 'right',
       format: 'number',
@@ -1958,7 +2156,7 @@ export const StockLookupView: React.FC = () => {
     {
       key: 'actualDailyUsage',
       label: '당일 실사용량',
-      width: '5.1%',
+      width: '5.7%',
       minWidth: '76px',
       align: 'right',
       format: 'number',
@@ -2011,44 +2209,13 @@ export const StockLookupView: React.FC = () => {
       },
     },
     {
-      key: 'avg20DailyUsage',
-      label: '실사용 평균(20일)',
-      width: '5.3%',
-      minWidth: '82px',
-      align: 'right',
-      format: 'number',
-      sortable: true,
-      editable: false,
-      render: (v, row) => {
-        const num = Number(v);
-        if (!(num > 0)) return <span className="text-gray-400 font-mono text-xs">-</span>;
-        const pack = Number(row.packUnit) || 1;
-        const disp = Number(num.toFixed(1)).toLocaleString();
-        const rawBox = num / pack;
-        const boxVal = pack > 1 ? (rawBox < 0.05 ? Number(rawBox.toFixed(3)) : rawBox < 0.1 ? Number(rawBox.toFixed(2)) : Number(rawBox.toFixed(1))) : 0;
-        const boxTxt = pack > 1 ? `(${boxVal}박)` : '';
-        const samples = row.estSampleCount || 0;
-        return (
-          <span
-            className="font-mono font-bold text-violet-700 whitespace-nowrap"
-            title={`최근 20일 실사용 평균: ${Number(num.toFixed(2)).toLocaleString()} (일평균 실소진량 · 관측 ${samples}회)${
-              pack > 1 ? ` · 약 ${(num / pack).toFixed(2)}박스/일 (입수량 ${pack})` : ''
-            }`}
-          >
-            {disp}
-            {boxTxt && <span className="ml-0.5 text-[10px] text-violet-500 font-normal font-sans">{boxTxt}</span>}
-          </span>
-        );
-      },
-    },
-    {
       key: 'packUnit',
-      label: '입수량',
-      width: '2.8%',
-      minWidth: '38px',
+      label: locked ? '입수량 🔒' : '입수량',
+      width: '3.2%',
+      minWidth: '44px',
       align: 'right',
       format: 'number',
-      editable: false,
+      editable: !locked,
     },
     {
       key: 'boxQty',
@@ -2206,9 +2373,9 @@ export const StockLookupView: React.FC = () => {
     },
     {
       key: 'unitPrice',
-      label: locked ? '단가 🔒' : '단가',
+      label: locked ? '봉단가 🔒' : '봉단가',
       width: '4.4%',
-      minWidth: '62px',
+      minWidth: '64px',
       align: 'right',
       format: 'currency',
       editable: !locked,
@@ -2217,6 +2384,23 @@ export const StockLookupView: React.FC = () => {
           ₩{Number(v || 0).toLocaleString()}
         </span>
       ),
+    },
+    {
+      key: 'boxPrice',
+      label: locked ? '박스단가 🔒' : '박스단가',
+      width: '4.8%',
+      minWidth: '72px',
+      align: 'right',
+      format: 'currency',
+      editable: !locked,
+      render: (v, row) => {
+        const bp = Number(v) > 0 ? Number(v) : calcBoxPrice(Number(row.unitPrice) || 0, normalizePackUnit(row.packUnit));
+        return (
+          <span className={`font-mono font-semibold text-blue-700 ${density === 'large' ? 'text-[15px]' : density === 'spacious' ? 'text-[14px]' : 'text-[12.5px]'}`}>
+            ₩{bp.toLocaleString()}
+          </span>
+        );
+      },
     },
     {
       key: 'totalAmount',
@@ -2653,6 +2837,25 @@ export const StockLookupView: React.FC = () => {
                   {shortageStats.shortageCount}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nextVal = !includeDiscontinued;
+                setIncludeDiscontinued(nextVal);
+                if (!snapshotMode) {
+                  void loadByDate(targetDate, nextVal);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-black transition cursor-pointer whitespace-nowrap ${
+                includeDiscontinued
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200'
+              }`}
+              title="삭제·이관·불용·출고정지(0재고 포함) 품목 표시"
+            >
+              <span>삭제·이관 포함</span>
             </button>
           </div>
 

@@ -23,6 +23,7 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { calcBoxPrice } from '@/lib/gfs/pricing';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -71,6 +72,8 @@ interface MaterialMeta {
   currentStock: number;
   pendingIncoming: number;
   unitPrice: number;
+  bagPrice?: number;
+  boxPrice?: number;
   dailyUsage: number;
 }
 
@@ -184,6 +187,8 @@ export const OrderSimulationView: React.FC = () => {
       unit: string;
       supplier: string;
       unitPrice: number;
+      bagPrice: number;
+      boxPrice: number;
       boxQty: number;
       totalReq: number;
       currentStock: number;
@@ -217,8 +222,10 @@ export const OrderSimulationView: React.FC = () => {
       const spec = meta?.spec || '-';
       const unit = meta?.unit || 'ea';
       const supplier = meta?.supplier || '협력사';
-      const unitPrice = meta?.unitPrice || 1000;
       const boxQty = meta?.boxQty && meta.boxQty > 0 ? meta.boxQty : 1;
+      const bagPrice = Number(meta?.bagPrice ?? meta?.unitPrice) || 0;
+      const unitPrice = bagPrice;
+      const boxPrice = Number(meta?.boxPrice) || calcBoxPrice(bagPrice, boxQty);
       const safetyStock = includeSafetyStock ? meta?.safetyStock || 0 : 0;
       const currentStock = meta?.currentStock || 0;
 
@@ -237,7 +244,7 @@ export const OrderSimulationView: React.FC = () => {
       // 박스 단위 올림 계산 및 시스템 예상발주량(낱개 수량) 산출
       const suggestBoxes = netShortage > 0 ? Math.ceil(netShortage / boxQty) : 0;
       const suggestQty = boxQty > 1 ? suggestBoxes * boxQty : netShortage;
-      const suggestAmt = suggestQty * unitPrice;
+      const suggestAmt = Math.round(suggestQty * unitPrice);
 
       // 재고 버팀일수
       const dailyUse = meta?.dailyUsage && meta.dailyUsage > 0 ? meta.dailyUsage : totalReq > 0 ? totalReq : 1;
@@ -277,6 +284,8 @@ export const OrderSimulationView: React.FC = () => {
         unit,
         supplier,
         unitPrice,
+        bagPrice,
+        boxPrice,
         boxQty,
         totalReq,
         currentStock,
@@ -377,7 +386,8 @@ export const OrderSimulationView: React.FC = () => {
         { key: 'suggestQty', label: '시스템예상발주량(수량)', format: 'number' },
         { key: 'boxQty', label: '박스내입수', format: 'number' },
         { key: 'suggestBoxes', label: '예상발주박스(Box)', format: 'number' },
-        { key: 'unitPrice', label: '발주단가', format: 'currency' },
+        { key: 'bagPrice', label: '봉단가', format: 'currency' },
+        { key: 'boxPrice', label: '박스단가', format: 'currency' },
         { key: 'suggestAmt', label: '예상매입금액', format: 'currency' },
         { key: 'stockDays', label: '유지가능일수' },
       ],
@@ -863,7 +873,7 @@ export const OrderSimulationView: React.FC = () => {
                       <th className="border-r border-slate-300 px-1 py-1 text-right w-[58px] bg-amber-100/90 text-amber-950 font-black">
                         발주Box📦
                       </th>
-                      <th className="border-r border-slate-300 px-1 py-1 text-right w-[50px]">단가</th>
+                      <th className="border-r border-slate-300 px-1 py-1 text-right w-[68px]">단가(봉/박스)</th>
                       <th className="border-r border-slate-300 px-1 py-1 text-right w-[70px] font-black">예상금액</th>
                       <th className="border-r border-slate-300 px-0.5 py-1 text-center w-[38px]">버팀일</th>
                       <th className="px-0.5 py-1 text-center w-[52px]">상태</th>
@@ -924,7 +934,12 @@ export const OrderSimulationView: React.FC = () => {
                           {row.suggestBoxes > 0 ? `${row.suggestBoxes}` : '-'}
                         </td>
                         <td className="px-1 py-0.5 text-right font-mono text-slate-700 border-r border-slate-200 text-[10.5px]">
-                          {row.unitPrice.toLocaleString()}
+                          <div>{row.unitPrice.toLocaleString()}</div>
+                          {row.boxQty > 1 && (
+                            <div className="text-[9.5px] text-slate-400">
+                              박스 {row.boxPrice.toLocaleString()} ({row.boxQty}입)
+                            </div>
+                          )}
                         </td>
                         <td className="px-1 py-0.5 text-right font-mono font-black text-slate-900 border-r border-slate-200 text-[11px]">
                           {row.suggestAmt > 0 ? row.suggestAmt.toLocaleString() : '-'}

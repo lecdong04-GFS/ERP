@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
 import { normName } from './norm';
+import { normalizeOrderCycleText, parseExcelLifecycle } from './productStatus';
 
 export { normName };
 
@@ -13,6 +14,9 @@ export interface AuditEntry {
   itemId: string;
   packUnit: number;
   bagPrice: number;
+  orderCycle?: string;
+  status?: string;
+  discontinuedDate?: string | null;
 }
 
 export interface OrderSheetItem {
@@ -34,6 +38,7 @@ export interface BomChildLink {
   normMenu: string;
   qty: number; // B열 수량 (야채 실주문량으로 보정 전)
   perUnit: number; // C열 개당소요량
+  orderBuffer?: number; // 시트별 손실/여유 버퍼 계수 (기본 1)
 }
 
 export interface BomMaterial {
@@ -54,14 +59,86 @@ const num = (v: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
-/** 발주시트 내장 BOM 파싱: 자재행 + 하위 메뉴행(A=메뉴,B=수량,C=개당소요량,E=0) */
+/** 발주시트 H열 수식에서 단위 환산 분모(divisor), 배율(multiplier), B/C 참조 행 범위, SUM(매수) 여부를 추출 */
+function parseOrderFormulaMeta(formula: unknown): {
+  divisor: number;
+  multiplier: number;
+  minRefRow: number | null;
+  maxRefRow: number | null;
+  isSumCount: boolean;
+} {
+  let divisor = 1;
+  let multiplier = 1;
+  if (!formula) {
+    return { divisor, multiplier, minRefRow: null, maxRefRow: null, isSumCount: false };
+  }
+  const f = String(formula).replace(/\s+/g, '');
+
+  // 괄호형 분모 예: /(450*1.5) → 675 (괄호 내 *1.5 를 multiplier 로 오인하지 않도록 제거)
+  let rest = f;
+  const parenDiv = f.match(/\/\(([0-9.]+)\*([0-9.]+)\)/);
+  if (parenDiv) {
+    const prod = Number(parenDiv[1]) * Number(parenDiv[2]);
+    if (prod > 0) divisor = prod;
+    rest = f.replace(parenDiv[0], '');
+  } else {
+    const divMatch = f.match(/\/([0-9.]+)/);
+    if (divMatch) divisor = Number(divMatch[1]) || 1;
+  }
+
+  // % 계수(예: *90% → 0.9) 및 일반 배율(예: *0.8, *1.1) 추출
+  const multMatch = rest.match(/\*([0-9.]+)(%?)/);
+  if (multMatch) {
+    const raw = Number(multMatch[1]) || 1;
+    multiplier = multMatch[2] === '%' ? raw / 100 : raw;
+  }
+
+  // 발주시트 내 지역 B/C 행 범위 추출 (타시트 참조 '시트'!B1 제외)
+  let minRefRow: number | null = null;
+  let maxRefRow: number | null = null;
+  const strippedCrossSheet = f.replace(/(?:'[^']+'|[가-힣A-Za-z0-9_]+)![$A-Za-z0-9:]+/g, '');
+  const refMatches = strippedCrossSheet.matchAll(/(?:^|[^A-Z$])[$]?[BC][$]?(\d+)/g);
+  for (const m of refMatches) {
+    const rNum = Number(m[1]);
+    if (rNum > 0) {
+      minRefRow = minRefRow == null ? rNum : Math.min(minRefRow, rNum);
+      maxRefRow = maxRefRow == null ? rNum : Math.max(maxRefRow, rNum);
+    }
+  }
+
+  const isSumCount = /\bSUM\([^)]*\bB\d+(?::B\d+)?[^)]*\)/i.test(strippedCrossSheet);
+  return { divisor, multiplier, minRefRow, maxRefRow, isSumCount };
+}
+
+/** 발주시트 내장 BOM 파싱: 자재행 + 하위 메뉴행(A=메뉴,B=수량,C=개당소요량,E=0) + 보조 계산기 시트 연동 */
 export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
   const ws = wb.Sheets['발주시트'];
   if (!ws) return [];
   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
   const mats: BomMaterial[] = [];
+  const matsByKey = new Map<string, BomMaterial>();
   let cur: BomMaterial | null = null;
+  let curMeta: ReturnType<typeof parseOrderFormulaMeta> | null = null;
   let currentSupplier = '';
+
+  const matDedupKey = (rawName: string, norm: string) => {
+    const tag = rawName.match(/^\[(냉장1?|냉장2?|냉동|상온|부자재)\]/);
+    return `${tag ? tag[1] : ''}|${norm}`;
+  };
+
+  const pushOrMergeMat = (m: BomMaterial) => {
+    const key = matDedupKey(m.name, m.norm);
+    const existing = matsByKey.get(key);
+    if (!existing) {
+      matsByKey.set(key, m);
+      mats.push(m);
+      return m;
+    }
+    if (existing.dailyUsage === 0 && m.dailyUsage > 0) existing.dailyUsage = m.dailyUsage;
+    if (existing.packUnit === 0 && m.packUnit > 0) existing.packUnit = m.packUnit;
+    if (existing.bagPrice === 0 && m.bagPrice > 0) existing.bagPrice = m.bagPrice;
+    return existing;
+  };
 
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
@@ -76,6 +153,7 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
     if (isSupplierHeader) {
       currentSupplier = aStr;
       cur = null;
+      curMeta = null;
       continue;
     }
 
@@ -96,16 +174,10 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
       const isMaterial = aStr === '' || packUnit > 0 || days > 0 || dailyUsage > 0 || hasBoxNum;
       if (isMaterial) {
         const hCell = ws['H' + (i + 1)];
-        let divisor = 1;
-        let multiplier = 1;
-        if (hCell && hCell.f) {
-          const divMatch = String(hCell.f).match(/\/([0-9.]+)/);
-          const multMatch = String(hCell.f).match(/\*([0-9.]+)/);
-          if (divMatch) divisor = Number(divMatch[1]) || 1;
-          if (multMatch) multiplier = Number(multMatch[1]) || 1;
-        }
+        const meta = parseOrderFormulaMeta(hCell?.f);
+        curMeta = meta;
 
-        cur = {
+        cur = pushOrMergeMat({
           name: cStr,
           norm: normName(cStr),
           supplierHeader: currentSupplier,
@@ -113,49 +185,71 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
           bagPrice: num(r[16]),
           days,
           dailyUsage,
-          divisor,
-          multiplier,
+          divisor: meta.divisor,
+          multiplier: meta.multiplier,
           menus: [],
-        };
-        mats.push(cur);
+        });
         continue;
       }
     }
 
     // 하위 메뉴행 (packUnit이 0이고 A열에 완제품 메뉴명이 있는 경우)
     if (cur && packUnit === 0 && aStr !== '') {
-      cur.menus.push({ menu: aStr, normMenu: normName(aStr), qty: num(b), perUnit: num(c) });
+      const excelRow = i + 1;
+      // H열 수식에 명시된 행 범위(minRefRow..maxRefRow)가 있는 경우 범위 밖의 비활성/잔여 행 제외
+      if (curMeta && curMeta.minRefRow != null && curMeta.maxRefRow != null) {
+        if (excelRow < curMeta.minRefRow || excelRow > curMeta.maxRefRow) {
+          continue;
+        }
+      }
+      const cEmpty = c == null || cStr === '' || cStr === 'null';
+      // 김 등 SUM(B...:B...) 매수 계산 품목에서 C열이 비어 있으면 기본 1장(매)
+      const perUnit = cEmpty && curMeta?.isSumCount ? 1 : num(c);
+      const normMenu = normName(aStr);
+      if (!cur.menus.some((m) => m.normMenu === normMenu)) {
+        cur.menus.push({ menu: aStr, normMenu, qty: num(b), perUnit });
+      }
     }
   }
 
-  // 보조 계산기 시트(볶음참깨, 참기름, 마요네즈, 참치 등)의 정밀 레시피 연동
+  // 보조 계산기 시트(볶음참깨/참기름, 마요네즈/참치, 야채 계산기, 조미식초, 정제염, 바코드) 정밀 레시피 연동
+  const dedupPush = (arr: BomChildLink[], item: BomChildLink) => {
+    if (!item.menu || item.perUnit <= 0) return;
+    if (!arr.some((x) => x.normMenu === item.normMenu)) arr.push(item);
+  };
+
   try {
     const sesameSheet = wb.Sheets['볶음참깨, 참기름'];
     if (sesameSheet) {
       const sRows: any[][] = XLSX.utils.sheet_to_json(sesameSheet, { header: 1, defval: null });
-      const oilMenus: BomChildLink[] = [];
+      const oil18Menus: BomChildLink[] = [];
+      const oil165Menus: BomChildLink[] = [];
       const seedMenus: BomChildLink[] = [];
-      for (let i = 4; i < sRows.length; i++) {
+      const seedBuf = num(sRows[3]?.[4]) || 1.1;
+      const oil18Buf = num(sRows[3]?.[10]) || 1.1;
+      const oil165Buf = num(sRows[3]?.[18]) || 1.1;
+      for (let i = 4; i < Math.min(sRows.length, 60); i++) {
         const r = sRows[i];
         if (!r) continue;
-        const oilQty = num(r[7]);
-        const oilMenu = r[8] != null ? String(r[8]).trim() : '';
-        const oilPerUnit = num(r[9]);
-        if (oilMenu && oilPerUnit > 0) {
-          oilMenus.push({ menu: oilMenu, normMenu: normName(oilMenu), qty: oilQty, perUnit: oilPerUnit });
-        }
-        const seedQty = num(r[1]);
         const seedMenu = r[2] != null ? String(r[2]).trim() : '';
-        const seedPerUnit = num(r[3]);
-        if (seedMenu && seedPerUnit > 0) {
-          seedMenus.push({ menu: seedMenu, normMenu: normName(seedMenu), qty: seedQty, perUnit: seedPerUnit });
-        }
+        dedupPush(seedMenus, { menu: seedMenu, normMenu: normName(seedMenu), qty: num(r[1]), perUnit: num(r[3]), orderBuffer: seedBuf });
+
+        const oil18Menu = r[8] != null ? String(r[8]).trim() : '';
+        dedupPush(oil18Menus, { menu: oil18Menu, normMenu: normName(oil18Menu), qty: num(r[7]), perUnit: num(r[9]), orderBuffer: oil18Buf });
+
+        const oil165Menu = r[16] != null ? String(r[16]).trim() : '';
+        dedupPush(oil165Menus, { menu: oil165Menu, normMenu: normName(oil165Menu), qty: num(r[15]), perUnit: num(r[17]), orderBuffer: oil165Buf });
       }
       for (const m of mats) {
-        if (m.name.includes('청학동참기름(1.8L') && oilMenus.length > 0) {
-          m.menus = oilMenus;
+        if (m.name.includes('청학동참기름(1.8L') && oil18Menus.length > 0) {
+          m.menus = oil18Menus;
+          if (!m.divisor || m.divisor < 100) m.divisor = m.divisor && m.divisor > 1 ? Math.round(m.divisor * 1000) : 1650;
+        } else if (m.name.includes('참기름(16.5') && oil165Menus.length > 0) {
+          m.menus = oil165Menus;
+          if (!m.divisor || m.divisor < 100) m.divisor = m.divisor && m.divisor > 1 ? Math.round(m.divisor * 1000) : 16500;
         } else if (m.name.includes('볶음참깨') && !m.name.includes('흑임자') && seedMenus.length > 0) {
           m.menus = seedMenus;
+          if (!m.divisor || m.divisor < 100) m.divisor = 1000;
         }
       }
     }
@@ -165,27 +259,149 @@ export function parseOrderSheetBom(wb: XLSX.WorkBook): BomMaterial[] {
       const mRows: any[][] = XLSX.utils.sheet_to_json(mayoSheet, { header: 1, defval: null });
       const mayoMenus: BomChildLink[] = [];
       const tunaMenus: BomChildLink[] = [];
-      for (let i = 4; i < mRows.length; i++) {
+      const mayoBuf = num(mRows[3]?.[4]) || 1.1;
+      const tunaBuf = num(mRows[3]?.[10]) || 1.1;
+      for (let i = 4; i < Math.min(mRows.length, 60); i++) {
         const r = mRows[i];
         if (!r) continue;
-        const mayoQty = num(r[1]);
         const mayoMenu = r[2] != null ? String(r[2]).trim() : '';
-        const mayoPerUnit = num(r[3]);
-        if (mayoMenu && mayoPerUnit > 0) {
-          mayoMenus.push({ menu: mayoMenu, normMenu: normName(mayoMenu), qty: mayoQty, perUnit: mayoPerUnit });
-        }
-        const tunaQty = num(r[7]);
+        dedupPush(mayoMenus, { menu: mayoMenu, normMenu: normName(mayoMenu), qty: num(r[1]), perUnit: num(r[3]), orderBuffer: mayoBuf });
+
         const tunaMenu = r[8] != null ? String(r[8]).trim() : '';
-        const tunaPerUnit = num(r[9]);
-        if (tunaMenu && tunaPerUnit > 0) {
-          tunaMenus.push({ menu: tunaMenu, normMenu: normName(tunaMenu), qty: tunaQty, perUnit: tunaPerUnit });
-        }
+        dedupPush(tunaMenus, { menu: tunaMenu, normMenu: normName(tunaMenu), qty: num(r[7]), perUnit: num(r[9]), orderBuffer: tunaBuf });
       }
       for (const m of mats) {
-        if (m.name.includes('마요네즈') && mayoMenus.length > 0) {
+        if (m.name.includes('마요네즈') && mayoMenus.length > 0 && m.menus.length <= mayoMenus.length) {
           m.menus = mayoMenus;
-        } else if ((m.name.includes('동원가라') || (m.name.includes('참치') && !m.name.includes('김치') && !m.name.includes('액젓'))) && tunaMenus.length > 0) {
+          if (!m.divisor || m.divisor < 100) m.divisor = 10000;
+        } else if (
+          (m.name.includes('동원가라') ||
+            (m.name.includes('살코기참치') && !m.name.includes('김치') && !m.name.includes('액젓') && !m.name.includes('다시'))) &&
+          tunaMenus.length > 0
+        ) {
           m.menus = tunaMenus;
+          if (!m.divisor || m.divisor < 100) m.divisor = m.divisor && m.divisor > 1 ? Math.round(m.divisor * 1000) : 3000;
+        }
+      }
+    }
+
+    const vegSheet = wb.Sheets['야채 계산기'];
+    if (vegSheet) {
+      const vRows: any[][] = XLSX.utils.sheet_to_json(vegSheet, { header: 1, defval: null });
+      const menuHeaderRow = vRows[1] || [];
+      const qtyRow = vRows[2] || [];
+      for (let i = 4; i < Math.min(vRows.length, 40); i++) {
+        const r = vRows[i];
+        if (!r) continue;
+        const matName = r[1] != null ? String(r[1]).trim() : '';
+        if (!matName) continue;
+        const matNorm = normName(matName);
+        const matchedMat = matsByKey.get(matDedupKey(matName, matNorm));
+        if (!matchedMat) continue;
+        const links: BomChildLink[] = [];
+        for (let c = 5; c < menuHeaderRow.length; c++) {
+          const menuName = menuHeaderRow[c] != null ? String(menuHeaderRow[c]).trim() : '';
+          const perUnit = num(r[c]);
+          if (menuName && perUnit > 0) {
+            dedupPush(links, { menu: menuName, normMenu: normName(menuName), qty: num(qtyRow[c]), perUnit, orderBuffer: 1 });
+          }
+        }
+        if (links.length > 0) {
+          matchedMat.menus = links;
+        }
+      }
+    }
+
+    const vinegarSheet = wb.Sheets['조미식초'];
+    if (vinegarSheet) {
+      const aRows: any[][] = XLSX.utils.sheet_to_json(vinegarSheet, { header: 1, defval: null });
+      const vinegarMenus: BomChildLink[] = [];
+      for (let i = 3; i < Math.min(aRows.length, 40); i++) {
+        const r = aRows[i];
+        if (!r || String(r[0] ?? '').trim() !== '원물중량') continue;
+        const menuRow = aRows[i - 1] || [];
+        const qtyRow = aRows[i + 1] || [];
+        const buf = num(aRows[i + 2]?.[0]) || 1.1;
+        for (let c = 1; c < menuRow.length; c++) {
+          const menuName = menuRow[c] != null ? String(menuRow[c]).trim() : '';
+          const perUnit = num(r[c]);
+          if (menuName && perUnit > 0) {
+            dedupPush(vinegarMenus, { menu: menuName, normMenu: normName(menuName), qty: num(qtyRow[c]), perUnit, orderBuffer: buf });
+          }
+        }
+      }
+      if (vinegarMenus.length > 0) {
+        for (const m of mats) {
+          if (m.name.includes('조미식초소스') && !m.name.includes('다시마')) {
+            m.menus = vinegarMenus;
+          }
+        }
+      }
+    }
+
+    const saltSheet = wb.Sheets['정제염'];
+    if (saltSheet) {
+      const zRows: any[][] = XLSX.utils.sheet_to_json(saltSheet, { header: 1, defval: null });
+      const saltMenus: BomChildLink[] = [];
+      const saltBuf = num(zRows[3]?.[3]) || 1.1;
+      for (let i = 4; i < Math.min(zRows.length, 60); i++) {
+        const r = zRows[i];
+        if (!r) continue;
+        const menuName = r[1] != null ? String(r[1]).trim() : '';
+        const perUnit = num(r[2]);
+        if (menuName && perUnit > 0) {
+          dedupPush(saltMenus, { menu: menuName, normMenu: normName(menuName), qty: num(r[0]), perUnit, orderBuffer: saltBuf });
+        }
+      }
+      if (saltMenus.length > 0) {
+        for (const m of mats) {
+          if (m.name.includes('정제염')) {
+            m.menus = saltMenus;
+            if (!m.divisor || m.divisor <= 1) m.divisor = 25000;
+          }
+        }
+      }
+    }
+
+    const barcodeSheet = wb.Sheets['바코드'];
+    if (barcodeSheet) {
+      const bRows: any[][] = XLSX.utils.sheet_to_json(barcodeSheet, { header: 1, defval: null });
+      const blocks = [
+        { qtyCol: 0, menuCol: 1, perCol: 2, bufCol: 3, targetName: '바코드54*45(삼각)(청색/적색)' },
+        { qtyCol: 6, menuCol: 7, perCol: 8, bufCol: 9, targetName: '바코드56*45(김밥)(청색/적색)' },
+        { qtyCol: 12, menuCol: 13, perCol: 14, bufCol: 15, targetName: '바코드60*35(도시락)(청색/적색)' },
+      ];
+      for (const blk of blocks) {
+        const buf = num(bRows[3]?.[blk.bufCol]) || 1.01;
+        const links: BomChildLink[] = [];
+        for (let i = 4; i < Math.min(bRows.length, 60); i++) {
+          const r = bRows[i];
+          if (!r) continue;
+          const menuName = r[blk.menuCol] != null ? String(r[blk.menuCol]).trim() : '';
+          const perUnit = num(r[blk.perCol]);
+          if (menuName && perUnit > 0) {
+            dedupPush(links, { menu: menuName, normMenu: normName(menuName), qty: num(r[blk.qtyCol]), perUnit, orderBuffer: buf });
+          }
+        }
+        if (links.length > 0) {
+          const targetNorm = normName(blk.targetName);
+          const existing = matsByKey.get(matDedupKey(blk.targetName, targetNorm));
+          if (existing) {
+            existing.menus = links;
+          } else {
+            pushOrMergeMat({
+              name: blk.targetName,
+              norm: targetNorm,
+              supplierHeader: '바코드',
+              packUnit: 1,
+              bagPrice: 0,
+              days: 0,
+              dailyUsage: 0,
+              divisor: 5000,
+              multiplier: 1,
+              menus: links,
+            });
+          }
         }
       }
     }
@@ -249,7 +465,21 @@ function findFile(candidates: string[]): string | null {
   return null;
 }
 
-/** 루트 및 26년도/11월·10월에서 패턴 매칭 → 수정시각 최신 파일 (날짜 바뀐 정본 자동 추적, 엑셀 임시파일 및 macOS NFD 정규화 대응) */
+function extractAuditFilenameDateScore(filename: string): number {
+  const nfc = filename.normalize('NFC');
+  const ymd = nfc.match(/(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})/);
+  if (ymd) {
+    return Number(ymd[1]) * 10000 + Number(ymd[2]) * 100 + Number(ymd[3]);
+  }
+  const md = nfc.match(/(\d{1,2})월\s*(\d{1,2})일/);
+  if (md) {
+    // 26년도 디렉터리/현재 기준 2026년 기준 점수화 (11월 10일 → 20261110)
+    return 20260000 + Number(md[1]) * 100 + Number(md[2]);
+  }
+  return 0;
+}
+
+/** 루트 및 26년도/11월·10월에서 패턴 매칭 → 파일명 일자 우선 + 수정시각 최신 파일 */
 function findLatestByPattern(pattern: RegExp): string | null {
   const root = process.cwd();
   const dirs = [
@@ -257,21 +487,26 @@ function findLatestByPattern(pattern: RegExp): string | null {
     path.join(root, '26년도', '10월'),
     root,
   ];
-  const hits: Array<{ p: string; m: number }> = [];
+  const hits: Array<{ p: string; dateScore: number; m: number }> = [];
   for (const dir of dirs) {
     try {
       if (!fs.existsSync(dir)) continue;
       for (const f of fs.readdirSync(dir)) {
         if (f.startsWith('~$')) continue;
-        if (!pattern.test(f.normalize('NFC'))) continue;
+        const nfc = f.normalize('NFC');
+        if (!pattern.test(nfc)) continue;
         const p = path.join(dir, f);
-        hits.push({ p, m: fs.statSync(p).mtimeMs });
+        hits.push({
+          p,
+          dateScore: extractAuditFilenameDateScore(nfc),
+          m: fs.statSync(p).mtimeMs,
+        });
       }
     } catch {
       /* 읽기 실패 시 무시 */
     }
   }
-  hits.sort((a, b) => b.m - a.m);
+  hits.sort((a, b) => (b.dateScore !== a.dateScore ? b.dateScore - a.dateScore : b.m - a.m));
   return hits.length > 0 ? hits[0].p : null;
 }
 
@@ -313,7 +548,7 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
 
     // 헤더 행 탐색 (최대 상위 10행 스캔)
     let headerIdx = -1;
-    let colName = 3, colVendor = 1, colId = 2, colPack = 10, colPrice = 12, colWh = -1;
+    let colName = 3, colVendor = 1, colId = 2, colCycle = 4, colExp = 6, colPack = 10, colPrice = 12, colWh = -1;
     for (let i = 0; i < Math.min(10, rows.length); i++) {
       const row = rows[i];
       if (!Array.isArray(row)) continue;
@@ -325,6 +560,8 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
           if (/제품명|품명|품목명|자재명|원부자재명/.test(s)) colName = idx;
           else if (/거래처|공급처|매입처|업체명|공급사/.test(s)) colVendor = idx;
           else if (/ID|품번|품목코드|자재코드|^코드$/.test(s)) colId = idx;
+          else if (/입고일|발주주기|리드타임/.test(s)) colCycle = idx;
+          else if (/유통기한|소비기한|카테고리|상태|비고/.test(s) && colExp === 6) colExp = idx;
           else if (/입수량|포장단위|^입수$/.test(s)) colPack = idx;
           else if (/봉단가|매입단가|^단가$/.test(s)) colPrice = idx;
           else if (/창고|보관창고|저장위치|창고명/.test(s)) colWh = idx;
@@ -339,7 +576,8 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
       if (!r) continue;
       const name = r[colName];
       if (!name || String(name).trim().length < 2 || String(name).trim() === 'None') continue;
-      const norm = normName(name);
+      const cleanName = String(name).replace(/[\r\n]+/g, ' ').trim();
+      const norm = normName(cleanName);
       if (!norm || map.has(norm)) continue;
 
       let wh = defaultWh;
@@ -347,7 +585,7 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
         wh = String(r[colWh]).trim();
       }
       if (!wh) {
-        const sName = String(name).trim();
+        const sName = cleanName;
         if (sName.startsWith('[냉장]')) wh = '냉장1';
         else if (sName.startsWith('[냉동]')) wh = '냉동';
         else if (sName.startsWith('[상온]')) wh = '상온';
@@ -355,14 +593,18 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
         else wh = '상온';
       }
 
+      const lifecycle = colExp >= 0 ? parseExcelLifecycle(r[colExp]) : { status: '정상', discontinuedDate: null };
       map.set(norm, {
-        name: String(name).trim(),
+        name: cleanName,
         norm,
         warehouse: wh,
         vendor: colVendor >= 0 ? String(r[colVendor] ?? '').trim() : '',
         itemId: colId >= 0 && r[colId] != null ? String(r[colId]).trim() : '',
         packUnit: colPack >= 0 ? Number(r[colPack]) || 0 : 0,
         bagPrice: colPrice >= 0 ? Number(r[colPrice]) || 0 : 0,
+        orderCycle: colCycle >= 0 ? normalizeOrderCycleText(r[colCycle]) : '',
+        status: lifecycle.status,
+        discontinuedDate: lifecycle.discontinuedDate,
       });
     }
   }

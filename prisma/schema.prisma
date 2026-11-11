@@ -140,6 +140,7 @@ model Product {
   safetyStockQty Float   @default(0)    // 안전재고량
   minOrderQty   Float    @default(0)    // 최소발주수량
   orderUnitQty  Float    @default(0)    // 발주단위수량
+  orderCycle    String   @default("")   // 발주주기 (D+1, D+2, D+3, D+7, D+2/1 등)
   targetOrderDays Float  @default(0)    // 목표 발주일수 (엑셀 G열: 4.5~10일, 0이면 거래처 leadTime 폴백)
   bomDivisor    Float    @default(1000) // BOM 일사용량 환산 분모 (기본 1000g→kg/봉, 포장재 1500/1800 등)
   bomMultiplier Float    @default(1)    // BOM 일사용량 추가 계수/수율 (엑셀 H열 후행 곱셈: 0.75, 0.8 등)

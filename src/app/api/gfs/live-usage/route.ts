@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
-import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
   calcDailyUsageFromParams,
   dedupSalesOrders,
@@ -18,63 +18,88 @@ import {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    let date = searchParams.get('date') || '';
+    const reqDate = searchParams.get('date') || '';
+    const exclusionDate = reqDate || kstToday();
 
-    if (!date) {
+    const resolveLatestOrderDate = async (lteDate?: string) => {
+      if (lteDate) {
+        const prior = await prisma.salesOrder.findFirst({
+          where: { orderDate: { lte: lteDate }, status: { not: '취소' } },
+          orderBy: { orderDate: 'desc' },
+          select: { orderDate: true },
+        });
+        if (prior?.orderDate) return prior.orderDate;
+      }
       const latest = await prisma.salesOrder.findFirst({
+        where: { status: { not: '취소' } },
         orderBy: { orderDate: 'desc' },
         select: { orderDate: true },
       });
-      date = latest?.orderDate || kstToday();
-    }
+      return latest?.orderDate || '';
+    };
 
-    // 1) 당일 완제품 수주량 합산 (중복 전표 방어)
-    const orders = await prisma.salesOrder.findMany({
-      where: { orderDate: date },
-      include: {
-        details: {
-          include: { product: true },
+    const loadOrderItemsForDate = async (d: string) => {
+      const orders = await prisma.salesOrder.findMany({
+        where: { orderDate: d, status: { not: '취소' } },
+        include: {
+          details: {
+            include: { product: true },
+          },
         },
-      },
-    });
+      });
 
-    const uniqueOrders = dedupSalesOrders(orders);
-    const orderItems: Array<{ productId: number; code: string; name: string; qty: number }> = [];
-    const byPid = new Map<number, { productId: number; code: string; name: string; qty: number }>();
+      const uniqueOrders = dedupSalesOrders(orders);
+      const orderItems: Array<{ productId: number; code: string; name: string; qty: number }> = [];
+      const byPid = new Map<number, { productId: number; code: string; name: string; qty: number }>();
 
-    for (const o of uniqueOrders) {
-      for (const d of o.details as any[]) {
-        const pid = Number(d.productId) || 0;
-        const qty = Number(d.totalQty) || 0;
-        if (qty <= 0) continue;
-        const name = d.product?.name || d.productName || '';
-        const code = String(d.productCode || d.product?.productCode || '');
-        if (pid > 0) {
-          const cur = byPid.get(pid) || { productId: pid, code, name, qty: 0 };
-          cur.qty += qty;
-          byPid.set(pid, cur);
-        } else if (name) {
-          orderItems.push({ productId: 0, code, name, qty });
+      for (const o of uniqueOrders) {
+        for (const det of o.details as any[]) {
+          const pid = Number(det.productId) || 0;
+          const qty = Number(det.totalQty) || 0;
+          if (qty <= 0) continue;
+          const name = det.product?.name || det.productName || '';
+          const code = String(det.productCode || det.product?.productCode || '');
+          if (pid > 0) {
+            const cur = byPid.get(pid) || { productId: pid, code, name, qty: 0 };
+            cur.qty += qty;
+            byPid.set(pid, cur);
+          } else if (name) {
+            orderItems.push({ productId: 0, code, name, qty });
+          }
         }
       }
-    }
-    for (const v of byPid.values()) orderItems.push(v);
+      for (const v of byPid.values()) orderItems.push(v);
 
-    // 1-1) 수주 전표가 없는 날짜 폴백: 생산일보 / 생산실적
-    if (orderItems.length === 0 && CANONICAL_DAILY_REPORTS[date]) {
-      for (const item of CANONICAL_DAILY_REPORTS[date].items) {
-        if (item.totalQty > 0) {
-          orderItems.push({ productId: 0, code: '', name: item.productName, qty: item.totalQty });
+      // 수주 전표가 없는 날짜 폴백: 생산일보 / 생산실적
+      if (orderItems.length === 0 && CANONICAL_DAILY_REPORTS[d]) {
+        for (const item of CANONICAL_DAILY_REPORTS[d].items) {
+          if (item.totalQty > 0) {
+            orderItems.push({ productId: 0, code: '', name: item.productName, qty: item.totalQty });
+          }
         }
       }
-    }
+      if (orderItems.length === 0) {
+        const prodResults = await prisma.productionResult.findMany({ where: { resultDate: d } });
+        for (const pr of prodResults) {
+          const qty = Number(pr.prodQty) || 0;
+          if (qty > 0) {
+            orderItems.push({ productId: 0, code: pr.productCode || '', name: pr.productName, qty });
+          }
+        }
+      }
+
+      return { uniqueOrders, orderItems };
+    };
+
+    let date = reqDate || (await resolveLatestOrderDate()) || exclusionDate;
+    let { uniqueOrders, orderItems } = await loadOrderItemsForDate(date);
+
+    // 당일/미래일 수주 미등록 시 기준일 이하 최근 수주로 자동 폴백
     if (orderItems.length === 0) {
-      const prodResults = await prisma.productionResult.findMany({ where: { resultDate: date } });
-      for (const pr of prodResults) {
-        const qty = Number(pr.prodQty) || 0;
-        if (qty > 0) {
-          orderItems.push({ productId: 0, code: pr.productCode || '', name: pr.productName, qty });
-        }
+      const fallbackDate = await resolveLatestOrderDate(reqDate || undefined);
+      if (fallbackDate && fallbackDate !== date) {
+        date = fallbackDate;
+        ({ uniqueOrders, orderItems } = await loadOrderItemsForDate(date));
       }
     }
 
@@ -180,8 +205,9 @@ export async function GET(req: NextRequest) {
         const cp = d.childProduct as any;
         if (!cp || !cp.isUsed) continue;
         if (cp.category === '완성품' || cp.category === '반제품') continue;
-        if (isExcludedFromOrder(cp.name, date)) continue;
-        if (cp.discontinuedDate && date >= cp.discontinuedDate) continue;
+        if (isTerminalProductStatus(cp.status)) continue;
+        if (isExcludedFromOrder(cp.name, exclusionDate)) continue;
+        if (cp.discontinuedDate && exclusionDate >= cp.discontinuedDate) continue;
 
         let unitQty = Number(d.unitQty) || 0;
         if (!(unitQty > 0)) continue;
@@ -210,7 +236,7 @@ export async function GET(req: NextRequest) {
     });
     const invMap = new Map(invSums.map((r) => [r.productId, Number(r._sum.currentQty) || 0]));
 
-    const rowsByNorm = new Map<string, any>();
+    const rows: any[] = [];
     for (const [pid, v] of acc.entries()) {
       const p = v.child;
       const div = Number(p.bomDivisor) > 0 ? Number(p.bomDivisor) : 1000;
@@ -219,9 +245,8 @@ export async function GET(req: NextRequest) {
       const daily = calcDailyUsageFromParams(v.rawTotalBuffered, div, mult, 1, digits);
       const total = invMap.get(pid) || 0;
       const nm = p.name || '';
-      const k = normName(nm);
-      if (k) {
-        rowsByNorm.set(k, {
+      if (nm) {
+        rows.push({
           productId: pid,
           productCode: p.productCode || '',
           productName: nm,
@@ -236,7 +261,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const rows = Array.from(rowsByNorm.values());
     const distinctMenuKeys = new Set(orderItems.map((it) => normalizeForBom(it.name)).filter(Boolean));
 
     return NextResponse.json({

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
-import { isExcludedOrderMaterial, pickLatestValidPrice } from '@/lib/gfs/orderCalc';
+import { isExcludedOrderMaterial } from '@/lib/gfs/orderCalc';
+import {
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+} from '@/lib/gfs/pricing';
 
 // GET /api/inventory/stocktake?warehouse=냉장1&category=원재료&stocktakeDate=2026-11-07&search=...
 export async function GET(req: NextRequest) {
@@ -52,7 +58,7 @@ export async function GET(req: NextRequest) {
         product: {
           include: {
             partner: true,
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 5 },
+            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
           },
         },
       },
@@ -68,9 +74,13 @@ export async function GET(req: NextRequest) {
 
     // 3. 실사 데이터 매핑 및 장부/실사/차이 계산
     const allRows = inventories.map((inv, idx) => {
-      const boxUnit = inv.product?.boxQty || 1;
-      const latestPrice = pickLatestValidPrice(inv.product?.prices || []);
-      const unitPrice = inv.unitPrice || latestPrice?.purchasePrice || 0;
+      const boxUnit = normalizePackUnit(inv.product?.boxQty);
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: pickLatestValidPurchasePrice(inv.product?.prices),
+        invUnitPrice: inv.unitPrice,
+      });
+      const boxPrice = calcBoxPrice(bagPrice, boxUnit);
+      const unitPrice = bagPrice;
       const rec = recordMap.get(`${inv.productCode}|${inv.warehouse}`);
 
       const bookQty = rec ? rec.bookQty : (inv.currentQty || 0);
@@ -106,6 +116,8 @@ export async function GET(req: NextRequest) {
         lotNo,
         boxUnitQty: boxUnit,
         unitPrice,
+        bagPrice,
+        boxPrice,
         bookQty,
         boxQty: boxCount,
         pieceQty: pieceCount,

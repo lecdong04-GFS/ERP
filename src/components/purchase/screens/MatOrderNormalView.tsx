@@ -21,7 +21,9 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
-import { DAY_CHARS, calcRow, splitWeek, getScheduledExclusion, type SheetRowInput } from '@/lib/gfs/orderCalc';
+import { DAY_CHARS, calcRow, splitWeek, type SheetRowInput } from '@/lib/gfs/orderCalc';
+import { calcBoxPrice } from '@/lib/gfs/pricing';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -84,6 +86,8 @@ export const MatOrderNormalView: React.FC = () => {
             finalBoxes: suggest,
             manual: false,
             discontinuedDate: r.discontinuedDate || '',
+            status: r.status || '정상',
+            orderCycle: r.orderCycle || '',
           };
         });
         setRows(loaded);
@@ -230,6 +234,7 @@ export const MatOrderNormalView: React.FC = () => {
             boxes: c.finalBoxes,
             packUnit: c.pack || r.packUnit,
             bagPrice: r.bagPrice,
+            boxPrice: calcBoxPrice(r.bagPrice, c.pack || r.packUnit),
             supplierHeader: r.supplier,
           })),
         }),
@@ -309,6 +314,7 @@ export const MatOrderNormalView: React.FC = () => {
         재고유지일: Number.isFinite(c.stockDays) ? Math.round(c.stockDays * 10) / 10 : 0,
         확정발주량_박스: c.finalBoxes,
         봉단가: row.bagPrice,
+        박스단가: calcBoxPrice(row.bagPrice, c.pack),
         발주금액: Math.round(c.amount),
         월: week[0] || 0,
         화: week[1] || 0,
@@ -338,6 +344,7 @@ export const MatOrderNormalView: React.FC = () => {
         { key: '재고유지일', label: '재고유지일' },
         { key: '확정발주량_박스', label: '발주량(박스)' },
         { key: '봉단가', label: '봉단가' },
+        { key: '박스단가', label: '박스단가' },
         { key: '발주금액', label: '발주금액' },
         { key: '월', label: '월' },
         { key: '화', label: '화' },
@@ -615,8 +622,8 @@ export const MatOrderNormalView: React.FC = () => {
                     <th className="border border-[#9098aa] px-1 py-0.5 min-w-[60px]" title="P 입수량(정본)">
                       입수량
                     </th>
-                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[80px] text-right" title="Q 봉단가">
-                      봉단가
+                    <th className="border border-[#9098aa] px-2 py-0.5 min-w-[95px] text-right" title="Q 봉단가 / 박스단가">
+                      단가(봉/박스)
                     </th>
                     <th className="border border-[#9098aa] px-2 py-0.5 min-w-[100px] text-right" title="R 금액 = O×P×Q">
                       금액
@@ -668,17 +675,15 @@ export const MatOrderNormalView: React.FC = () => {
                               row.warehouse ? ` [${row.warehouse}]` : ''
                             }`}
                           >
-                            <span>{row.name}</span>
-                            {(() => {
-                              const s = getScheduledExclusion(row.name);
-                              const d = row.discontinuedDate || s?.effectiveDate || '';
-                              const lbl = s?.label || (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))} 삭제예정` : '');
-                              return lbl ? (
-                                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">
-                                  {lbl}
-                                </span>
-                              ) : null;
-                            })()}
+                            <div className="flex items-center gap-1.5">
+                              <span>{row.name}</span>
+                              <ProductLifecycleBadge
+                                status={row.status}
+                                discontinuedDate={row.discontinuedDate}
+                                name={row.name}
+                                refDate={orderDate}
+                              />
+                            </div>
                           </td>
                           <td className="border border-gray-300 whitespace-nowrap px-1 py-0.5 text-right font-mono text-gray-600">
                             {Number.isFinite(c.boxesStd) ? Math.round(c.boxesStd * 10) / 10 : '-'}
@@ -736,7 +741,16 @@ export const MatOrderNormalView: React.FC = () => {
                             {c.pack || '-'}
                           </td>
                           <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
-                            {row.bagPrice ? row.bagPrice.toLocaleString() : '-'}
+                            {row.bagPrice ? (
+                              <div>
+                                <span>{row.bagPrice.toLocaleString()}</span>
+                                {(c.pack || 1) > 1 && (
+                                  <span className="ml-1 text-[10px] text-gray-500">
+                                    (박스 {calcBoxPrice(row.bagPrice, c.pack).toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
+                            ) : '-'}
                           </td>
                           <td className="border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-bold text-emerald-700 bg-emerald-50/20">
                             {c.amount ? Math.round(c.amount).toLocaleString() : '-'}

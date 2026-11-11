@@ -358,6 +358,7 @@ async function main() {
             unitQty: m.perUnit,
             unit: inferBomUnit(bm.name),
             yieldRate: 100,
+            orderBuffer: m.orderBuffer ?? 1,
             remark: '11월 발주서 BOM',
           },
         });

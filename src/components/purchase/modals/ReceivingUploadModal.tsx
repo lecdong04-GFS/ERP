@@ -46,6 +46,9 @@ export interface ParsedReceivingRow {
   diffQty: number;
   diffAmt: number;
   lotNo: string;
+  packUnit?: number;
+  bagPrice?: number;
+  boxPrice?: number;
 }
 
 interface ReceivingUploadModalProps {
@@ -173,6 +176,9 @@ export const ReceivingUploadModal: React.FC<ReceivingUploadModalProps> = ({
               else if (val === '차량청결') colMap.carClean = cIdx;
               else if (val === '종합판정') colMap.totalJudge = cIdx;
               else if (val === '구매단가' || val === '입고단가') colMap.buyPrice = cIdx;
+              else if (val === '입수량' || val === '입수') colMap.packUnit = cIdx;
+              else if (val === '봉단가') colMap.bagPrice = cIdx;
+              else if (val === '박스단가') colMap.boxPrice = cIdx;
               else if (val === '입고금액') colMap.recvAmt = cIdx;
               else if (val === '차이수량') colMap.diffQty = cIdx;
               else if (val === '금액차이' || val === '차이금액') colMap.diffAmt = cIdx;
@@ -199,13 +205,21 @@ export const ReceivingUploadModal: React.FC<ReceivingUploadModalProps> = ({
           const recvQty = Number(String(row[colMap.recvQty] || 0).replace(/,/g, '')) || 0;
           const orderQty = Number(String(row[colMap.orderQty] || 0).replace(/,/g, '')) || 0;
           const orderPrice = Number(String(row[colMap.orderPrice] || 0).replace(/,/g, '')) || 0;
+          const unitStr = String(row[colMap.unit] || '').trim() || 'box';
+          const packUnit = Math.max(1, Number(String(row[colMap.packUnit] || 1).replace(/,/g, '')) || 1);
+          const bagPriceIn = Number(String(row[colMap.bagPrice] || 0).replace(/,/g, '')) || 0;
+          const boxPriceIn = Number(String(row[colMap.boxPrice] || 0).replace(/,/g, '')) || 0;
+          const isBoxU = /^(box|박스|bx|ctn)$/i.test(unitStr);
           let buyPrice = Number(String(row[colMap.buyPrice] || 0).replace(/,/g, '')) || 0;
+          if (buyPrice === 0 && isBoxU && boxPriceIn > 0) buyPrice = boxPriceIn;
+          if (buyPrice === 0 && !isBoxU && bagPriceIn > 0) buyPrice = bagPriceIn;
+          if (buyPrice === 0 && isBoxU && bagPriceIn > 0) buyPrice = Math.round(bagPriceIn * packUnit);
           if (buyPrice === 0 && orderPrice > 0) buyPrice = orderPrice;
 
           let recvAmt = Number(String(row[colMap.recvAmt] || 0).replace(/,/g, '')) || 0;
-          if (recvAmt === 0 && recvQty > 0 && buyPrice > 0) recvAmt = recvQty * buyPrice;
+          if (recvAmt === 0 && recvQty > 0 && buyPrice > 0) recvAmt = Math.round(recvQty * buyPrice);
 
-          const orderAmt = Number(String(row[colMap.orderAmt] || 0).replace(/,/g, '')) || (orderQty * orderPrice);
+          const orderAmt = Number(String(row[colMap.orderAmt] || 0).replace(/,/g, '')) || Math.round(orderQty * orderPrice);
           const diffQty = recvQty - orderQty;
           const diffAmt = recvAmt - orderAmt;
 
@@ -234,6 +248,9 @@ export const ReceivingUploadModal: React.FC<ReceivingUploadModalProps> = ({
             diffQty,
             diffAmt,
             lotNo: String(row[colMap.lotNo] || '').trim(),
+            packUnit,
+            bagPrice: bagPriceIn || (isBoxU && packUnit > 1 ? Math.round((buyPrice / packUnit) * 100) / 100 : buyPrice),
+            boxPrice: boxPriceIn || (isBoxU ? buyPrice : Math.round(buyPrice * packUnit)),
           });
         }
 

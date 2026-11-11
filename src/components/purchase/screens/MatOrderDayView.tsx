@@ -38,6 +38,8 @@ import {
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
+import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
 import {
   DAY_CHARS,
   WEEKDAY_DEMAND_FACTORS,
@@ -45,11 +47,19 @@ import {
   splitWeek,
   classifyPattern,
   getScheduledExclusion,
+  calcStrategyOrderDays,
   type SheetRowInput,
+  type StrategyMode,
 } from '@/lib/gfs/orderCalc';
+import { calcBoxPrice } from '@/lib/gfs/pricing';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function formatOrderDays(days: number): string {
+  if (!Number.isFinite(days) || days <= 0) return '-';
+  return `${Number(days.toFixed(2))}일`;
 }
 
 /** Date 객체를 YYYY-MM-DD 문자열로 변환 (로컬 기준) */
@@ -67,7 +77,7 @@ function getMondayOfWeek(dateStr: string): Date {
   return d;
 }
 
-export type StrategyMode = 'tight' | 'standard' | 'safety';
+export type { StrategyMode };
 
 // 단종 및 대체 완료 완제품의 전용 원부자재 불용 방지 경보 맵
 const DISCONTINUED_CAUTION_MAP: Record<string, string> = {
@@ -121,19 +131,21 @@ export const MatOrderDayView: React.FC = () => {
   const [mainMode, setMainMode] = useState<'order' | 'inbound'>('order');
 
   // ── 발주 제어 전략 모드 (⚡타이트 / ⚖️표준 / 🛡️보수적 안전) ──
-  const [strategyMode, setStrategyMode] = useState<StrategyMode>(() => {
-    const t = new Date();
-    return t.getDay() === 5 ? 'safety' : 'standard'; // 금요일이면 주말 공백 대비 안전모드 기본 추천
-  });
+  // 기본값은 항상 'standard'로 두어 품목 마스터(DB)의 발주일수를 그대로 반영
+  const [strategyMode, setStrategyMode] = useState<StrategyMode>('standard');
 
-  // 품목별 목표 안전일수 커스텀 오버라이드: rowId -> targetDays
+  // 품목별 발주일수 커스텀 오버라이드: rowId -> 발주일수
   const [itemTargetDaysOverrides, setItemTargetDaysOverrides] = useState<Record<number, number>>({});
+  const [editingOrderDays, setEditingOrderDays] = useState<{ id: number; value: string } | null>(null);
+  const [savingOrderDaysId, setSavingOrderDaysId] = useState<number | null>(null);
 
   // 계산 근거 팝오버 활성 품목 ID
   const [activeBriefingId, setActiveBriefingId] = useState<number | null>(null);
 
-  // 발주 필요 품목만 보기 (기본 true) vs 전체 품목 보기
+  // 발주 필요 품목만 보기 (기본 true) vs 전체 품목 보기 / 정렬 모드 / 타요일 긴급미배정 필터
   const [showOnlyOrderable, setShowOnlyOrderable] = useState<boolean>(true);
+  const [showOnlyUrgentUnallocated, setShowOnlyUrgentUnallocated] = useState<boolean>(false);
+  const [sortMode, setSortMode] = useState<'urgency' | 'default'>('urgency');
 
   // 기준일자 및 요일 인덱스 (0=월, 1=화, 2=수, 3=목, 4=금, 5=토, 6=일)
   const [orderDate, setOrderDate] = useState<string>(kstToday());
@@ -203,6 +215,13 @@ export const MatOrderDayView: React.FC = () => {
   // 현재 선택된 요일의 실제 날짜 (YYYY-MM-DD)
   const currentDayDate = weekDates[dayIdx];
 
+  // 이번 주/미래 주차 조회 시 과거 날짜 요일로는 자동 배분하지 않도록 마스크 생성 (과거 요일 누락 방지)
+  const activeDayMask = useMemo(() => {
+    const todayStr = kstToday();
+    const hasTodayOrFuture = weekDates.some((d) => d >= todayStr);
+    return hasTodayOrFuture ? weekDates.map((d) => d >= todayStr) : undefined;
+  }, [weekDates]);
+
   // 주간 범위 텍스트 (예: 2026.11.02 ~ 2026.11.08)
   const weekRangeText = useMemo(() => {
     const start = weekDates[0];
@@ -240,18 +259,19 @@ export const MatOrderDayView: React.FC = () => {
         const loaded: SheetRow[] = json.data.rows.map((r: any) => {
           const pack = r.packUnit || r.packUnitAudit || 0;
           const total = (r.incoming || 0) + (r.currentStock || 0);
-          const req = (r.dailyUsage || 0) * (r.days || 0);
+          const masterOrderDays = Number(r.targetOrderDays ?? r.days) || 0;
+          const req = (r.dailyUsage || 0) * masterOrderDays;
           const suggest = pack > 0 ? Math.ceil(Math.max(0, req - total) / pack) : 0;
           return {
             id: r.id,
             productId: r.productId,
-            targetOrderDays: r.targetOrderDays || 0,
+            targetOrderDays: masterOrderDays,
             supplier: r.supplier || '',
             name: r.name,
             boxesBase: r.boxesBase || 0,
             packUnit: r.packUnit || 0,
             packUnitAudit: r.packUnitAudit || 0,
-            days: r.days || 0,
+            days: masterOrderDays,
             dailyUsage: r.dailyUsage || 0,
             incoming: r.incoming || 0,
             currentStock: r.currentStock || 0,
@@ -270,6 +290,8 @@ export const MatOrderDayView: React.FC = () => {
             liveBomUsage: r.liveBomUsage,
             surveyDailyUsage: r.surveyDailyUsage,
             discontinuedDate: r.discontinuedDate || '',
+            status: r.status || '정상',
+            orderCycle: r.orderCycle || '',
           };
         });
         setRows(loaded);
@@ -392,36 +414,44 @@ export const MatOrderDayView: React.FC = () => {
       const pattern = classifyPattern(r.supplier, r.orderDay);
       const isDaily = pattern === '매일';
 
-      // 3단 전략 모드에 따른 목표 안전일수 결정
-      let baseTargetDays = r.days || (isDaily ? 3.0 : 5.0);
-      if (itemTargetDaysOverrides[r.id] !== undefined) {
-        baseTargetDays = itemTargetDaysOverrides[r.id];
-      } else if (strategyMode === 'tight') {
-        baseTargetDays = isDaily ? Math.min(baseTargetDays, 2.0) : baseTargetDays;
-      } else if (strategyMode === 'safety') {
-        baseTargetDays = baseTargetDays + 1.0;
-      }
+      // 마스터 DB의 발주일수 + 3대 전략 모드(타이트/표준/안전) 적용
+      const masterOrderDays = Number(r.targetOrderDays ?? r.days) || 0;
+      const strategyCalc = calcStrategyOrderDays({
+        masterOrderDays,
+        pattern,
+        orderCycle: r.orderCycle,
+        strategyMode,
+      });
+      const baseTargetDays =
+        itemTargetDaysOverrides[r.id] !== undefined
+          ? itemTargetDaysOverrides[r.id]
+          : strategyCalc.effectiveDays;
+      const minFloorDays = itemTargetDaysOverrides[r.id] !== undefined ? 0 : strategyCalc.minFloorDays;
 
-      // 보수적 안전 모드일 경우 공정 감모 로스 5% 버퍼 가산
-      const lossRate = strategyMode === 'safety' ? 1.05 : 1.0;
+      // 보수적 안전 모드일 경우 발주일수가 설정된 품목에 한해 공정 감모 로스 5% 버퍼 가산
+      const lossRate = baseTargetDays > 0 && strategyMode === 'safety' ? 1.05 : 1.0;
       const targetStock = Math.round(dailyUsage * baseTargetDays * lossRate);
       const shortageBags = Math.max(0, targetStock - totalStock);
 
-      // 4대 안전 감사 판정
+      // 4대 안전 감사 판정 (shortageBags 계산 시 incoming을 이미 차감했으므로 기발주가 있어도 목표 미달이면 부족분 추천 유지)
+      const hasIncoming = (r.incoming || 0) > 0;
       const isOverstocked = stockDays >= 60;
       const isPendingOverlap = dailyUsage > 0 && (r.incoming || 0) >= dailyUsage * 1.8;
       const isCriticalShortage = stockDays < 1.2 && (r.incoming || 0) <= 0 && dailyUsage > 0;
-      const isSafetyShortage = stockDays < baseTargetDays && dailyUsage > 0 && !isCriticalShortage;
+      const isSafetyShortage = baseTargetDays > 0 && stockDays < baseTargetDays && dailyUsage > 0 && !isCriticalShortage;
       const isReplacedItem = r.name.includes('스팸(340g*20캔)') || (r as any).isReplaced;
       const targetDayDate = weekDates[targetDayIdx] || currentDayDate || kstToday();
       const scheduledExcl = getScheduledExclusion(r.name);
       const scheduledDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
-      const isPastScheduledDeletion = Boolean(scheduledDate && targetDayDate >= scheduledDate);
-      const scheduledLabel = scheduledDate
-        ? `${Number(scheduledDate.slice(5, 7))}/${Number(scheduledDate.slice(8, 10))} 삭제예정`
-        : '';
-      const cautionLabel = DISCONTINUED_CAUTION_MAP[r.name] || scheduledExcl?.label || scheduledLabel;
-      const isDiscontinuedItem = Boolean(cautionLabel);
+      const lifecycle = getProductLifecycleInfo(
+        { status: r.status, discontinuedDate: scheduledDate, name: r.name },
+        targetDayDate
+      );
+      const isPastScheduledDeletion = Boolean(
+        (scheduledDate && targetDayDate >= scheduledDate) || lifecycle?.isBlocked
+      );
+      const cautionLabel = DISCONTINUED_CAUTION_MAP[r.name] || '';
+      const isDiscontinuedItem = Boolean(cautionLabel || lifecycle || scheduledExcl?.label);
 
       let auditStatus: 'critical' | 'warning' | 'normal' | 'overstock' | 'pending_overlap' = 'normal';
       let auditLabel = '정상 재고';
@@ -430,45 +460,49 @@ export const MatOrderDayView: React.FC = () => {
         auditLabel = '🔄 고미트 대체완료 (발주 0b)';
       } else if (isPastScheduledDeletion) {
         auditStatus = 'warning';
-        auditLabel = '🚫 삭제예정일 도래';
+        auditLabel = lifecycle?.isTerminal ? `🚫 ${lifecycle.label}` : '🚫 삭제예정일 도래';
       } else if (isDiscontinuedItem) {
         auditStatus = 'warning';
         auditLabel = '🚨 단종 불용주의';
       } else if (isOverstocked) {
         auditStatus = 'overstock';
         auditLabel = '60일+ 과잉재고';
-      } else if (isPendingOverlap) {
-        auditStatus = 'pending_overlap';
-        auditLabel = '입고충분 중복주의';
       } else if (isCriticalShortage) {
         auditStatus = 'critical';
         auditLabel = '🚨 결품초임박';
       } else if (isSafetyShortage) {
         auditStatus = 'warning';
-        auditLabel = '⚠️ 안전미달';
+        auditLabel = hasIncoming ? '⚠️ 기발주포함 부족' : '⚠️ 안전미달';
+      } else if (isPendingOverlap) {
+        auditStatus = 'pending_overlap';
+        auditLabel = '기발주 입고충분';
       }
 
-      // 추천 박스수: 대체 완료 품목, 삭제예정일 도래 품목, 과잉재고, 입고중복, 일소진량 0인 경우 0박스 완벽 차단
+      // 추천 박스수: 대체 완료/삭제예정일 도래/과잉재고/일소진량 0만 차단 (기발주분은 totalStock에서 이미 차감됨)
       const suggestedBoxes =
-        isOverstocked || isPendingOverlap || isReplacedItem || isPastScheduledDeletion || dailyUsage <= 0
+        isOverstocked || isReplacedItem || isPastScheduledDeletion || dailyUsage <= 0
           ? 0
           : pack > 0 && shortageBags > 0
           ? Math.ceil(shortageBags / pack)
           : 0;
 
-      // 요일 분할
-      const week = splitWeek(r, suggestedBoxes);
+      // 요일 분할 (오늘 이후 실제 발주 가능 요일에 100% 배분)
+      const week = splitWeek(r, suggestedBoxes, activeDayMask);
       const override = isPastScheduledDeletion ? 0 : overrides[targetDayIdx]?.[r.id];
       const dayQty = override !== undefined ? override : week[targetDayIdx];
-      const amount = dayQty * pack * r.bagPrice;
+      const boxPrice = calcBoxPrice(r.bagPrice, pack);
+      const amount = dayQty * boxPrice;
 
       return {
         pack,
+        boxPrice,
         totalStock,
         dailyUsage,
         stockDays,
         pattern,
         isDaily,
+        masterOrderDays,
+        minFloorDays,
         targetDays: baseTargetDays,
         lossRate,
         targetStock,
@@ -484,16 +518,72 @@ export const MatOrderDayView: React.FC = () => {
         amount,
       };
     },
-    [strategyMode, itemTargetDaysOverrides, overrides, weekDates, currentDayDate]
+    [strategyMode, itemTargetDaysOverrides, overrides, weekDates, currentDayDate, activeDayMask]
   );
 
-  // 품목별 목표 안전일수 미세조정 핸들러 (±0.5일)
-  const handleStepTargetDays = (id: number, currentDays: number, step: number) => {
-    const nextDays = Math.max(0.5, Math.round((currentDays + step) * 10) / 10);
-    setItemTargetDaysOverrides((prev) => ({
-      ...prev,
-      [id]: nextDays,
-    }));
+  // 품목별 발주일수 미세조정 핸들러 (±0.5일, 0일 가능)
+  const handleStepTargetDays = (id: number, currentDays: number, step: number, masterDays: number) => {
+    const nextDays = Math.max(0, Math.round((currentDays + step) * 100) / 100);
+    setItemTargetDaysOverrides((prev) => {
+      if (nextDays === masterDays) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: nextDays };
+    });
+  };
+
+  // 품목별 발주일수 직접 입력 확정
+  const handleCommitOrderDaysInput = (id: number, raw: string, masterDays: number) => {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      const normalized = Math.round(parsed * 100) / 100;
+      setItemTargetDaysOverrides((prev) => {
+        if (normalized === masterDays) {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        }
+        return { ...prev, [id]: normalized };
+      });
+    }
+    setEditingOrderDays(null);
+  };
+
+  // 변경된 발주일수를 품목 마스터(DB Product.targetOrderDays)에 영구 저장
+  const handleSaveOrderDays = async (row: SheetRow, nextDays: number) => {
+    const productId = row.productId ?? row.id;
+    const normalized = Math.max(0, Math.round(nextDays * 100) / 100);
+    setSavingOrderDaysId(row.id);
+    try {
+      const res = await fetch('/api/inventory/stock', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: [{ id: 0, productId, targetOrderDays: normalized }],
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('발주일수 저장 실패: ' + (json.error || `HTTP ${res.status}`));
+        return;
+      }
+      setRows((prev) =>
+        prev.map((item) =>
+          item.id === row.id ? { ...item, targetOrderDays: normalized, days: normalized } : item
+        )
+      );
+      setItemTargetDaysOverrides((prev) => {
+        const next = { ...prev };
+        delete next[row.id];
+        return next;
+      });
+    } catch (err: any) {
+      alert('발주일수 저장 중 통신 오류: ' + (err?.message || String(err)));
+    } finally {
+      setSavingOrderDaysId(null);
+    }
   };
 
   // 요일 탭별 통계 (해당 요일 자동 분할량 기준)
@@ -523,9 +613,24 @@ export const MatOrderDayView: React.FC = () => {
     });
   }, [rows, supplierFilter, patternFilter, keyword, getRowMetrics]);
 
+  // 타 요일 납품 등으로 오늘 배정이 0이지만 재고가 매우 부족(1.5일 미만)한 품목 감지
+  const offScheduleUrgentItems = useMemo(() => {
+    return rows
+      .map((r) => {
+        const pattern = classifyPattern(r.supplier, r.orderDay);
+        const m = getRowMetrics(r, dayIdx);
+        if (m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0)) {
+          return { r, m, pattern };
+        }
+        return null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => a.m.stockDays - b.m.stockDays);
+  }, [rows, dayIdx, getRowMetrics]);
+
   // 현재 요일에 해당하는 발주 행 목록
   const dayRows = useMemo(() => {
-    return rows
+    const mapped = rows
       .map((r) => {
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
         const pattern = classifyPattern(r.supplier, r.orderDay);
@@ -538,12 +643,39 @@ export const MatOrderDayView: React.FC = () => {
           return null;
         }
         const m = getRowMetrics(r, dayIdx);
+        if (showOnlyUrgentUnallocated) {
+          if (!(m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0))) {
+            return null;
+          }
+          return { r, m, pattern };
+        }
         // showOnlyOrderable 가 true 일 때는 dayQty > 0 인 품목만 표시 (단, 검색어 입력 시에는 재고/상태 확인을 위해 0건 품목도 표시)
         if (showOnlyOrderable && !keyword.trim() && m.dayQty <= 0) return null;
         return { r, m, pattern };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [rows, supplierFilter, patternFilter, keyword, dayIdx, getRowMetrics, showOnlyOrderable]);
+
+    if (sortMode === 'urgency') {
+      const rank = (item: (typeof mapped)[number]) => {
+        if (item.m.auditStatus === 'critical') return 0;
+        if (item.m.auditStatus === 'warning') return 1;
+        if (item.m.dayQty > 0) return 2;
+        return 3;
+      };
+      mapped.sort((a, b) => rank(a) - rank(b) || a.m.stockDays - b.m.stockDays);
+    }
+    return mapped;
+  }, [
+    rows,
+    supplierFilter,
+    patternFilter,
+    keyword,
+    dayIdx,
+    getRowMetrics,
+    showOnlyOrderable,
+    showOnlyUrgentUnallocated,
+    sortMode,
+  ]);
 
   // 합계 계산 (발주 및 런웨이 지표)
   const dayTotals = useMemo(() => {
@@ -551,14 +683,16 @@ export const MatOrderDayView: React.FC = () => {
     let amt = 0;
     let criticalCount = 0;
     let warningCount = 0;
+    let zeroPriceCount = 0;
     let totalStockDaysSum = 0;
     let countWithUsage = 0;
 
-    dayRows.forEach(({ m }) => {
+    dayRows.forEach(({ r, m }) => {
       boxes += m.dayQty;
       amt += m.amount;
       if (m.auditStatus === 'critical') criticalCount++;
       if (m.auditStatus === 'warning') warningCount++;
+      if (m.dayQty > 0 && (r.bagPrice || 0) <= 0) zeroPriceCount++;
       if (m.dailyUsage > 0 && m.stockDays < 60) {
         totalStockDaysSum += m.stockDays;
         countWithUsage++;
@@ -566,8 +700,9 @@ export const MatOrderDayView: React.FC = () => {
     });
 
     const avgRunway = countWithUsage > 0 ? totalStockDaysSum / countWithUsage : 0;
-    return { boxes, amt, criticalCount, warningCount, avgRunway };
-  }, [dayRows]);
+    const manualOverrideCount = Object.keys(overrides[dayIdx] || {}).length;
+    return { boxes, amt, criticalCount, warningCount, zeroPriceCount, manualOverrideCount, avgRunway };
+  }, [dayRows, overrides, dayIdx]);
 
   // 수량 인라인 수정 (정수 박스 단위)
   const handleDayQtyChange = (id: number, val: string) => {
@@ -587,6 +722,7 @@ export const MatOrderDayView: React.FC = () => {
         return next;
       });
       setItemTargetDaysOverrides({});
+      setShowOnlyUrgentUnallocated(false);
     }
   };
 
@@ -599,25 +735,30 @@ export const MatOrderDayView: React.FC = () => {
       return;
     }
 
-    // ── [안전 가드레일] 중복 발주 사전 감지 (이미 기발주 전표가 발행된 품목이 포함되어 있는지 점검) ──
-    const duplicateItems = dayRows
-      .filter(({ r, m }) => m.dayQty > 0 && (r.pendingBoxes || 0) > 0)
+    // ── [안전 가드레일] 기발주 미입고 품목 안내 (부족분 계산 시 기발주 수량은 이미 차감되었으나 추가 발주 확인) ──
+    const duplicateItems = saveRows
+      .filter(({ r }) => (r.pendingBoxes || 0) > 0)
       .map(
         ({ r, m }) =>
-          `• ${r.name} (기발주: ${r.pendingBoxes}box -> 추가발주: ${m.dayQty}box, 전표: ${(r.pendingOrderNos || []).slice(0, 2).join(', ')})`
+          `• ${r.name} (기발주: ${r.pendingBoxes}box 차감 후 추가부족분: ${m.dayQty}box, 전표: ${(r.pendingOrderNos || []).slice(0, 2).join(', ')})`
       );
 
     if (duplicateItems.length > 0) {
       const msg =
-        `⚠️ [중복 발주 주의 경고]\n\n` +
-        `선택하신 품목 중 ${duplicateItems.length}개 품목은 이미 발주 전표가 발행되어 운송/미입고 대기 중입니다:\n\n` +
+        `⚠️ [기발주 포함 추가 발주 확인]\n\n` +
+        `선택하신 품목 중 ${duplicateItems.length}개 품목은 기존 미입고 발주분을 차감하고도 목표 발주일수에 부족하여 추가 발주가 포함되었습니다:\n\n` +
         duplicateItems.slice(0, 5).join('\n') +
         (duplicateItems.length > 5 ? `\n...외 ${duplicateItems.length - 5}건` : '') +
-        `\n\n정말로 이 품목들을 '추가 발주'하시겠습니까?\n(취소를 누르면 중복 발주가 방지되고 저장이 중단됩니다.)`;
+        `\n\n추가 발주를 진행하시겠습니까?\n(취소를 누르면 저장이 중단됩니다.)`;
       if (!confirm(msg)) {
         return;
       }
     }
+
+    const zeroPriceLine =
+      dayTotals.zeroPriceCount > 0
+        ? `\n\n⚠️ 단가 미등록(₩0) 품목 ${dayTotals.zeroPriceCount}건이 포함되어 있습니다.`
+        : '';
 
     if (
       !confirm(
@@ -625,7 +766,7 @@ export const MatOrderDayView: React.FC = () => {
           saveRows.length
         }개 품목 (${dayTotals.boxes.toLocaleString()}박스 / ₩${Math.round(
           dayTotals.amt
-        ).toLocaleString()}원)을 ERP 정식 발주서(PO)로 확정 생성하시겠습니까?\n\n생성된 발주서는 [발주현황/수정] 및 [입고등록] 화면에 실시간 연동됩니다.`
+        ).toLocaleString()}원)을 ERP 정식 발주서(PO)로 확정 생성하시겠습니까?${zeroPriceLine}\n\n생성된 발주서는 [발주현황/수정] 및 [입고등록] 화면에 실시간 연동됩니다.`
       )
     ) {
       return;
@@ -641,13 +782,14 @@ export const MatOrderDayView: React.FC = () => {
           orderDate: currentDayDate,
           items: saveRows.map(({ r, m }) => {
             const pack = m.pack || r.packUnit || 1;
+            const boxPrice = m.boxPrice || calcBoxPrice(r.bagPrice, pack);
             return {
               productId: r.productId,
               name: r.name,
               boxes: m.dayQty,
               packUnit: pack,
               bagPrice: r.bagPrice,
-              boxPrice: (r.bagPrice || 0) * pack,
+              boxPrice,
               supplierHeader: r.supplier,
             };
           }),
@@ -659,6 +801,7 @@ export const MatOrderDayView: React.FC = () => {
         return;
       }
 
+      const failedMat = (matJson.data?.failed || []) as any[];
       const orderItems = (matJson.data?.matched || [])
         .filter((m: any) => m.productCode && Number(m.orderQty) > 0)
         .map((m: any) => ({
@@ -674,7 +817,7 @@ export const MatOrderDayView: React.FC = () => {
         }));
 
       if (orderItems.length === 0) {
-        const reasons = (matJson.data?.failed || [])
+        const reasons = failedMat
           .slice(0, 5)
           .map((f: any) => `• ${f.name}: ${f.reason}`)
           .join('\n');
@@ -696,10 +839,19 @@ export const MatOrderDayView: React.FC = () => {
 
       if (res.ok && json.success) {
         const orderCount = (json.data || []).length;
+        const failedWarn =
+          failedMat.length > 0
+            ? `\n\n⚠️ 제외/매칭실패 ${failedMat.length}건:\n` +
+              failedMat
+                .slice(0, 5)
+                .map((f: any) => `• ${f.name}: ${f.reason}`)
+                .join('\n')
+            : '';
         alert(
           `✅ [${DAY_CHARS[dayIdx]}요일 (${currentDayDate})] 발주 확정 완료!\n\n` +
             `• 생성된 발주서: 총 ${orderCount}건 발행 완료\n` +
-            `• 상단의 [발주서 ${orderCount}건 발행] 버튼을 누르면 거래처별 전표 내역을 바로 확인하실 수 있습니다.`
+            `• 상단의 [발주서 ${orderCount}건 발행] 버튼을 누르면 거래처별 전표 내역을 바로 확인하실 수 있습니다.` +
+            failedWarn
         );
         loadConfirmedPo();
         loadInboundPending();
@@ -726,12 +878,13 @@ export const MatOrderDayView: React.FC = () => {
       입고예정_봉: r.incoming,
       일소진량_봉: m.dailyUsage,
       현재재고유지일_일: Number(m.stockDays.toFixed(1)),
-      목표안전일수_일: m.targetDays,
+      발주일수_일: m.targetDays,
       안전감사상태: m.auditLabel,
       추천수량_박스: m.suggestedBoxes,
       발주수량_박스: m.dayQty,
       입수량: m.pack || 0,
       봉단가: r.bagPrice,
+      박스단가: calcBoxPrice(r.bagPrice, m.pack),
       금액: Math.round(m.amount),
       비고: r.vendor || '',
     }));
@@ -746,11 +899,12 @@ export const MatOrderDayView: React.FC = () => {
         { key: '납품요일패턴', label: '납품패턴' },
         { key: '보관창고', label: '보관창고' },
         { key: '현재재고유지일_일', label: '재고유지일(일)' },
-        { key: '목표안전일수_일', label: '목표안전일(일)' },
+        { key: '발주일수_일', label: '발주일수(일)' },
         { key: '안전감사상태', label: '감사상태' },
         { key: '발주수량_박스', label: '발주량(박스)' },
         { key: '입수량', label: '입수량' },
         { key: '봉단가', label: '봉단가' },
+        { key: '박스단가', label: '박스단가' },
         { key: '금액', label: '금액' },
       ],
       data: exportData,
@@ -761,7 +915,11 @@ export const MatOrderDayView: React.FC = () => {
   const handleInboundQtyChange = (detailId: number, val: string) => {
     const num = Math.max(0, Number(val) || 0);
     setInboundItems((prev) =>
-      prev.map((it) => (it.detailId === detailId ? { ...it, actualRecvQty: num } : it))
+      prev.map((it) =>
+        it.detailId === detailId
+          ? { ...it, actualRecvQty: num, amount: Math.round(num * it.unitPrice) }
+          : it
+      )
     );
   };
 
@@ -777,7 +935,13 @@ export const MatOrderDayView: React.FC = () => {
 
   // 모든 검수 수량을 발주수량(100% 정상)으로 자동 채우기
   const handleFillAllOrderQty = () => {
-    setInboundItems((prev) => prev.map((it) => ({ ...it, actualRecvQty: it.orderQty })));
+    setInboundItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        actualRecvQty: it.orderQty,
+        amount: Math.round(it.orderQty * it.unitPrice),
+      }))
+    );
   };
 
   // ── 입고 검수 완료 및 실제 재고 반영 (POST /api/purchase/receiving) ──
@@ -910,7 +1074,7 @@ export const MatOrderDayView: React.FC = () => {
     filteredInboundItems.forEach((it) => {
       totalOrder += it.orderQty;
       totalActual += it.actualRecvQty;
-      totalAmount += it.amount;
+      totalAmount += Math.round(it.actualRecvQty * it.unitPrice);
       if (it.actualRecvQty < it.orderQty) shortCount++;
     });
     return {
@@ -1192,7 +1356,7 @@ export const MatOrderDayView: React.FC = () => {
                     ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
                 }`}
-                title="⚡ 타이트 모드: 매일처 1.8~2.0일치 압축, 폐기 손실 방지"
+                title="⚡ 타이트 모드: 리드타임(D+1/D+2) 결품 하한선 보호 + 전 품목 여유분 압축"
               >
                 ⚡ 타이트
               </button>
@@ -1204,7 +1368,7 @@ export const MatOrderDayView: React.FC = () => {
                     ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50'
                 }`}
-                title="⚖️ 표준 모드: 마스터 기준 정석 운영"
+                title="⚖️ 표준 모드: 품목 마스터(DB) 발주일수 100% 그대로 적용"
               >
                 ⚖️ 표준
               </button>
@@ -1216,7 +1380,7 @@ export const MatOrderDayView: React.FC = () => {
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
                 }`}
-                title="🛡️ 보수적 안전 모드: 결품 차단 (+1일 및 감모 5% 가산)"
+                title="🛡️ 보수적 안전 모드: 결품 차단 (발주일수 +1일 및 감모 5% 가산)"
               >
                 🛡️ 안전
               </button>
@@ -1333,23 +1497,40 @@ export const MatOrderDayView: React.FC = () => {
               {/* 발주 대상만 보기 토글 */}
               <button
                 type="button"
-                onClick={() => setShowOnlyOrderable((prev) => !prev)}
+                onClick={() => {
+                  setShowOnlyUrgentUnallocated(false);
+                  setShowOnlyOrderable((prev) => !prev);
+                }}
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  showOnlyOrderable
+                  showOnlyOrderable && !showOnlyUrgentUnallocated
                     ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
                 }`}
-                title="발주량이 잡힌 품목만 보기 or 전체 442개 품목 탐색하기"
+                title="발주량이 잡힌 품목만 보기 or 전체 품목 탐색하기"
               >
                 <Package className="w-3.5 h-3.5" />
-                <span>{showOnlyOrderable ? '발주대상만' : '전체품목'}</span>
+                <span>{showOnlyOrderable && !showOnlyUrgentUnallocated ? '발주대상만' : '전체품목'}</span>
                 <span
                   className={`text-[11px] font-mono px-1.5 rounded-full font-bold whitespace-nowrap ${
-                    showOnlyOrderable ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+                    showOnlyOrderable && !showOnlyUrgentUnallocated ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
                   }`}
                 >
                   {dayRows.length}
                 </span>
+              </button>
+
+              {/* 정렬 모드 전환 (긴급도순 vs 창고·품목순) */}
+              <button
+                type="button"
+                onClick={() => setSortMode((prev) => (prev === 'urgency' ? 'default' : 'urgency'))}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border whitespace-nowrap ${
+                  sortMode === 'urgency'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                }`}
+                title="긴급 품목(결품초임박/안전미달)을 테이블 맨 위에 우선 배치합니다."
+              >
+                {sortMode === 'urgency' ? '🚨 긴급순' : '창고·품목순'}
               </button>
 
               {/* 검색창 */}
@@ -1549,7 +1730,7 @@ export const MatOrderDayView: React.FC = () => {
       {/* ── 3-1. 요일별 통계 기반 스마트 수요 가중치 안내 배너 ── */}
       {mainMode === 'order' && WEEKDAY_DEMAND_FACTORS[dayIdx] && (
         <div
-          className={`px-4 py-2 flex items-center justify-between text-xs border-b shrink-0 shadow-2xs ${
+          className={`px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs border-b shrink-0 shadow-2xs ${
             WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
               ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 text-amber-950'
               : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
@@ -1587,14 +1768,43 @@ export const MatOrderDayView: React.FC = () => {
               <strong>{WEEKDAY_DEMAND_FACTORS[dayIdx].label}</strong>이 적용되어, 공급업체별 확정량이 요일 수요에 비례하여 자동 배분되었습니다.
             </span>
           </div>
-          <div className="hidden md:flex items-center gap-2 text-[11px] font-bold opacity-80">
-            <span className="bg-white/80 px-2 py-0.5 rounded border border-slate-200">
-              {WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
-                ? '⚡ 피크 결품 방지 증량'
-                : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
-                ? '🛡️ 주말 신선자재 폐기 방지 감량'
-                : '⚖️ 정석 안정 수요'}
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold shrink-0">
+            <span
+              className={`px-2 py-0.5 rounded border ${
+                strategyMode === 'tight'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : strategyMode === 'safety'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : 'bg-white/90 text-blue-900 border-blue-200'
+              }`}
+            >
+              {strategyMode === 'tight'
+                ? '⚡ 타이트: 리드타임 하한 보호 · 전품목 여유일 압축'
+                : strategyMode === 'safety'
+                ? '🛡️ 안전: 발주일수 +1일 · 감모 5% 가산'
+                : '⚖️ 표준: 품목 마스터 DB 발주일수 기준'}
             </span>
+            {offScheduleUrgentItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowOnlyUrgentUnallocated((prev) => !prev)}
+                className={`px-2 py-0.5 rounded border font-black cursor-pointer transition ${
+                  showOnlyUrgentUnallocated
+                    ? 'bg-rose-600 text-white border-rose-700'
+                    : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                }`}
+                title="오늘 납품 요일이 아닌 품목(예: 화목토/주말) 중 재고 1.5일 미만 부족 품목을 확인합니다."
+              >
+                {showOnlyUrgentUnallocated
+                  ? `긴급미배정 필터 해제 (${offScheduleUrgentItems.length}건)`
+                  : `🚨 타요일·주말 긴급부족 ${offScheduleUrgentItems.length}건 확인`}
+              </button>
+            )}
+            {dayTotals.zeroPriceCount > 0 && (
+              <span className="px-2 py-0.5 rounded border bg-amber-100 text-amber-900 border-amber-300 font-black">
+                ⚠️ 단가 미등록 {dayTotals.zeroPriceCount}건
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1632,16 +1842,19 @@ export const MatOrderDayView: React.FC = () => {
                       재고유지일 (Runway)
                       <span className="block text-[11px] text-blue-700 font-bold leading-tight">보유일수 · 상태</span>
                     </th>
-                    <th className="py-3 px-3 min-w-[160px] text-center whitespace-nowrap">
-                      목표 안전일수
-                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">미세조정 (±0.5일)</span>
+                    <th className="py-3 px-3 min-w-[165px] text-center whitespace-nowrap">
+                      발주일수
+                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">기준 · 필요량 (±0.5일)</span>
                     </th>
                     <th className="py-3 px-3 min-w-[170px] text-right bg-amber-50/70 text-amber-950 border-x border-amber-200 whitespace-nowrap">
                       {DAY_CHARS[dayIdx]}요일 발주(✏️)
                       <span className="block text-[11px] text-amber-800 font-bold leading-tight">추천치 대비 확정</span>
                     </th>
                     <th className="py-3 px-2.5 w-24 text-right whitespace-nowrap">입수량</th>
-                    <th className="py-3 px-2.5 w-28 text-right whitespace-nowrap">봉단가</th>
+                    <th className="py-3 px-2.5 w-32 text-right whitespace-nowrap">
+                      단가
+                      <span className="block text-[11px] text-slate-500 font-bold leading-tight">봉단가 / 박스단가</span>
+                    </th>
                     <th className="py-3 px-3 w-36 text-right font-black whitespace-nowrap">발주금액</th>
                     <th className="py-3 px-2.5 w-24 text-center whitespace-nowrap">계산근거</th>
                   </tr>
@@ -1699,9 +1912,15 @@ export const MatOrderDayView: React.FC = () => {
                           <td className="py-2.5 px-4 font-black text-slate-900 text-[15px] whitespace-nowrap">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span title={r.name}>{r.name}</span>
+                              <ProductLifecycleBadge
+                                status={r.status}
+                                discontinuedDate={r.discontinuedDate}
+                                name={r.name}
+                                refDate={currentDayDate || orderDate}
+                              />
                               {m.cautionLabel && (
-                                <span className="inline-flex items-center gap-0.5 text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 animate-pulse whitespace-nowrap shadow-xs">
-                                  🚨 {m.cautionLabel}
+                                <span className="inline-flex items-center gap-0.5 text-[11px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 shadow-xs whitespace-nowrap">
+                                  {m.cautionLabel}
                                 </span>
                               )}
                             </div>
@@ -1722,6 +1941,11 @@ export const MatOrderDayView: React.FC = () => {
                             >
                               {pattern}
                             </span>
+                            {r.orderCycle && r.orderCycle !== pattern && (
+                              <span className="block text-[10.5px] font-bold text-slate-500 mt-0.5">
+                                {r.orderCycle}
+                              </span>
+                            )}
                           </td>
 
                           {/* 보관창고 */}
@@ -1812,32 +2036,102 @@ export const MatOrderDayView: React.FC = () => {
                             )}
                           </td>
 
-                          {/* 목표 안전일수 (미세조정) */}
+                          {/* 발주일수 (마스터 기준 · ±0.5일 / 직접입력 / DB저장) */}
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
-                                onClick={() => handleStepTargetDays(r.id, m.targetDays, -0.5)}
+                                onClick={() =>
+                                  handleStepTargetDays(r.id, m.targetDays, -0.5, m.masterOrderDays)
+                                }
                                 className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer"
-                                title="목표안전일수 0.5일 축소"
+                                title="발주일수 0.5일 축소"
                               >
                                 <Minus size={12} />
                               </button>
-                              <span className="font-mono font-black text-[13.5px] min-w-[36px] text-center text-slate-800">
-                                {m.targetDays.toFixed(1)}일
-                              </span>
+                              {editingOrderDays?.id === r.id ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.5"
+                                  autoFocus
+                                  value={editingOrderDays.value}
+                                  onChange={(e) =>
+                                    setEditingOrderDays({ id: r.id, value: e.target.value })
+                                  }
+                                  onBlur={() =>
+                                    handleCommitOrderDaysInput(
+                                      r.id,
+                                      editingOrderDays.value,
+                                      m.masterOrderDays
+                                    )
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleCommitOrderDaysInput(
+                                        r.id,
+                                        editingOrderDays.value,
+                                        m.masterOrderDays
+                                      );
+                                    } else if (e.key === 'Escape') {
+                                      setEditingOrderDays(null);
+                                    }
+                                  }}
+                                  className="w-14 text-center px-1 py-0.5 text-[13px] font-mono font-black border border-blue-400 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingOrderDays({
+                                      id: r.id,
+                                      value: m.targetDays > 0 ? String(m.targetDays) : '0',
+                                    })
+                                  }
+                                  className={`font-mono font-black text-[13.5px] min-w-[42px] text-center px-1 rounded hover:bg-blue-50 transition cursor-pointer ${
+                                    m.targetDays > 0 ? 'text-slate-800' : 'text-slate-400'
+                                  }`}
+                                  title="클릭하여 발주일수 직접 입력"
+                                >
+                                  {formatOrderDays(m.targetDays)}
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleStepTargetDays(r.id, m.targetDays, 0.5)}
+                                onClick={() =>
+                                  handleStepTargetDays(r.id, m.targetDays, 0.5, m.masterOrderDays)
+                                }
                                 className="w-5.5 h-5.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer"
-                                title="목표안전일수 0.5일 가산"
+                                title="발주일수 0.5일 가산"
                               >
                                 <Plus size={12} />
                               </button>
                             </div>
-                            <span className="block text-[11px] text-slate-500 font-mono font-bold mt-0.5 whitespace-nowrap">
-                              목표 {m.targetStock.toLocaleString()}봉
-                            </span>
+                            <div className="flex items-center justify-center gap-1 mt-0.5 whitespace-nowrap">
+                              <span className="text-[11px] text-slate-500 font-mono font-bold">
+                                {m.targetDays > 0 ? `필요 ${m.targetStock.toLocaleString()}봉` : '미설정'}
+                              </span>
+                              {m.targetDays !== m.masterOrderDays && (
+                                <span
+                                  className="text-[10px] text-indigo-600 font-mono font-bold"
+                                  title="품목 마스터(DB) 기준 발주일수"
+                                >
+                                  (기준 {formatOrderDays(m.masterOrderDays)})
+                                </span>
+                              )}
+                              {itemTargetDaysOverrides[r.id] !== undefined &&
+                                itemTargetDaysOverrides[r.id] !== m.masterOrderDays && (
+                                  <button
+                                    type="button"
+                                    disabled={savingOrderDaysId === r.id}
+                                    onClick={() => handleSaveOrderDays(r, m.targetDays)}
+                                    className="px-1.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-[10px] font-black transition cursor-pointer"
+                                    title="수정한 발주일수를 품목 마스터(DB)에 영구 저장"
+                                  >
+                                    {savingOrderDaysId === r.id ? '저장중' : 'DB저장'}
+                                  </button>
+                                )}
+                            </div>
                           </td>
 
                           {/* 요일 발주수량 (추천치 대비 확정) */}
@@ -1876,9 +2170,16 @@ export const MatOrderDayView: React.FC = () => {
                             {m.pack > 0 ? `${m.pack.toLocaleString()}` : '-'}
                           </td>
 
-                          {/* 봉단가 */}
+                          {/* 봉단가 / 박스단가 */}
                           <td className="py-2.5 px-2.5 text-right font-mono text-slate-800 text-[13.5px] font-bold whitespace-nowrap">
-                            {r.bagPrice > 0 ? `₩${r.bagPrice.toLocaleString()}` : '-'}
+                            {r.bagPrice > 0 ? (
+                              <>
+                                <div>₩{r.bagPrice.toLocaleString()}</div>
+                                <div className="text-[11px] font-medium text-slate-500">
+                                  박스 ₩{calcBoxPrice(r.bagPrice, m.pack).toLocaleString()}
+                                </div>
+                              </>
+                            ) : '-'}
                           </td>
 
                           {/* 발주금액 */}
@@ -1928,10 +2229,21 @@ export const MatOrderDayView: React.FC = () => {
                                   </div>
 
                                   <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-700">
-                                    <div className="font-bold text-slate-900">② 일소진량 및 목표일수</div>
+                                    <div className="font-bold text-slate-900">② 일소진량 및 발주일수</div>
                                     <div className="text-[11.5px] text-slate-600 font-mono mt-0.5">
-                                      일평균 {m.dailyUsage.toLocaleString()}봉/일 × 목표 {m.targetDays.toFixed(1)}일
-                                      {strategyMode === 'safety' && <span className="text-emerald-700 font-bold"> (+5% 버퍼)</span>}
+                                      일평균 {m.dailyUsage.toLocaleString()}봉/일 × 발주 {formatOrderDays(m.targetDays)}
+                                      {m.targetDays !== m.masterOrderDays && (
+                                        <span className="text-indigo-600 font-bold">
+                                          {' '}(기준 {formatOrderDays(m.masterOrderDays)}
+                                          {strategyMode === 'tight' && m.minFloorDays > 0
+                                            ? ` · 하한 ${formatOrderDays(m.minFloorDays)}`
+                                            : ''}
+                                          )
+                                        </span>
+                                      )}
+                                      {m.targetDays > 0 && strategyMode === 'safety' && (
+                                        <span className="text-emerald-700 font-bold"> (+5% 버퍼)</span>
+                                      )}
                                     </div>
                                   </div>
 
@@ -1949,7 +2261,7 @@ export const MatOrderDayView: React.FC = () => {
                                       부족분 ÷ 입수({m.pack}봉) ➔ 올림{' '}
                                       <strong className="text-blue-700 font-black">[{m.suggestedBoxes}박스]</strong>
                                       <span className="block text-[11px] text-slate-500 font-sans mt-0.5">
-                                        오늘({DAY_CHARS[dayIdx]}요일) 요일 분할 배정: <strong>{m.week[dayIdx]}박스</strong>
+                                        오늘({DAY_CHARS[dayIdx]}요일) 남은 납품일 가중 배정: <strong>{m.week[dayIdx]}박스</strong>
                                       </span>
                                     </div>
                                   </div>
@@ -2026,7 +2338,7 @@ export const MatOrderDayView: React.FC = () => {
                       const isShort = diff > 0;
                       const isZero = item.actualRecvQty === 0;
                       const isFull = diff === 0;
-                      const actualAmount = item.actualRecvQty * item.unitPrice;
+                      const actualAmount = Math.round(item.actualRecvQty * item.unitPrice);
 
                       return (
                         <tr
@@ -2229,11 +2541,16 @@ export const MatOrderDayView: React.FC = () => {
                     }`}
                   >
                     {strategyMode === 'tight'
-                      ? '⚡타이트(최소재고)'
+                      ? '⚡타이트(리드타임보호 압축)'
                       : strategyMode === 'safety'
-                      ? '🛡️보수적안전(+1일)'
-                      : '⚖️표준(마스터)'}
+                      ? '🛡️보수적안전(+1일·+5%)'
+                      : '⚖️표준(발주일수)'}
                   </strong>
+                  {dayTotals.manualOverrideCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px] font-bold">
+                      수동수정 {dayTotals.manualOverrideCount}건
+                    </span>
+                  )}
                 </span>
                 <span className="text-slate-300">|</span>
                 <span className="text-slate-600">

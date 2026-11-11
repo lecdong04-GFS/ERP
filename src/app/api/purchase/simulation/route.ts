@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
-import { isDummyBomDetail } from '@/lib/gfs/bomMatch';
+import { isDummyBomDetail, matchBomHeader } from '@/lib/gfs/bomMatch';
+import { getLiveBomUsageMap } from '@/lib/gfs/liveUsage';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+  toBagQty,
+} from '@/lib/gfs/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,25 +22,82 @@ export async function GET(req: NextRequest) {
     const todayKst = kstToday();
     const date = searchParams.get('date') || todayKst;
 
-    // 1. 활성 BOM 헤더 및 하위 자재 명세 로드
-    const bomHeaders = await prisma.bomHeader.findMany({
-      where: { isUsed: true },
-      include: {
-        parentProduct: {
-          include: { partner: true },
-        },
-        details: {
-          include: {
-            childProduct: {
-              include: { partner: true },
+    // 1. 활성 BOM 헤더, ReprProduct 매핑, 실시간 BOM 일사용량 병렬 로드
+    const [rawBomHeaders, reprRows, liveBomUsage] = await Promise.all([
+      prisma.bomHeader.findMany({
+        where: { isUsed: true },
+        include: {
+          parentProduct: {
+            include: { partner: true },
+          },
+          details: {
+            include: {
+              childProduct: {
+                include: { partner: true },
+              },
             },
           },
         },
-      },
-      orderBy: { id: 'asc' },
+        orderBy: { id: 'asc' },
+      }),
+      prisma.reprProduct.findMany({
+        where: { isUsed: true },
+        select: {
+          orderProductId: true,
+          reprProductId: true,
+        },
+      }),
+      getLiveBomUsageMap(date).catch(() => null),
+    ]);
+
+    const bomHeaders = rawBomHeaders.filter(
+      (bh) =>
+        bh.parentProduct &&
+        bh.details.some((d) => !isDummyBomDetail(d.unit, d.unitQty) && Number(d.unitQty) > 0),
+    );
+    bomHeaders.sort((a, b) => {
+      const aDummy = a.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+      const bDummy = b.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+      if (aDummy !== bDummy) return aDummy ? 1 : -1;
+      const aCat = a.parentProduct?.category === '완성품' ? 0 : 1;
+      const bCat = b.parentProduct?.category === '완성품' ? 0 : 1;
+      if (aCat !== bCat) return aCat - bCat;
+      return a.id - b.id;
     });
 
-    // 2. 완제품별 GS25 과거 수주 통계 집계 (실제 2,500+건 수주 실적 기반)
+    const reprByOrderId = new Map<number, number>();
+    for (const r of reprRows) {
+      reprByOrderId.set(r.orderProductId, r.reprProductId);
+    }
+    const headerByParentId = new Map<number, (typeof bomHeaders)[number]>();
+    for (const bh of bomHeaders) {
+      if (!headerByParentId.has(bh.parentProductId)) {
+        headerByParentId.set(bh.parentProductId, bh);
+      }
+    }
+    const resolveCanonicalProductCode = (
+      productId: number | null | undefined,
+      productCode: string | null | undefined,
+      productName: string | null | undefined,
+    ): string => {
+      if (productId && reprByOrderId.has(productId)) {
+        const mapped = headerByParentId.get(reprByOrderId.get(productId)!);
+        if (mapped?.parentProduct?.productCode) return mapped.parentProduct.productCode;
+      }
+      if (productId && headerByParentId.has(productId)) {
+        const direct = headerByParentId.get(productId)!;
+        if (!direct.details.some((d) => isDummyBomDetail(d.unit, d.unitQty))) {
+          if (direct.parentProduct?.productCode) return direct.parentProduct.productCode;
+        }
+      }
+      if (productName) {
+        const matched = matchBomHeader(productName, productId ?? null, bomHeaders);
+        if (matched?.parentProduct?.productCode) return matched.parentProduct.productCode;
+      }
+      return productCode || '';
+    };
+
+    // 2. 완제품별 GS25 과거 수주 통계 집계 (ReprProduct + BOM 매핑 통합 일일 평균)
     const allOrderDetails = await prisma.salesOrderDetail.findMany({
       where: {
         salesOrder: {
@@ -40,24 +106,39 @@ export async function GET(req: NextRequest) {
       },
       select: {
         totalQty: true,
-        product: { select: { productCode: true } },
+        salesOrder: { select: { orderDate: true } },
+        product: { select: { id: true, productCode: true, name: true } },
       },
     });
 
-    const statMap = new Map<string, { count: number; totalQty: number; avgQty: number }>();
+    const statMap = new Map<
+      string,
+      { count: number; totalQty: number; avgQty: number; dates: Set<string> }
+    >();
     for (const od of allOrderDetails) {
-      const code = od.product?.productCode;
-      if (!code) continue;
-      const cur = statMap.get(code) || { count: 0, totalQty: 0, avgQty: 0 };
+      const targetCode = resolveCanonicalProductCode(
+        od.product?.id,
+        od.product?.productCode,
+        od.product?.name,
+      );
+      if (!targetCode) continue;
+      const cur = statMap.get(targetCode) || {
+        count: 0,
+        totalQty: 0,
+        avgQty: 0,
+        dates: new Set<string>(),
+      };
       cur.count += 1;
       cur.totalQty += Number(od.totalQty) || 0;
-      statMap.set(code, cur);
+      if (od.salesOrder?.orderDate) cur.dates.add(od.salesOrder.orderDate);
+      statMap.set(targetCode, cur);
     }
     statMap.forEach((v) => {
-      v.avgQty = v.count > 0 ? Math.round(v.totalQty / v.count) : 0;
+      const denom = v.dates.size > 0 ? v.dates.size : v.count;
+      v.avgQty = denom > 0 ? Math.round(v.totalQty / denom) : 0;
     });
 
-    // 2-1. 최근 수주량 조회 (기준일자 이전 가장 최근 수주)
+    // 2-1. 최근 수주량 조회 (기준일자 이전 가장 최근 수주일 합계)
     const recentOrders = await prisma.salesOrderDetail.findMany({
       where: {
         salesOrder: {
@@ -65,16 +146,33 @@ export async function GET(req: NextRequest) {
           orderDate: { lte: date },
         },
       },
-      include: { product: true },
-      orderBy: { id: 'desc' },
-      take: 500,
+      include: {
+        product: true,
+        salesOrder: { select: { orderDate: true } },
+      },
+      orderBy: [{ salesOrder: { orderDate: 'desc' } }, { id: 'desc' }],
+      take: 2000,
     });
 
     const recentOrderQtyMap = new Map<string, number>();
+    const recentOrderDateMap = new Map<string, string>();
     for (const od of recentOrders) {
-      const code = od.product?.productCode;
-      if (code && !recentOrderQtyMap.has(code)) {
-        recentOrderQtyMap.set(code, Number(od.totalQty) || 0);
+      const targetCode = resolveCanonicalProductCode(
+        od.product?.id,
+        od.product?.productCode,
+        od.product?.name,
+      );
+      const orderDate = od.salesOrder?.orderDate || '';
+      if (!targetCode || !orderDate) continue;
+      const latestDate = recentOrderDateMap.get(targetCode);
+      if (!latestDate) {
+        recentOrderDateMap.set(targetCode, orderDate);
+        recentOrderQtyMap.set(targetCode, Number(od.totalQty) || 0);
+      } else if (latestDate === orderDate) {
+        recentOrderQtyMap.set(
+          targetCode,
+          (recentOrderQtyMap.get(targetCode) || 0) + (Number(od.totalQty) || 0),
+        );
       }
     }
 
@@ -127,12 +225,15 @@ export async function GET(req: NextRequest) {
           ingredients: bh.details
             .filter((d) => {
               if (isDummyBomDetail(d.unit, d.unitQty)) return false;
+              if (!(Number(d.unitQty) > 0)) return false;
+              if (d.childProductId === bh.parentProductId) return false;
               const cp = d.childProduct;
+              if (cp && (cp.category === '완성품' || cp.category === '반제품')) return false;
               const name = cp?.name || '';
               const disc = cp?.discontinuedDate;
               if (
                 isExcludedFromOrder(name, date) ||
-                (cp && (!cp.isUsed || (disc && date >= disc)))
+                (cp && (!cp.isUsed || isTerminalProductStatus(cp.status) || (disc && date >= disc)))
               ) {
                 return false;
               }
@@ -141,8 +242,13 @@ export async function GET(req: NextRequest) {
             .map((d) => {
             const cp = d.childProduct;
             const yieldRate = d.yieldRate > 0 ? d.yieldRate : 100;
-            const unitQty = d.unitQty || 0;
-            const realFactor = unitQty / (yieldRate / 100);
+            const divisor = Number(cp?.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
+            const mult = Number(cp?.bomMultiplier) > 0 ? Number(cp.bomMultiplier) : 1;
+            const buffer = Number((d as any).orderBuffer) > 0 ? Number((d as any).orderBuffer) : 1;
+            const u = String(d.unit || '').trim().toLowerCase();
+            const rawUnitQty = Number(d.unitQty) || 0;
+            const unitQty = u === 'kg' && divisor >= 100 ? rawUnitQty * 1000 : rawUnitQty;
+            const realFactor = (((unitQty * buffer) / (yieldRate / 100)) / (divisor > 1 ? divisor : 1)) * mult;
             return {
               childId: cp?.id || d.childProductId,
               childCode: cp?.productCode || '',
@@ -166,12 +272,16 @@ export async function GET(req: NextRequest) {
       },
       include: {
         partner: true,
+        prices: {
+          orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+          take: 10,
+        },
         inventories: true,
       },
       orderBy: { productCode: 'asc' },
     });
 
-    // 5. 입고예정량 (PurchaseOrderDetail 미입고 잔량)
+    // 5. 입고예정량 (PurchaseOrderDetail 미입고 잔량 — 봉/기본단위 환산)
     const pendingOrders = await prisma.purchaseOrderDetail.findMany({
       where: {
         purchaseOrder: {
@@ -181,17 +291,21 @@ export async function GET(req: NextRequest) {
       select: {
         productId: true,
         productCode: true,
+        unit: true,
         remainQty: true,
+        product: { select: { boxQty: true } },
       },
     });
 
     const pendingMap = new Map<string, number>();
     for (const po of pendingOrders) {
-      pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + (Number(po.remainQty) || 0));
+      const bags = toBagQty(Number(po.remainQty) || 0, po.unit || 'box', po.product?.boxQty);
+      pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + bags);
     }
 
     // 6. 자재 메타데이터 맵 빌드 (발주 제외 및 삭제예정일 도래 품목 제외 — date 기준 동적 비교)
     const activeMaterials = materials.filter((m) => {
+      if (isTerminalProductStatus(m.status)) return false;
       if (isExcludedFromOrder(m.name, date)) return false;
       if (m.discontinuedDate && date >= m.discontinuedDate) return false;
       return true;
@@ -202,8 +316,21 @@ export async function GET(req: NextRequest) {
       const invStock = m.inventories.reduce((acc, inv) => acc + (Number(inv.currentQty) || 0), 0);
       const invPrice = m.inventories.find((inv) => (Number(inv.unitPrice) || 0) > 0)?.unitPrice || 0;
       const invUsage = m.inventories.find((inv) => (Number(inv.dailyUsage) || 0) > 0)?.dailyUsage || 0;
+      const masterDailyUsage = Number(invUsage) || 0;
+      const liveDailyUsage = Math.round(
+        (liveBomUsage?.byProductId.get(m.id) ??
+          liveBomUsage?.byProductCode.get(m.productCode) ??
+          0) * 100,
+      ) / 100;
+      const dailyUsage = liveDailyUsage > 0 ? liveDailyUsage : masterDailyUsage;
       const pendingIncoming = pendingMap.get(m.productCode) || 0;
       const targetDays = Number((m as any).targetOrderDays) > 0 ? Number((m as any).targetOrderDays) : (m.partner?.leadTime || 1);
+      const packUnit = normalizePackUnit(m.boxQty);
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: pickLatestValidPurchasePrice(m.prices as any),
+        invUnitPrice: invPrice,
+      });
+      const boxPrice = calcBoxPrice(bagPrice, packUnit);
 
       materialMap[m.productCode] = {
         id: m.id,
@@ -216,14 +343,18 @@ export async function GET(req: NextRequest) {
         partnerId: m.partnerId || '',
         leadTime: m.partner?.leadTime || 1,
         targetOrderDays: targetDays,
-        boxQty: m.boxQty > 0 ? m.boxQty : 1,
+        boxQty: packUnit,
         minOrderQty: m.minOrderQty || 1,
         orderUnitQty: m.orderUnitQty || 1,
         safetyStock: m.safetyStockQty || 50,
         currentStock: Number(invStock.toFixed(2)),
         pendingIncoming: Number(pendingIncoming.toFixed(2)),
-        unitPrice: Number(invPrice) || 1000,
-        dailyUsage: Number(invUsage) || 0,
+        unitPrice: bagPrice,
+        bagPrice,
+        boxPrice,
+        dailyUsage,
+        liveDailyUsage,
+        masterDailyUsage,
       };
     }
 

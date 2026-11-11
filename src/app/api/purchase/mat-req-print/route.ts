@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
   CUSTOM_BOM_ALIAS,
   dedupSalesOrders,
   isDummyBomDetail,
+  matchBomHeader,
   menuKey,
   normalizeForBom,
   pickLatestValidPrice,
@@ -13,6 +16,12 @@ import {
   BOM_MASTER_RECIPES,
   REPR_MAPPINGS,
 } from '@/services/pipeline/ProductionCostPipeline';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+} from '@/lib/gfs/pricing';
 
 // GET /api/purchase/mat-req-print?date=2026-10-30&shift=ALL&gye=ALL&category=ALL&search=
 export async function GET(req: NextRequest) {
@@ -38,7 +47,7 @@ export async function GET(req: NextRequest) {
           include: {
             product: {
               include: {
-                prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
                 inventories: true,
                 partner: true,
               },
@@ -70,7 +79,7 @@ export async function GET(req: NextRequest) {
             include: {
               product: {
                 include: {
-                  prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                  prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
                   inventories: true,
                   partner: true,
                 },
@@ -179,18 +188,32 @@ export async function GET(req: NextRequest) {
       orderBy: { id: 'asc' },
     });
 
-    const dbBomByParentCode = new Map<string, (typeof bomHeaders)[0]>();
-    const dbBomByName = new Map<string, (typeof bomHeaders)[0]>();
-    const dbBomByNorm = new Map<string, (typeof bomHeaders)[0]>();
-    const dbBomByMenuKey = new Map<string, (typeof bomHeaders)[0]>();
+    const usableBomHeaders = bomHeaders.filter((bh) =>
+      bh.details.some((d) => !isDummyBomDetail(d.unit, d.unitQty) && Number(d.unitQty) > 0),
+    );
+    usableBomHeaders.sort((a, b) => {
+      const aDummy = a.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+      const bDummy = b.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+      if (aDummy !== bDummy) return aDummy ? 1 : -1;
+      const aCat = a.parentProduct?.category === '완성품' ? 0 : 1;
+      const bCat = b.parentProduct?.category === '완성품' ? 0 : 1;
+      if (aCat !== bCat) return aCat - bCat;
+      return a.id - b.id;
+    });
 
-    bomHeaders.forEach((bh) => {
-      if (bh.parentProduct?.productCode) {
+    const dbBomByParentCode = new Map<string, (typeof usableBomHeaders)[0]>();
+    const dbBomByName = new Map<string, (typeof usableBomHeaders)[0]>();
+    const dbBomByNorm = new Map<string, (typeof usableBomHeaders)[0]>();
+    const dbBomByMenuKey = new Map<string, (typeof usableBomHeaders)[0]>();
+
+    usableBomHeaders.forEach((bh) => {
+      if (bh.parentProduct?.productCode && !dbBomByParentCode.has(bh.parentProduct.productCode)) {
         dbBomByParentCode.set(bh.parentProduct.productCode, bh);
       }
       if (bh.parentProduct?.name) {
-        dbBomByName.set(bh.parentProduct.name, bh);
-        dbBomByNorm.set(normalizeForBom(bh.parentProduct.name), bh);
+        if (!dbBomByName.has(bh.parentProduct.name)) dbBomByName.set(bh.parentProduct.name, bh);
+        const n = normalizeForBom(bh.parentProduct.name);
+        if (!dbBomByNorm.has(n)) dbBomByNorm.set(n, bh);
         const mk = menuKey(bh.parentProduct.name);
         if (mk && !dbBomByMenuKey.has(mk)) dbBomByMenuKey.set(mk, bh);
       }
@@ -198,9 +221,19 @@ export async function GET(req: NextRequest) {
 
     const findBomForProduct = (prod: any) => {
       if (!prod) return null;
-      if (prod.productCode && dbBomByParentCode.has(prod.productCode)) {
-        return dbBomByParentCode.get(prod.productCode);
+      const orderCode = prod.productCode || '';
+      const mappedReprCode = reprCodeMap.get(orderCode);
+      if (mappedReprCode && dbBomByParentCode.has(mappedReprCode)) {
+        return dbBomByParentCode.get(mappedReprCode);
       }
+      if (orderCode && dbBomByParentCode.has(orderCode)) {
+        const direct = dbBomByParentCode.get(orderCode)!;
+        if (!direct.details.some((d) => isDummyBomDetail(d.unit, d.unitQty))) {
+          return direct;
+        }
+      }
+      const matched = matchBomHeader(prod.name || '', prod.id ?? null, usableBomHeaders);
+      if (matched) return matched;
       if (prod.name && dbBomByName.has(prod.name)) {
         return dbBomByName.get(prod.name);
       }
@@ -258,6 +291,9 @@ export async function GET(req: NextRequest) {
       reqQty1: number;
       reqQty2: number;
       reqTotal: number;
+      packUnit: number;
+      bagPrice: number;
+      boxPrice: number;
       unitPrice: number;
       safetyStock: number;
       orderUnit: string;
@@ -284,12 +320,21 @@ export async function GET(req: NextRequest) {
       if (dbBom && dbBom.details.length > 0) {
         dbBom.details.forEach((bd) => {
           if (isDummyBomDetail(bd.unit, bd.unitQty)) return;
-          // level 3 (원부자재) 또는 공정이 할당되지 않은 level 2
-          if (bd.level === 3 || (bd.level === 2 && !bd.gye)) {
+          if (!(Number(bd.unitQty) > 0)) return;
+          if (bd.childProductId === dbBom.parentProductId) return;
+          if (!bd.level || bd.level >= 2) {
             const child = bd.childProduct as any;
-            if (child && !child.isUsed) return;
-            const divisor = Number(child?.bomDivisor) > 0 ? Number(child.bomDivisor) : 1000;
-            const factor = (bd.unitQty / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1);
+            if (!child || !child.isUsed) return;
+            if (child.category === '완성품' || child.category === '반제품') return;
+            if (isTerminalProductStatus(child.status)) return;
+            if (isExcludedFromOrder(child.name || '', targetDate)) return;
+            if (child.discontinuedDate && targetDate >= child.discontinuedDate) return;
+            const divisor = Number(child.bomDivisor) > 0 ? Number(child.bomDivisor) : 1000;
+            const multiplier = Number(child.bomMultiplier) > 0 ? Number(child.bomMultiplier) : 1;
+            const buffer = Number((bd as any).orderBuffer) > 0 ? Number((bd as any).orderBuffer) : 1;
+            const u = String(bd.unit || '').trim().toLowerCase();
+            const rawUnitQty = u === 'kg' && divisor >= 100 ? bd.unitQty * 1000 : bd.unitQty;
+            const factor = (((rawUnitQty * buffer) / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1)) * multiplier;
             const req1 = Math.round(qty1 * factor * 1000) / 1000;
             const req2 = Math.round(qty2 * factor * 1000) / 1000;
             const reqTot = Math.round(totalQty * factor * 1000) / 1000;
@@ -312,6 +357,19 @@ export async function GET(req: NextRequest) {
               existing.reqQty2 += req2;
               existing.reqTotal += reqTot;
             } else {
+              const packUnit = normalizePackUnit(child?.boxQty);
+              const invPrice = (child?.inventories || []).reduce(
+                (best: number, inv: any) => (best > 0 ? best : Number(inv.unitPrice) || 0),
+                0
+              );
+              const bagPrice = resolveBagPrice({
+                masterBagPrice:
+                  pickLatestValidPurchasePrice(child?.prices) ||
+                  Number(pickLatestValidPrice(child?.prices)?.purchasePrice) ||
+                  0,
+                invUnitPrice: invPrice,
+              });
+              const boxPrice = calcBoxPrice(bagPrice, packUnit);
               matReqAgg.set(aggKey, {
                 partCategory: cat,
                 partCode,
@@ -323,7 +381,10 @@ export async function GET(req: NextRequest) {
                 reqQty1: req1,
                 reqQty2: req2,
                 reqTotal: reqTot,
-                unitPrice: Number(pickLatestValidPrice(child?.prices)?.purchasePrice) || 0,
+                packUnit,
+                bagPrice,
+                boxPrice,
+                unitPrice: bagPrice,
                 safetyStock: child?.safetyStockQty || 0,
                 orderUnit: child && child.boxQty > 1 ? 'box' : child?.unit || 'ea',
                 orderUnitQty: child?.orderUnitQty || 1,
@@ -378,6 +439,9 @@ export async function GET(req: NextRequest) {
                     reqQty1: req1,
                     reqQty2: req2,
                     reqTotal: reqTot,
+                    packUnit: 1,
+                    bagPrice: raw.unitCost || 0,
+                    boxPrice: raw.unitCost || 0,
                     unitPrice: raw.unitCost || 0,
                     safetyStock: 50,
                     orderUnit: 'box',
@@ -455,6 +519,9 @@ export async function GET(req: NextRequest) {
         shortageQty: Number(shortageQty.toFixed(2)),
         orderQty,
         orderUnit: item.orderUnit,
+        packUnit: item.packUnit,
+        bagPrice: item.bagPrice,
+        boxPrice: item.boxPrice,
         unitPrice: item.unitPrice,
         totalAmt,
         supplier: item.supplier,

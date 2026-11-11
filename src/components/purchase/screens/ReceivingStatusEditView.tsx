@@ -6,6 +6,13 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import {
+  calcBagPriceFromBox,
+  calcBoxPrice,
+  isBagUnitLabel,
+  isBoxUnitLabel,
+  normalizePackUnit,
+} from '@/lib/gfs/pricing';
+import {
   ExternalLink,
   Printer,
   Search,
@@ -34,6 +41,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { ReceivingUploadModal } from '../modals/ReceivingUploadModal';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 
 // KST 시간 헬퍼
 function kstToday(): string {
@@ -63,12 +71,18 @@ interface ReceivingRow {
   productId: number;
   productCode: string;
   productName: string;
+  productStatus?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
   category: string;          // '원재료' | '부자재'
   spec: string;
   unit: string;
+  packUnit: number;          // 입수량
   orderQty: number;          // 발주수량
   recvQty: number;           // 입고수량 (editable)
-  buyPrice: number;          // 구매단가 (editable)
+  buyPrice: number;          // 적용 입고단가 (editable)
+  bagPrice: number;          // 봉단가 (editable)
+  boxPrice: number;          // 박스단가 (editable)
   recvAmt: number;           // 입고금액 (recvQty * buyPrice)
   diffQty: number;           // 차이수량 (recvQty - orderQty)
   warehouse: string;         // 창고명 (editable)
@@ -165,7 +179,20 @@ export const ReceivingStatusEditView: React.FC = () => {
           (rcv.details || []).forEach((dt: any) => {
             const qty = Number(dt.receivedQty || 0);
             const price = Number(dt.unitPrice || 0);
-            const amt = Number(dt.amount || qty * price);
+            const amt = Number(dt.amount || Math.round(qty * price));
+            const packUnit = normalizePackUnit(dt.packUnit || dt.product?.boxQty || dt.boxQty);
+            const unitStr = dt.unit || dt.product?.unit || 'box';
+            const isBox = isBoxUnitLabel(unitStr) || (!isBagUnitLabel(unitStr) && packUnit > 1);
+            const bagPrice =
+              Number(dt.bagPrice) > 0
+                ? Number(dt.bagPrice)
+                : isBox && packUnit > 1 && price > 0
+                  ? calcBagPriceFromBox(price, packUnit)
+                  : price;
+            const boxPrice =
+              Number(dt.boxPrice) > 0
+                ? Number(dt.boxPrice)
+                : calcBoxPrice(bagPrice, packUnit);
 
             // 결품/차이 분석 (비고 또는 수량에서 파생)
             let orderQty = qty;
@@ -190,13 +217,19 @@ export const ReceivingStatusEditView: React.FC = () => {
               status: rcv.status || '입고완료',
               productId: dt.productId,
               productCode: dt.productCode || dt.product?.productCode || `P-${dt.id}`,
-              productName: dt.productName || dt.product?.name || '원료',
+              productName: dt.product?.name || dt.productName || '원료',
+              productStatus: dt.product?.status || '정상',
+              discontinuedDate: dt.product?.discontinuedDate || '',
+              isUsed: dt.product?.isUsed !== false,
               category: dt.product?.category || (dt.productName?.includes('용기') || dt.productName?.includes('뚜껑') ? '부자재' : '원재료'),
               spec: dt.product?.spec || '-',
-              unit: dt.unit || dt.product?.unit || 'box',
+              unit: unitStr,
+              packUnit,
               orderQty,
               recvQty: qty,
               buyPrice: price,
+              bagPrice,
+              boxPrice,
               recvAmt: amt,
               diffQty,
               warehouse: dt.warehouse || '상온',
@@ -258,7 +291,13 @@ export const ReceivingStatusEditView: React.FC = () => {
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
       if (supplierFilter !== 'ALL' && r.partnerName !== supplierFilter) return false;
-      if (statusFilter !== '전체' && r.status !== statusFilter) return false;
+      if (statusFilter !== '전체') {
+        if (statusFilter === '입고완료') {
+          if (r.status !== '입고완료' && r.status !== '입고') return false;
+        } else if (r.status !== statusFilter) {
+          return false;
+        }
+      }
       if (keyword.trim()) {
         const q = keyword.trim().toLowerCase();
         const match =
@@ -320,13 +359,40 @@ export const ReceivingStatusEditView: React.FC = () => {
         if (r.id !== id) return r;
 
         const updated: any = { ...r, [field]: val };
+        const pack = normalizePackUnit(updated.packUnit);
+        const isBox = isBoxUnitLabel(updated.unit) || (!isBagUnitLabel(updated.unit) && pack > 1);
 
-        // 수량 또는 단가 변경 시 금액 자동 재계산
-        if (field === 'recvQty' || field === 'buyPrice') {
-          const qty = Number(field === 'recvQty' ? val : updated.recvQty) || 0;
-          const price = Number(field === 'buyPrice' ? val : updated.buyPrice) || 0;
-          updated.recvAmt = qty * price;
+        // 수량 또는 봉/박스/구매단가 변경 시 양방향 동기화 및 금액 자동 재계산
+        if (field === 'recvQty') {
+          const qty = Number(val) || 0;
+          updated.recvQty = qty;
+          updated.recvAmt = Math.round(qty * (Number(updated.buyPrice) || 0));
           updated.diffQty = qty - updated.orderQty;
+        } else if (field === 'bagPrice') {
+          const bag = Number(val) || 0;
+          const box = calcBoxPrice(bag, pack);
+          updated.bagPrice = bag;
+          updated.boxPrice = box;
+          updated.buyPrice = isBox && pack > 1 ? box : bag;
+          updated.recvAmt = Math.round((Number(updated.recvQty) || 0) * updated.buyPrice);
+        } else if (field === 'boxPrice') {
+          const box = Number(val) || 0;
+          const bag = calcBagPriceFromBox(box, pack);
+          updated.boxPrice = box;
+          updated.bagPrice = bag;
+          updated.buyPrice = isBox && pack > 1 ? box : bag;
+          updated.recvAmt = Math.round((Number(updated.recvQty) || 0) * updated.buyPrice);
+        } else if (field === 'buyPrice') {
+          const price = Number(val) || 0;
+          updated.buyPrice = price;
+          if (isBox && pack > 1) {
+            updated.boxPrice = price;
+            updated.bagPrice = calcBagPriceFromBox(price, pack);
+          } else {
+            updated.bagPrice = price;
+            updated.boxPrice = calcBoxPrice(price, pack);
+          }
+          updated.recvAmt = Math.round((Number(updated.recvQty) || 0) * price);
         }
 
         // dirty check (원본 대비 변경 여부)
@@ -1127,8 +1193,15 @@ export const ReceivingStatusEditView: React.FC = () => {
 
                         {/* 7. 품명 및 규격 (18px 대형 볼드 타이포그래피) */}
                         <td className="py-4 px-4 text-left">
-                          <div className="font-black text-slate-950 text-[18px] tracking-tight leading-snug">
-                            {row.productName}
+                          <div className="font-black text-slate-950 text-[18px] tracking-tight leading-snug flex items-center gap-2 flex-wrap">
+                            <span>{row.productName}</span>
+                            <ProductLifecycleBadge
+                              status={row.productStatus}
+                              discontinuedDate={row.discontinuedDate}
+                              isUsed={row.isUsed}
+                              name={row.productName}
+                              refDate={row.receivingDate}
+                            />
                           </div>
                           <div className="flex items-center gap-2.5 mt-1 text-[13px] text-slate-600 font-medium">
                             <span>코드: <strong className="text-slate-800 font-mono">{row.productCode}</strong></span>
@@ -1151,7 +1224,7 @@ export const ReceivingStatusEditView: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* 9. 구매단가 (대형 인풋 에디터) */}
+                        {/* 9. 구매단가 (대형 인풋 에디터 + 입수/봉단가/박스단가 연동) */}
                         <td className="py-4 px-3 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <span className="text-sm font-bold text-slate-400">₩</span>
@@ -1162,6 +1235,13 @@ export const ReceivingStatusEditView: React.FC = () => {
                               onChange={(e) => handleCellChange(row.id, 'buyPrice', e.target.value)}
                               className="w-32 h-11 px-3 text-right font-black text-[17.5px] text-slate-950 bg-slate-50 hover:bg-white focus:bg-white border-2 border-slate-300 focus:border-blue-600 rounded-xl shadow-xs focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
                             />
+                          </div>
+                          <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] font-semibold text-slate-500">
+                            <span>입수 {row.packUnit}</span>
+                            <span>·</span>
+                            <span>봉 ₩{row.bagPrice.toLocaleString()}</span>
+                            <span>·</span>
+                            <span className="text-blue-700">박스 ₩{row.boxPrice.toLocaleString()}</span>
                           </div>
                         </td>
 

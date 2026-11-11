@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { kstToday } from '@/lib/kst';
-import { isExcludedOrderMaterial, pickLatestValidPrice } from '@/lib/gfs/orderCalc';
+import { isExcludedOrderMaterial } from '@/lib/gfs/orderCalc';
+import { getLiveBomUsageMap } from '@/lib/gfs/liveUsage';
+import {
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+} from '@/lib/gfs/pricing';
 
 // GET /api/inventory/safety-stock?warehouse=냉장1&statusFilter=CRITICAL&search=...
 export async function GET(req: NextRequest) {
@@ -35,19 +42,22 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // 활성 원부재료 인벤토리 및 마스터 제품/거래처 정보 조회
-    const rawInventories = await prisma.inventory.findMany({
-      where,
-      include: {
-        product: {
-          include: {
-            partner: true,
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 5 },
+    // 활성 원부재료 인벤토리, 최신 수주 기반 BOM live 일사용량 병렬 조회
+    const [rawInventories, liveBomUsage] = await Promise.all([
+      prisma.inventory.findMany({
+        where,
+        include: {
+          product: {
+            include: {
+              partner: true,
+              prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+            },
           },
         },
-      },
-      orderBy: [{ warehouse: 'asc' }, { productCode: 'asc' }],
-    });
+        orderBy: [{ warehouse: 'asc' }, { productCode: 'asc' }],
+      }),
+      getLiveBomUsageMap().catch(() => null),
+    ]);
 
     const inventories = rawInventories.filter(
       (inv) => inv.product && !isExcludedOrderMaterial(inv.product, today)
@@ -58,10 +68,21 @@ export async function GET(req: NextRequest) {
       const partnerName = p?.partner?.name || '기타협력사';
       const partnerLead = p?.partner?.leadTime && p.partner.leadTime > 0 ? p.partner.leadTime : 1;
       const leadTime = Number(p?.targetOrderDays) > 0 ? Number(p.targetOrderDays) : partnerLead;
-      const boxUnit = p?.boxQty || 1;
-      const latestPrice = pickLatestValidPrice(p?.prices || []);
-      const unitPrice = inv.unitPrice || latestPrice?.purchasePrice || 0;
-      const dailyUsage = inv.dailyUsage || 0;
+      const boxUnit = normalizePackUnit(p?.boxQty);
+      const bagPrice = resolveBagPrice({
+        masterBagPrice: pickLatestValidPurchasePrice(p?.prices),
+        invUnitPrice: inv.unitPrice,
+      });
+      const boxPrice = calcBoxPrice(bagPrice, boxUnit);
+      const unitPrice = bagPrice;
+      const masterDailyUsage = Number(inv.dailyUsage) || 0;
+      const liveDailyVal = liveBomUsage
+        ? (liveBomUsage.byProductId.get(inv.productId) ??
+            (inv.productCode ? liveBomUsage.byProductCode.get(inv.productCode) : undefined) ??
+            0)
+        : 0;
+      const dailyUsage = liveDailyVal > 0 ? liveDailyVal : masterDailyUsage;
+      const usageSource = liveDailyVal > 0 ? 'LIVE_BOM' : 'INVENTORY';
       const currentQty = inv.currentQty || 0;
 
       // 안전재고 기준: Product에 등록된 safetyStockQty 우선, 없으면 (일사용량 * 리드타임 * 1.5)
@@ -120,7 +141,12 @@ export async function GET(req: NextRequest) {
         unit: inv.unit || p?.unit || '봉',
         boxUnitQty: boxUnit,
         unitPrice,
+        bagPrice,
+        boxPrice,
         dailyUsage: Math.round(dailyUsage * 100) / 100,
+        liveDailyUsage: Math.round(liveDailyVal * 100) / 100,
+        masterDailyUsage: Math.round(masterDailyUsage * 100) / 100,
+        usageSource,
         currentQty,
         stockDays,
         safetyStock,

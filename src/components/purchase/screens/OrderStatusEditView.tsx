@@ -25,6 +25,12 @@ import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
 import { usePrintReport } from '@/context/PrintReportContext';
+import {
+  normalizePackUnit,
+  calcBoxPrice,
+  calcBagPriceFromBox,
+  isBoxUnitLabel,
+} from '@/lib/gfs/pricing';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -51,8 +57,13 @@ export interface FlatOrderItemRow {
   category: string;
   spec: string;
   unit: string;
+  packUnit: number; // 입수량
+  bagPrice: number; // 봉단가
+  boxPrice: number; // 박스단가
+  masterBagPrice?: number;
+  masterBoxPrice?: number;
   orderQty: number; // 박스 수량
-  unitPrice: number; // 박스 단가
+  unitPrice: number; // 주문 단위 단가 (box인 경우 박스단가)
   amount: number; // 라인 총액
   receivedQty: number;
   remainQty: number;
@@ -151,8 +162,15 @@ export const OrderStatusEditView: React.FC = () => {
 
         const poDetailItems: FlatOrderItemRow[] = details.map((d: any) => {
           const orderQty = Number(d.orderQty) || 0;
+          const unitStr = d.unit || 'box';
+          const packUnit = normalizePackUnit(d.packUnit || d.product?.boxQty);
           const unitPrice = Number(d.unitPrice) || 0;
-          const lineAmt = Number(d.amount) != null && !isNaN(Number(d.amount)) ? Number(d.amount) : orderQty * unitPrice;
+          const isBox = isBoxUnitLabel(unitStr);
+          const bagPrice = Number(d.bagPrice) || (isBox && packUnit > 1 ? calcBagPriceFromBox(unitPrice, packUnit) : unitPrice);
+          const boxPrice = Number(d.boxPrice) || calcBoxPrice(bagPrice, packUnit);
+          const masterBagPrice = Number(d.masterBagPrice) || 0;
+          const masterBoxPrice = Number(d.masterBoxPrice) || 0;
+          const lineAmt = Number(d.amount) != null && !isNaN(Number(d.amount)) ? Number(d.amount) : Math.round(orderQty * unitPrice);
 
           const itemRow: FlatOrderItemRow = {
             id: d.id,
@@ -165,7 +183,12 @@ export const OrderStatusEditView: React.FC = () => {
             productName: d.productName || d.product?.name || '',
             category: d.category || '원부자재',
             spec: d.product?.spec || '-',
-            unit: d.unit || 'box',
+            unit: unitStr,
+            packUnit,
+            bagPrice,
+            boxPrice,
+            masterBagPrice,
+            masterBoxPrice,
             orderQty,
             unitPrice,
             amount: lineAmt,
@@ -303,12 +326,14 @@ export const OrderStatusEditView: React.FC = () => {
     return flatItems.filter((x) => x.isModified).length;
   }, [flatItems]);
 
-  // 3) 전체 품목 인라인 수정 핸들러 (수량 or 단가 변경 시 금액 자동 재계산)
-  const handleItemFieldChange = (detailId: number, field: 'orderQty' | 'unitPrice' | 'remark', value: any) => {
+  // 3) 전체 품목 인라인 수정 핸들러 (수량 or 봉단가/박스단가 변경 시 금액 및 상호 단가 자동 재계산)
+  const handleItemFieldChange = (detailId: number, field: 'orderQty' | 'unitPrice' | 'bagPrice' | 'remark', value: any) => {
     setFlatItems((prev) =>
       prev.map((item) => {
         if (item.id !== detailId) return item;
         const updated = { ...item, isModified: true };
+        const isBox = isBoxUnitLabel(item.unit);
+        const pack = normalizePackUnit(item.packUnit);
         if (field === 'orderQty') {
           const qty = Math.max(0, Number(value) || 0);
           updated.orderQty = qty;
@@ -317,7 +342,20 @@ export const OrderStatusEditView: React.FC = () => {
         } else if (field === 'unitPrice') {
           const price = Math.max(0, Number(value) || 0);
           updated.unitPrice = price;
+          if (isBox && pack > 1) {
+            updated.boxPrice = price;
+            updated.bagPrice = calcBagPriceFromBox(price, pack);
+          } else {
+            updated.bagPrice = price;
+            updated.boxPrice = calcBoxPrice(price, pack);
+          }
           updated.amount = Math.round(updated.orderQty * price);
+        } else if (field === 'bagPrice') {
+          const bag = Math.max(0, Number(value) || 0);
+          updated.bagPrice = bag;
+          updated.boxPrice = calcBoxPrice(bag, pack);
+          updated.unitPrice = isBox ? updated.boxPrice : bag;
+          updated.amount = Math.round(updated.orderQty * updated.unitPrice);
         } else if (field === 'remark') {
           updated.remark = String(value || '');
         }
@@ -592,7 +630,9 @@ export const OrderStatusEditView: React.FC = () => {
           { key: 'spec', label: '규격' },
           { key: 'unit', label: '단위' },
           { key: 'orderQty', label: '발주박스수', format: 'number' },
-          { key: 'unitPrice', label: '박스단가', format: 'currency' },
+          { key: 'packUnit', label: '입수량', format: 'number' },
+          { key: 'bagPrice', label: '봉단가', format: 'currency' },
+          { key: 'unitPrice', label: '발주(박스)단가', format: 'currency' },
           { key: 'amount', label: '발주금액', format: 'currency' },
           { key: 'status', label: '발주상태' },
           { key: 'remark', label: '비고' },
@@ -1036,8 +1076,12 @@ export const OrderStatusEditView: React.FC = () => {
                     <th className="py-3 px-3 w-40">거래처명</th>
                     <th className="py-3 px-4 min-w-[200px]">품명</th>
                     <th className="py-3 px-3 w-28 text-center">규격/단위</th>
+                    <th className="py-3 px-2.5 w-20 text-right">입수량</th>
                     <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
                       발주박스수 (✏️)
+                    </th>
+                    <th className="py-3 px-3 w-28 text-right bg-emerald-50/60 text-emerald-900 border-r border-blue-100">
+                      봉단가 (✏️)
                     </th>
                     <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-r border-blue-100">
                       박스단가 (✏️)
@@ -1051,7 +1095,7 @@ export const OrderStatusEditView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-[13.5px]">
                   {filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-16 text-center">
+                      <td colSpan={15} className="py-16 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           <Package className="w-12 h-12 text-slate-300" />
                           <div className="text-[15px] font-black text-slate-700">
@@ -1145,6 +1189,11 @@ export const OrderStatusEditView: React.FC = () => {
                             {item.spec} / {item.unit}
                           </td>
 
+                          {/* 입수량 */}
+                          <td className="py-2.5 px-2.5 text-right font-mono font-bold text-slate-700 text-[12.5px]">
+                            {item.packUnit.toLocaleString()}
+                          </td>
+
                           {/* 발주박스수 (인라인 수정 가능 인풋) */}
                           <td className="py-1.5 px-2 text-right bg-blue-50/40 border-x border-blue-100">
                             <div className="flex items-center justify-end gap-1">
@@ -1157,11 +1206,28 @@ export const OrderStatusEditView: React.FC = () => {
                                 }
                                 className="w-20 text-right px-2 py-1 bg-white border border-blue-300 rounded-lg text-[14px] font-black font-mono text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                               />
-                              <span className="text-[12px] font-bold text-blue-700">box</span>
+                              <span className="text-[12px] font-bold text-blue-700">{item.unit || 'box'}</span>
                             </div>
                           </td>
 
-                          {/* 박스단가 (인라인 수정 가능 인풋) */}
+                          {/* 봉단가 (양방향 자동 연동) */}
+                          <td className="py-1.5 px-2 text-right bg-emerald-50/30 border-r border-blue-100">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-[12px] text-slate-400 font-mono">₩</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={10}
+                                value={item.bagPrice}
+                                onChange={(e) =>
+                                  handleItemFieldChange(item.id, 'bagPrice', e.target.value)
+                                }
+                                className="w-20 text-right px-2 py-1 bg-white border border-emerald-300 rounded-lg text-[13px] font-bold font-mono text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                              />
+                            </div>
+                          </td>
+
+                          {/* 박스단가 (인라인 수정 가능 인풋 + 마스터 동기화) */}
                           <td className="py-1.5 px-2 text-right bg-blue-50/40 border-r border-blue-100">
                             <div className="flex items-center justify-end gap-1">
                               <span className="text-[12px] text-slate-400 font-mono">₩</span>
@@ -1176,6 +1242,26 @@ export const OrderStatusEditView: React.FC = () => {
                                 className="w-24 text-right px-2 py-1 bg-white border border-blue-300 rounded-lg text-[13.5px] font-black font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
                               />
                             </div>
+                            {item.masterBoxPrice != null &&
+                              item.masterBoxPrice > 0 &&
+                              Math.abs(item.unitPrice - (isBoxUnitLabel(item.unit) ? item.masterBoxPrice : (item.masterBagPrice || item.masterBoxPrice))) > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleItemFieldChange(
+                                      item.id,
+                                      'unitPrice',
+                                      isBoxUnitLabel(item.unit)
+                                        ? item.masterBoxPrice
+                                        : item.masterBagPrice || item.masterBoxPrice
+                                    )
+                                  }
+                                  className="mt-0.5 text-[10.5px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
+                                  title="마스터 기준단가로 동기화"
+                                >
+                                  마스터 ₩{(isBoxUnitLabel(item.unit) ? item.masterBoxPrice : (item.masterBagPrice || item.masterBoxPrice)).toLocaleString()} 적용
+                                </button>
+                              )}
                           </td>
 
                           {/* 발주금액 (수량 x 단가 자동 연산) */}
@@ -1350,7 +1436,9 @@ export const OrderStatusEditView: React.FC = () => {
                           <tr>
                             <th className="py-2.5 px-3">품명</th>
                             <th className="py-2.5 px-3 text-center">규격</th>
+                            <th className="py-2.5 px-2 text-right">입수</th>
                             <th className="py-2.5 px-3 text-right">발주수량</th>
+                            <th className="py-2.5 px-3 text-right">봉단가</th>
                             <th className="py-2.5 px-3 text-right">박스단가</th>
                             <th className="py-2.5 px-3 text-right">금액</th>
                             <th className="py-2.5 px-3 text-center">상태</th>
@@ -1362,8 +1450,14 @@ export const OrderStatusEditView: React.FC = () => {
                             <tr key={d.id} className="hover:bg-slate-50">
                               <td className="py-2.5 px-3 font-black text-slate-800">{d.productName}</td>
                               <td className="py-2.5 px-3 text-center text-slate-500">{d.spec}</td>
+                              <td className="py-2.5 px-2 text-right font-mono text-slate-500">
+                                {d.packUnit}
+                              </td>
                               <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-800">
                                 {d.orderQty} {d.unit}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-mono text-emerald-700">
+                                ₩{d.bagPrice.toLocaleString()}
                               </td>
                               <td className="py-2.5 px-3 text-right font-mono text-slate-600">
                                 ₩{d.unitPrice.toLocaleString()}

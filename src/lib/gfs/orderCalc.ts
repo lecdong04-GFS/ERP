@@ -1,6 +1,62 @@
 import { normalizeDateYmd, pickLatestValidPrice } from '@/lib/gfs/bomMatch';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 
 export { normalizeDateYmd, pickLatestValidPrice };
+
+export type StrategyMode = 'tight' | 'standard' | 'safety';
+
+/** 발주주기 문자열(예: 'D+2', 'D+2/1', 'D-2')에서 리드타임 일수 파싱 */
+export function parseLeadTimeDays(orderCycle?: string): number {
+  const nums = String(orderCycle || '')
+    .match(/\d+/g)
+    ?.map((s) => Number(s))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!nums || nums.length === 0) return 1;
+  return Math.min(14, Math.max(...nums));
+}
+
+/**
+ * 3대 발주 전략 모드(타이트/표준/안전)별 적용 발주일수 및 로스 버퍼 산출
+ * - 표준: 마스터(DB) 발주일수 100% 그대로
+ * - 타이트: 리드타임·납품주기별 결품 방어 하한선(minFloorDays)을 유지하면서 전 패턴 여유일 압축
+ * - 안전: 발주일수 +1.0일 및 공정 감모 버퍼 +5% 가산 (0일 미설정 품목은 0 유지)
+ */
+export function calcStrategyOrderDays(params: {
+  masterOrderDays: number;
+  pattern: string;
+  orderCycle?: string;
+  strategyMode: StrategyMode;
+}): { effectiveDays: number; lossRate: number; minFloorDays: number } {
+  const master = Number(params.masterOrderDays) || 0;
+  if (master <= 0) {
+    return { effectiveDays: 0, lossRate: 1.0, minFloorDays: 0 };
+  }
+  if (params.strategyMode === 'standard') {
+    return { effectiveDays: master, lossRate: 1.0, minFloorDays: master };
+  }
+  if (params.strategyMode === 'safety') {
+    return {
+      effectiveDays: Math.round((master + 1.0) * 100) / 100,
+      lossRate: 1.05,
+      minFloorDays: master,
+    };
+  }
+
+  // 타이트 모드: 리드타임 + 납품주기 기반 최소 방어 하한선 아래로는 절대 내리지 않음
+  const leadDays = parseLeadTimeDays(params.orderCycle);
+  const isDaily = params.pattern === '매일';
+  const isTwiceWeekly = params.pattern === '수금' || params.pattern === '화금';
+  const rawFloor = isDaily
+    ? Math.max(2.0, leadDays + 0.5)
+    : isTwiceWeekly
+    ? Math.max(4.0, leadDays + 2.0)
+    : Math.max(3.0, leadDays + 1.0);
+  const minFloorDays = Math.min(master, rawFloor);
+  const ratio = isDaily ? 0.7 : 0.8;
+  const compressed = Math.round(master * ratio * 2) / 2;
+  const effectiveDays = Math.min(master, Math.max(minFloorDays, compressed));
+  return { effectiveDays, lossRate: 1.0, minFloorDays };
+}
 
 // GFS 발주시트 공용 계산 (일반/요일별 화면 공용, 클라이언트 안전)
 export interface SheetRowInput {
@@ -30,6 +86,8 @@ export interface SheetRowInput {
   usageSource?: 'BOM실시간' | '기준소진량';
   liveBomUsage?: number | null;
   surveyDailyUsage?: number;
+  status?: string;
+  orderCycle?: string;
   discontinuedDate?: string;
 }
 
@@ -99,11 +157,12 @@ export function parseDeliveryDays(header: string, orderDay?: string): boolean[] 
 
 /**
  * 확정량을 납품요일별 수요 가중치(화:1.09, 월:1.08 ... 금:0.88)에 따라 비례 분할 (해밀턴 최대잔여법)
- * 총합 보존 법칙 (sum === finalBoxes) 및 정수 박스 분할 100% 보장
+ * activeDayMask 전달 시 해당 주에서 실제 발주/납품 가능한 요일(예: 오늘 이후)에만 100% 배분
  */
-export function splitWeek(r: SheetRowInput, finalBoxes: number): number[] {
+export function splitWeek(r: SheetRowInput, finalBoxes: number, activeDayMask?: boolean[]): number[] {
   const days = parseDeliveryDays(r.supplier || '', r.orderDay);
-  const idx = days.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
+  const eligible = activeDayMask ? days.map((on, i) => Boolean(on && activeDayMask[i])) : days;
+  const idx = eligible.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
   const out = [0, 0, 0, 0, 0, 0, 0];
   if (finalBoxes <= 0 || idx.length === 0) return out;
 
@@ -277,11 +336,12 @@ export function isExcludedFromOrder(name?: string | null, targetDate?: string): 
 }
 
 export function isExcludedOrderMaterial(
-  product: { name?: string | null; isUsed?: boolean | null; discontinuedDate?: string | null },
+  product: { name?: string | null; isUsed?: boolean | null; discontinuedDate?: string | null; status?: string | null },
   targetDate?: string
 ): boolean {
   if (!product) return true;
   if (product.isUsed === false) return true;
+  if (isTerminalProductStatus(product.status)) return true;
   const checkDate = targetDate ? normalizeDateYmd(targetDate) : kstTodayStr();
   if (isExcludedFromOrder(product.name, checkDate)) return true;
   const discDate = product.discontinuedDate ? normalizeDateYmd(product.discontinuedDate) : '';

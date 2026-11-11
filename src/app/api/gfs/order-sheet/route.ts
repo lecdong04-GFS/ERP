@@ -5,10 +5,19 @@ import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { getLiveBomUsageMap, LiveBomUsageMap } from '@/lib/gfs/liveUsage';
 import { pickLatestValidPrice, normalizeDateYmd } from '@/lib/gfs/bomMatch';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
+import {
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+  isBagUnitLabel,
+  toBoxQty,
+} from '@/lib/gfs/pricing';
 
 // GET /api/gfs/order-sheet — 100% PostgreSQL DB 기반 정본, 실시간 BOM 일사용량 및 기발주 미입고(Pending PO) 실시간 연동
 // - 품목(Product) 기준 1행: 다중 창고/LOT 재고는 합산 (중복행 방지)
-// - 발주일수: Product.targetOrderDays(엑셀 G열) 우선, 0이면 거래처 leadTime 폴백
+// - 발주일수: Product.targetOrderDays 직접 반영 (0이면 미설정 / 자동발주 미생성)
 // - 단종/삭제예정: 조회 기준일(date) 기준 동적 판정
 export async function GET(req: NextRequest) {
   try {
@@ -28,6 +37,8 @@ export async function GET(req: NextRequest) {
       include: {
         partner: true,
         prices: {
+          orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+          take: 10,
           select: { id: true, effectiveDate: true, purchasePrice: true, deliveryPrice: true },
         },
         inventories: true,
@@ -46,6 +57,7 @@ export async function GET(req: NextRequest) {
     // 3. DB에서 현재 미입고 상태인 '기발주(Pending PO)' 내역 실시간 일괄 조회
     type PendingPoInfo = {
       remainBoxes: number;
+      remainDirectBags: number;
       orderBoxes: number;
       orderNos: string[];
       latestOrderDate: string;
@@ -53,9 +65,21 @@ export async function GET(req: NextRequest) {
     const pendingById = new Map<number, PendingPoInfo>();
     const pendingByCode = new Map<string, PendingPoInfo>();
     const pendingByNorm = new Map<string, PendingPoInfo>();
-    const addPending = <K,>(m: Map<K, PendingPoInfo>, key: K, boxes: number, orderQty: number, orderNo: string, orderDate: string) => {
-      const cur = m.get(key) || { remainBoxes: 0, orderBoxes: 0, orderNos: [], latestOrderDate: '' };
-      cur.remainBoxes += boxes;
+    const addPending = <K,>(
+      m: Map<K, PendingPoInfo>,
+      key: K,
+      qty: number,
+      orderQty: number,
+      unit: string,
+      orderNo: string,
+      orderDate: string
+    ) => {
+      const cur = m.get(key) || { remainBoxes: 0, remainDirectBags: 0, orderBoxes: 0, orderNos: [], latestOrderDate: '' };
+      if (isBagUnitLabel(unit)) {
+        cur.remainDirectBags += qty;
+      } else {
+        cur.remainBoxes += qty;
+      }
       cur.orderBoxes += orderQty;
       if (orderNo && !cur.orderNos.includes(orderNo)) cur.orderNos.push(orderNo);
       if (!cur.latestOrderDate || orderDate > cur.latestOrderDate) cur.latestOrderDate = orderDate;
@@ -74,6 +98,7 @@ export async function GET(req: NextRequest) {
           productId: true,
           productCode: true,
           productName: true,
+          unit: true,
           orderQty: true,
           remainQty: true,
           purchaseOrder: {
@@ -85,13 +110,14 @@ export async function GET(req: NextRequest) {
       for (const d of activePendingDetails) {
         const orderNo = d.purchaseOrder?.orderNo || '';
         const orderDate = normalizeDateYmd(d.purchaseOrder?.orderDate || '');
-        const boxes = d.remainQty > 0 ? d.remainQty : d.orderQty;
+        const qty = d.remainQty > 0 ? d.remainQty : d.orderQty;
+        const unit = d.unit || 'box';
         // 우선순위 매칭: productId → productCode → 품명 (한 PO 상세는 하나의 키에만 반영)
-        if (d.productId) addPending(pendingById, d.productId, boxes, d.orderQty, orderNo, orderDate);
-        else if (d.productCode) addPending(pendingByCode, d.productCode, boxes, d.orderQty, orderNo, orderDate);
+        if (d.productId) addPending(pendingById, d.productId, qty, d.orderQty, unit, orderNo, orderDate);
+        else if (d.productCode) addPending(pendingByCode, d.productCode, qty, d.orderQty, unit, orderNo, orderDate);
         else {
           const norm = normName(d.productName);
-          if (norm) addPending(pendingByNorm, norm, boxes, d.orderQty, orderNo, orderDate);
+          if (norm) addPending(pendingByNorm, norm, qty, d.orderQty, unit, orderNo, orderDate);
         }
       }
     } catch (poErr: any) {
@@ -103,6 +129,7 @@ export async function GET(req: NextRequest) {
 
     for (const p of products) {
       const name = p.name || p.productCode;
+      if (isTerminalProductStatus(p.status)) continue;
       if (isExcludedFromOrder(name, checkDate)) continue;
       const discDate = p.discontinuedDate ? normalizeDateYmd(p.discontinuedDate) : '';
       if (discDate && checkDate >= discDate) continue;
@@ -119,28 +146,36 @@ export async function GET(req: NextRequest) {
       // 재고 행도 없고, BOM 사용량도 없고, 목표 발주일수도 없는 품목은 발주 대상 아님
       if (invs.length === 0 && !isBomDriven && !(Number(p.targetOrderDays) > 0)) continue;
 
-      const pack = Number(p.boxQty) > 0 ? Number(p.boxQty) : 1;
+      const pack = normalizePackUnit(p.boxQty);
       // 다중 창고/LOT 재고 합산
       const current = invs.reduce((s, i) => s + (Number(i.currentQty) || 0), 0);
       const surveyDaily = invs.reduce((mx, i) => Math.max(mx, Number(i.dailyUsage) || 0), 0);
       const baseIncoming = invs.reduce((s, i) => s + (Number((i as any).inQty) || 0), 0);
       const primaryInv = invs.find((i) => i.warehouse === p.warehouse) || invs[0];
 
-      const targetDays = Number(p.targetOrderDays) > 0 ? Number(p.targetOrderDays) : Number(p.partner?.leadTime) || 2;
+      const targetDays = Number(p.targetOrderDays) > 0 ? Number(p.targetOrderDays) : 0;
       const baseDailyUsage = isBomDriven ? Number(liveBomVal) : surveyDaily;
 
       const supplier = p.partner?.name || p.warehouse || primaryInv?.warehouse || '기타';
       if (supplier) suppliersSet.add(supplier);
 
       const poInfo = pendingById.get(p.id) || (code ? pendingByCode.get(code) : undefined) || (norm ? pendingByNorm.get(norm) : undefined);
-      const pendingBoxes = poInfo?.remainBoxes || 0;
-      const pendingBags = pendingBoxes * pack;
+      const rawBoxes = poInfo?.remainBoxes || 0;
+      const directBags = poInfo?.remainDirectBags || 0;
+      const pendingBoxes = rawBoxes + (directBags > 0 ? toBoxQty(directBags, pack) : 0);
+      const pendingBags = rawBoxes * pack + directBags;
       const totalIncoming = baseIncoming + pendingBags;
 
-      const latestPrice = pickLatestValidPrice(p.prices as any);
-      const priceFromMaster = Number(latestPrice?.purchasePrice) || 0;
-      const invPrice = Number(primaryInv?.unitPrice) || 0;
-      const unitPrice = priceFromMaster > 0 ? priceFromMaster : invPrice;
+      const masterBagPrice = pickLatestValidPurchasePrice(p.prices as any) || Number(pickLatestValidPrice(p.prices as any)?.purchasePrice) || 0;
+      const invValidPrice =
+        Number(primaryInv?.unitPrice) > 0
+          ? Number(primaryInv?.unitPrice)
+          : invs.reduce((best, i) => (best > 0 ? best : Number(i.unitPrice) || 0), 0);
+      const unitPrice = resolveBagPrice({
+        masterBagPrice,
+        invUnitPrice: invValidPrice,
+      });
+      const boxPrice = calcBoxPrice(unitPrice, pack);
 
       // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료
       const isReplacedSpam = name.includes('스팸(340g*20캔)') || (name.includes('스팸') && supplier.includes('튀김실'));
@@ -158,7 +193,7 @@ export async function GET(req: NextRequest) {
         packUnit: pack,
         packUnitAudit: pack,
         days: targetDays,
-        targetOrderDays: Number(p.targetOrderDays) || 0,
+        targetOrderDays: targetDays,
         dailyUsage: effectiveDailyUsage,
         isBomDriven,
         usageSource: isBomDriven ? 'BOM실시간' : '기준소진량',
@@ -171,12 +206,16 @@ export async function GET(req: NextRequest) {
         latestOrderDate: poInfo?.latestOrderDate || '',
         currentStock: current,
         bagPrice: unitPrice,
+        purchasePrice: unitPrice,
+        boxPrice,
         stockDays,
         warehouse: p.warehouse || primaryInv?.warehouse || '',
         vendor: p.partner?.name || '',
         partnerId: p.partnerId || '',
         orderDay: p.partner?.orderDay || '월화수목금',
         itemId: code,
+        status: p.status || '정상',
+        orderCycle: p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : ''),
         discontinuedDate: discDate,
         isReplaced: isReplacedSpam,
         replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,

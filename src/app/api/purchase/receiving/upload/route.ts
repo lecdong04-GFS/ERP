@@ -3,6 +3,14 @@ import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import {
+  calcBagPriceFromBox,
+  calcBoxPrice,
+  isBagUnitLabel,
+  isBoxUnitLabel,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+} from '@/lib/gfs/pricing';
 
 function normalizeDate(val: any): string {
   if (!val) return '';
@@ -302,22 +310,51 @@ export async function POST(req: NextRequest) {
               warehouse = product.warehouse;
             }
 
-            const packUnit = Math.max(1, Number(product.boxQty) || 1);
-            const isBagUnit = item.unit === '봉' || item.unit === 'ea' || item.unit === 'pk';
-            const bagRecvQty = isBagUnit ? item.recvQty : item.recvQty * packUnit;
-            const bagBuyPrice = !isBagUnit && packUnit > 1 && item.buyPrice > 0
-              ? Math.round(item.buyPrice / packUnit)
-              : item.buyPrice;
+            const packUnit = normalizePackUnit(product.boxQty);
+            const isBoxInput =
+              isBoxUnitLabel(item.unit) ||
+              (!isBagUnitLabel(item.unit) && packUnit > 1);
+            const bagRecvQty = isBoxInput ? item.recvQty * packUnit : item.recvQty;
+            const rawBuyPrice = Number(item.buyPrice) || 0;
+            const bagBuyPrice =
+              isBoxInput && packUnit > 1 && rawBuyPrice > 0
+                ? calcBagPriceFromBox(rawBuyPrice, packUnit)
+                : rawBuyPrice;
 
-            // 구매단가 최신화 (ProductPrice: 항상 봉/낱개 단가 기준 저장)
+            // 구매단가 최신화 (ProductPrice: 변동 시에만 봉단가 기준 추가 + 동일 품목 전체 재고 단가 동기화)
             if (options.updatePrice && bagBuyPrice > 0) {
-              await tx.productPrice.create({
-                data: {
-                  productId: product.id,
-                  purchasePrice: bagBuyPrice,
-                  effectiveDate: groupDate,
-                  remark: `입고파일 단가수정 반영 (${groupDate})`,
-                },
+              const latestPrices = await tx.productPrice.findMany({
+                where: { productId: product.id },
+                orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+                take: 10,
+              });
+              const curMasterBag = pickLatestValidPurchasePrice(latestPrices);
+              if (Math.abs(curMasterBag - bagBuyPrice) > 0.01) {
+                const sameDay = latestPrices.find(
+                  (pr) => normalizeDate(pr.effectiveDate) === groupDate
+                );
+                if (sameDay) {
+                  await tx.productPrice.update({
+                    where: { id: sameDay.id },
+                    data: {
+                      purchasePrice: bagBuyPrice,
+                      remark: `입고파일 단가수정 반영 (${groupDate})`,
+                    },
+                  });
+                } else {
+                  await tx.productPrice.create({
+                    data: {
+                      productId: product.id,
+                      purchasePrice: bagBuyPrice,
+                      effectiveDate: groupDate,
+                      remark: `입고파일 단가수정 반영 (${groupDate})`,
+                    },
+                  });
+                }
+              }
+              await tx.inventory.updateMany({
+                where: { productId: product.id },
+                data: { unitPrice: bagBuyPrice },
               });
             }
 
@@ -334,7 +371,7 @@ export async function POST(req: NextRequest) {
                     partnerName: group.partnerName,
                     deliveryDate: groupDate,
                     status: item.diffQty && item.diffQty < 0 ? '부분입고' : '입고완료',
-                    totalAmount: item.orderAmt || item.recvAmt || 0,
+                    totalAmount: 0,
                   },
                   include: { details: true },
                 });
@@ -344,7 +381,13 @@ export async function POST(req: NextRequest) {
               // PurchaseOrderDetail 확인 또는 생성
               const poDetail = po.details?.find((d: any) => d.productId === product.id);
               const orderQty = item.orderQty || item.recvQty || 0;
-              const orderPrice = item.orderPrice || item.buyPrice || 0;
+              const fallbackBoxPrice =
+                bagBuyPrice > 0 ? calcBoxPrice(bagBuyPrice, packUnit) : 0;
+              const orderPrice =
+                Number(item.orderPrice || item.buyPrice || fallbackBoxPrice) || 0;
+              const detailAmount = Math.round(
+                Number(item.orderAmt) || orderQty * orderPrice
+              );
 
               if (!poDetail) {
                 const createdPod = await tx.purchaseOrderDetail.create({
@@ -357,7 +400,7 @@ export async function POST(req: NextRequest) {
                     unit: 'box',
                     orderQty,
                     unitPrice: orderPrice,
-                    amount: item.orderAmt || (orderQty * orderPrice),
+                    amount: detailAmount,
                     receivedQty: item.recvQty,
                     remainQty: Math.max(0, orderQty - item.recvQty),
                   },
@@ -395,19 +438,24 @@ export async function POST(req: NextRequest) {
 
             if (options.updateStock && item.recvQty > 0) {
               if (existingInv) {
+                const nextQty = (Number(existingInv.currentQty) || 0) + bagRecvQty;
+                const finalUnitPrice =
+                  bagBuyPrice > 0 ? bagBuyPrice : (Number(existingInv.unitPrice) || 0);
+                const nextStockAmount = Math.round(nextQty * finalUnitPrice);
                 await tx.inventory.update({
                   where: { id: existingInv.id },
                   data: {
-                    currentQty: { increment: bagRecvQty },
-                    stockAmount: { increment: item.recvAmt },
-                    unitPrice: bagBuyPrice > 0 ? bagBuyPrice : existingInv.unitPrice,
+                    currentQty: nextQty,
+                    stockAmount: nextStockAmount,
+                    unitPrice: finalUnitPrice,
                     lastInDate: groupDate,
                     expiryDate,
                     lotNo,
                   },
                 });
-                existingInv.currentQty += bagRecvQty;
-                existingInv.stockAmount += item.recvAmt;
+                existingInv.currentQty = nextQty;
+                existingInv.unitPrice = finalUnitPrice;
+                existingInv.stockAmount = nextStockAmount;
               } else {
                 const createdInv = await tx.inventory.create({
                   data: {
@@ -421,7 +469,7 @@ export async function POST(req: NextRequest) {
                     currentQty: bagRecvQty,
                     unit: product.unit || '봉',
                     unitPrice: bagBuyPrice,
-                    stockAmount: item.recvAmt,
+                    stockAmount: Math.round(bagRecvQty * bagBuyPrice),
                     lastInDate: groupDate,
                   },
                 });
@@ -492,6 +540,27 @@ export async function POST(req: NextRequest) {
           });
 
           totalImportedReceivings++;
+        }
+
+        // 발주 연동(syncPo) 시 모든 수정/생성된 PO 헤더의 총액 및 입수상태를 상세 합계 기준으로 재계산
+        if (options.syncPo) {
+          for (const po of poMap.values()) {
+            const allDetails = await tx.purchaseOrderDetail.findMany({
+              where: { purchaseOrderId: po.id },
+            });
+            const sumAmount = Math.round(
+              allDetails.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+            );
+            const allDone = allDetails.length > 0 && allDetails.every((d) => (d.remainQty || 0) <= 0);
+            const anyRecv = allDetails.some((d) => (d.receivedQty || 0) > 0);
+            await tx.purchaseOrder.update({
+              where: { id: po.id },
+              data: {
+                totalAmount: sumAmount,
+                status: allDone ? '입고완료' : anyRecv ? '부분입고' : '발주',
+              },
+            });
+          }
         }
       },
       { timeout: 120000, maxWait: 20000 }

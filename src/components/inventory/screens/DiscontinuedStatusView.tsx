@@ -19,6 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 
 interface DiscontinuedItem {
   id: number;
@@ -45,6 +46,9 @@ interface BomMaterialAnalysis {
   otherUsageCount: number;
   totalStock: number;
   warehouse: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
 }
 
 export const DiscontinuedStatusView: React.FC = () => {
@@ -686,7 +690,15 @@ export const DiscontinuedStatusView: React.FC = () => {
                           className={m.isExclusive ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50'}
                         >
                           <td className="py-3 px-4 font-black text-slate-900 text-[14.5px]">
-                            {m.name}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{m.name}</span>
+                              <ProductLifecycleBadge
+                                status={m.status}
+                                discontinuedDate={m.discontinuedDate}
+                                isUsed={m.isUsed}
+                                name={m.name}
+                              />
+                            </div>
                           </td>
                           <td className="py-3 px-3 text-center">
                             {m.isExclusive ? (

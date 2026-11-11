@@ -7,6 +7,7 @@ import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { classifyPattern } from '@/lib/gfs/orderCalc';
 import { normName } from '@/lib/gfs/norm';
+import { calcBoxPrice } from '@/lib/gfs/pricing';
 export interface MatOrderSimulItem {
   id: number;
   supplier: string; // 거래처
@@ -16,6 +17,8 @@ export interface MatOrderSimulItem {
   unit: string; // 단위
   orderQty: number; // 발주수량
   unitPrice: number; // 발주단가
+  bagPrice?: number; // 봉단가
+  boxPrice?: number; // 박스단가
   orderAmt: number; // 발주금액
   leadTime: string; // 조달기간
   recvDate: string; // 입고일
@@ -98,6 +101,8 @@ export const MatOrderSimulView: React.FC = () => {
             unit: r.unit || 'ea',
             orderQty: Math.max(0, Math.round(Number(r.orderQty) || 0)),
             unitPrice: Math.max(0, Math.round(Number(r.unitPrice) || 0)),
+            bagPrice: Math.max(0, Number(r.bagPrice ?? r.unitPrice) || 0),
+            boxPrice: Math.max(0, Number(r.boxPrice) || calcBoxPrice(Number(r.bagPrice ?? r.unitPrice) || 0, ref && Number(ref.packUnit) > 0 ? Number(ref.packUnit) : (Number(r.unitQty) || 1))),
             orderAmt: Math.max(0, Math.round(Number(r.orderQty) || 0)) * Math.max(0, Math.round(Number(r.unitPrice) || 0)),
             leadTime: lead > 0 ? `${lead}일` : '-',
             recvDate: recv.date,
@@ -220,7 +225,7 @@ export const MatOrderSimulView: React.FC = () => {
           return {
             ...r,
             orderQty: num,
-            orderAmt: num * r.unitPrice,
+            orderAmt: Math.round(num * r.unitPrice),
           };
         }
         return r;
@@ -490,8 +495,13 @@ export const MatOrderSimulView: React.FC = () => {
                       className="w-full h-full text-right font-bold text-gray-900 border-none outline-none focus:ring-1 focus:ring-blue-500 bg-transparent px-1.5"
                     />
                   </td>
-                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800">
+                  <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono text-gray-800" title={row.packUnit > 1 ? `봉 ${ (row.bagPrice ?? row.unitPrice).toLocaleString() }원 / 박스 ${ (row.boxPrice ?? calcBoxPrice(row.bagPrice ?? row.unitPrice, row.packUnit)).toLocaleString() }원 (${row.packUnit}입)` : undefined}>
                     {row.unitPrice.toLocaleString()}
+                    {row.packUnit > 1 && (row.boxPrice || 0) > 0 && (row.boxPrice || 0) !== row.unitPrice && (
+                      <span className="ml-1 text-[10px] text-slate-400">
+                        (박스 {(row.boxPrice || 0).toLocaleString()})
+                      </span>
+                    )}
                   </td>
                     <td className="cursor-pointer hover:bg-blue-50/80 hover:outline hover:outline-1 hover:outline-blue-400 border border-gray-300 whitespace-nowrap px-2 py-0.5 text-right font-mono font-medium text-gray-900">
                       {row.orderAmt.toLocaleString()}

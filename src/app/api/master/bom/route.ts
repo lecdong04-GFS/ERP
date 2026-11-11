@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { isDummyBomDetail, normalizeDateYmd } from '@/lib/gfs/bomMatch';
+import {
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidDeliveryPrice,
+  pickLatestValidPurchasePrice,
+} from '@/lib/gfs/pricing';
 
 function sortPricesDesc(prices?: any[] | null): any[] {
   if (!prices || prices.length === 0) return [];
@@ -51,26 +57,41 @@ export async function GET(req: NextRequest) {
       orderBy: { parentProductId: 'asc' },
     });
 
-    const cleaned = bomHeaders.map((bh) => ({
-      ...bh,
-      parentProduct: bh.parentProduct
-        ? {
-            ...bh.parentProduct,
-            prices: sortPricesDesc(bh.parentProduct.prices),
-          }
-        : bh.parentProduct,
-      details: (bh.details || [])
-        .filter((d) => !isDummyBomDetail(d.unit, d.unitQty))
-        .map((d) => ({
-          ...d,
-          childProduct: d.childProduct
-            ? {
-                ...d.childProduct,
-                prices: sortPricesDesc(d.childProduct.prices),
-              }
-            : d.childProduct,
-        })),
-    }));
+    const cleaned = bomHeaders.map((bh) => {
+      const parentPrices = sortPricesDesc(bh.parentProduct?.prices);
+      return {
+        ...bh,
+        parentProduct: bh.parentProduct
+          ? {
+              ...bh.parentProduct,
+              prices: parentPrices,
+              deliveryPrice: pickLatestValidDeliveryPrice(parentPrices),
+              purchasePrice: pickLatestValidPurchasePrice(parentPrices),
+            }
+          : bh.parentProduct,
+        details: (bh.details || [])
+          .filter((d) => !isDummyBomDetail(d.unit, d.unitQty))
+          .map((d) => {
+            const cp = d.childProduct;
+            const childPrices = sortPricesDesc(cp?.prices);
+            const bagPrice = pickLatestValidPurchasePrice(childPrices);
+            const packUnit = normalizePackUnit(cp?.boxQty);
+            return {
+              ...d,
+              childProduct: cp
+                ? {
+                    ...cp,
+                    prices: childPrices,
+                    boxQty: packUnit,
+                    bagPrice,
+                    purchasePrice: bagPrice,
+                    boxPrice: calcBoxPrice(bagPrice, packUnit),
+                  }
+                : cp,
+            };
+          }),
+      };
+    });
 
     return NextResponse.json({ success: true, data: cleaned });
   } catch (error: any) {

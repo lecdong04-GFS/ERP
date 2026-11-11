@@ -109,8 +109,9 @@ export async function GET(req: NextRequest) {
             ? Number(cp.bomDivisor)
             : (unit.toLowerCase() === 'g' || unit.toLowerCase() === 'ml' ? 1000 : 1);
           const effQty = unit.toLowerCase() === 'kg' && div >= 100 ? actQty * 1000 : actQty;
+          const mult = Number(cp?.bomMultiplier) > 0 ? Number(cp.bomMultiplier) : 1;
           const unitCost =
-            Math.round(calcBomEffectiveUnitCost(effQty, purchasePrice, div) * 10) / 10;
+            Math.round(calcBomEffectiveUnitCost(effQty, purchasePrice, div, mult) * 10) / 10;
           totalRecipeCost += unitCost;
 
           return {

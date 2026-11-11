@@ -5,6 +5,14 @@ import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { Plus, Trash2, Search, Download, Copy, RefreshCw, X, Layers, CheckCircle2, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
+import {
+  calcBomEffectiveUnitPrice,
+  calcBoxPrice,
+  normalizePackUnit,
+  pickLatestValidDeliveryPrice,
+  pickLatestValidPurchasePrice,
+} from '@/lib/gfs/pricing';
 
 export interface BomParentProduct {
   id: number;
@@ -26,6 +34,9 @@ export interface BomParentProduct {
   version: string; // 현재 적용 버전
   gyeName: string; // 성형장/계
   remark: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
 }
 
 export interface BomChildMaterial {
@@ -37,7 +48,11 @@ export interface BomChildMaterial {
   partName: string;
   partSpec: string;
   partUnit: string;
+  boxQty: number;
   purchasePrice: number;
+  boxPrice: number;
+  bomDivisor?: number;
+  bomMultiplier?: number;
   recipeYield: number;
   unitInputQty: number; // (단위) 기준소요량
   unitActualQty: number; // (단위) 실투입량 = unitInputQty / (recipeYield / 100)
@@ -49,6 +64,9 @@ export interface BomChildMaterial {
   partnerName: string;
   gyeName: string;
   remark: string;
+  status?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
 }
 
 interface ProductSearchItem {
@@ -59,7 +77,11 @@ interface ProductSearchItem {
   unit: string;
   category: string;
   kind: string;
+  boxQty: number;
   purchasePrice: number;
+  boxPrice: number;
+  bomDivisor?: number;
+  bomMultiplier?: number;
   partnerName: string;
 }
 
@@ -81,20 +103,6 @@ const detectVariety = (kind?: string | null, name?: string): string => {
 const kstTodayStr = (): string =>
   new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-// 단위 실효단가 계산 (Product.bomDivisor 우선 반영, 기본 g/ml는 1/1000 적용)
-const calculateEffectivePrice = (unit: string, purchasePrice: number, bomDivisor?: number): number => {
-  if (!purchasePrice || purchasePrice <= 0) return 0;
-  const div = Number(bomDivisor) > 0 ? Number(bomDivisor) : 0;
-  const u = (unit || '').toLowerCase().trim();
-  if (u === 'g' || u === 'ml' || u === 'cc') {
-    return purchasePrice / (div >= 100 ? div : 1000);
-  }
-  if ((u === '매' || u === '장') && div >= 100) {
-    return purchasePrice / div;
-  }
-  return purchasePrice;
-};
-
 // 소요 원부자재 단가 및 비용 계산
 const calculateChildCosts = (
   unitQty: number,
@@ -103,11 +111,12 @@ const calculateChildCosts = (
   purchasePrice: number,
   baseProdQty: number = 100,
   bomDivisor?: number,
+  bomMultiplier?: number,
 ) => {
   const yRate = yieldRate > 0 ? yieldRate : 100;
   const inQty = Number(unitQty) || 0;
   const actQty = Math.round((inQty / (yRate / 100)) * 1000) / 1000;
-  const effectivePrice = calculateEffectivePrice(unit, purchasePrice || 0, bomDivisor);
+  const effectivePrice = calcBomEffectiveUnitPrice(unit, purchasePrice || 0, bomDivisor, bomMultiplier);
   const uCost = Math.round(actQty * effectivePrice * 10) / 10;
   const pInQty = Math.round(inQty * baseProdQty * 100) / 100;
   const pActQty = Math.round(actQty * baseProdQty * 100) / 100;
@@ -185,16 +194,30 @@ export const BomNormalView: React.FC = () => {
         if (!p) return;
         const pId = p.id;
         const baseQty = 100;
-        const deliveryPrice = p.prices?.[0]?.deliveryPrice || 0;
+        const deliveryPrice =
+          Number(p.deliveryPrice) || pickLatestValidDeliveryPrice(p.prices) || 0;
 
         // 원부자재 가공
         const rawDetails = h.details || [];
         const mappedChildren: BomChildMaterial[] = rawDetails.map((d: any) => {
           const cp = d.childProduct || {};
-          const purchasePrice = cp.prices?.[0]?.purchasePrice || 0;
+          const pack = normalizePackUnit(cp.boxQty);
+          const purchasePrice =
+            Number(cp.bagPrice ?? cp.purchasePrice) ||
+            pickLatestValidPurchasePrice(cp.prices) ||
+            0;
+          const boxPrice = Number(cp.boxPrice) || calcBoxPrice(purchasePrice, pack);
           const unit = d.unit || cp.unit || 'g';
           const yieldRate = d.yieldRate || 100;
-          const costs = calculateChildCosts(d.unitQty, unit, yieldRate, purchasePrice, baseQty, cp.bomDivisor);
+          const costs = calculateChildCosts(
+            d.unitQty,
+            unit,
+            yieldRate,
+            purchasePrice,
+            baseQty,
+            cp.bomDivisor,
+            cp.bomMultiplier
+          );
 
           return {
             id: d.id,
@@ -205,7 +228,11 @@ export const BomNormalView: React.FC = () => {
             partName: cp.name || '',
             partSpec: cp.spec || '',
             partUnit: unit,
+            boxQty: pack,
             purchasePrice,
+            boxPrice,
+            bomDivisor: cp.bomDivisor,
+            bomMultiplier: cp.bomMultiplier,
             recipeYield: yieldRate,
             unitInputQty: costs.unitInputQty,
             unitActualQty: costs.unitActualQty,
@@ -217,6 +244,9 @@ export const BomNormalView: React.FC = () => {
             partnerName: cp.partner?.name || '',
             gyeName: d.gye?.name || cp.gye?.name || '',
             remark: d.remark || '',
+            status: cp.status || '정상',
+            discontinuedDate: cp.discontinuedDate || '',
+            isUsed: cp.isUsed !== false,
           };
         });
 
@@ -265,6 +295,9 @@ export const BomNormalView: React.FC = () => {
           version: h.version || '1.0',
           gyeName: p.gye?.name || '성형장',
           remark: h.remark || '',
+          status: p.status || '정상',
+          discontinuedDate: p.discontinuedDate || '',
+          isUsed: p.isUsed !== false,
         });
       });
 
@@ -351,10 +384,23 @@ export const BomNormalView: React.FC = () => {
     if (header?.details) {
       const mapped: BomChildMaterial[] = header.details.map((d: any) => {
         const cp = d.childProduct || {};
-        const purchasePrice = cp.prices?.[0]?.purchasePrice || 0;
+        const pack = normalizePackUnit(cp.boxQty);
+        const purchasePrice =
+          Number(cp.bagPrice ?? cp.purchasePrice) ||
+          pickLatestValidPurchasePrice(cp.prices) ||
+          0;
+        const boxPrice = Number(cp.boxPrice) || calcBoxPrice(purchasePrice, pack);
         const unit = d.unit || cp.unit || 'g';
         const yieldRate = d.yieldRate || 100;
-        const costs = calculateChildCosts(d.unitQty, unit, yieldRate, purchasePrice, selectedParent.baseProdQty);
+        const costs = calculateChildCosts(
+          d.unitQty,
+          unit,
+          yieldRate,
+          purchasePrice,
+          selectedParent.baseProdQty,
+          cp.bomDivisor,
+          cp.bomMultiplier
+        );
 
         return {
           id: d.id,
@@ -365,7 +411,11 @@ export const BomNormalView: React.FC = () => {
           partName: cp.name || '',
           partSpec: cp.spec || '',
           partUnit: unit,
+          boxQty: pack,
           purchasePrice,
+          boxPrice,
+          bomDivisor: cp.bomDivisor,
+          bomMultiplier: cp.bomMultiplier,
           recipeYield: yieldRate,
           unitInputQty: costs.unitInputQty,
           unitActualQty: costs.unitActualQty,
@@ -413,7 +463,9 @@ export const BomNormalView: React.FC = () => {
               columnKey === 'partUnit' ? String(newValue) : next.partUnit,
               columnKey === 'recipeYield' ? Number(newValue) || 100 : next.recipeYield,
               next.purchasePrice,
-              selectedParent.baseProdQty
+              selectedParent.baseProdQty,
+              next.bomDivisor,
+              next.bomMultiplier
             );
             return { ...next, ...costs };
           }
@@ -580,10 +632,23 @@ export const BomNormalView: React.FC = () => {
         if (json.success && json.data?.[0]?.details) {
           srcChildren = json.data[0].details.map((d: any) => {
             const cp = d.childProduct || {};
-            const purchasePrice = cp.prices?.[0]?.purchasePrice || 0;
+            const pack = normalizePackUnit(cp.boxQty);
+            const purchasePrice =
+              Number(cp.bagPrice ?? cp.purchasePrice) ||
+              pickLatestValidPurchasePrice(cp.prices) ||
+              0;
+            const boxPrice = Number(cp.boxPrice) || calcBoxPrice(purchasePrice, pack);
             const unit = d.unit || cp.unit || 'g';
             const yieldRate = d.yieldRate || 100;
-            const costs = calculateChildCosts(d.unitQty, unit, yieldRate, purchasePrice, selectedParent.baseProdQty);
+            const costs = calculateChildCosts(
+              d.unitQty,
+              unit,
+              yieldRate,
+              purchasePrice,
+              selectedParent.baseProdQty,
+              cp.bomDivisor,
+              cp.bomMultiplier
+            );
 
             return {
               id: Date.now() + Math.random(),
@@ -594,7 +659,11 @@ export const BomNormalView: React.FC = () => {
               partName: cp.name || '',
               partSpec: cp.spec || '',
               partUnit: unit,
+              boxQty: pack,
               purchasePrice,
+              boxPrice,
+              bomDivisor: cp.bomDivisor,
+              bomMultiplier: cp.bomMultiplier,
               recipeYield: yieldRate,
               unitInputQty: costs.unitInputQty,
               unitActualQty: costs.unitActualQty,
@@ -715,17 +784,29 @@ export const BomNormalView: React.FC = () => {
       const res = await fetch(`/api/master/product?${params.toString()}`);
       const json = await res.json();
       if (json.success && json.data) {
-        const items: ProductSearchItem[] = json.data.map((p: any) => ({
-          id: p.id,
-          productCode: p.productCode || '',
-          name: p.name || '',
-          spec: p.spec || '',
-          unit: p.unit || 'g',
-          category: p.category || '원재료',
-          kind: p.kind || '',
-          purchasePrice: p.prices?.[0]?.purchasePrice || 0,
-          partnerName: p.partner?.name || '',
-        }));
+        const items: ProductSearchItem[] = json.data.map((p: any) => {
+          const pack = normalizePackUnit(p.boxQty);
+          const purchasePrice =
+            Number(p.bagPrice ?? p.purchasePrice) ||
+            pickLatestValidPurchasePrice(p.prices) ||
+            0;
+          const boxPrice = Number(p.boxPrice) || calcBoxPrice(purchasePrice, pack);
+          return {
+            id: p.id,
+            productCode: p.productCode || '',
+            name: p.name || '',
+            spec: p.spec || '',
+            unit: p.unit || 'g',
+            category: p.category || '원재료',
+            kind: p.kind || '',
+            boxQty: pack,
+            purchasePrice,
+            boxPrice,
+            bomDivisor: p.bomDivisor,
+            bomMultiplier: p.bomMultiplier,
+            partnerName: p.partnerName || p.partner?.name || '',
+          };
+        });
         setSearchResults(items);
       } else {
         setSearchResults([]);
@@ -758,7 +839,15 @@ export const BomNormalView: React.FC = () => {
 
     const unit = newMaterialUnit || item.unit || 'g';
     const yieldRate = newMaterialYield || 100;
-    const costs = calculateChildCosts(newMaterialQty, unit, yieldRate, item.purchasePrice, selectedParent.baseProdQty);
+    const costs = calculateChildCosts(
+      newMaterialQty,
+      unit,
+      yieldRate,
+      item.purchasePrice,
+      selectedParent.baseProdQty,
+      item.bomDivisor,
+      item.bomMultiplier
+    );
 
     const newChild: BomChildMaterial = {
       id: Date.now(),
@@ -769,7 +858,11 @@ export const BomNormalView: React.FC = () => {
       partName: item.name,
       partSpec: item.spec,
       partUnit: unit,
+      boxQty: item.boxQty,
       purchasePrice: item.purchasePrice,
+      boxPrice: item.boxPrice,
+      bomDivisor: item.bomDivisor,
+      bomMultiplier: item.bomMultiplier,
       recipeYield: yieldRate,
       unitInputQty: costs.unitInputQty,
       unitActualQty: costs.unitActualQty,
@@ -871,7 +964,24 @@ export const BomNormalView: React.FC = () => {
     { key: 'itemCode', label: '품번', width: '120px', align: 'center' },
     { key: 'category', label: '구분', width: '65px', align: 'center' },
     { key: 'variety', label: '품종', width: '85px', align: 'center' },
-    { key: 'itemName', minWidth: '240px', label: '완제품 품명', align: 'left' },
+    {
+      key: 'itemName',
+      minWidth: '240px',
+      label: '완제품 품명',
+      align: 'left',
+      render: (val, row) => (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="truncate font-semibold text-gray-900">{String(val ?? '')}</span>
+          <ProductLifecycleBadge
+            status={row.status}
+            discontinuedDate={row.discontinuedDate}
+            isUsed={row.isUsed}
+            name={String(val ?? '')}
+            compact
+          />
+        </div>
+      ),
+    },
     { key: 'spec', label: '규격', width: '100px', align: 'center' },
     { key: 'unit', label: '단위', width: '50px', align: 'center' },
     { key: 'baseProdQty', label: '생산기준', width: '75px', align: 'right', format: 'number' },
@@ -902,10 +1012,29 @@ export const BomNormalView: React.FC = () => {
     { key: 'used', label: '사용', width: '45px', align: 'center', format: 'checkbox' },
     { key: 'partId', label: '자재코드', width: '120px', align: 'center' },
     { key: 'category', label: '구분', width: '65px', align: 'center' },
-    { key: 'partName', minWidth: '220px', label: '원부자재명', align: 'left' },
+    {
+      key: 'partName',
+      minWidth: '220px',
+      label: '원부자재명',
+      align: 'left',
+      render: (val, row) => (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="truncate font-semibold text-gray-900">{String(val ?? '')}</span>
+          <ProductLifecycleBadge
+            status={row.status}
+            discontinuedDate={row.discontinuedDate}
+            isUsed={row.isUsed}
+            name={String(val ?? '')}
+            compact
+          />
+        </div>
+      ),
+    },
     { key: 'partSpec', label: '규격', width: '100px', align: 'center' },
     { key: 'partUnit', label: '배합단위', width: '70px', align: 'center', editable: true },
-    { key: 'purchasePrice', label: '매입단가', width: '85px', align: 'right', format: 'currency' },
+    { key: 'boxQty', label: '입수량', width: '60px', align: 'right', format: 'number' },
+    { key: 'purchasePrice', label: '봉단가', width: '85px', align: 'right', format: 'currency' },
+    { key: 'boxPrice', label: '박스단가', width: '95px', align: 'right', format: 'currency' },
     { key: 'unitInputQty', label: '(단위)소요량', width: '85px', align: 'right', editable: true },
     { key: 'recipeYield', label: '수율(%)', width: '75px', align: 'right', editable: true },
     { key: 'unitActualQty', label: '(단위)실소요', width: '85px', align: 'right' },

@@ -38,6 +38,9 @@ export interface MatReqRow {
   shortageQty: number;
   orderQty: number;
   orderUnit: string;
+  packUnit?: number;
+  bagPrice?: number;
+  boxPrice?: number;
   unitPrice: number;
   totalAmt: number;
   supplier: string;
@@ -74,7 +77,9 @@ const COLUMNS: PurchaseGridColumnDef[] = [
   },
   { key: 'orderQty', label: '추천발주량', width: '85px', align: 'right', format: 'number' },
   { key: 'orderUnit', label: '발주단위', width: '65px', align: 'center' },
-  { key: 'unitPrice', label: '매입단가', width: '80px', align: 'right', format: 'currency' },
+  { key: 'packUnit', label: '입수량', width: '60px', align: 'right', format: 'number' },
+  { key: 'unitPrice', label: '봉단가', width: '80px', align: 'right', format: 'currency' },
+  { key: 'boxPrice', label: '박스단가', width: '85px', align: 'right', format: 'currency' },
   { key: 'totalAmt', label: '발주예상액', width: '95px', align: 'right', format: 'currency' },
   { key: 'supplier', label: '거래처/매입처', width: '120px', align: 'left' },
   { key: 'remark', label: '상태/비고', width: '130px', align: 'left' },

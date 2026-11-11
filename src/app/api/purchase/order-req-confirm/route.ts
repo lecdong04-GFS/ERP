@@ -2,16 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday, makeDocNo } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
   dedupSalesOrders,
   isDummyBomDetail,
-  menuKey,
+  matchBomHeader,
   pickLatestValidPrice,
 } from '@/lib/gfs/bomMatch';
+import { BOM_MASTER_RECIPES } from '@/services/pipeline/ProductionCostPipeline';
 import {
-  BOM_MASTER_RECIPES,
-  REPR_MAPPINGS,
-} from '@/services/pipeline/ProductionCostPipeline';
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  calcBoxPrice,
+  unitPriceForOrderUnit,
+  toBagQty,
+  toBoxQty,
+} from '@/lib/gfs/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +48,7 @@ export async function GET(req: NextRequest) {
       string,
       {
         orderNo: string;
+        unit: string;
         orderQty: number;
         unitPrice: number;
         amount: number;
@@ -59,6 +67,7 @@ export async function GET(req: NextRequest) {
         } else {
           confirmedItemMap.set(code, {
             orderNo: po.orderNo,
+            unit: dt.unit || 'box',
             orderQty: dt.orderQty,
             unitPrice: dt.unitPrice,
             amount: dt.amount,
@@ -78,62 +87,105 @@ export async function GET(req: NextRequest) {
       reqMap.set(r.materialCode, (reqMap.get(r.materialCode) || 0) + r.requiredQty);
     }
 
-    // 3. 만약 MaterialRequirement가 비어있다면, 해당 일자 GS25 수주 및 BOM을 통해 실시간 소요량 연산
-    if (reqMap.size === 0) {
-      const salesOrders = await prisma.salesOrder.findMany({
-        where: { orderDate: date, status: { not: '취소' } },
-        include: { details: { include: { product: true } } },
-      });
+    // 3. 해당 일자 GS25 수주 및 BOM을 통한 실시간 소요량 연산 (MaterialRequirement 미등록 자재 보완)
+    const bomReqMap = new Map<string, number>();
+    const salesOrders = await prisma.salesOrder.findMany({
+      where: { orderDate: date, status: { not: '취소' } },
+      include: { details: { include: { product: true } } },
+    });
 
-      if (salesOrders.length > 0) {
+    if (salesOrders.length > 0) {
         const uniqueSalesOrders = dedupSalesOrders(salesOrders);
-        // 완제품별 수량 집계 (코드 + 품명 보존)
-        const prodAgg = new Map<string, { qty: number; name: string }>();
+        // 완제품별 수량 집계 (productId + 코드 + 품명 보존)
+        const prodAgg = new Map<string, { qty: number; name: string; productId: number }>();
         uniqueSalesOrders.forEach((so) => {
           so.details.forEach((dt) => {
             if (!dt.product) return;
             const code = dt.product.productCode;
             const tot = Number(dt.totalQty) || (Number(dt.orderQty1) || 0) + (Number(dt.orderQty2) || 0);
-            const prev = prodAgg.get(code) || { qty: 0, name: dt.product.name || '' };
+            const prev = prodAgg.get(code) || {
+              qty: 0,
+              name: dt.product.name || '',
+              productId: dt.product.id,
+            };
             prev.qty += tot;
             prodAgg.set(code, prev);
           });
         });
 
-        // DB BOM 로드
-        const bomHeaders = await prisma.bomHeader.findMany({
-          where: { isUsed: true },
-          include: {
-            parentProduct: true,
-            details: { include: { childProduct: true } },
-          },
-          orderBy: { id: 'asc' },
-        });
-        const bomMap = new Map<string, (typeof bomHeaders)[0]>();
-        const bomByMenuKey = new Map<string, (typeof bomHeaders)[0]>();
-        bomHeaders.forEach((bh) => {
-          if (bh.parentProduct?.productCode) {
-            bomMap.set(bh.parentProduct.productCode, bh);
-          }
-          const mk = menuKey(bh.parentProduct?.name || '');
-          if (mk && !bomByMenuKey.has(mk)) {
-            bomByMenuKey.set(mk, bh);
-          }
+        // DB ReprProduct(대표품목 매핑) + BOM 로드 (더미행 제외 정본 우선)
+        const [reprRows, bomHeaders] = await Promise.all([
+          prisma.reprProduct.findMany({
+            where: { isUsed: true },
+            select: {
+              orderProductId: true,
+              reprProductId: true,
+              reprProduct: { select: { productCode: true } },
+            },
+          }),
+          prisma.bomHeader.findMany({
+            where: { isUsed: true },
+            include: {
+              parentProduct: true,
+              details: { include: { childProduct: true } },
+            },
+            orderBy: { id: 'asc' },
+          }),
+        ]);
+
+        const reprByOrderId = new Map<number, { reprId: number; reprCode: string }>();
+        for (const r of reprRows) {
+          reprByOrderId.set(r.orderProductId, {
+            reprId: r.reprProductId,
+            reprCode: r.reprProduct?.productCode || '',
+          });
+        }
+
+        const usableBomHeaders = bomHeaders.filter((bh) =>
+          bh.details.some((d) => !isDummyBomDetail(d.unit, d.unitQty) && Number(d.unitQty) > 0),
+        );
+        usableBomHeaders.sort((a, b) => {
+          const aDummy = a.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+          const bDummy = b.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+          if (aDummy !== bDummy) return aDummy ? 1 : -1;
+          const aCat = a.parentProduct?.category === '완성품' ? 0 : 1;
+          const bCat = b.parentProduct?.category === '완성품' ? 0 : 1;
+          if (aCat !== bCat) return aCat - bCat;
+          return a.id - b.id;
         });
 
-        prodAgg.forEach(({ qty: orderQty, name: orderName }, orderCode) => {
-          const reprCode =
-            REPR_MAPPINGS.find((m) => m.orderItemCode === orderCode)?.reprItemCode || orderCode;
-          const dbBom =
-            bomMap.get(orderCode) ||
-            bomMap.get(reprCode) ||
-            bomByMenuKey.get(menuKey(orderName));
+        const headerByParentId = new Map<number, (typeof usableBomHeaders)[number]>();
+        for (const bh of usableBomHeaders) {
+          if (!headerByParentId.has(bh.parentProductId)) {
+            headerByParentId.set(bh.parentProductId, bh);
+          }
+        }
+
+        prodAgg.forEach(({ qty: orderQty, name: orderName, productId }, orderCode) => {
+          const reprEntry = reprByOrderId.get(productId);
+          const reprCode = reprEntry?.reprCode || orderCode;
+
+          let dbBom: (typeof usableBomHeaders)[number] | null = null;
+          if (reprEntry) {
+            dbBom = headerByParentId.get(reprEntry.reprId) || null;
+          }
+          if (!dbBom && headerByParentId.has(productId)) {
+            const direct = headerByParentId.get(productId)!;
+            const directHasDummy = direct.details.some((d) => isDummyBomDetail(d.unit, d.unitQty));
+            if (!directHasDummy) dbBom = direct;
+          }
+          if (!dbBom) {
+            dbBom = matchBomHeader(orderName, productId, usableBomHeaders);
+          }
 
           if (dbBom && dbBom.details.length > 0) {
             dbBom.details.forEach((bd) => {
               if (isDummyBomDetail(bd.unit, bd.unitQty)) return;
-              if (bd.level === 3 || bd.level === 2) {
+              if (!(Number(bd.unitQty) > 0)) return;
+              if (bd.childProductId === dbBom!.parentProductId) return;
+              if (!bd.level || bd.level >= 2) {
                 const cp = bd.childProduct as any;
+                if (!cp || cp.category === '완성품' || cp.category === '반제품') return;
                 const childCode = cp.productCode;
                 const childName = cp.name || '';
                 // 발주 제외 요청 품목 및 비활성/단종예정 도래 품목 스킵 (date 기준 동적 비교)
@@ -141,14 +193,19 @@ export async function GET(req: NextRequest) {
                 if (
                   isExcludedFromOrder(childName, date) ||
                   !cp.isUsed ||
+                  isTerminalProductStatus(cp.status) ||
                   (childDisc && date >= childDisc)
                 ) {
                   return;
                 }
                 const divisor = Number(cp.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
-                const factor = (bd.unitQty / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1);
+                const mult = Number(cp.bomMultiplier) > 0 ? Number(cp.bomMultiplier) : 1;
+                const buffer = Number((bd as any).orderBuffer) > 0 ? Number((bd as any).orderBuffer) : 1;
+                const u = String(bd.unit || '').trim().toLowerCase();
+                const rawUnitQty = u === 'kg' && divisor >= 100 ? bd.unitQty * 1000 : bd.unitQty;
+                const factor = (((rawUnitQty * buffer) / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1)) * mult;
                 const req = Math.round(orderQty * factor * 100) / 100;
-                reqMap.set(childCode, (reqMap.get(childCode) || 0) + req);
+                bomReqMap.set(childCode, (bomReqMap.get(childCode) || 0) + req);
               }
             });
           } else {
@@ -164,17 +221,21 @@ export async function GET(req: NextRequest) {
                     }
                     const rawFactor = raw.unitQty / ((raw.yieldRate || 100) / 100);
                     const req = Math.round(orderQty * rawFactor * 100) / 100;
-                    reqMap.set(raw.componentCode, (reqMap.get(raw.componentCode) || 0) + req);
+                    bomReqMap.set(raw.componentCode, (bomReqMap.get(raw.componentCode) || 0) + req);
                   }
                 });
               });
             }
           }
         });
+      for (const [code, val] of bomReqMap.entries()) {
+        if (!reqMap.has(code)) {
+          reqMap.set(code, val);
+        }
       }
     }
 
-    // 4. 입고예정량 (PurchaseOrderDetail 중 아직 미입고 상태인 것) 집계
+    // 4. 입고예정량 (PurchaseOrderDetail 중 아직 미입고 상태인 것 — 봉/기본단위 환산 집계)
     const pendingOrders = await prisma.purchaseOrderDetail.findMany({
       where: {
         purchaseOrder: {
@@ -185,12 +246,15 @@ export async function GET(req: NextRequest) {
       select: {
         productId: true,
         productCode: true,
+        unit: true,
         remainQty: true,
+        product: { select: { boxQty: true } },
       },
     });
     const pendingMap = new Map<string, number>();
     for (const po of pendingOrders) {
-      pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + (po.remainQty || 0));
+      const bags = toBagQty(po.remainQty || 0, po.unit || 'box', po.product?.boxQty);
+      pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + bags);
     }
 
     // 5. 자재 마스터 로드
@@ -209,6 +273,7 @@ export async function GET(req: NextRequest) {
 
     // 6. 데이터 병합 및 행 생성 (발주 제외 및 삭제예정일 도래 품목 제외 — date 기준 동적 비교)
     const activeMaterials = materials.filter((m) => {
+      if (isTerminalProductStatus(m.status)) return false;
       if (isExcludedFromOrder(m.name, date)) return false;
       if (m.discontinuedDate && date >= m.discontinuedDate) return false;
       return true;
@@ -233,15 +298,36 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      const boxQty = normalizePackUnit(m.boxQty);
+      const invPrice = (m.inventories || []).reduce(
+        (best, inv) => (best > 0 ? best : Number(inv.unitPrice) || 0),
+        0
+      );
+      const bagPrice = resolveBagPrice({
+        masterBagPrice:
+          pickLatestValidPurchasePrice(m.prices as any) ||
+          Number(pickLatestValidPrice(m.prices as any)?.purchasePrice) ||
+          0,
+        invUnitPrice: invPrice,
+      });
+      const boxPrice = calcBoxPrice(bagPrice, boxQty);
+
       // 스마트발주(GFS) 확정 여부 확인
       const confirmed = confirmedItemMap.get(m.productCode);
       const isConfirmed = !!confirmed;
       const finalOrderQty = isConfirmed ? confirmed.orderQty : recommendedOrderQty;
+      const effectiveUnit = isConfirmed ? confirmed.unit || 'box' : m.unit || 'ea';
 
-      const unitPrice = confirmed?.unitPrice || Number(pickLatestValidPrice(m.prices as any)?.purchasePrice) || 0;
-      const amount = finalOrderQty * unitPrice;
-      const boxQty = m.boxQty > 0 ? m.boxQty : 1;
-      const expectedBox = boxQty > 0 ? Math.ceil(finalOrderQty / boxQty) : 0;
+      const unitPrice = isConfirmed
+        ? confirmed.unitPrice > 0
+          ? confirmed.unitPrice
+          : unitPriceForOrderUnit(bagPrice, effectiveUnit, boxQty)
+        : bagPrice;
+      const amount = isConfirmed
+        ? confirmed.amount > 0
+          ? Math.round(confirmed.amount)
+          : Math.round(finalOrderQty * unitPrice)
+        : Math.round(finalOrderQty * unitPrice);
 
       let status = '정상 재고';
       if (isConfirmed) {
@@ -256,14 +342,18 @@ export async function GET(req: NextRequest) {
         itemName: m.name,
         materialCode: m.productCode,
         spec: m.spec || '',
-        unit: m.unit || 'ea',
+        unit: effectiveUnit,
         supplier: confirmed?.partnerName || m.partner?.name || '미지정거래처',
         partnerId: m.partnerId || '',
-        orderUnit: m.boxQty > 1 ? 'box' : m.unit || 'ea',
+        orderUnit: isConfirmed ? effectiveUnit : (boxQty > 1 ? 'box' : m.unit || 'ea'),
         minOrderQty: m.minOrderQty || 1,
         orderQty: finalOrderQty,
         unitPrice,
+        bagPrice,
+        boxPrice,
+        packUnit: boxQty,
         orderAmt: amount,
+        bomReqQty: Math.round(reqQty * 100) / 100,
         calcQty: Number(netShortage.toFixed(2)),
         unitQty: boxQty,
         orderUnitQty: m.orderUnitQty || 1,
@@ -271,7 +361,7 @@ export async function GET(req: NextRequest) {
         clientStock: 0,
         safetyStock,
         currentStock: Number(currentStock.toFixed(2)),
-        incomingScheduledBox: boxQty > 0 ? Math.ceil(incomingScheduled / boxQty) : 0,
+        incomingScheduledBox: toBoxQty(incomingScheduled, boxQty),
         incomingScheduled: Number(incomingScheduled.toFixed(2)),
         stockQty: Number(currentStock.toFixed(2)),
         isConfirmed,
@@ -417,6 +507,10 @@ export async function POST(req: NextRequest) {
                 { name: gi.itemName || gi.materialName },
               ],
             },
+            include: {
+              prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+              inventories: { select: { unitPrice: true } },
+            },
           });
 
           if (!product) {
@@ -429,12 +523,25 @@ export async function POST(req: NextRequest) {
                 category: gi.category || '원재료',
                 partnerId: partner.id,
               },
+              include: {
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+                inventories: { select: { unitPrice: true } },
+              },
             });
           }
 
           const oQty = Number(gi.orderQty);
-          const uPrice = Number(gi.unitPrice || 0);
-          const amt = oQty * uPrice;
+          const itemUnit = gi.unit || 'ea';
+          const invP = (product.inventories || []).reduce((b, i) => (b > 0 ? b : Number(i.unitPrice) || 0), 0);
+          const fallbackBagPrice = resolveBagPrice({
+            masterBagPrice: pickLatestValidPurchasePrice(product.prices as any),
+            invUnitPrice: invP,
+          });
+          const uPrice =
+            Number(gi.unitPrice || 0) > 0
+              ? Number(gi.unitPrice)
+              : unitPriceForOrderUnit(fallbackBagPrice, itemUnit, product.boxQty);
+          const amt = Math.round(oQty * uPrice);
           poTotalAmount += amt;
 
           detailRecords.push({
@@ -442,7 +549,7 @@ export async function POST(req: NextRequest) {
             productCode: product.productCode,
             productName: product.name,
             category: gi.category || '원재료',
-            unit: gi.unit || 'ea',
+            unit: itemUnit,
             orderQty: oQty,
             unitPrice: uPrice,
             amount: amt,
@@ -465,7 +572,7 @@ export async function POST(req: NextRequest) {
               partnerName: partner.name,
               orderType: '소요량확정',
               status: '발주',
-              totalAmount: poTotalAmount,
+              totalAmount: Math.round(poTotalAmount),
               createdBy,
               remark: `발주소요량확정 시스템 등록 (${detailRecords.length}개 품목)`,
               details: {

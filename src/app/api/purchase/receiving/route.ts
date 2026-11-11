@@ -3,6 +3,16 @@ import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
+import {
+  calcBagPriceFromBox,
+  calcBoxPrice,
+  isBagUnitLabel,
+  isBoxUnitLabel,
+  normalizePackUnit,
+  pickLatestValidPurchasePrice,
+  resolveBagPrice,
+  unitPriceForOrderUnit,
+} from '@/lib/gfs/pricing';
 
 // GET /api/purchase/receiving
 // - ?type=pending_orders : 아직 입고되지 않은 발주서(PurchaseOrderDetail) 목록 반환 (입고등록 대기 목록)
@@ -50,12 +60,41 @@ export async function GET(req: NextRequest) {
           purchaseOrder: {
             include: { partner: true },
           },
-          product: true,
+          product: {
+            include: {
+              prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+            },
+          },
         },
         orderBy: { purchaseOrder: { orderDate: 'desc' } },
       });
 
-      return NextResponse.json({ success: true, data: pendingDetails });
+      const enrichedPending = pendingDetails.map((dt) => {
+        const packUnit = normalizePackUnit(dt.product?.boxQty || dt.orderUnitQty);
+        const masterBag = pickLatestValidPurchasePrice(dt.product?.prices);
+        const rawUnitPrice = Number(dt.unitPrice) || 0;
+        const derivedBag =
+          rawUnitPrice > 0
+            ? isBoxUnitLabel(dt.unit) && packUnit > 1
+              ? calcBagPriceFromBox(rawUnitPrice, packUnit)
+              : rawUnitPrice
+            : masterBag;
+        const bagPrice = masterBag > 0 ? masterBag : derivedBag;
+        const boxPrice = calcBoxPrice(bagPrice, packUnit);
+        const effectiveUnitPrice =
+          rawUnitPrice > 0
+            ? rawUnitPrice
+            : unitPriceForOrderUnit(bagPrice, dt.unit, packUnit);
+        return {
+          ...dt,
+          unitPrice: effectiveUnitPrice,
+          packUnit,
+          bagPrice,
+          boxPrice,
+        };
+      });
+
+      return NextResponse.json({ success: true, data: enrichedPending });
     }
 
     // 2) 실제 입고 전표 이력 목록 (Receiving)
@@ -76,7 +115,9 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (status && status !== '전체') where.status = status;
+    if (status && status !== '전체') {
+      where.status = status === '입고완료' ? { in: ['입고완료', '입고'] } : status;
+    }
     if (search) {
       where.OR = [
         { receivingNo: { contains: search } },
@@ -93,7 +134,11 @@ export async function GET(req: NextRequest) {
         partner: true,
         details: {
           include: {
-            product: true,
+            product: {
+              include: {
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+              },
+            },
           },
         },
       },
@@ -103,7 +148,35 @@ export async function GET(req: NextRequest) {
       ],
     });
 
-    return NextResponse.json({ success: true, data: receivings });
+    const enrichedReceivings = receivings.map((r) => ({
+      ...r,
+      details: (r.details || []).map((dt) => {
+        const packUnit = normalizePackUnit(dt.product?.boxQty || dt.boxQty);
+        const masterBag = pickLatestValidPurchasePrice(dt.product?.prices);
+        const rawUnitPrice = Number(dt.unitPrice) || 0;
+        const isBox =
+          isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
+        const lineBag =
+          rawUnitPrice > 0
+            ? isBox && packUnit > 1
+              ? calcBagPriceFromBox(rawUnitPrice, packUnit)
+              : rawUnitPrice
+            : 0;
+        const bagPrice = resolveBagPrice({
+          masterBagPrice: lineBag > 0 ? lineBag : masterBag,
+          invUnitPrice: masterBag,
+        });
+        const boxPrice = calcBoxPrice(bagPrice, packUnit);
+        return {
+          ...dt,
+          packUnit,
+          bagPrice,
+          boxPrice,
+        };
+      }),
+    }));
+
+    return NextResponse.json({ success: true, data: enrichedReceivings });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch receivings' },
@@ -217,15 +290,21 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const packUnit = Math.max(1, Number(product.boxQty || item.unitQty || item.boxQty || 1));
-        const isBagInput = item.unit === '봉' || item.unit === 'ea' || item.unit === 'pk';
-        const bagReceivedQty = isBagInput ? receivedQty : receivedQty * packUnit;
+        const packUnit = normalizePackUnit(product.boxQty || item.unitQty || item.boxQty);
+        const treatAsBox =
+          isBoxUnitLabel(item.unit) ||
+          (!isBagUnitLabel(item.unit) && !item.unit && packUnit > 1);
+        const bagReceivedQty = treatAsBox ? receivedQty * packUnit : receivedQty;
 
         const unitPrice = Number(item.unitPrice || 0);
-        const bagUnitPrice = !isBagInput && packUnit > 1 && unitPrice > 0
-          ? Math.round(unitPrice / packUnit)
-          : unitPrice;
-        const amount = receivedQty * unitPrice;
+        const explicitBag = Number(item.bagPrice || 0);
+        const bagUnitPrice =
+          explicitBag > 0
+            ? explicitBag
+            : treatAsBox && packUnit > 1 && unitPrice > 0
+              ? calcBagPriceFromBox(unitPrice, packUnit)
+              : unitPrice;
+        const amount = Math.round(receivedQty * unitPrice);
 
         const cleanLotNo = item.lotNo
           ? String(item.lotNo).replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, receivingDate.replace(/-/g, '').slice(2))
@@ -267,7 +346,7 @@ export async function POST(req: NextRequest) {
           lotNo: cleanLotNo,
           expiryDate,
           receivedQty,
-          unit: isBagInput ? (item.unit || '봉') : 'box',
+          unit: treatAsBox ? 'box' : (item.unit || product.unit || '봉'),
           unitPrice,
           amount,
           boxQty: packUnit,
@@ -278,6 +357,34 @@ export async function POST(req: NextRequest) {
 
         // 3) 현재고 (Inventory) 원자적 반영 (재고는 봉/낱개 수량 및 봉 단가 기준, 품목당 정본 Inventory 행 갱신)
         if (receivedQty > 0) {
+          if (bagUnitPrice > 0) {
+            const pPrices = await tx.productPrice.findMany({
+              where: { productId: product.id },
+              orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+              take: 5,
+            });
+            const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
+            const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
+            if (!latestValid || (receivingDate >= latestDate && Math.abs(latestValid.purchasePrice - bagUnitPrice) > 0.5)) {
+              const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === receivingDate);
+              if (sameDay) {
+                await tx.productPrice.update({
+                  where: { id: sameDay.id },
+                  data: { purchasePrice: bagUnitPrice, remark: `입고단가 반영 (${receivingDate})` },
+                });
+              } else {
+                await tx.productPrice.create({
+                  data: {
+                    productId: product.id,
+                    purchasePrice: bagUnitPrice,
+                    effectiveDate: receivingDate,
+                    remark: `입고단가 반영 (${receivingDate})`,
+                  },
+                });
+              }
+            }
+          }
+
           const existingInventory =
             (await tx.inventory.findFirst({
               where: { productId: product.id, warehouse },
@@ -289,17 +396,35 @@ export async function POST(req: NextRequest) {
             }));
 
           if (existingInventory) {
+            const nextQty = (Number(existingInventory.currentQty) || 0) + bagReceivedQty;
+            const finalBag = bagUnitPrice > 0 ? bagUnitPrice : (Number(existingInventory.unitPrice) || 0);
+            const nextStockAmount = Math.round(nextQty * finalBag);
             await tx.inventory.update({
               where: { id: existingInventory.id },
               data: {
-                currentQty: { increment: bagReceivedQty },
-                stockAmount: { increment: amount },
-                ...(bagUnitPrice > 0 ? { unitPrice: bagUnitPrice } : {}),
+                currentQty: nextQty,
+                stockAmount: nextStockAmount,
+                ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
                 lastInDate: receivingDate,
                 expiryDate,
                 lotNo: cleanLotNo,
               },
             });
+            if (bagUnitPrice > 0) {
+              const siblingLots = await tx.inventory.findMany({
+                where: { productId: product.id, id: { not: existingInventory.id } },
+                select: { id: true, currentQty: true },
+              });
+              for (const lot of siblingLots) {
+                await tx.inventory.update({
+                  where: { id: lot.id },
+                  data: {
+                    unitPrice: bagUnitPrice,
+                    stockAmount: Math.round((Number(lot.currentQty) || 0) * bagUnitPrice),
+                  },
+                });
+              }
+            }
           } else {
             await tx.inventory.create({
               data: {
@@ -315,7 +440,7 @@ export async function POST(req: NextRequest) {
                 currentQty: bagReceivedQty,
                 unit: product.unit || '봉',
                 unitPrice: bagUnitPrice,
-                stockAmount: amount,
+                stockAmount: Math.round(bagReceivedQty * bagUnitPrice),
                 lastInDate: receivingDate,
               },
             });
@@ -494,7 +619,7 @@ export async function PUT(req: NextRequest) {
 
         const newQty = item.receivedQty !== undefined ? Number(item.receivedQty) : oldQty;
         const newPrice = item.unitPrice !== undefined ? Number(item.unitPrice) : oldPrice;
-        const newAmt = newQty * newPrice;
+        const newAmt = Math.round(newQty * newPrice);
 
         const newExpiry = item.expiryDate ?? currentDetail.expiryDate;
         const newWarehouse = item.warehouse ?? currentDetail.warehouse;
@@ -504,11 +629,16 @@ export async function PUT(req: NextRequest) {
 
         const deltaQty = newQty - oldQty;
         const deltaAmt = newAmt - oldAmt;
-        const packUnit = Math.max(1, Number(currentDetail.product?.boxQty) || 1);
-        const isBagUnit = currentDetail.unit === '봉' || currentDetail.unit === 'ea' || currentDetail.unit === 'pk';
-        const deltaBagQty = isBagUnit ? deltaQty : deltaQty * packUnit;
-        const newBagQty = isBagUnit ? newQty : newQty * packUnit;
-        const newBagPrice = !isBagUnit && packUnit > 1 && newPrice > 0 ? Math.round(newPrice / packUnit) : newPrice;
+        const packUnit = normalizePackUnit(currentDetail.product?.boxQty || currentDetail.boxQty);
+        const treatAsBox =
+          isBoxUnitLabel(currentDetail.unit) ||
+          (!isBagUnitLabel(currentDetail.unit) && packUnit > 1);
+        const deltaBagQty = treatAsBox ? deltaQty * packUnit : deltaQty;
+        const newBagQty = treatAsBox ? newQty * packUnit : newQty;
+        const newBagPrice =
+          treatAsBox && packUnit > 1 && newPrice > 0
+            ? calcBagPriceFromBox(newPrice, packUnit)
+            : newPrice;
 
         // 1) ReceivingDetail 갱신
         await tx.receivingDetail.update({
@@ -543,12 +673,14 @@ export async function PUT(req: NextRequest) {
             }));
 
           if (inv) {
+            const nextQty = (Number(inv.currentQty) || 0) + deltaBagQty;
+            const finalBag = newBagPrice > 0 ? newBagPrice : (Number(inv.unitPrice) || 0);
             await tx.inventory.update({
               where: { id: inv.id },
               data: {
-                currentQty: { increment: deltaBagQty },
-                stockAmount: { increment: deltaAmt },
-                ...(newBagPrice > 0 ? { unitPrice: newBagPrice } : {}),
+                currentQty: nextQty,
+                stockAmount: Math.round(nextQty * finalBag),
+                ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
                 warehouse: newWarehouse,
                 expiryDate: newExpiry,
                 lotNo: newLotNo,
@@ -567,10 +699,52 @@ export async function PUT(req: NextRequest) {
                 currentQty: newBagQty,
                 unit: currentDetail.product?.unit || '봉',
                 unitPrice: newBagPrice,
-                stockAmount: newAmt,
+                stockAmount: Math.round(newBagQty * newBagPrice),
                 lastInDate: normalizeDateYmd(currentDetail.receiving.receivingDate),
               },
             });
+          }
+
+          if (newBagPrice > 0 && Math.abs(newPrice - oldPrice) > 0.01) {
+            const rDate = normalizeDateYmd(currentDetail.receiving.receivingDate);
+            const pPrices = await tx.productPrice.findMany({
+              where: { productId: currentDetail.productId },
+              orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+              take: 5,
+            });
+            const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
+            const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
+            if (!latestValid || rDate >= latestDate) {
+              const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === rDate);
+              if (sameDay) {
+                await tx.productPrice.update({
+                  where: { id: sameDay.id },
+                  data: { purchasePrice: newBagPrice, remark: `입고수정 단가반영 (${rDate})` },
+                });
+              } else {
+                await tx.productPrice.create({
+                  data: {
+                    productId: currentDetail.productId,
+                    purchasePrice: newBagPrice,
+                    effectiveDate: rDate,
+                    remark: `입고수정 단가반영 (${rDate})`,
+                  },
+                });
+              }
+            }
+            const siblingLots = await tx.inventory.findMany({
+              where: { productId: currentDetail.productId },
+              select: { id: true, currentQty: true },
+            });
+            for (const lot of siblingLots) {
+              await tx.inventory.update({
+                where: { id: lot.id },
+                data: {
+                  unitPrice: newBagPrice,
+                  stockAmount: Math.round((Number(lot.currentQty) || 0) * newBagPrice),
+                },
+              });
+            }
           }
 
           // 3) 자재수불부 (MaterialLedger) 감사 로그
@@ -602,13 +776,18 @@ export async function PUT(req: NextRequest) {
             });
           }
 
-          // 4) 발주서 잔량 동기화
+          // 4) 발주서 잔량 동기화 (동일 품목/협력사 기준 실제 발주 이력 우선 매칭)
           const poDetail = await tx.purchaseOrderDetail.findFirst({
             where: {
-              OR: [
-                { productId: currentDetail.productId },
-                { productCode: currentDetail.productCode },
-                { productName: currentDetail.productName },
+              AND: [
+                {
+                  OR: [
+                    { productId: currentDetail.productId },
+                    { productCode: currentDetail.productCode },
+                    { productName: currentDetail.productName },
+                  ],
+                },
+                ...(deltaQty < 0 ? [{ receivedQty: { gt: 0 } }] : []),
               ],
             },
             orderBy: { id: 'desc' },
@@ -700,10 +879,14 @@ export async function DELETE(req: NextRequest) {
         if (!receiving || receiving.status === '취소') continue;
 
         for (const dt of receiving.details) {
-          const packUnit = Math.max(1, Number(dt.product?.boxQty) || 1);
-          const isBagUnit = dt.unit === '봉' || dt.unit === 'ea' || dt.unit === 'pk';
-          const dtBagQty = isBagUnit ? dt.receivedQty : dt.receivedQty * packUnit;
-          const dtBagPrice = !isBagUnit && packUnit > 1 && dt.unitPrice > 0 ? Math.round(dt.unitPrice / packUnit) : dt.unitPrice;
+          const packUnit = normalizePackUnit(dt.product?.boxQty || dt.boxQty);
+          const treatAsBox =
+            isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
+          const dtBagQty = treatAsBox ? dt.receivedQty * packUnit : dt.receivedQty;
+          const dtBagPrice =
+            treatAsBox && packUnit > 1 && dt.unitPrice > 0
+              ? calcBagPriceFromBox(dt.unitPrice, packUnit)
+              : dt.unitPrice;
 
           // 재고 차감
           const inv =
@@ -719,18 +902,21 @@ export async function DELETE(req: NextRequest) {
               orderBy: { id: 'asc' },
             }));
           if (inv) {
+            const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
+            const unitP = Number(inv.unitPrice) || dtBagPrice || 0;
             await tx.inventory.update({
               where: { id: inv.id },
               data: {
-                currentQty: { decrement: dtBagQty },
-                stockAmount: { decrement: dt.amount },
+                currentQty: nextQty,
+                stockAmount: Math.round(nextQty * unitP),
               },
             });
           }
 
-          // 발주서 잔량 복원
+          // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)
           const poDetail = await tx.purchaseOrderDetail.findFirst({
             where: {
+              receivedQty: { gt: 0 },
               OR: [
                 { productId: dt.productId },
                 { productCode: dt.productCode },
@@ -798,9 +984,10 @@ export async function DELETE(req: NextRequest) {
 
         if (!dt || dt.receivedQty <= 0) continue;
 
-        const packUnit = Math.max(1, Number(dt.product?.boxQty) || 1);
-        const isBagUnit = dt.unit === '봉' || dt.unit === 'ea' || dt.unit === 'pk';
-        const dtBagQty = isBagUnit ? dt.receivedQty : dt.receivedQty * packUnit;
+        const packUnit = normalizePackUnit(dt.product?.boxQty || dt.boxQty);
+        const treatAsBox =
+          isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
+        const dtBagQty = treatAsBox ? dt.receivedQty * packUnit : dt.receivedQty;
 
         // 재고 차감
         const inv =
@@ -816,18 +1003,20 @@ export async function DELETE(req: NextRequest) {
             orderBy: { id: 'asc' },
           }));
         if (inv) {
+          const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
           await tx.inventory.update({
             where: { id: inv.id },
             data: {
-              currentQty: { decrement: dtBagQty },
-              stockAmount: { decrement: dt.amount },
+              currentQty: nextQty,
+              stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
             },
           });
         }
 
-        // 발주서 잔량 복원
+        // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)
         const poDetail = await tx.purchaseOrderDetail.findFirst({
           where: {
+            receivedQty: { gt: 0 },
             OR: [
               { productId: dt.productId },
               { productCode: dt.productCode },
@@ -844,6 +1033,15 @@ export async function DELETE(req: NextRequest) {
               receivedQty: newRecv,
               remainQty: (poDetail.remainQty || 0) + dt.receivedQty,
             },
+          });
+          const poDetails = await tx.purchaseOrderDetail.findMany({
+            where: { purchaseOrderId: poDetail.purchaseOrderId },
+          });
+          const anyRecv = poDetails.some((d) => (d.receivedQty || 0) > 0);
+          const allDone = poDetails.every((d) => (d.remainQty || 0) <= 0);
+          await tx.purchaseOrder.update({
+            where: { id: poDetail.purchaseOrderId },
+            data: { status: allDone ? '입고완료' : anyRecv ? '부분입고' : '발주' },
           });
         }
 

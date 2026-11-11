@@ -13,6 +13,8 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { normName } from '@/lib/gfs/norm';
+import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
+import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import {
   calcBomEffectiveUnitCost,
   dedupSalesOrders,
@@ -384,12 +386,21 @@ export class ProductionCostPipelineDBEngine {
             });
           }
 
-          if (bd.childProduct && bd.childProduct.isUsed) {
+          if (
+            bd.childProduct &&
+            bd.childProduct.isUsed &&
+            !isTerminalProductStatus(bd.childProduct.status) &&
+            !isExcludedFromOrder(bd.childProduct.name, orderDate) &&
+            !(bd.childProduct.discontinuedDate && orderDate >= bd.childProduct.discontinuedDate)
+          ) {
             const cp = bd.childProduct as any;
             const code = cp.productCode || `MAT-${bd.childProductId}`;
             const unitCost = Number(pickLatestValidPrice(cp.prices)?.purchasePrice) || 0;
             const divisor = Number(cp.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
-            const reqInPacks = divisor > 1 ? compTotalReq / divisor : compTotalReq;
+            const multiplier = Number(cp.bomMultiplier) > 0 ? Number(cp.bomMultiplier) : 1;
+            const u = String(bd.unit || '').trim().toLowerCase();
+            const scaledReq = u === 'kg' && divisor >= 100 ? compTotalReq * 1000 : compTotalReq;
+            const reqInPacks = (divisor > 1 ? scaledReq / divisor : scaledReq) * multiplier;
             if (!materialRequirementMap[code]) {
               materialRequirementMap[code] = {
                 partCode: code,
@@ -584,8 +595,9 @@ export class ProductionCostPipelineDBEngine {
           const div = Number(cp?.bomDivisor) > 0
             ? Number(cp.bomDivisor)
             : (unitStr === 'g' || unitStr === 'ml' ? 1000 : 1);
+          const mult = Number(cp?.bomMultiplier) > 0 ? Number(cp.bomMultiplier) : 1;
           const effQty = unitStr === 'kg' && div >= 100 ? actQty * 1000 : actQty;
-          unitMaterialCost += calcBomEffectiveUnitCost(effQty, price, div);
+          unitMaterialCost += calcBomEffectiveUnitCost(effQty, price, div, mult);
         }
         unitMaterialCost = Math.round(unitMaterialCost * 10) / 10;
       } else {

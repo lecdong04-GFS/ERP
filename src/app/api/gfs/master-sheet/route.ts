@@ -6,6 +6,7 @@ import { kstToday } from '@/lib/kst';
 import * as XLSX from 'xlsx';
 import { parseOrderSheet } from '@/lib/gfs/canonical';
 import { normName } from '@/lib/gfs/norm';
+import { resolveBagPrice } from '@/lib/gfs/pricing';
 
 const MASTER_KEY = 'gfs_master_workbook';
 
@@ -123,7 +124,10 @@ export async function POST(req: NextRequest) {
           const k = normName(inv.productName);
           const o = orderNorms.get(k);
           if (o) {
-            const finalPrice = o.bagPrice > 0 ? o.bagPrice : inv.unitPrice;
+            const finalPrice = resolveBagPrice({
+              masterBagPrice: o.bagPrice,
+              invUnitPrice: inv.unitPrice,
+            });
             const stockDays = o.dailyUsage > 0 ? Math.round((o.currentStock / o.dailyUsage) * 10) / 10 : null;
 
             await prisma.inventory.update({
@@ -132,7 +136,7 @@ export async function POST(req: NextRequest) {
                 currentQty: o.currentStock,
                 dailyUsage: o.dailyUsage,
                 unitPrice: finalPrice,
-                stockAmount: o.currentStock * finalPrice,
+                stockAmount: Math.round(o.currentStock * finalPrice),
               },
             });
 
