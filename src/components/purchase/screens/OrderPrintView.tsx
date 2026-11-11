@@ -119,7 +119,7 @@ export const OrderPrintView: React.FC = () => {
             type: d.product?.category || (d.product?.itemCode?.startsWith('R') ? '원재료' : '부재료'),
             name: d.product?.name || d.productName || '자재품목',
             spec: d.product?.spec || '-',
-            unit: d.product?.unit || 'kg',
+            unit: d.unit || d.product?.unit || 'box',
             orderQty: d.orderQty || 0,
             unitPrice: d.unitPrice || 0,
             orderAmt: d.amount || (d.orderQty || 0) * (d.unitPrice || 0),

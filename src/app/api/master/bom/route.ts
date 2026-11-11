@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { isDummyBomDetail, normalizeDateYmd } from '@/lib/gfs/bomMatch';
+
+function sortPricesDesc(prices?: any[] | null): any[] {
+  if (!prices || prices.length === 0) return [];
+  return [...prices].sort((a, b) => {
+    const da = normalizeDateYmd(a.effectiveDate);
+    const db = normalizeDateYmd(b.effectiveDate);
+    if (da !== db) return db.localeCompare(da);
+    return (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
+}
 
 // GET /api/master/bom?productId=1 OR ?productCode=27000388710
 export async function GET(req: NextRequest) {
@@ -8,16 +19,19 @@ export async function GET(req: NextRequest) {
     const productId = searchParams.get('productId');
     const productCode = searchParams.get('productCode');
 
-    let whereParent: any = {};
+    const whereParent: any = {};
     if (productId) whereParent.id = Number(productId);
     if (productCode) whereParent.productCode = productCode;
 
     const bomHeaders = await prisma.bomHeader.findMany({
-      where: Object.keys(whereParent).length > 0 ? { parentProduct: whereParent } : {},
+      where: {
+        isUsed: true,
+        ...(Object.keys(whereParent).length > 0 ? { parentProduct: whereParent } : {}),
+      },
       include: {
         parentProduct: {
           include: {
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
             gye: true,
           },
         },
@@ -25,7 +39,7 @@ export async function GET(req: NextRequest) {
           include: {
             childProduct: {
               include: {
-                prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
                 partner: true,
               },
             },
@@ -37,7 +51,28 @@ export async function GET(req: NextRequest) {
       orderBy: { parentProductId: 'asc' },
     });
 
-    return NextResponse.json({ success: true, data: bomHeaders });
+    const cleaned = bomHeaders.map((bh) => ({
+      ...bh,
+      parentProduct: bh.parentProduct
+        ? {
+            ...bh.parentProduct,
+            prices: sortPricesDesc(bh.parentProduct.prices),
+          }
+        : bh.parentProduct,
+      details: (bh.details || [])
+        .filter((d) => !isDummyBomDetail(d.unit, d.unitQty))
+        .map((d) => ({
+          ...d,
+          childProduct: d.childProduct
+            ? {
+                ...d.childProduct,
+                prices: sortPricesDesc(d.childProduct.prices),
+              }
+            : d.childProduct,
+        })),
+    }));
+
+    return NextResponse.json({ success: true, data: cleaned });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch BOM' },

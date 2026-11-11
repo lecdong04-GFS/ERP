@@ -228,11 +228,13 @@ export const MatOrderDayView: React.FC = () => {
     return confirmedPoList.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
   }, [confirmedPoList]);
 
-  // 1. 발주시트 정본 로드 (스마트발주 GFS 마스터와 실시간 동기화)
+  // 1. 발주시트 정본 로드 (스마트발주 GFS 마스터와 실시간 동기화) — 선택 요일 날짜 기준 (단종/삭제예정 동적 판정)
   const loadOrderSheet = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/gfs/order-sheet', { cache: 'no-store' });
+      const qs = currentDayDate ? `?date=${encodeURIComponent(currentDayDate)}` : '';
+      const res = await fetch(`/api/gfs/order-sheet${qs}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`발주시트 조회 실패 (HTTP ${res.status})`);
       const json = await res.json();
       if (json.success && Array.isArray(json.data?.rows)) {
         const loaded: SheetRow[] = json.data.rows.map((r: any) => {
@@ -242,6 +244,8 @@ export const MatOrderDayView: React.FC = () => {
           const suggest = pack > 0 ? Math.ceil(Math.max(0, req - total) / pack) : 0;
           return {
             id: r.id,
+            productId: r.productId,
+            targetOrderDays: r.targetOrderDays || 0,
             supplier: r.supplier || '',
             name: r.name,
             boxesBase: r.boxesBase || 0,
@@ -276,7 +280,7 @@ export const MatOrderDayView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentDayDate]);
 
   useEffect(() => {
     loadOrderSheet();
@@ -588,8 +592,10 @@ export const MatOrderDayView: React.FC = () => {
 
   // 해당 요일 발주 확정 및 ERP 발주서(PO) 전표 생성
   const handleSaveDay = async () => {
-    if (dayRows.length === 0) {
-      alert(`[${DAY_CHARS[dayIdx]}요일]에 발주할 품목이 없습니다.`);
+    // 발주수량 0 품목은 전송 제외 (1box 단건도 정상 저장)
+    const saveRows = dayRows.filter(({ m }) => Number(m.dayQty) > 0);
+    if (saveRows.length === 0) {
+      alert(`[${DAY_CHARS[dayIdx]}요일]에 발주수량이 입력된 품목이 없습니다.`);
       return;
     }
 
@@ -616,7 +622,7 @@ export const MatOrderDayView: React.FC = () => {
     if (
       !confirm(
         `[${currentDayDate} (${DAY_CHARS[dayIdx]}요일)] 납품분으로 총 ${
-          dayRows.length
+          saveRows.length
         }개 품목 (${dayTotals.boxes.toLocaleString()}박스 / ₩${Math.round(
           dayTotals.amt
         ).toLocaleString()}원)을 ERP 정식 발주서(PO)로 확정 생성하시겠습니까?\n\n생성된 발주서는 [발주현황/수정] 및 [입고등록] 화면에 실시간 연동됩니다.`
@@ -633,34 +639,46 @@ export const MatOrderDayView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orderDate: currentDayDate,
-          items: dayRows.map(({ r, m }) => ({
-            name: r.name,
-            boxes: m.dayQty,
-            packUnit: m.pack || r.packUnit,
-            bagPrice: r.bagPrice,
-            supplierHeader: r.supplier,
-          })),
+          items: saveRows.map(({ r, m }) => {
+            const pack = m.pack || r.packUnit || 1;
+            return {
+              productId: r.productId,
+              name: r.name,
+              boxes: m.dayQty,
+              packUnit: pack,
+              bagPrice: r.bagPrice,
+              boxPrice: (r.bagPrice || 0) * pack,
+              supplierHeader: r.supplier,
+            };
+          }),
         }),
       });
-      const matJson = await matRes.json();
-      if (!matJson.success) {
-        alert('ERP 품목 매칭 실패: ' + (matJson.error || '알 수 없는 오류'));
+      const matJson = await matRes.json().catch(() => ({ success: false, error: `HTTP ${matRes.status}` }));
+      if (!matRes.ok || !matJson.success) {
+        alert('ERP 품목 매칭 실패: ' + (matJson.error || `HTTP ${matRes.status}`));
         return;
       }
 
       const orderItems = (matJson.data?.matched || [])
-        .filter((m: any) => m.productCode)
+        .filter((m: any) => m.productCode && Number(m.orderQty) > 0)
         .map((m: any) => ({
+          productId: m.productId,
           productCode: m.productCode,
           productName: m.productName || m.name,
           orderQty: m.orderQty,
+          unit: 'box',
           unitPrice: m.boxPrice || 0,
+          totalAmount: m.totalAmount || undefined,
           partnerId: m.partnerId || undefined,
           partnerName: m.partnerName || undefined,
         }));
 
       if (orderItems.length === 0) {
-        alert('ERP 품목 마스터와 매칭된 발주 품목이 없습니다.');
+        const reasons = (matJson.data?.failed || [])
+          .slice(0, 5)
+          .map((f: any) => `• ${f.name}: ${f.reason}`)
+          .join('\n');
+        alert('ERP 품목 마스터와 매칭된 발주 품목이 없습니다.' + (reasons ? `\n\n${reasons}` : ''));
         return;
       }
 
@@ -674,9 +692,9 @@ export const MatOrderDayView: React.FC = () => {
           items: orderItems,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
 
-      if (json.success) {
+      if (res.ok && json.success) {
         const orderCount = (json.data || []).length;
         alert(
           `✅ [${DAY_CHARS[dayIdx]}요일 (${currentDayDate})] 발주 확정 완료!\n\n` +
@@ -1296,7 +1314,7 @@ export const MatOrderDayView: React.FC = () => {
 
               {/* 납품패턴 필터 */}
               <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
-                {['전체', '월수금', '화목토', '매일'].map((pat) => (
+                {['전체', '월수금', '화목토', '수금', '화금', '주5일', '매일', '기타'].map((pat) => (
                   <button
                     key={pat}
                     type="button"

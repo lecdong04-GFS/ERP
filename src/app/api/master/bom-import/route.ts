@@ -19,6 +19,45 @@ export async function POST(req: NextRequest) {
     const today = kstToday();
 
     const { orderFile, auditFile } = findRepoFiles();
+    if (!orderFile) {
+      // PostgreSQL 단일 진실 공급원 모드: 현재 DB 정본 BOM 현황 반환
+      const [headerCount, detailCount, matCount] = await Promise.all([
+        prisma.bomHeader.count({ where: { isUsed: true } }),
+        prisma.bomDetail.count({ where: { bomHeader: { isUsed: true } } }),
+        prisma.product.count({ where: { isUsed: true, category: { notIn: ['완성품', '반제품'] } } }),
+      ]);
+      if (dryRun) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            dryRun: true,
+            materialCount: matCount,
+            menuCount: headerCount,
+            linkCount: detailCount,
+            existingMaterials: matCount,
+            newMaterials: 0,
+            existingMenus: headerCount,
+            newMenus: 0,
+            skippedMemo: [],
+            sampleNewMaterials: [],
+            sampleNewMenus: [],
+            sampleLinks: [],
+          },
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        data: {
+          menuCount: headerCount,
+          createdProducts: 0,
+          createdPartners: 0,
+          createdHeaders: 0,
+          createdDetails: 0,
+          skippedMemo: [],
+          errors: [],
+        },
+      });
+    }
     const bundle = await loadBomBundle(orderFile, auditFile, today);
 
     const allNames = [

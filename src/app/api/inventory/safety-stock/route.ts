@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { kstToday } from '@/lib/kst';
+import { isExcludedOrderMaterial, pickLatestValidPrice } from '@/lib/gfs/orderCalc';
 
 // GET /api/inventory/safety-stock?warehouse=냉장1&statusFilter=CRITICAL&search=...
 export async function GET(req: NextRequest) {
@@ -11,8 +13,14 @@ export async function GET(req: NextRequest) {
     const supplier = searchParams.get('supplier');
     const statusFilter = searchParams.get('statusFilter') || 'ALL'; // ALL, CRITICAL, WARNING, OPTIMAL, EXCESS
     const search = searchParams.get('search');
+    const today = kstToday();
 
-    const where: any = {};
+    const where: any = {
+      product: {
+        isUsed: true,
+        category: { notIn: ['완성품', '반제품'] },
+      },
+    };
     if (warehouse && warehouse !== 'ALL') {
       where.warehouse = warehouse;
     }
@@ -27,26 +35,32 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    // 606개 원부재료 인벤토리 및 마스터 제품/거래처 정보 조회
-    const inventories = await prisma.inventory.findMany({
+    // 활성 원부재료 인벤토리 및 마스터 제품/거래처 정보 조회
+    const rawInventories = await prisma.inventory.findMany({
       where,
       include: {
         product: {
           include: {
             partner: true,
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+            prices: { orderBy: { effectiveDate: 'desc' }, take: 5 },
           },
         },
       },
       orderBy: [{ warehouse: 'asc' }, { productCode: 'asc' }],
     });
 
+    const inventories = rawInventories.filter(
+      (inv) => inv.product && !isExcludedOrderMaterial(inv.product, today)
+    );
+
     const allRows = inventories.map((inv, idx) => {
       const p = inv.product;
       const partnerName = p?.partner?.name || '기타협력사';
-      const leadTime = p?.partner?.leadTime && p.partner.leadTime > 0 ? p.partner.leadTime : 1;
+      const partnerLead = p?.partner?.leadTime && p.partner.leadTime > 0 ? p.partner.leadTime : 1;
+      const leadTime = Number(p?.targetOrderDays) > 0 ? Number(p.targetOrderDays) : partnerLead;
       const boxUnit = p?.boxQty || 1;
-      const unitPrice = inv.unitPrice || p?.prices?.[0]?.purchasePrice || 0;
+      const latestPrice = pickLatestValidPrice(p?.prices || []);
+      const unitPrice = inv.unitPrice || latestPrice?.purchasePrice || 0;
       const dailyUsage = inv.dailyUsage || 0;
       const currentQty = inv.currentQty || 0;
 
@@ -224,17 +238,30 @@ export async function POST(req: NextRequest) {
 
     // 1. 자동 산출 시뮬레이션 요청인 경우
     if (action === 'auto-calc') {
-      const inventories = await prisma.inventory.findMany({
+      const today = kstToday();
+      const rawInventories = await prisma.inventory.findMany({
+        where: {
+          product: {
+            isUsed: true,
+            category: { notIn: ['완성품', '반제품'] },
+          },
+        },
         include: {
           product: { include: { partner: true } },
         },
       });
+      const inventories = rawInventories.filter(
+        (inv) => inv.product && !isExcludedOrderMaterial(inv.product, today)
+      );
 
       const mult = Number(bufferMultiplier) || 1.5;
       const updatedList = inventories.map((inv) => {
-        const leadTime = inv.product?.partner?.leadTime && inv.product.partner.leadTime > 0
+        const partnerLead = inv.product?.partner?.leadTime && inv.product.partner.leadTime > 0
           ? inv.product.partner.leadTime
           : 1;
+        const leadTime = Number(inv.product?.targetOrderDays) > 0
+          ? Number(inv.product.targetOrderDays)
+          : partnerLead;
         const daily = inv.dailyUsage || 0;
         let autoSafety = Math.ceil(daily * Math.max(1, leadTime) * mult);
         if (autoSafety <= 0) autoSafety = 5;

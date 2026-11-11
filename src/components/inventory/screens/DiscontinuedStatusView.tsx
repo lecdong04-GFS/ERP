@@ -103,16 +103,24 @@ export const DiscontinuedStatusView: React.FC = () => {
   // 기간 전환
   const handlePeriodChange = (mode: '일간' | '주간' | '월간' | '하반기' | '전체') => {
     setPeriodMode(mode);
-    const today = '2026-11-07';
+    const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+    const today = kstNow.toISOString().slice(0, 10);
+    const ym = today.slice(0, 7);
     if (mode === '일간') {
       setStartDate(today);
       setEndDate(today);
     } else if (mode === '주간') {
-      setStartDate('2026-11-02');
-      setEndDate('2026-11-08');
+      const d = new Date(today + 'T00:00:00Z');
+      const dow = (d.getUTCDay() + 6) % 7;
+      const mon = new Date(d.getTime() - dow * 86400000).toISOString().slice(0, 10);
+      const sun = new Date(d.getTime() + (6 - dow) * 86400000).toISOString().slice(0, 10);
+      setStartDate(mon);
+      setEndDate(sun);
     } else if (mode === '월간') {
-      setStartDate('2026-11-01');
-      setEndDate('2026-11-30');
+      const [y, m] = ym.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      setStartDate(`${ym}-01`);
+      setEndDate(`${ym}-${String(lastDay).padStart(2, '0')}`);
     } else if (mode === '하반기') {
       setStartDate('2026-07-01');
       setEndDate('2026-12-31');

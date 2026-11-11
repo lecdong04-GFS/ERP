@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
+import { isDummyBomDetail, menuKey } from '@/lib/gfs/bomMatch';
 import { getCanonicalDailyReport } from '@/components/production/data/dailyProductionReportData';
 
 function normalizeWarehouse(rawWh?: string | null): string {
@@ -644,19 +645,37 @@ export async function GET(req: NextRequest) {
     const stockMapByNorm = new Map<string, { warehouse: string; currentQty: number; productCode?: string }>();
     const stockMapByCode = new Map<string, { warehouse: string; currentQty: number; productCode?: string }>();
 
-    // 1단계: 실시간 재고(Inventory) 기본 등록
+    // 1단계: 실시간 재고(Inventory) 품목별 창고 합산 등록
     for (const inv of allInventories) {
-      const info = { warehouse: normalizeWarehouse(inv.warehouse), currentQty: inv.currentQty, productCode: inv.productCode };
-      if (inv.productCode) stockMapByCode.set(inv.productCode, info);
-      if (inv.productName) stockMapByNorm.set(normName(inv.productName), info);
-      if (inv.product?.name) stockMapByNorm.set(normName(inv.product.name), info);
+      const wh = normalizeWarehouse(inv.warehouse);
+      if (inv.productCode) {
+        const prev = stockMapByCode.get(inv.productCode);
+        stockMapByCode.set(inv.productCode, {
+          warehouse: prev?.warehouse || wh,
+          currentQty: (prev?.currentQty || 0) + (Number(inv.currentQty) || 0),
+          productCode: inv.productCode,
+        });
+      }
+      for (const nm of [inv.productName, inv.product?.name]) {
+        if (!nm) continue;
+        const k = normName(nm);
+        if (!k) continue;
+        const prev = stockMapByNorm.get(k);
+        stockMapByNorm.set(k, {
+          warehouse: prev?.warehouse || wh,
+          currentQty: (prev?.currentQty || 0) + (Number(inv.currentQty) || 0),
+          productCode: inv.productCode,
+        });
+      }
     }
 
-    // 2단계 (최우선): 일일 재고조사표 스냅샷 덮어쓰기 (재고조회와 창고명/수량 100% 무결성 직결)
-    for (const snap of activeSnapshots) {
-      const info = { warehouse: normalizeWarehouse(snap.warehouse), currentQty: snap.currentQty, productCode: snap.productCode };
-      if (snap.productCode) stockMapByCode.set(snap.productCode, info);
-      if (snap.productName) stockMapByNorm.set(normName(snap.productName), info);
+    // 2단계: 일일 재고조사표 스냅샷이 당일(targetDate)에 있을 때만 우선 반영
+    if (targetSnapshots.length > 0) {
+      for (const snap of targetSnapshots) {
+        const info = { warehouse: normalizeWarehouse(snap.warehouse), currentQty: snap.currentQty, productCode: snap.productCode };
+        if (snap.productCode) stockMapByCode.set(snap.productCode, info);
+        if (snap.productName) stockMapByNorm.set(normName(snap.productName), info);
+      }
     }
 
     // 3) DB에 이미 저장된 WorkOrder가 있는지 확인
@@ -676,8 +695,9 @@ export async function GET(req: NextRequest) {
       orderBy: { workSeq: 'asc' },
     });
 
-    // 4) BOM 전체 로드 (공통 캐시 인덱싱 및 정밀 룩업 구축)
+    // 4) 활성 정본 BOM 전체 로드 (공통 캐시 인덱싱 및 정밀 룩업 구축)
     const bomHeaders = await prisma.bomHeader.findMany({
+      where: { isUsed: true },
       include: {
         parentProduct: true,
         details: {
@@ -690,11 +710,13 @@ export async function GET(req: NextRequest) {
           orderBy: { sortOrder: 'asc' },
         },
       },
+      orderBy: { id: 'asc' },
     });
 
-    // 정밀 BOM 매핑 사전 (완전 일치 우선 -> 수식어/접두어 제외 일치 -> 단어 매칭)
+    // 정밀 BOM 매핑 사전 (menuKey + 완전 일치 우선 -> 수식어/접두어 제외 일치)
     const bomLookupExact = new Map<string, (typeof bomHeaders)[0]>();
     const bomLookupBase = new Map<string, (typeof bomHeaders)[0]>();
+    const bomLookupMenuKey = new Map<string, (typeof bomHeaders)[0]>();
     for (const b of bomHeaders) {
       if (b.parentProduct?.name) {
         const pName = b.parentProduct.name;
@@ -703,10 +725,20 @@ export async function GET(req: NextRequest) {
 
         const nBase = normName(pName.replace(/^\(주문\)\s*/, '').replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, ''));
         if (nBase && !bomLookupBase.has(nBase)) bomLookupBase.set(nBase, b);
+
+        const mk = menuKey(pName);
+        if (mk && !bomLookupMenuKey.has(mk)) bomLookupMenuKey.set(mk, b);
       }
     }
 
     const findBom = (name: string, base?: string) => {
+      const mk1 = menuKey(name);
+      if (mk1 && bomLookupMenuKey.has(mk1)) return bomLookupMenuKey.get(mk1);
+      if (base) {
+        const mkBase = menuKey(base);
+        if (mkBase && bomLookupMenuKey.has(mkBase)) return bomLookupMenuKey.get(mkBase);
+      }
+
       const n1 = normName(name);
       if (bomLookupExact.has(n1)) return bomLookupExact.get(n1);
 
@@ -754,7 +786,7 @@ export async function GET(req: NextRequest) {
             .join(', ');
 
           for (const d of bom.details) {
-            if (!d.childProduct) continue;
+            if (!d.childProduct || isDummyBomDetail(d.unit, d.unitQty)) continue;
             const cName = d.childProduct.name;
             const req = (w.orderQty || 0) * d.unitQty * (100 / (d.yieldRate || 100));
             const prev = matMap.get(cName) || {
@@ -1101,7 +1133,7 @@ export async function GET(req: NextRequest) {
           .join(', ');
 
         for (const d of bom.details) {
-          if (!d.childProduct) continue;
+          if (!d.childProduct || isDummyBomDetail(d.unit, d.unitQty)) continue;
           const cName = d.childProduct.name;
           const req = item.qty * d.unitQty * (100 / (d.yieldRate || 100));
           const prev = matMap.get(cName) || {

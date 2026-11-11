@@ -1293,6 +1293,8 @@ export const StockLookupView: React.FC = () => {
           if (!r) continue;
           const name = String(r[colMap.name] ?? '').trim();
           if (name.length < 2 || name === 'None' || name === 'undefined') continue;
+          // 부자재 다중행 메뉴 라벨(줄바꿈 포함) 및 헤더 반복행 차단
+          if (/[\r\n]/.test(name) || /^(제품명|품명|품목명|자재명|합계|소계)$/.test(name)) continue;
           const norm = normName(name);
           if (!norm) continue;
 
@@ -1317,6 +1319,12 @@ export const StockLookupView: React.FC = () => {
           const itemId = colMap.code >= 0 && r[colMap.code] != null && String(r[colMap.code]).trim() !== '' ? String(r[colMap.code]).trim() : '';
           const inbound = colMap.inbound >= 0 ? String(r[colMap.inbound] ?? '').trim() : '';
           const expiry = colMap.expiry >= 0 && r[colMap.expiry] != null && String(r[colMap.expiry]).trim() !== '' ? String(r[colMap.expiry]).trim() : '';
+          const isDeletedRow = /삭제|불용|이관|단종/.test(expiry);
+          const exist = nextByNorm.get(norm);
+          // 기존에 없는 0재고 삭제/부자재 라벨행은 신규 품목으로 생성하지 않음
+          if (!exist && current <= 0 && (isDeletedRow || /^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(expiry))) {
+            continue;
+          }
 
           // 창고명 자동 판별 (기본 시트창고 -> 열 데이터 -> 기존 품목 창고 -> 제품명 접두사 -> 기본값)
           let wh = defaultWh;
@@ -1353,10 +1361,14 @@ export const StockLookupView: React.FC = () => {
           const estEntry = estMapRef.current.byWhAndKey[`${wh}|${norm}`] || estMapRef.current.byKeyOnly[norm] || null;
           const estDaily = estEntry ? Math.round((Number(estEntry.estDailyUsage) || 0) * 100) / 100 : 0;
           const estSamples = estEntry ? Number(estEntry.sampleCount) || 0 : 0;
-          const exist = nextByNorm.get(norm);
           // 안전재고 자동계산 (신규·0인 것만, 기존 수기값 유지)
           const autoSafety = calcSafetyStock(daily > 0 ? daily : estDaily, pack, parseLeadDays(inbound));
           if (exist) {
+            // 동일 norm의 삭제/0재고 중복행이 활성 재고(>0)를 0으로 덮어쓰지 않도록 보호
+            if (isDeletedRow && current <= 0 && exist.currentStock > 0) {
+              parsed += 1;
+              continue;
+            }
             const oldStock = exist.currentStock;
             const newSafety = (!exist.safetyStock || exist.safetyStock <= 0) && autoSafety > 0 ? autoSafety : exist.safetyStock;
             // 유지일: 현재고 ÷ 일사용량 실시간 계산
@@ -1531,21 +1543,30 @@ export const StockLookupView: React.FC = () => {
       const isToday = targetDate === kstToday();
       const shouldSyncLive = isToday || !snapshotMode || existingInv.length > 0;
 
-      // 1) 신규행: 품목 자동생성(materialize) — 스냅샷/재고 공통으로 품번 확보
+      // 1) 신규행: 품목 자동생성(materialize) — 비정형/삭제/0재고 라벨 제외 및 품번 전달로 중복 생성 차단
       const codeByNorm = new Map<string, string>();
-      if (fresh.length > 0) {
-        setSaveStatusMsg(`신규 품목 기준정보 등록 중 (${fresh.length}건)...`);
+      const freshForMat = fresh.filter((d) => {
+        if (/[\r\n]/.test(d.itemName || '')) return false;
+        const exp = String(d.expiryDate || '').trim();
+        if (/삭제|불용|이관|단종/.test(exp) && d.currentStock <= 0) return false;
+        if (/^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(exp) && d.currentStock <= 0) return false;
+        return true;
+      });
+      if (freshForMat.length > 0) {
+        setSaveStatusMsg(`신규 품목 기준정보 등록 중 (${freshForMat.length}건)...`);
         const matRes = await fetch('/api/gfs/materialize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            items: fresh.map((d) => ({
+            items: freshForMat.map((d) => ({
+              productCode: d.itemCode || undefined,
               name: d.itemName,
               boxes: 1,
               packUnit: d.packUnit,
               bagPrice: d.unitPrice,
               supplierHeader: d.vendor,
               safetyStock: d.safetyStock,
+              expiryDate: d.expiryDate || undefined,
             })),
           }),
         });

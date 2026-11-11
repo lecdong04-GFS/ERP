@@ -1,6 +1,12 @@
+import { normalizeDateYmd, pickLatestValidPrice } from '@/lib/gfs/bomMatch';
+
+export { normalizeDateYmd, pickLatestValidPrice };
+
 // GFS 발주시트 공용 계산 (일반/요일별 화면 공용, 클라이언트 안전)
 export interface SheetRowInput {
   id: number;
+  productId?: number;
+  targetOrderDays?: number;
   supplier: string;
   name: string;
   boxesBase: number;
@@ -78,7 +84,9 @@ export function calcRow(r: SheetRowInput): CalcResult {
 /** 거래처 헤더 및 DB orderDay 에서 납품요일 파싱 (월~일 순서 boolean) */
 export function parseDeliveryDays(header: string, orderDay?: string): boolean[] {
   const h = (orderDay || header || '').replace(/\s+/g, '');
-  if (/월화수목금토|매일|월~토/.test(h)) return [true, true, true, true, true, true, false];
+  if (/월화수목금토|월~토/.test(h)) return [true, true, true, true, true, true, false];
+  // '매일' 단독 키워드만 매칭 (매일유업/일미 등 오매칭 방지)
+  if (/^매일$/.test(h)) return [true, true, true, true, true, true, false];
   if (/월화수목금|주5일|월~금/.test(h)) return [true, true, true, true, true, false, false];
   if (/월수금/.test(h)) return [true, false, true, false, true, false, false];
   if (/화목토/.test(h)) return [false, true, false, true, false, true, false];
@@ -142,15 +150,25 @@ export function splitWeek(r: SheetRowInput, finalBoxes: number): number[] {
 }
 
 /** 납품 패턴 분류 */
-export function classifyPattern(header: string, orderDay?: string): '매일' | '월수금' | '화목토' | '주5일' | '기타' {
+export function classifyPattern(header: string, orderDay?: string): '매일' | '월수금' | '화목토' | '수금' | '화금' | '주5일' | '기타' {
   const h = (orderDay || header || '').replace(/\s+/g, '');
-  if (/월화수목금토|매일|월~토/.test(h)) return '매일';
+  if (!h) return '기타';
+  if (/월화수목금토|월~토/.test(h)) return '매일';
+  // '매일' 단독 키워드: 정확히 '매일'만 (매일유업/일미 등 오매칭 방지)
+  if (/^매일$/.test(h)) return '매일';
   if (/월화수목금|주5일|월~금/.test(h)) return '주5일';
   const hasMonWedFri = h.includes('월') && h.includes('수') && h.includes('금');
   const hasTueThuSat = h.includes('화') && h.includes('목') && h.includes('토');
   if (hasMonWedFri && !hasTueThuSat) return '월수금';
   if (hasTueThuSat && !hasMonWedFri) return '화목토';
-  return '주5일';
+  // 수금, 화금 패턴
+  const hasWed = h.includes('수'), hasFri = h.includes('금');
+  const hasTue = h.includes('화');
+  if (hasWed && hasFri && !h.includes('월') && !hasTue && !h.includes('목') && !h.includes('토')) return '수금';
+  if (hasTue && hasFri && !h.includes('월') && !hasWed && !h.includes('목') && !h.includes('토')) return '화금';
+  // 나머지 요일 조합
+  if (/[월화수목금토일]/.test(h)) return '기타';
+  return '기타';
 }
 
 /**
@@ -245,10 +263,28 @@ export function isExcludedFromOrder(name?: string | null, targetDate?: string): 
     const todayStr = kstTodayStr();
     const normTarget = targetDate ? targetDate.trim().replace(/\./g, '-').slice(0, 10) : '';
     const validTarget = /^\d{4}-\d{2}-\d{2}$/.test(normTarget) ? normTarget : '';
-    if (todayStr >= scheduled.effectiveDate || (validTarget !== '' && validTarget >= scheduled.effectiveDate)) {
+    if (todayStr >= scheduled.effectiveDate && validTarget === '') {
+      // targetDate 미지정 시에만 서버 날짜 기준 제외
+      return true;
+    }
+    if (validTarget !== '' && validTarget >= scheduled.effectiveDate) {
+      // 명시적 targetDate가 주어졌을 때는 그 날짜만 기준
       return true;
     }
   }
 
+  return false;
+}
+
+export function isExcludedOrderMaterial(
+  product: { name?: string | null; isUsed?: boolean | null; discontinuedDate?: string | null },
+  targetDate?: string
+): boolean {
+  if (!product) return true;
+  if (product.isUsed === false) return true;
+  const checkDate = targetDate ? normalizeDateYmd(targetDate) : kstTodayStr();
+  if (isExcludedFromOrder(product.name, checkDate)) return true;
+  const discDate = product.discontinuedDate ? normalizeDateYmd(product.discontinuedDate) : '';
+  if (discDate && checkDate >= discDate) return true;
   return false;
 }

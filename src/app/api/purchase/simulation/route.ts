@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { isDummyBomDetail } from '@/lib/gfs/bomMatch';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,12 +126,13 @@ export async function GET(req: NextRequest) {
           seasonalityNote: currentSeasonality.note,
           ingredients: bh.details
             .filter((d) => {
+              if (isDummyBomDetail(d.unit, d.unitQty)) return false;
               const cp = d.childProduct;
               const name = cp?.name || '';
               const disc = cp?.discontinuedDate;
               if (
                 isExcludedFromOrder(name, date) ||
-                (cp && (!cp.isUsed || (disc && (todayKst >= disc || date >= disc))))
+                (cp && (!cp.isUsed || (disc && date >= disc)))
               ) {
                 return false;
               }
@@ -188,10 +190,10 @@ export async function GET(req: NextRequest) {
       pendingMap.set(po.productCode, (pendingMap.get(po.productCode) || 0) + (Number(po.remainQty) || 0));
     }
 
-    // 6. 자재 메타데이터 맵 빌드 (발주 제외 및 삭제예정일 도래 품목 제외)
+    // 6. 자재 메타데이터 맵 빌드 (발주 제외 및 삭제예정일 도래 품목 제외 — date 기준 동적 비교)
     const activeMaterials = materials.filter((m) => {
       if (isExcludedFromOrder(m.name, date)) return false;
-      if (m.discontinuedDate && (todayKst >= m.discontinuedDate || date >= m.discontinuedDate)) return false;
+      if (m.discontinuedDate && date >= m.discontinuedDate) return false;
       return true;
     });
 
@@ -201,6 +203,7 @@ export async function GET(req: NextRequest) {
       const invPrice = m.inventories.find((inv) => (Number(inv.unitPrice) || 0) > 0)?.unitPrice || 0;
       const invUsage = m.inventories.find((inv) => (Number(inv.dailyUsage) || 0) > 0)?.dailyUsage || 0;
       const pendingIncoming = pendingMap.get(m.productCode) || 0;
+      const targetDays = Number((m as any).targetOrderDays) > 0 ? Number((m as any).targetOrderDays) : (m.partner?.leadTime || 1);
 
       materialMap[m.productCode] = {
         id: m.id,
@@ -212,6 +215,7 @@ export async function GET(req: NextRequest) {
         supplier: m.partner?.name || '협력사',
         partnerId: m.partnerId || '',
         leadTime: m.partner?.leadTime || 1,
+        targetOrderDays: targetDays,
         boxQty: m.boxQty > 0 ? m.boxQty : 1,
         minOrderQty: m.minOrderQty || 1,
         orderUnitQty: m.orderUnitQty || 1,

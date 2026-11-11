@@ -7,6 +7,8 @@ import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { kstToday } from '@/lib/kst';
 
 interface InItem {
+  productId?: number;
+  productCode?: string;
   name: string;
   boxes?: number;
   packUnit?: number;
@@ -16,6 +18,15 @@ interface InItem {
   supplierHeader?: string;
   safetyStock?: number;
   stockDays?: number | null; // GFS 버팀일 (calc.stockDays 그대로)
+  expiryDate?: string;
+}
+
+function isDiscontinuedOrJunkForMaterialize(rawName: string, expiryDate?: string): boolean {
+  if (/[\r\n]/.test(rawName)) return true; // 부자재 다중행 메뉴 라벨 (예: '슈퍼핫도그\n2종')
+  const exp = String(expiryDate || '').trim();
+  if (/삭제|불용|이관|단종/.test(exp)) return true;
+  if (/^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(exp)) return true;
+  return false;
 }
 
 // POST /api/gfs/materialize
@@ -46,24 +57,45 @@ export async function POST(req: NextRequest) {
     const created: any[] = [];
     const failed: any[] = [];
 
-    // 기존 활성 품목 일괄 조회 (정본 품번·낮은 ID 우선) — 별칭 매칭 및 비활성/중복 재생성 방지
-    const rawExisting = await prisma.product.findMany({
-      where: { isUsed: true },
+    // 기존 활성 및 비활성 품목 일괄 조회 (정본 품번·낮은 ID 우선) — 별칭 매칭 및 비활성/중복 재생성 방지
+    const allProductsRaw = await prisma.product.findMany({
       include: { partner: true },
       orderBy: { id: 'asc' },
     });
-    const existing = [...rawExisting].sort((a, b) => {
-      const aTemp = a.productCode.startsWith('MAT-') || a.productCode.startsWith('GFS-') ? 1 : 0;
-      const bTemp = b.productCode.startsWith('MAT-') || b.productCode.startsWith('GFS-') ? 1 : 0;
-      if (aTemp !== bTemp) return aTemp - bTemp;
-      return a.id - b.id;
-    });
+    const sortCanonFirst = (arr: typeof allProductsRaw) =>
+      [...arr].sort((a, b) => {
+        const aTemp = a.productCode.startsWith('MAT-') || a.productCode.startsWith('GFS-') ? 1 : 0;
+        const bTemp = b.productCode.startsWith('MAT-') || b.productCode.startsWith('GFS-') ? 1 : 0;
+        if (aTemp !== bTemp) return aTemp - bTemp;
+        return a.id - b.id;
+      });
+    const existing = sortCanonFirst(allProductsRaw.filter((p) => p.isUsed));
+    const inactiveList = sortCanonFirst(allProductsRaw.filter((p) => !p.isUsed));
+
+    const existingById = new Map<number, any>();
+    const existingByCode = new Map<string, any>();
     const existingByName = new Map<string, any>();
     const existingByNorm = new Map<string, any>();
+    const inactiveByCode = new Map<string, any>();
+    const inactiveByName = new Map<string, any>();
+    const inactiveByNorm = new Map<string, any>();
+    const allProductCodes = new Set<string>();
+
+    allProductsRaw.forEach((p) => {
+      if (p.productCode) allProductCodes.add(p.productCode);
+    });
     existing.forEach((p) => {
+      existingById.set(p.id, p);
+      if (p.productCode && !existingByCode.has(p.productCode)) existingByCode.set(p.productCode, p);
       if (!existingByName.has(p.name)) existingByName.set(p.name, p);
       const k = normName(p.name);
       if (k && !existingByNorm.has(k)) existingByNorm.set(k, p);
+    });
+    inactiveList.forEach((p) => {
+      if (p.productCode && !inactiveByCode.has(p.productCode)) inactiveByCode.set(p.productCode, p);
+      if (!inactiveByName.has(p.name)) inactiveByName.set(p.name, p);
+      const k = normName(p.name);
+      if (k && !inactiveByNorm.has(k)) inactiveByNorm.set(k, p);
     });
 
     // ── Phase A: 항목별 사전 계산 (DB 접근 없음) ──
@@ -86,8 +118,7 @@ export async function POST(req: NextRequest) {
       existing: any | null;
     }
     const prepared: Prepared[] = [];
-    const checkOrderDate = orderDate || kstToday();
-    const todayKst = kstToday();
+    const checkOrderDate = /^\d{4}-\d{2}-\d{2}$/.test(String(orderDate || '')) ? String(orderDate) : kstToday();
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
       const rawName = String(it.name || '').trim();
@@ -98,12 +129,41 @@ export async function POST(req: NextRequest) {
       const boxes = Number(it.boxes) || 0;
       if (boxes <= 0) continue; // 발주수량 0은 스킵
       const norm = normName(rawName);
-      const matchedExisting = existingByName.get(rawName) || existingByNorm.get(norm) || null;
+      const pidIn = Number(it.productId) || 0;
+      const codeIn = String(it.productCode || '').trim();
+      const matchedInactiveByName = inactiveByName.get(rawName) || inactiveByNorm.get(norm) || null;
+      const matchedActiveDirect =
+        (pidIn ? existingById.get(pidIn) : null) ||
+        existingByName.get(rawName) ||
+        existingByNorm.get(norm) ||
+        null;
+
+      // 활성 품목에 없고 이미 비활성/삭제된 품목이면 중복 재생성 차단
+      if (!matchedActiveDirect && matchedInactiveByName) {
+        failed.push({ name: rawName, reason: '비활성/삭제 품목' });
+        continue;
+      }
+      const isJunkOrDeleted = isDiscontinuedOrJunkForMaterialize(rawName, it.expiryDate);
+      const matchedExisting =
+        matchedActiveDirect ||
+        (!isJunkOrDeleted && codeIn ? existingByCode.get(codeIn) || null : null);
+
+      if (!matchedExisting) {
+        if (codeIn && inactiveByCode.has(codeIn)) {
+          failed.push({ name: rawName, reason: '비활성 품번' });
+          continue;
+        }
+        if (isJunkOrDeleted) {
+          failed.push({ name: rawName, reason: '비정형/삭제예정 라벨' });
+          continue;
+        }
+      }
+
       const targetNameForExclusion = matchedExisting?.name || rawName;
       const targetDiscDate = matchedExisting?.discontinuedDate || '';
       if (
         isExcludedFromOrder(targetNameForExclusion, checkOrderDate) ||
-        (targetDiscDate && (todayKst >= targetDiscDate || checkOrderDate >= targetDiscDate))
+        (targetDiscDate && checkOrderDate >= targetDiscDate)
       ) {
         failed.push({ name: rawName, reason: '발주 제외/단종 품목' });
         continue;
@@ -172,7 +232,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // ── Phase B-2: 품번 일괄 확정 (조회 1~2회, 충돌은 메모리에서 해소) ──
+        // ── Phase B-2: 품번 일괄 확정 (메모리 중복/기존 코드 전수 확인) ──
         let seq = 0;
         const codeByNorm = new Map<string, string>();
         for (const p of toCreate) {
@@ -184,26 +244,18 @@ export async function POST(req: NextRequest) {
           codeByNorm.set(p.norm, base);
         }
         const taken = new Set<string>();
-        const collideCheck = [...new Set(codeByNorm.values())];
-        if (collideCheck.length > 0) {
-          const existingCodes = new Set(
-            (await prisma.product.findMany({ where: { productCode: { in: collideCheck } }, select: { productCode: true } })).map(
-              (p) => p.productCode
-            )
-          );
-          for (const [normKey, base] of codeByNorm) {
-            let code = base;
-            if (taken.has(code) || existingCodes.has(code)) {
-              let n = 1;
+        for (const [normKey, base] of codeByNorm) {
+          let code = base;
+          if (taken.has(code) || allProductCodes.has(code)) {
+            let n = 1;
+            code = `${base}-${n}`;
+            while ((taken.has(code) || allProductCodes.has(code)) && n < 100) {
+              n += 1;
               code = `${base}-${n}`;
-              while ((taken.has(code) || existingCodes.has(code)) && n < 50) {
-                n += 1;
-                code = `${base}-${n}`;
-              }
             }
-            taken.add(code);
-            codeByNorm.set(normKey, code);
           }
+          taken.add(code);
+          codeByNorm.set(normKey, code);
         }
 
         // ── Phase B-3: 품목 일괄 생성 (1회) → ID 회수 (1회) ──
@@ -305,6 +357,7 @@ export async function POST(req: NextRequest) {
       const totalAmount = p.totalAmount > 0 ? p.totalAmount : p.boxes * boxPrice;
       const partner = (product as any).partner;
       matched.push({
+        productId: product.id,
         productCode: product.productCode,
         productName: product.name,
         orderQty: p.boxes,

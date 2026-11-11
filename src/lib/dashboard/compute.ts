@@ -115,11 +115,17 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       prisma.materialRequirement.count({
         where: { status: '미확정', shortageQty: { gt: 0 } },
       }),
-      prisma.safetyStock.count({ where: { shortageQty: { gt: 0 } } }),
+      prisma.safetyStock.count({
+        where: {
+          shortageQty: { gt: 0 },
+          product: { isUsed: true },
+        },
+      }),
       prisma.inventory.findMany({
         where: {
           currentQty: { gt: 0 },
           expiryDate: { not: '' },
+          product: { isUsed: true },
           AND: [{ expiryDate: { gte: kstDate(-30) } }, { expiryDate: { lte: kstDate(7) } }],
         },
         select: {
@@ -134,6 +140,9 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         take: 300,
       }),
       prisma.inventory.findMany({
+        where: {
+          product: { isUsed: true },
+        },
         select: { warehouse: true, currentQty: true, unitPrice: true, stockAmount: true },
       }),
       prisma.gfsSnapshot.findMany({

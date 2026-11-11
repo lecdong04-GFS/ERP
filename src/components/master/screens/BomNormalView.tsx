@@ -78,12 +78,19 @@ const detectVariety = (kind?: string | null, name?: string): string => {
   return '일반/기타';
 };
 
-// 단위 실효단가 계산 (g, ml는 kg/L 기준 매입단가이므로 1/1000 적용)
-const calculateEffectivePrice = (unit: string, purchasePrice: number): number => {
+const kstTodayStr = (): string =>
+  new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+// 단위 실효단가 계산 (Product.bomDivisor 우선 반영, 기본 g/ml는 1/1000 적용)
+const calculateEffectivePrice = (unit: string, purchasePrice: number, bomDivisor?: number): number => {
   if (!purchasePrice || purchasePrice <= 0) return 0;
+  const div = Number(bomDivisor) > 0 ? Number(bomDivisor) : 0;
   const u = (unit || '').toLowerCase().trim();
   if (u === 'g' || u === 'ml' || u === 'cc') {
-    return purchasePrice / 1000;
+    return purchasePrice / (div >= 100 ? div : 1000);
+  }
+  if ((u === '매' || u === '장') && div >= 100) {
+    return purchasePrice / div;
   }
   return purchasePrice;
 };
@@ -94,12 +101,13 @@ const calculateChildCosts = (
   unit: string,
   yieldRate: number,
   purchasePrice: number,
-  baseProdQty: number = 100
+  baseProdQty: number = 100,
+  bomDivisor?: number,
 ) => {
   const yRate = yieldRate > 0 ? yieldRate : 100;
   const inQty = Number(unitQty) || 0;
   const actQty = Math.round((inQty / (yRate / 100)) * 1000) / 1000;
-  const effectivePrice = calculateEffectivePrice(unit, purchasePrice || 0);
+  const effectivePrice = calculateEffectivePrice(unit, purchasePrice || 0, bomDivisor);
   const uCost = Math.round(actQty * effectivePrice * 10) / 10;
   const pInQty = Math.round(inQty * baseProdQty * 100) / 100;
   const pActQty = Math.round(actQty * baseProdQty * 100) / 100;
@@ -186,7 +194,7 @@ export const BomNormalView: React.FC = () => {
           const purchasePrice = cp.prices?.[0]?.purchasePrice || 0;
           const unit = d.unit || cp.unit || 'g';
           const yieldRate = d.yieldRate || 100;
-          const costs = calculateChildCosts(d.unitQty, unit, yieldRate, purchasePrice, baseQty);
+          const costs = calculateChildCosts(d.unitQty, unit, yieldRate, purchasePrice, baseQty, cp.bomDivisor);
 
           return {
             id: d.id,
@@ -468,7 +476,7 @@ export const BomNormalView: React.FC = () => {
       const payload = {
         parentProductId: selectedParent.id,
         version,
-        effectiveDate: new Date().toISOString().slice(0, 10),
+        effectiveDate: kstTodayStr(),
         details: children.map((c) => ({
           childProductId: c.childProductId,
           unitQty: c.unitInputQty,
@@ -524,7 +532,7 @@ export const BomNormalView: React.FC = () => {
         body: JSON.stringify({
           parentProductId: selectedParent.id,
           version: nextMinor,
-          effectiveDate: new Date().toISOString().slice(0, 10),
+          effectiveDate: kstTodayStr(),
           details: children.map((c) => ({
             childProductId: c.childProductId,
             unitQty: c.unitInputQty,

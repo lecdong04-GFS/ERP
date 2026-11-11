@@ -2,10 +2,18 @@ import { PrismaClient } from '@prisma/client';
 import * as xlsx from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isDummyBomDetail, menuKey } from '../src/lib/gfs/bomMatch';
 
 const prisma = new PrismaClient();
 
 const DIR_PATH = '/Users/bunker/GFS-ERP/제작관련 데이터/누락된 bom';
+
+// 단종/중복 자재 코드 -> 정본 자재 Product ID 매핑
+const CANONICAL_CHILD_ID_BY_CODE: Record<string, number> = {
+  '20001846': 53, // [냉동] 당근채(10kg/box) -> [냉장] 당근채(4kg*3봉 - 1박스)
+  '20193250': 309, // 신슈단무지(꼬들단무지) 중복 -> 정본 pid=309
+  '30002556': 337, // [상온] 오이피클랠리쉬 -> [상온] 늘푸른피클랠리쉬
+};
 
 function cleanGyeName(raw: string): string {
   if (!raw) return '';
@@ -15,16 +23,15 @@ function cleanGyeName(raw: string): string {
 }
 
 async function main() {
-  console.log('=== 11월 신메뉴 누락 BOM 전산 일괄 동기화 시작 ===');
+  console.log('=== 11월 신메뉴 BOM 평탄화(1개당 g/매/장) 동기화 시작 ===');
 
   if (!fs.existsSync(DIR_PATH)) {
     throw new Error(`Directory not found: ${DIR_PATH}`);
   }
 
-  const files = fs.readdirSync(DIR_PATH).filter(f => f.endsWith('.xls') || f.endsWith('.xlsx'));
+  const files = fs.readdirSync(DIR_PATH).filter((f) => f.endsWith('.xls') || f.endsWith('.xlsx'));
   console.log(`발견된 BOM 엑셀 파일: ${files.length}개\n`);
 
-  // 1. 공정(계) 마스터 맵 로드
   const gyes = await prisma.gyeMaster.findMany();
   const gyeMap = new Map<string, string>();
   for (const g of gyes) {
@@ -41,9 +48,20 @@ async function main() {
     return null;
   };
 
-  let totalHeadersCreated = 0;
+  // 이미 정본 BOM(BH#1..75)이 존재하는 메뉴는 중복 헤더 생성 방지
+  const existingHeaders = await prisma.bomHeader.findMany({
+    where: { isUsed: true },
+    include: { parentProduct: true },
+    orderBy: { id: 'asc' },
+  });
+  const headerByMenuKey = new Map<string, (typeof existingHeaders)[number]>();
+  for (const h of existingHeaders) {
+    const mk = menuKey(h.parentProduct?.name || '');
+    if (mk && !headerByMenuKey.has(mk)) headerByMenuKey.set(mk, h);
+  }
+
+  let totalHeadersUpdated = 0;
   let totalDetailsCreated = 0;
-  let totalProductsCreated = 0;
 
   for (const f of files) {
     const filePath = path.join(DIR_PATH, f);
@@ -52,32 +70,30 @@ async function main() {
     const ws = wb.Sheets[sheetName];
     const rows = xlsx.utils.sheet_to_json<any[]>(ws, { header: 1 });
 
-    if (rows.length < 4) {
-      console.warn(`[SKIP] 파일 데이터 부족: ${f}`);
-      continue;
-    }
+    if (rows.length < 4) continue;
 
     const row3 = rows[3] || [];
     const parentCode = String(row3[11] || '').trim();
     const parentName = String(row3[12] || '').trim();
-    const parentType = String(row3[15] || '완성품').trim();
+    const mk = menuKey(parentName);
 
-    console.log(`\n▶ [${f}] 처리 중...`);
-    console.log(`   - 완성품명: ${parentName} (코드: ${parentCode})`);
-
-    // 1) 자재(원부자재 및 반제품) 목록 파싱
-    interface ParsedChild {
-      childCode: string;
-      childName: string;
-      childGye: string;
-      childType: string;
-      level: number;
-      unitQty: number;
-      unit: string;
-      yieldRate: number;
+    const existingCanon = headerByMenuKey.get(mk);
+    if (existingCanon && existingCanon.id <= 75) {
+      console.log(`▶ [${f}] 정본 BOM 헤더(BH#${existingCanon.id} ${existingCanon.parentProduct.name}) 이미 존재 -> 중복 생성 건너뜀`);
+      continue;
     }
 
-    const childList: ParsedChild[] = [];
+    // 다단계 트리 평탄화: 각 레벨의 (투입량 / 생산기준량 / (레시피수율/100)) 누적 곱셈 후 원부자재(leaf)만 추출
+    interface StackNode {
+      level: number;
+      factorPerFg: number;
+    }
+    const stack: StackNode[] = [{ level: 0, factorPerFg: 1 }];
+    const leafMap = new Map<
+      number,
+      { productId: number; unitQty: number; unit: string; yieldRate: number; gyeId: string | null; remark: string }
+    >();
+
     for (let i = 4; i < rows.length; i++) {
       const r = rows[i];
       if (!r || r.length === 0) continue;
@@ -85,173 +101,114 @@ async function main() {
       const name = String(r[12] || '').trim();
       if (!name || name === 'null') continue;
 
-      const level = Number(r[0]) || 3;
+      const level = Number(r[0]) || 1;
       const gye = String(r[14] || '').trim();
       const type = String(r[15] || '원재료').trim();
-      const unitQty = Number(r[17]) || 0;
-      const unit = String(r[18] || 'g').trim();
-      const yieldRate = Number(r[20]) || 100;
+      const baseQty = Number(r[16]) || 1;
+      const rawUnitQty = Number(r[17]) || 0;
+      const rawUnit = String(r[18] || 'g').trim();
+      const itemYield = Number(r[20]) || 100;
+      const recipeYield = Number(r[21]) || 100;
 
-      childList.push({
-        childCode: code,
-        childName: name,
-        childGye: gye,
-        childType: type,
-        level,
-        unitQty,
-        unit,
-        yieldRate,
-      });
-    }
+      // 개봉 더미행(1봉(팩), 1통 등) 제외
+      if (isDummyBomDetail(rawUnit, rawUnitQty)) continue;
 
-    console.log(`   - 파싱된 하위 자재/반제품 수: ${childList.length}개`);
+      while (stack.length > 1 && stack[stack.length - 1].level >= level) {
+        stack.pop();
+      }
+      const parentFactor = stack[stack.length - 1].factorPerFg;
 
-    // 2) 각 자재 Product DB 조회 및 없으면 생성
-    const resolvedChildren: Array<{
-      productId: number;
-      level: number;
-      unitQty: number;
-      unit: string;
-      yieldRate: number;
-      gyeId: string | null;
-      remark: string;
-      sortOrder: number;
-    }> = [];
+      if (type === '반제품') {
+        const subFactor =
+          baseQty > 0 ? (parentFactor * rawUnitQty) / (baseQty * (recipeYield > 0 ? recipeYield / 100 : 1)) : 0;
+        stack.push({ level, factorPerFg: subFactor });
+        continue;
+      }
 
-    for (let idx = 0; idx < childList.length; idx++) {
-      const ch = childList[idx];
-      let p = await prisma.product.findFirst({
-        where: {
-          OR: [
-            ...(ch.childCode ? [{ productCode: ch.childCode }] : []),
-            { name: ch.childName },
-          ],
-        },
-      });
+      // 원재료/부자재 leaf: 완성품 1개당 소요량(g/매/장)으로 환산
+      let unit = rawUnit;
+      let qtyInBase = rawUnitQty;
+      if (unit.toLowerCase() === 'kg') {
+        qtyInBase = rawUnitQty * 1000;
+        unit = 'g';
+      }
+      const perFgQty =
+        baseQty > 0
+          ? (parentFactor * qtyInBase) / (baseQty * (itemYield > 0 ? itemYield / 100 : 1))
+          : 0;
+      if (!(perFgQty > 0)) continue;
 
-      if (!p) {
-        p = await prisma.product.create({
-          data: {
-            productCode: ch.childCode || `MAT-${Date.now()}-${idx}`,
-            name: ch.childName,
-            category: ch.childType === '반제품' ? '반제품' : '원재료',
-            unit: ch.unit || 'g',
-            status: '정상',
+      let pId = CANONICAL_CHILD_ID_BY_CODE[code] || 0;
+      if (!pId) {
+        const p = await prisma.product.findFirst({
+          where: {
             isUsed: true,
-            remark: `신메뉴 BOM 자재 자동등록 (${f})`,
+            category: { notIn: ['완성품', '반제품'] },
+            OR: [...(code ? [{ productCode: code }] : []), { name }],
           },
         });
-        totalProductsCreated++;
+        if (!p) continue;
+        pId = p.id;
       }
 
-      resolvedChildren.push({
-        productId: p.id,
-        level: ch.level,
-        unitQty: ch.unitQty,
-        unit: ch.unit,
-        yieldRate: ch.yieldRate,
-        gyeId: findGyeId(ch.childGye),
-        remark: ch.childGye,
-        sortOrder: idx + 1,
-      });
+      const cur = leafMap.get(pId);
+      if (cur) {
+        cur.unitQty = Math.round((cur.unitQty + perFgQty) * 1000) / 1000;
+      } else {
+        leafMap.set(pId, {
+          productId: pId,
+          unitQty: Math.round(perFgQty * 1000) / 1000,
+          unit,
+          yieldRate: 100,
+          gyeId: findGyeId(gye),
+          remark: gye,
+        });
+      }
     }
 
-    // 3) 이 완제품에 매핑되어야 할 모든 Product ID 수집
-    //    - 마스터 대표 완제품 (없으면 생성)
-    //    - 수주에 들어오는 1편, 2편, (주문) 변형 상품들
-    const targetProductIds = new Set<number>();
-
-    // 3-1) 마스터 상품
     let masterProd = await prisma.product.findFirst({
       where: {
-        OR: [
-          ...(parentCode ? [{ productCode: parentCode }] : []),
-          { name: parentName },
-        ],
+        category: '완성품',
+        OR: [...(parentCode ? [{ productCode: parentCode }] : []), { name: parentName }],
       },
     });
+    if (!masterProd) continue;
 
-    if (!masterProd) {
-      masterProd = await prisma.product.create({
+    const header =
+      existingCanon ||
+      (await prisma.bomHeader.create({
         data: {
-          productCode: parentCode || `FG-${Date.now()}`,
-          name: parentName,
-          category: '완성품',
-          unit: 'ea',
-          status: '정상',
-          isUsed: true,
-          remark: `11월 신메뉴 레시피 정본 (${f})`,
-        },
-      });
-      totalProductsCreated++;
-    }
-    targetProductIds.add(masterProd.id);
-
-    // 3-2) 1편, 2편, (주문) 관련 수주 상품들 검색 및 추가
-    const variants = await prisma.product.findMany({
-      where: {
-        name: { contains: parentName },
-      },
-    });
-    for (const v of variants) {
-      targetProductIds.add(v.id);
-    }
-
-    console.log(`   - BOM을 연동할 상품 대상: ${targetProductIds.size}개 (${parentName} 및 1편/2편/(주문) 포함)`);
-
-    // 4) 각 대상 Product에 대해 BomHeader & BomDetail 동기화
-    for (const prodId of targetProductIds) {
-      // 기존 BOM이 있으면 삭제 후 재생성 (클린 동기화)
-      const existingHeaders = await prisma.bomHeader.findMany({
-        where: { parentProductId: prodId },
-        select: { id: true },
-      });
-
-      if (existingHeaders.length > 0) {
-        await prisma.bomDetail.deleteMany({
-          where: { bomHeaderId: { in: existingHeaders.map(h => h.id) } },
-        });
-        await prisma.bomHeader.deleteMany({
-          where: { id: { in: existingHeaders.map(h => h.id) } },
-        });
-      }
-
-      // 새 BomHeader 생성
-      const header = await prisma.bomHeader.create({
-        data: {
-          parentProductId: prodId,
+          parentProductId: masterProd.id,
           version: '26.11',
           effectiveDate: '2026-11-05',
-          remark: `11월 신메뉴 레시피 동기화 (${f})`,
+          remark: `11월 신메뉴 평탄화 레시피 (${f})`,
           isUsed: true,
         },
-      });
-      totalHeadersCreated++;
+        include: { parentProduct: true },
+      }));
 
-      // BomDetail 일괄 생성
-      await prisma.bomDetail.createMany({
-        data: resolvedChildren.map(c => ({
+    await prisma.bomDetail.deleteMany({ where: { bomHeaderId: header.id } });
+    let sortOrder = 0;
+    for (const c of leafMap.values()) {
+      await prisma.bomDetail.create({
+        data: {
           bomHeaderId: header.id,
           childProductId: c.productId,
-          level: c.level,
+          level: 3,
           unitQty: c.unitQty,
           unit: c.unit,
           yieldRate: c.yieldRate,
           gyeId: c.gyeId,
           remark: c.remark,
-          sortOrder: c.sortOrder,
-        })),
+          sortOrder: ++sortOrder,
+        },
       });
-      totalDetailsCreated += resolvedChildren.length;
+      totalDetailsCreated++;
     }
+    totalHeadersUpdated++;
   }
 
-  console.log('\n=============================================');
-  console.log('🎉 9대 신메뉴 BOM 전산 일괄 동기화 완료!');
-  console.log(`- 생성/동기화된 BOM Header 수: ${totalHeadersCreated}개`);
-  console.log(`- 등록된 레시피 원부자재 Detail 수: ${totalDetailsCreated}개`);
-  console.log(`- 신규 등록된 Product 수: ${totalProductsCreated}개`);
-  console.log('=============================================\n');
+  console.log(`완료: 헤더 ${totalHeadersUpdated}개, 상세 ${totalDetailsCreated}건`);
 }
 
 main()

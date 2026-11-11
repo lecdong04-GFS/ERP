@@ -6,6 +6,7 @@ import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 
 interface OrderResultItem {
+  productId?: number;
   productCode: string;
   productName?: string;
   orderQty: number;
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     const todayKst = kstToday();
-    const today = orderDate || todayKst;
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(String(orderDate || '')) ? String(orderDate) : todayKst;
 
     // 발주 제외 요청 품목 필터링
     const targetItems = items.filter((it) => {
@@ -65,10 +66,24 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 그룹핑: partnerId별 1건씩 발주서 생성 (미지정 시 첫 번째 유효 거래처 사용)
+    // ── 품목 일괄 조회 (productId 우선, productCode 보조) ──
+    const allIds = [...new Set(targetItems.map((it) => Number(it.productId) || 0).filter((n) => n > 0))];
+    const allCodes = [...new Set(targetItems.map((it) => String(it.productCode || '').trim()).filter(Boolean))];
+    const prodOr: any[] = [];
+    if (allIds.length > 0) prodOr.push({ id: { in: allIds } });
+    if (allCodes.length > 0) prodOr.push({ productCode: { in: allCodes } });
+    const foundProducts = prodOr.length > 0 ? await prisma.product.findMany({ where: { OR: prodOr } }) : [];
+    const productById = new Map(foundProducts.map((p) => [p.id, p]));
+    const productByCode = new Map(foundProducts.map((p) => [p.productCode, p]));
+    const resolveProduct = (it: OrderResultItem) =>
+      (Number(it.productId) ? productById.get(Number(it.productId)) : undefined) ||
+      productByCode.get(String(it.productCode || '').trim());
+
+    // 그룹핑: 품목 거래처(요청 partnerId → 품목 마스터 partnerId → 요청 공통 partnerId) 별 1건씩 발주서 생성
     const groups = new Map<string, OrderResultItem[]>();
     for (const it of targetItems) {
-      const pid = it.partnerId || partnerId || '__DEFAULT__';
+      const prod = resolveProduct(it);
+      const pid = it.partnerId || prod?.partnerId || partnerId || '__DEFAULT__';
       if (!groups.has(pid)) groups.set(pid, []);
       groups.get(pid)!.push(it);
     }
@@ -112,19 +127,6 @@ export async function POST(req: NextRequest) {
       partnerById.set(resolvedDefaultPartner.id, resolvedDefaultPartner);
       partnerByName.set(resolvedDefaultPartner.name, resolvedDefaultPartner);
     }
-
-    const allCodes = [
-      ...new Set(
-        [...groups.values()]
-          .flatMap((gi) => gi.map((it) => String(it.productCode || '').trim()))
-          .filter(Boolean)
-      ),
-    ];
-    const foundProducts =
-      allCodes.length > 0
-        ? await prisma.product.findMany({ where: { productCode: { in: allCodes } } })
-        : [];
-    const productByCode = new Map(foundProducts.map((p) => [p.productCode, p]));
 
     const logRows: {
       logDate: string;
@@ -177,13 +179,10 @@ export async function POST(req: NextRequest) {
       }[] = [];
 
       for (const it of groupItems) {
-        const code = String(it.productCode || '').trim();
-        const product = code ? productByCode.get(code) : undefined;
+        const product = resolveProduct(it);
         if (!product) continue; // 미등록 품목은 스킵
         const itemName = it.productName || product.name;
-        const isPastDisc =
-          Boolean(product.discontinuedDate) &&
-          (todayKst >= product.discontinuedDate! || today >= product.discontinuedDate!);
+        const isPastDisc = Boolean(product.discontinuedDate) && today >= product.discontinuedDate!;
         if (!product.isUsed || isPastDisc || isExcludedFromOrder(itemName, today)) {
           skippedExcludedCount += 1;
           continue;
@@ -200,7 +199,7 @@ export async function POST(req: NextRequest) {
           productCode: product.productCode,
           productName: itemName,
           category: product.category,
-          unit: it.unit || product.unit || 'box',
+          unit: it.unit || 'box',
           orderQty: qty,
           unitPrice: price,
           amount: lineAmount,
@@ -275,26 +274,24 @@ export async function POST(req: NextRequest) {
       const matReqData = targetItems
         .filter((it) => {
           if (!(Number(it.orderQty) > 0)) return false;
-          const product = productByCode.get(String(it.productCode || '').trim());
+          const product = resolveProduct(it);
           if (!product || !product.isUsed) return false;
-          const isPastDisc =
-            Boolean(product.discontinuedDate) &&
-            (todayKst >= product.discontinuedDate! || today >= product.discontinuedDate!);
+          const isPastDisc = Boolean(product.discontinuedDate) && today >= product.discontinuedDate!;
           if (isPastDisc || isExcludedFromOrder(it.productName || product.name, today)) return false;
           return true;
         })
         .map((it) => {
-          const product = productByCode.get(String(it.productCode || '').trim());
+          const product = resolveProduct(it);
           return {
             reqDate: today,
             shift: '1편',
             productCode: '',
             productName: '',
-            materialCode: String(it.productCode || '').trim(),
+            materialCode: product?.productCode || String(it.productCode || '').trim(),
             materialName: it.productName || product?.name || '',
             category: product?.category || '원재료',
             requiredQty: Number(it.orderQty) || 0,
-            unit: it.unit || product?.unit || 'ea',
+            unit: it.unit || 'box',
             partnerId: it.partnerId || product?.partnerId || null,
             partnerName: it.partnerName || '',
             currentStock: 0,

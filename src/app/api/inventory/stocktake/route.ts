@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { isExcludedOrderMaterial, pickLatestValidPrice } from '@/lib/gfs/orderCalc';
 
 // GET /api/inventory/stocktake?warehouse=냉장1&category=원재료&stocktakeDate=2026-11-07&search=...
 export async function GET(req: NextRequest) {
@@ -13,7 +14,12 @@ export async function GET(req: NextRequest) {
     const stocktakeDate = searchParams.get('stocktakeDate') || kstToday();
     const diffFilter = searchParams.get('diffFilter') || 'ALL'; // ALL, DIFF, MATCH, SHORTAGE, SURPLUS
 
-    const where: any = {};
+    const where: any = {
+      product: {
+        isUsed: true,
+        category: { notIn: ['완성품', '반제품'] },
+      },
+    };
     if (warehouse && warehouse !== 'ALL') {
       where.warehouse = warehouse;
     }
@@ -39,14 +45,14 @@ export async function GET(req: NextRequest) {
       recordMap.set(key, rec);
     });
 
-    // 2. 현재고(Inventory) 및 품목 마스터/거래처/단가 조회 (606품목)
-    const inventories = await prisma.inventory.findMany({
+    // 2. 현재고(Inventory) 및 품목 마스터/거래처/단가 조회
+    const rawInventories = await prisma.inventory.findMany({
       where,
       include: {
         product: {
           include: {
             partner: true,
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+            prices: { orderBy: { effectiveDate: 'desc' }, take: 5 },
           },
         },
       },
@@ -56,10 +62,15 @@ export async function GET(req: NextRequest) {
       ],
     });
 
+    const inventories = rawInventories.filter(
+      (inv) => inv.product && !isExcludedOrderMaterial(inv.product, stocktakeDate)
+    );
+
     // 3. 실사 데이터 매핑 및 장부/실사/차이 계산
     const allRows = inventories.map((inv, idx) => {
       const boxUnit = inv.product?.boxQty || 1;
-      const unitPrice = inv.unitPrice || inv.product?.prices[0]?.purchasePrice || 0;
+      const latestPrice = pickLatestValidPrice(inv.product?.prices || []);
+      const unitPrice = inv.unitPrice || latestPrice?.purchasePrice || 0;
       const rec = recordMap.get(`${inv.productCode}|${inv.warehouse}`);
 
       const bookQty = rec ? rec.bookQty : (inv.currentQty || 0);

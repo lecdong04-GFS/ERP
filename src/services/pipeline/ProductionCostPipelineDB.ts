@@ -14,6 +14,13 @@
 import { PrismaClient } from '@prisma/client';
 import { normName } from '@/lib/gfs/norm';
 import {
+  calcBomEffectiveUnitCost,
+  dedupSalesOrders,
+  isDummyBomDetail,
+  menuKey,
+  pickLatestValidPrice,
+} from '@/lib/gfs/bomMatch';
+import {
   OrderIntakeItem,
   WorkOrderDispatchItem,
   MaterialLedgerDepletionItem,
@@ -106,9 +113,10 @@ export class ProductionCostPipelineDBEngine {
     let orders: OrderIntakeItem[] = [];
 
     if (salesOrders.length > 0) {
+      const uniqueSalesOrders = dedupSalesOrders(salesOrders);
       // 품목별로 집계 (같은 품번의 여러 수주를 합산)
       const itemMap: Record<string, OrderIntakeItem> = {};
-      for (const so of salesOrders) {
+      for (const so of uniqueSalesOrders) {
         for (const d of so.details) {
           const key = d.product.productCode;
           if (!itemMap[key]) {
@@ -130,7 +138,7 @@ export class ProductionCostPipelineDBEngine {
         }
       }
       orders = Object.values(itemMap);
-      addLog('STEP 1: 수주 조회', `DB에서 ${salesOrders.length}건 수주, ${orders.length}개 품목 집계 완료`, 'success');
+      addLog('STEP 1: 수주 조회', `DB에서 ${uniqueSalesOrders.length}건 수주, ${orders.length}개 품목 집계 완료`, 'success');
     } else if (params.useLegacyFallback === true) {
       // 명시적 요청 시에만 내장 샘플 데이터 사용 (폴백)
       orders = [...SAMPLE_STORE_ORDERS];
@@ -239,7 +247,7 @@ export class ProductionCostPipelineDBEngine {
           include: {
             childProduct: {
               include: {
-                prices: { orderBy: { effectiveDate: 'desc' as const }, take: 1 },
+                prices: { orderBy: [{ effectiveDate: 'desc' as const }, { id: 'desc' as const }], take: 10 },
                 partner: true,
               },
             },
@@ -248,26 +256,32 @@ export class ProductionCostPipelineDBEngine {
           orderBy: { sortOrder: 'asc' },
         },
       },
+      orderBy: { id: 'asc' },
     });
 
     // DB BOM을 코드 및 품명 기반 맵으로 변환
-    const dbBomByCode = new Map<string, typeof bomHeaders[0]>();
-    const dbBomByName = new Map<string, typeof bomHeaders[0]>();
-    const dbBomByNorm = new Map<string, typeof bomHeaders[0]>();
+    const dbBomByCode = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByName = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByNorm = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByMenuKey = new Map<string, (typeof bomHeaders)[0]>();
 
     for (const bh of bomHeaders) {
       if (bh.parentProduct?.productCode) dbBomByCode.set(bh.parentProduct.productCode, bh);
       if (bh.parentProduct?.name) {
         dbBomByName.set(bh.parentProduct.name, bh);
         dbBomByNorm.set(normName(bh.parentProduct.name), bh);
+        const mk = menuKey(bh.parentProduct.name);
+        if (mk && !dbBomByMenuKey.has(mk)) dbBomByMenuKey.set(mk, bh);
       }
     }
 
-    const findDbBom = (order: { reprCode: string; reprName: string }) => {
+    const findDbBom = (order: { reprCode: string; reprName: string; orderItemName?: string }) => {
       return (
         dbBomByCode.get(order.reprCode) ||
         dbBomByName.get(order.reprName) ||
-        dbBomByNorm.get(normName(order.reprName))
+        dbBomByNorm.get(normName(order.reprName)) ||
+        dbBomByMenuKey.get(menuKey(order.reprName)) ||
+        (order.orderItemName ? dbBomByMenuKey.get(menuKey(order.orderItemName)) : undefined)
       );
     };
 
@@ -344,6 +358,7 @@ export class ProductionCostPipelineDBEngine {
         // === DB BOM 사용 ===
         dbBomUsed++;
         for (const bd of dbBom.details) {
+          if (isDummyBomDetail(bd.unit, bd.unitQty)) continue;
           const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
           const compTotalReq = Math.round(effOrderQty * factor * 100) / 100;
           const compReq1 = Math.round(order.orderQty1 * factor * 100) / 100;
@@ -369,24 +384,27 @@ export class ProductionCostPipelineDBEngine {
             });
           }
 
-          if (bd.childProduct) {
-            const code = bd.childProduct.productCode || `MAT-${bd.childProductId}`;
-            const unitCost = bd.childProduct.prices?.[0]?.purchasePrice || 0;
+          if (bd.childProduct && bd.childProduct.isUsed) {
+            const cp = bd.childProduct as any;
+            const code = cp.productCode || `MAT-${bd.childProductId}`;
+            const unitCost = Number(pickLatestValidPrice(cp.prices)?.purchasePrice) || 0;
+            const divisor = Number(cp.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
+            const reqInPacks = divisor > 1 ? compTotalReq / divisor : compTotalReq;
             if (!materialRequirementMap[code]) {
               materialRequirementMap[code] = {
                 partCode: code,
-                partName: bd.childProduct.name,
-                partSpec: bd.childProduct.spec || '',
-                unit: bd.unit || bd.childProduct.unit || 'g',
-                warehouse: bd.childProduct.warehouse || '상온',
+                partName: cp.name,
+                partSpec: cp.spec || '',
+                unit: cp.unit || bd.unit || '봉',
+                warehouse: cp.warehouse || '상온',
                 totalReqQty: 0,
-                category: bd.childProduct.category || '원재료',
-                partnerId: bd.childProduct.partnerId,
-                partnerName: bd.childProduct.partner?.name || '',
+                category: cp.category || '원재료',
+                partnerId: cp.partnerId,
+                partnerName: cp.partner?.name || '',
                 unitCost,
               };
             }
-            materialRequirementMap[code].totalReqQty += compTotalReq;
+            materialRequirementMap[code].totalReqQty += reqInPacks;
           }
         }
       } else if (BOM_MASTER_RECIPES[order.reprCode]) {
@@ -557,9 +575,19 @@ export class ProductionCostPipelineDBEngine {
       const dbBom = findDbBom(order);
       if (dbBom && dbBom.details.length > 0) {
         for (const bd of dbBom.details) {
-          const price = bd.childProduct.prices[0]?.purchasePrice || 0;
-          unitMaterialCost += bd.unitQty * price;
+          if (isDummyBomDetail(bd.unit, bd.unitQty)) continue;
+          const cp = bd.childProduct as any;
+          const price = Number(pickLatestValidPrice(cp?.prices)?.purchasePrice) || 0;
+          const unitStr = (bd.unit || cp?.unit || 'g').toLowerCase();
+          const yieldFactor = (bd.yieldRate || 100) > 0 ? (bd.yieldRate || 100) / 100 : 1;
+          const actQty = bd.unitQty / yieldFactor;
+          const div = Number(cp?.bomDivisor) > 0
+            ? Number(cp.bomDivisor)
+            : (unitStr === 'g' || unitStr === 'ml' ? 1000 : 1);
+          const effQty = unitStr === 'kg' && div >= 100 ? actQty * 1000 : actQty;
+          unitMaterialCost += calcBomEffectiveUnitCost(effQty, price, div);
         }
+        unitMaterialCost = Math.round(unitMaterialCost * 10) / 10;
       } else {
         const recipe = BOM_MASTER_RECIPES[order.reprCode];
         if (recipe) {

@@ -114,7 +114,7 @@ export const MatOrderSimulView: React.FC = () => {
             dailyUse: ref && Number(ref.dailyUsage) > 0 ? Number(ref.dailyUsage) : 0,
             orderDays: ref && Number(ref.days) > 0 ? Number(ref.days) : 0,
             stockDays: ref && ref.stockDays != null && !isNaN(Number(ref.stockDays)) ? Number(ref.stockDays) : null,
-            pattern: ref?.supplier ? classifyPattern(ref.supplier) : '기타',
+            pattern: ref ? classifyPattern(ref.orderDay || ref.supplier || '') : '기타',
           };
         });
         setRows(loaded);

@@ -140,6 +140,10 @@ model Product {
   safetyStockQty Float   @default(0)    // 안전재고량
   minOrderQty   Float    @default(0)    // 최소발주수량
   orderUnitQty  Float    @default(0)    // 발주단위수량
+  targetOrderDays Float  @default(0)    // 목표 발주일수 (엑셀 G열: 4.5~10일, 0이면 거래처 leadTime 폴백)
+  bomDivisor    Float    @default(1000) // BOM 일사용량 환산 분모 (기본 1000g→kg/봉, 포장재 1500/1800 등)
+  bomMultiplier Float    @default(1)    // BOM 일사용량 추가 계수/수율 (엑셀 H열 후행 곱셈: 0.75, 0.8 등)
+  bomRoundDigits Int     @default(1)    // BOM 일사용량 ROUNDUP 소수 자릿수 (0, 1, 2, 3)
   discontinuedDate String? // 단종일
   status        String   @default("정상") // 정상, 단종, 불용
   remark        String   @default("")
@@ -238,6 +242,7 @@ model BomDetail {
   unitQty       Float    @default(0)   // 단위투입량
   unit          String   @default("")  // 투입단위 (g, kg, ea, 매)
   yieldRate     Float    @default(100) // 수율(%) — 80~100
+  orderBuffer   Float    @default(1)   // 발주 여유계수 (야채/참치/마요네즈/바코드 1.1, 1.01 등)
   gyeId         String?                // 투입공정 계id
   nextProcess   String   @default("")  // 다음공정
   sortOrder     Int      @default(0)
@@ -724,7 +729,7 @@ model Inventory {
   expiryDate    String   @default("")  // 유통기한
   warehouse     String   @default("")  // 보관창고
   currentQty    Float    @default(0)   // 현재고 수량
-  dailyUsage    Float    @default(0)   // 일 사용량(박스)
+  dailyUsage    Float    @default(0)   // 일 사용량(봉/단위)
   unit          String   @default("")
   unitPrice     Float    @default(0)   // 단가
   stockAmount   Float    @default(0)   // 재고금액
@@ -754,7 +759,7 @@ model InventorySnapshot {
   lotNo         String   @default("")
   expiryDate    String   @default("")  // 유통기한
   currentQty    Float    @default(0)   // 해당 일자 재고수량
-  dailyUsage    Float    @default(0)   // 일 사용량(박스)
+  dailyUsage    Float    @default(0)   // 일 사용량(봉/단위)
   packUnit      Float    @default(0)   // 입수량
   boxQty        Float    @default(0)   // 박스
   pieceQty      Float    @default(0)   // 낱개

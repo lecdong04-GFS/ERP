@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { pickLatestDeliveryPrice, pickLatestValidPrice } from '@/lib/gfs/bomMatch';
 
 // GET /api/master/product?category=완성품&search=김밥
 export async function GET(req: NextRequest) {
@@ -24,8 +25,8 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         prices: {
-          orderBy: { effectiveDate: 'desc' },
-          take: 1,
+          orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+          take: 10,
         },
         partner: true,
         gye: true,
@@ -33,9 +34,9 @@ export async function GET(req: NextRequest) {
       orderBy: { productCode: 'asc' },
     });
 
-    // BOM 구성품 수 (부모 기준 최신 버전 합산 → 버전별 중복 제외는 최신 버전만)
+    // BOM 구성품 수 (활성 정본 헤더 기준)
     const headers = await prisma.bomHeader.findMany({
-      where: { parentProductId: { in: products.map((p) => p.id) } },
+      where: { isUsed: true, parentProductId: { in: products.map((p) => p.id) } },
       select: {
         parentProductId: true,
         version: true,
@@ -65,8 +66,12 @@ export async function GET(req: NextRequest) {
       safetyStockQty: p.safetyStockQty,
       minOrderQty: p.minOrderQty,
       orderUnitQty: p.orderUnitQty,
-      deliveryPrice: p.prices[0]?.deliveryPrice ?? 0,
-      purchasePrice: p.prices[0]?.purchasePrice ?? 0,
+      targetOrderDays: (p as any).targetOrderDays ?? 0,
+      bomDivisor: (p as any).bomDivisor ?? 1000,
+      bomMultiplier: (p as any).bomMultiplier ?? 1,
+      bomRoundDigits: (p as any).bomRoundDigits ?? 1,
+      deliveryPrice: pickLatestDeliveryPrice(p.prices),
+      purchasePrice: pickLatestValidPrice(p.prices),
       partnerId: p.partnerId ?? '',
       partnerName: p.partner?.name ?? '',
       gyeId: p.gyeId ?? '',

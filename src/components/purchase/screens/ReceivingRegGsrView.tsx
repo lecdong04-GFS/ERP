@@ -36,6 +36,19 @@ function getKoreanDayOfWeek(dateStr: string): string {
   return isNaN(d.getTime()) ? '목' : days[d.getDay()];
 }
 
+function normalizeYmd(val: any): string {
+  if (!val) return kstToday();
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (mdy) {
+    let y = Number(mdy[3]);
+    if (y < 100) y += 2000;
+    return `${y}-${String(mdy[1]).padStart(2, '0')}-${String(mdy[2]).padStart(2, '0')}`;
+  }
+  return s.replace(/\./g, '-').slice(0, 10);
+}
+
 // 빈 기본값
 const INITIAL_RECEIVING_DATA: any[] = [];
 
@@ -108,6 +121,8 @@ export const ReceivingRegGsrView: React.FC = () => {
           const remainQty = Number(dt.remainQty) > 0 ? Number(dt.remainQty) : Number(dt.orderQty) - Number(dt.receivedQty || 0);
           const unitPrice = Number(dt.unitPrice || dt.product?.unitPrice || 0);
 
+          const normOrderDate = normalizeYmd(po.orderDate || kstToday());
+
           return {
             id: idx++,
             orderDetailId: dt.id,
@@ -116,21 +131,21 @@ export const ReceivingRegGsrView: React.FC = () => {
             productCode: dt.productCode || dt.product?.productCode || '',
             partnerId: po.partnerId || dt.product?.partnerId || '',
             manualClose: false,
-            orderDate: po.orderDate || kstToday(),
-            dayOfWeek: getKoreanDayOfWeek(po.orderDate || kstToday()),
+            orderDate: normOrderDate,
+            dayOfWeek: getKoreanDayOfWeek(normOrderDate),
             orderNo: po.orderNo || `PO-${dt.id}`,
             method: po.orderType || '스마트발주',
             supplier: po.partnerName || po.partner?.name || '협력사',
             type: dt.category || (dt.productCode?.startsWith('R') ? '부자재' : '원재료'),
             name: dt.productName || dt.product?.name,
             spec: dt.product?.spec || '-',
-            unit: dt.unit || dt.product?.unit || 'box',
+            unit: dt.unit || 'box',
             orderQty: Number(dt.orderQty || 0),
             prevRecvQty: Number(dt.receivedQty || 0),
             clientOutQty: remainQty,
             carNo: '경기88바1234',
             recvQty: remainQty, // 기본값: 잔량 전량 입고 제안
-            unitQty: Number(dt.orderUnitQty || 1),
+            unitQty: Number(dt.product?.boxQty || dt.orderUnitQty || 1),
             pieceQty: 0,
             warehouse: dt.product?.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(dt.product.warehouse)
               ? dt.product.warehouse
@@ -144,7 +159,7 @@ export const ReceivingRegGsrView: React.FC = () => {
             unitPrice,
             recvAmt: remainQty * unitPrice,
             diffQty: 0,
-            lotNo: `LOT-${(po.orderDate || kstToday()).replace(/-/g, '').slice(2)}-${(dt.productCode || 'MAT').slice(-4)}`,
+            lotNo: `LOT-${normOrderDate.replace(/-/g, '').slice(2)}-${(dt.productCode || 'MAT').slice(-4)}`,
             remark: po.remark ? `[발주연계] ${po.remark}` : '스마트발주(GFS) 정상입고',
           };
         });

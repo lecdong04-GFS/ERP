@@ -131,6 +131,57 @@ export const BomExplosionView: React.FC = () => {
           }));
           if (newTrees.length > 0) {
             setTreeData(newTrees);
+            setSelectedNodeId(newTrees[0].id);
+            setExpandedNodes({ [newTrees[0].id]: true });
+          }
+
+          const dynamicRows: ExplosionRow[] = [];
+          let rowSeq = 1;
+          for (const b of json.data) {
+            const p = b.parentProduct;
+            if (!p) continue;
+            const pCode = p.productCode || `FG-${p.id}`;
+            dynamicRows.push({
+              id: rowSeq++,
+              partId: pCode,
+              category: p.category || '완성품',
+              partName: p.name || '',
+              partSpec: p.spec || '1ea',
+              partUnit: p.unit || 'ea',
+              level: 0,
+              lv1: pCode,
+              lv2: '',
+              lv3: '',
+              lv4: '',
+              lv5: '',
+              lv6: '',
+              lv7: '',
+            });
+            for (const d of b.details || []) {
+              const cp = d.childProduct;
+              if (!cp) continue;
+              const cCode = cp.productCode || `MAT-${cp.id}`;
+              const lvl = Number(d.level) || 3;
+              dynamicRows.push({
+                id: rowSeq++,
+                partId: cCode,
+                category: cp.category || '원재료',
+                partName: cp.name || '',
+                partSpec: cp.spec || `${d.unitQty}${d.unit || 'g'}`,
+                partUnit: d.unit || cp.unit || 'g',
+                level: lvl,
+                lv1: '',
+                lv2: lvl <= 2 ? cCode : '',
+                lv3: lvl >= 3 ? cCode : '',
+                lv4: '',
+                lv5: '',
+                lv6: '',
+                lv7: '',
+              });
+            }
+          }
+          if (dynamicRows.length > 0) {
+            setExplosionRows(dynamicRows);
           }
         }
       })
@@ -248,7 +299,7 @@ export const BomExplosionView: React.FC = () => {
         </div>
 
         <span className="text-[11px] text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-300 font-semibold shadow-2xs">
-          전개 품목수: <span className="text-blue-700 font-bold">{SAMPLE_EXPLOSION_DATA.length}</span> 건
+          전개 품목수: <span className="text-blue-700 font-bold">{explosionRows.length}</span> 건
         </span>
       </div>
 
@@ -284,7 +335,7 @@ export const BomExplosionView: React.FC = () => {
           <div className="flex-1 min-h-0">
             <MasterDataGrid
               columns={COLUMNS}
-              data={SAMPLE_EXPLOSION_DATA}
+              data={explosionRows}
               summaryRow={false}
             />
           </div>

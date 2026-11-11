@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       const bomMaterials: any[] = [];
       if (parent) {
         const boms = await prisma.bomHeader.findMany({
-          where: { parentProductId: parent.id },
+          where: { parentProductId: parent.id, isUsed: true },
           include: {
             details: {
               include: {
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
             const otherUsageCount = await prisma.bomDetail.count({
               where: {
                 childProductId: d.childProductId,
-                bomHeader: { parentProductId: { not: parent.id } },
+                bomHeader: { isUsed: true, parentProductId: { not: parent.id } },
               },
             });
             const totalStock = ch.inventories.reduce((sum, inv) => sum + (inv.currentQty || 0), 0);

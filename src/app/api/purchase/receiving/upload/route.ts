@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
+import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 function normalizeDate(val: any): string {
   if (!val) return '';
@@ -149,14 +150,17 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // [캐싱 2] 품목 사전 조회 (활성 품목·정규 품번 우선 정렬)
+        // [캐싱 2] 품목 사전 조회 (활성 원재료/부자재 및 정규 품번 우선 정렬)
         const rawProducts = await tx.product.findMany({
+          where: {
+            category: { notIn: ['완성품', '반제품'] },
+          },
           orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
         });
         const allProducts = [...rawProducts].sort((a, b) => {
           if (a.isUsed !== b.isUsed) return a.isUsed ? -1 : 1;
-          const aMat = a.productCode.startsWith('MAT-') ? 1 : 0;
-          const bMat = b.productCode.startsWith('MAT-') ? 1 : 0;
+          const aMat = a.productCode.startsWith('MAT-') || a.productCode.startsWith('GFS-') ? 1 : 0;
+          const bMat = b.productCode.startsWith('MAT-') || b.productCode.startsWith('GFS-') ? 1 : 0;
           if (aMat !== bMat) return aMat - bMat;
           return a.id - b.id;
         });
@@ -167,8 +171,8 @@ export async function POST(req: NextRequest) {
         const canonProductMap = new Map<string, any>();
         const normalizedProductMap = new Map<string, any>();
         for (const p of searchPool) {
-          productMap.set(p.name.trim(), p);
-          productMap.set(p.name.replace(/\s+/g, ''), p);
+          if (!productMap.has(p.name.trim())) productMap.set(p.name.trim(), p);
+          if (!productMap.has(p.name.replace(/\s+/g, ''))) productMap.set(p.name.replace(/\s+/g, ''), p);
           const canon = normName(p.name);
           if (canon && !canonProductMap.has(canon)) {
             canonProductMap.set(canon, p);
@@ -192,11 +196,15 @@ export async function POST(req: NextRequest) {
           poMap.set(po.orderNo, po);
         }
 
-        // [캐싱 4] 재고(Inventory) 사전 조회
-        const allInventories = await tx.inventory.findMany();
+        // [캐싱 4] 재고(Inventory) 사전 조회 (품목당 정본 1행 우선 매칭으로 중복 창고 행 생성 원천 차단)
+        const allInventories = await tx.inventory.findMany({ orderBy: { id: 'asc' } });
         const invMap = new Map<string, any>(); // key: `${productId}_${warehouse}`
+        const invByProdId = new Map<number, any>();
         for (const inv of allInventories) {
           invMap.set(`${inv.productId}_${inv.warehouse}`, inv);
+          if (!invByProdId.has(inv.productId)) {
+            invByProdId.set(inv.productId, inv);
+          }
         }
 
         // 그룹별 Receiving 헤더 및 상세 생성
@@ -290,19 +298,30 @@ export async function POST(req: NextRequest) {
             productMap.set(cleanName, product);
             productMap.set(matchKey, product);
 
-            // 구매단가 최신화 (ProductPrice)
-            if (options.updatePrice && item.buyPrice > 0) {
+            if (product.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(product.warehouse)) {
+              warehouse = product.warehouse;
+            }
+
+            const packUnit = Math.max(1, Number(product.boxQty) || 1);
+            const isBagUnit = item.unit === '봉' || item.unit === 'ea' || item.unit === 'pk';
+            const bagRecvQty = isBagUnit ? item.recvQty : item.recvQty * packUnit;
+            const bagBuyPrice = !isBagUnit && packUnit > 1 && item.buyPrice > 0
+              ? Math.round(item.buyPrice / packUnit)
+              : item.buyPrice;
+
+            // 구매단가 최신화 (ProductPrice: 항상 봉/낱개 단가 기준 저장)
+            if (options.updatePrice && bagBuyPrice > 0) {
               await tx.productPrice.create({
                 data: {
                   productId: product.id,
-                  purchasePrice: item.buyPrice,
+                  purchasePrice: bagBuyPrice,
                   effectiveDate: groupDate,
                   remark: `입고파일 단가수정 반영 (${groupDate})`,
                 },
               });
             }
 
-            // 발주서 연동 (PurchaseOrder / PurchaseOrderDetail)
+            // 발주서 연동 (PurchaseOrder / PurchaseOrderDetail: 박스 수량 및 박스 단가 기준)
             if (options.syncPo && item.orderNo) {
               const orderNo = item.orderNo.trim();
               let po = poMap.get(orderNo);
@@ -310,7 +329,7 @@ export async function POST(req: NextRequest) {
                 po = await tx.purchaseOrder.create({
                   data: {
                     orderNo,
-                    orderDate: item.orderDate || groupDate,
+                    orderDate: normalizeDate(item.orderDate) || groupDate,
                     partnerId,
                     partnerName: group.partnerName,
                     deliveryDate: groupDate,
@@ -333,9 +352,9 @@ export async function POST(req: NextRequest) {
                     purchaseOrderId: po.id,
                     productId: product.id,
                     productCode: product.productCode,
-                    productName: cleanName,
+                    productName: product.name,
                     category: product.category,
-                    unit: item.unit || 'box',
+                    unit: 'box',
                     orderQty,
                     unitPrice: orderPrice,
                     amount: item.orderAmt || (orderQty * orderPrice),
@@ -351,6 +370,7 @@ export async function POST(req: NextRequest) {
                 await tx.purchaseOrderDetail.update({
                   where: { id: poDetail.id },
                   data: {
+                    unit: 'box',
                     receivedQty: newRecv,
                     remainQty: newRemain,
                   },
@@ -360,68 +380,75 @@ export async function POST(req: NextRequest) {
               }
             }
 
+            const rawLot = item.lotNo
+              ? String(item.lotNo).replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, groupDate.replace(/-/g, '').slice(2))
+              : '';
             const lotNo =
-              item.lotNo ||
+              rawLot ||
               `LOT-${groupDate.replace(/-/g, '')}-${product.productCode.slice(-4)}`;
-            const expiryDate = item.expiryDate || '2027-10-25';
+            const expiryDate = normalizeDate(item.expiryDate) || '2027-10-25';
             const inspectResult = item.totalJudge === 'X' ? '불합격' : '합격';
 
-            // 실재고 (Inventory) 가산 및 단가 갱신
-            if (options.updateStock && item.recvQty > 0) {
-              const invKey = `${product.id}_${warehouse}`;
-              const existingInv = invMap.get(invKey);
+            // 실재고 (Inventory: 봉/낱개 수량 및 봉 단가 기준 가산)
+            const invKey = `${product.id}_${warehouse}`;
+            const existingInv = invMap.get(invKey) || invByProdId.get(product.id);
 
+            if (options.updateStock && item.recvQty > 0) {
               if (existingInv) {
                 await tx.inventory.update({
                   where: { id: existingInv.id },
                   data: {
-                    currentQty: { increment: item.recvQty },
+                    currentQty: { increment: bagRecvQty },
                     stockAmount: { increment: item.recvAmt },
-                    unitPrice: item.buyPrice > 0 ? item.buyPrice : existingInv.unitPrice,
+                    unitPrice: bagBuyPrice > 0 ? bagBuyPrice : existingInv.unitPrice,
                     lastInDate: groupDate,
                     expiryDate,
+                    lotNo,
                   },
                 });
-                existingInv.currentQty += item.recvQty;
+                existingInv.currentQty += bagRecvQty;
                 existingInv.stockAmount += item.recvAmt;
               } else {
                 const createdInv = await tx.inventory.create({
                   data: {
                     productId: product.id,
                     productCode: product.productCode,
-                    productName: cleanName,
+                    productName: product.name,
                     category: product.category,
                     lotNo,
                     expiryDate,
                     warehouse,
-                    currentQty: item.recvQty,
-                    unit: item.unit || 'box',
-                    unitPrice: item.buyPrice,
+                    currentQty: bagRecvQty,
+                    unit: product.unit || '봉',
+                    unitPrice: bagBuyPrice,
                     stockAmount: item.recvAmt,
                     lastInDate: groupDate,
                   },
                 });
                 invMap.set(invKey, createdInv);
+                invByProdId.set(product.id, createdInv);
               }
             }
 
-            // 자재수불부 (MaterialLedger)
+            // 자재수불부 (MaterialLedger: 봉 수량 및 봉 단가 기준)
             if (options.createLedger && item.recvQty > 0) {
+              const curInv = invByProdId.get(product.id);
+              const ledgerCurQty = curInv ? curInv.currentQty : bagRecvQty;
               await tx.materialLedger.create({
                 data: {
                   ledgerDate: groupDate,
                   productId: product.id,
                   productCode: product.productCode,
-                  productName: cleanName,
+                  productName: product.name,
                   category: product.category,
-                  unit: item.unit || 'box',
+                  unit: product.unit || '봉',
                   carryOverQty: 0,
-                  inQty: item.recvQty,
+                  inQty: bagRecvQty,
                   outQty: 0,
                   adjustQty: 0,
-                  currentQty: item.recvQty,
-                  unitPrice: item.buyPrice,
-                  stockAmount: item.recvAmt,
+                  currentQty: ledgerCurQty,
+                  unitPrice: bagBuyPrice,
+                  stockAmount: Math.round(ledgerCurQty * bagBuyPrice),
                   txnType: '정규입고',
                   refNo: receivingNo,
                   remark: `[파일업로드] ${group.partnerName} (${cleanName}, 차량:${item.carNo || '-'}, 온도:${item.carTemp || '-'})`,
@@ -432,14 +459,14 @@ export async function POST(req: NextRequest) {
             detailCreates.push({
               productId: product.id,
               productCode: product.productCode,
-              productName: cleanName,
+              productName: product.name,
               lotNo,
               expiryDate,
               receivedQty: item.recvQty,
-              unit: item.unit || 'box',
+              unit: 'box',
               unitPrice: item.buyPrice,
               amount: item.recvAmt,
-              boxQty: item.recvQty,
+              boxQty: packUnit,
               warehouse,
               inspectResult,
               remark: `차량:${item.carNo || '-'}, 온도:${item.carTemp || '-'}, 판정:${inspectResult}, 규격:${item.spec || '-'}`,
@@ -469,6 +496,8 @@ export async function POST(req: NextRequest) {
       },
       { timeout: 120000, maxWait: 20000 }
     );
+
+    await touchDashboardSnapshot();
 
     return NextResponse.json({
       success: true,

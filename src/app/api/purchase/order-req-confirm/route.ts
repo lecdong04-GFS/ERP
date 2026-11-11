@@ -3,6 +3,12 @@ import prisma from '@/lib/prisma';
 import { kstToday, makeDocNo } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import {
+  dedupSalesOrders,
+  isDummyBomDetail,
+  menuKey,
+  pickLatestValidPrice,
+} from '@/lib/gfs/bomMatch';
+import {
   BOM_MASTER_RECIPES,
   REPR_MAPPINGS,
 } from '@/services/pipeline/ProductionCostPipeline';
@@ -80,14 +86,17 @@ export async function GET(req: NextRequest) {
       });
 
       if (salesOrders.length > 0) {
-        // 완제품별 수량 집계
-        const prodAgg = new Map<string, number>();
-        salesOrders.forEach((so) => {
+        const uniqueSalesOrders = dedupSalesOrders(salesOrders);
+        // 완제품별 수량 집계 (코드 + 품명 보존)
+        const prodAgg = new Map<string, { qty: number; name: string }>();
+        uniqueSalesOrders.forEach((so) => {
           so.details.forEach((dt) => {
             if (!dt.product) return;
             const code = dt.product.productCode;
             const tot = Number(dt.totalQty) || (Number(dt.orderQty1) || 0) + (Number(dt.orderQty2) || 0);
-            prodAgg.set(code, (prodAgg.get(code) || 0) + tot);
+            const prev = prodAgg.get(code) || { qty: 0, name: dt.product.name || '' };
+            prev.qty += tot;
+            prodAgg.set(code, prev);
           });
         });
 
@@ -98,34 +107,46 @@ export async function GET(req: NextRequest) {
             parentProduct: true,
             details: { include: { childProduct: true } },
           },
+          orderBy: { id: 'asc' },
         });
         const bomMap = new Map<string, (typeof bomHeaders)[0]>();
+        const bomByMenuKey = new Map<string, (typeof bomHeaders)[0]>();
         bomHeaders.forEach((bh) => {
           if (bh.parentProduct?.productCode) {
             bomMap.set(bh.parentProduct.productCode, bh);
           }
+          const mk = menuKey(bh.parentProduct?.name || '');
+          if (mk && !bomByMenuKey.has(mk)) {
+            bomByMenuKey.set(mk, bh);
+          }
         });
 
-        prodAgg.forEach((orderQty, orderCode) => {
+        prodAgg.forEach(({ qty: orderQty, name: orderName }, orderCode) => {
           const reprCode =
             REPR_MAPPINGS.find((m) => m.orderItemCode === orderCode)?.reprItemCode || orderCode;
-          const dbBom = bomMap.get(orderCode) || bomMap.get(reprCode);
+          const dbBom =
+            bomMap.get(orderCode) ||
+            bomMap.get(reprCode) ||
+            bomByMenuKey.get(menuKey(orderName));
 
           if (dbBom && dbBom.details.length > 0) {
             dbBom.details.forEach((bd) => {
+              if (isDummyBomDetail(bd.unit, bd.unitQty)) return;
               if (bd.level === 3 || bd.level === 2) {
-                const childCode = bd.childProduct.productCode;
-                const childName = bd.childProduct.name || '';
-                // 발주 제외 요청 품목 및 비활성/단종예정 도래 품목 스킵
-                const childDisc = bd.childProduct.discontinuedDate;
+                const cp = bd.childProduct as any;
+                const childCode = cp.productCode;
+                const childName = cp.name || '';
+                // 발주 제외 요청 품목 및 비활성/단종예정 도래 품목 스킵 (date 기준 동적 비교)
+                const childDisc = cp.discontinuedDate;
                 if (
                   isExcludedFromOrder(childName, date) ||
-                  !bd.childProduct.isUsed ||
-                  (childDisc && (todayKst >= childDisc || date >= childDisc))
+                  !cp.isUsed ||
+                  (childDisc && date >= childDisc)
                 ) {
                   return;
                 }
-                const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
+                const divisor = Number(cp.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
+                const factor = (bd.unitQty / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1);
                 const req = Math.round(orderQty * factor * 100) / 100;
                 reqMap.set(childCode, (reqMap.get(childCode) || 0) + req);
               }
@@ -180,16 +201,16 @@ export async function GET(req: NextRequest) {
       },
       include: {
         partner: true,
-        prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+        prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
         inventories: true,
       },
       orderBy: { productCode: 'asc' },
     });
 
-    // 6. 데이터 병합 및 행 생성 (발주 제외 및 삭제예정일 도래 품목 제외)
+    // 6. 데이터 병합 및 행 생성 (발주 제외 및 삭제예정일 도래 품목 제외 — date 기준 동적 비교)
     const activeMaterials = materials.filter((m) => {
       if (isExcludedFromOrder(m.name, date)) return false;
-      if (m.discontinuedDate && (todayKst >= m.discontinuedDate || date >= m.discontinuedDate)) return false;
+      if (m.discontinuedDate && date >= m.discontinuedDate) return false;
       return true;
     });
 
@@ -197,7 +218,7 @@ export async function GET(req: NextRequest) {
       const currentStock = m.inventories.reduce((acc, inv) => acc + inv.currentQty, 0);
       const reqQty = reqMap.get(m.productCode) || 0;
       const incomingScheduled = pendingMap.get(m.productCode) || 0;
-      const safetyStock = m.safetyStockQty || 50;
+      const safetyStock = m.safetyStockQty || 0;
 
       // 순소요량 (Net Requirement)
       const netShortage = Math.max(0, reqQty + safetyStock - (currentStock + incomingScheduled));
@@ -217,7 +238,7 @@ export async function GET(req: NextRequest) {
       const isConfirmed = !!confirmed;
       const finalOrderQty = isConfirmed ? confirmed.orderQty : recommendedOrderQty;
 
-      const unitPrice = confirmed?.unitPrice || m.prices[0]?.purchasePrice || 0;
+      const unitPrice = confirmed?.unitPrice || Number(pickLatestValidPrice(m.prices as any)?.purchasePrice) || 0;
       const amount = finalOrderQty * unitPrice;
       const boxQty = m.boxQty > 0 ? m.boxQty : 1;
       const expectedBox = boxQty > 0 ? Math.ceil(finalOrderQty / boxQty) : 0;

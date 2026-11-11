@@ -2,42 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import {
+  CUSTOM_BOM_ALIAS,
+  dedupSalesOrders,
+  isDummyBomDetail,
+  menuKey,
+  normalizeForBom,
+  pickLatestValidPrice,
+} from '@/lib/gfs/bomMatch';
+import {
   BOM_MASTER_RECIPES,
   REPR_MAPPINGS,
 } from '@/services/pipeline/ProductionCostPipeline';
-
-// 품명 정규화 (BOM 매칭용)
-function normalizeForBom(s: string): string {
-  return String(s || '')
-    .normalize('NFC')
-    .replace(/^\[.*?\]\s*/, '')
-    .replace(/^\(주문\)\s*/, '')
-    .replace(/\s+/g, '')
-    .replace(/[12]편$/, '')
-    .replace(/[12]$/, '')
-    .replace(/도시락$/, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/[()[\]{}*_\-.,/&]/g, '')
-    .toLowerCase();
-}
-
-// 10~11월 실무 품명과 BOM 마스터 간 관용적 별칭 매핑
-const CUSTOM_BOM_ALIAS: Record<string, string> = {
-  'new혜자백설갈비양념제육': 'new혜자백설갈비양념제육',
-  '더큰맥적구이한상': '더큰추석맥적구이한상',
-  '더큰들기름묵은지참치': '종가들기름묵은지참치',
-  '커플곱창김참치비빔밥': '커플곱창김참치마요전주비빔',
-  '디핑시장꼬마김밥': '용기광장시장꼬마김밥',
-  '디핑에그햄꼬마김밥': '용기에그햄꼬마김밥',
-  '넷플더담은k떡갈비김밥': '넷플k스타일떡갈비김밥',
-  'new뭘좋아할지몰라다넣어': '뭘좋아할지몰라다넣어봤어',
-  '더큰오징어제육깻잎쌈밥': '더큰오징어제육깻잎쌈밥',
-  '직화한돈제육쌈김밥': '직화한돈제육쌈김밥',
-  '더큰통스팸참치김치': '더큰스팸김치볶음밥',
-  '더큰통스팸계란김치': '더큰스팸계란볶음밥',
-  '더큰삼각전주비빔': '삼각전주비빔',
-  '스팸무스비': 'new스팸무스비',
-};
 
 // GET /api/purchase/mat-req-print?date=2026-10-30&shift=ALL&gye=ALL&category=ALL&search=
 export async function GET(req: NextRequest) {
@@ -130,7 +105,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 3. 완제품별 주문량 집계 (1편, 2편, 합계)
+    // 3. 완제품별 주문량 집계 (1편, 2편, 합계) — 중복 전표 제거
+    const uniqueSalesOrders = dedupSalesOrders(salesOrders);
     const orderAggMap = new Map<
       string,
       {
@@ -142,7 +118,7 @@ export async function GET(req: NextRequest) {
     >();
 
     let totalFinishedOrderQty = 0;
-    salesOrders.forEach((so) => {
+    uniqueSalesOrders.forEach((so) => {
       so.details.forEach((dt) => {
         if (!dt.product) return;
         const code = dt.product.productCode;
@@ -191,7 +167,7 @@ export async function GET(req: NextRequest) {
             childProduct: {
               include: {
                 partner: true,
-                prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
                 inventories: true,
               },
             },
@@ -200,11 +176,13 @@ export async function GET(req: NextRequest) {
           orderBy: { sortOrder: 'asc' },
         },
       },
+      orderBy: { id: 'asc' },
     });
 
     const dbBomByParentCode = new Map<string, (typeof bomHeaders)[0]>();
     const dbBomByName = new Map<string, (typeof bomHeaders)[0]>();
     const dbBomByNorm = new Map<string, (typeof bomHeaders)[0]>();
+    const dbBomByMenuKey = new Map<string, (typeof bomHeaders)[0]>();
 
     bomHeaders.forEach((bh) => {
       if (bh.parentProduct?.productCode) {
@@ -213,6 +191,8 @@ export async function GET(req: NextRequest) {
       if (bh.parentProduct?.name) {
         dbBomByName.set(bh.parentProduct.name, bh);
         dbBomByNorm.set(normalizeForBom(bh.parentProduct.name), bh);
+        const mk = menuKey(bh.parentProduct.name);
+        if (mk && !dbBomByMenuKey.has(mk)) dbBomByMenuKey.set(mk, bh);
       }
     });
 
@@ -223,6 +203,10 @@ export async function GET(req: NextRequest) {
       }
       if (prod.name && dbBomByName.has(prod.name)) {
         return dbBomByName.get(prod.name);
+      }
+      const mk = menuKey(prod.name || '');
+      if (mk && dbBomByMenuKey.has(mk)) {
+        return dbBomByMenuKey.get(mk);
       }
       const norm = normalizeForBom(prod.name || '');
       if (dbBomByNorm.has(norm)) {
@@ -299,10 +283,13 @@ export async function GET(req: NextRequest) {
 
       if (dbBom && dbBom.details.length > 0) {
         dbBom.details.forEach((bd) => {
+          if (isDummyBomDetail(bd.unit, bd.unitQty)) return;
           // level 3 (원부자재) 또는 공정이 할당되지 않은 level 2
           if (bd.level === 3 || (bd.level === 2 && !bd.gye)) {
-            const child = bd.childProduct;
-            const factor = bd.unitQty / ((bd.yieldRate || 100) / 100);
+            const child = bd.childProduct as any;
+            if (child && !child.isUsed) return;
+            const divisor = Number(child?.bomDivisor) > 0 ? Number(child.bomDivisor) : 1000;
+            const factor = (bd.unitQty / ((bd.yieldRate || 100) / 100)) / (divisor > 1 ? divisor : 1);
             const req1 = Math.round(qty1 * factor * 1000) / 1000;
             const req2 = Math.round(qty2 * factor * 1000) / 1000;
             const reqTot = Math.round(totalQty * factor * 1000) / 1000;
@@ -330,14 +317,14 @@ export async function GET(req: NextRequest) {
                 partCode,
                 partName,
                 partSpec: child?.spec || `${bd.unitQty}${bd.unit}`,
-                partUnit: bd.unit || child?.unit || 'kg',
+                partUnit: child?.unit || '봉',
                 gyeName,
                 recipeYield: bd.yieldRate || 100,
                 reqQty1: req1,
                 reqQty2: req2,
                 reqTotal: reqTot,
-                unitPrice: child?.prices[0]?.purchasePrice || 0,
-                safetyStock: child?.safetyStockQty || 50,
+                unitPrice: Number(pickLatestValidPrice(child?.prices)?.purchasePrice) || 0,
+                safetyStock: child?.safetyStockQty || 0,
                 orderUnit: child && child.boxQty > 1 ? 'box' : child?.unit || 'ea',
                 orderUnitQty: child?.orderUnitQty || 1,
                 minOrderQty: child?.minOrderQty || 1,

@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
-
-function normalizeForBom(name: string): string {
-  let s = (name || '').trim();
-  s = s.replace(/^\(주문\)\s*/, '');
-  s = s.replace(/\s*[12]편$/, '');
-  s = s.replace(/[12]$/, '');
-  s = s.replace(/\s+/g, '');
-  return s;
-}
+import {
+  calcDailyUsageFromParams,
+  dedupSalesOrders,
+  isDummyBomDetail,
+  matchBomHeader,
+  menuKey,
+  normalizeForBom,
+} from '@/lib/gfs/bomMatch';
 
 // GET /api/gfs/live-usage?date=YYYY-MM-DD
-// ERP 자체 계산: 금일 완제품 수주량 x BOM = 자재별 live 일사용량 (GFS H열과 동일식)
-// GFS를 열지 않아도 버팀일을 살아있게 만드는 엔진
+// ERP 자체 계산: 금일 완제품 수주량 x 정본 BOM = 자재별 live 일사용량 (PostgreSQL 단일 진실 공급원)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -32,7 +28,7 @@ export async function GET(req: NextRequest) {
       date = latest?.orderDate || kstToday();
     }
 
-    // 1) 당일 완제품 수주량 합산 (productId 및 품목명 기준)
+    // 1) 당일 완제품 수주량 합산 (중복 전표 방어)
     const orders = await prisma.salesOrder.findMany({
       where: { orderDate: date },
       include: {
@@ -42,123 +38,168 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // 동일 일자 중복 업로드 전표(DOC 해시 동일 또는 총량 동일 전표) 중복 합산 방어
-    const seenOrderKeys = new Set<string>();
-    const uniqueOrders = orders.filter((o) => {
-      const docKey = o.remark && o.remark.startsWith('DOC:') ? o.remark : `${o.orderDate}_${o.totalQty}_${o.totalAmount}`;
-      if (seenOrderKeys.has(docKey)) return false;
-      seenOrderKeys.add(docKey);
-      return true;
-    });
+    const uniqueOrders = dedupSalesOrders(orders);
+    const orderItems: Array<{ productId: number; code: string; name: string; qty: number }> = [];
+    const byPid = new Map<number, { productId: number; code: string; name: string; qty: number }>();
 
-    const menuQty = new Map<number, { qty: number; code: string; name: string }>();
-    const menuQtyByNorm = new Map<string, { qty: number; code: string; name: string }>();
     for (const o of uniqueOrders) {
       for (const d of o.details as any[]) {
-        const pid = Number(d.productId);
+        const pid = Number(d.productId) || 0;
         const qty = Number(d.totalQty) || 0;
-        if (!pid || qty <= 0) continue;
-        const pName = d.product?.name || d.productName || '';
-        const cur = menuQty.get(pid) || { qty: 0, code: String(d.productCode || d.product?.productCode || ''), name: pName };
-        cur.qty += qty;
-        menuQty.set(pid, cur);
-
-        const norm = normalizeForBom(pName);
-        if (norm) {
-          const normCur = menuQtyByNorm.get(norm) || { qty: 0, code: cur.code, name: pName };
-          normCur.qty += qty;
-          menuQtyByNorm.set(norm, normCur);
+        if (qty <= 0) continue;
+        const name = d.product?.name || d.productName || '';
+        const code = String(d.productCode || d.product?.productCode || '');
+        if (pid > 0) {
+          const cur = byPid.get(pid) || { productId: pid, code, name, qty: 0 };
+          cur.qty += qty;
+          byPid.set(pid, cur);
+        } else if (name) {
+          orderItems.push({ productId: 0, code, name, qty });
         }
       }
     }
+    for (const v of byPid.values()) orderItems.push(v);
 
-    // 1-1) 수주 DB 전표가 없는 날짜 폴백: 정본 생산일보(CANONICAL_DAILY_REPORTS) 또는 생산실적 DB 연동
-    if (menuQtyByNorm.size === 0 && CANONICAL_DAILY_REPORTS[date]) {
-      const canonical = CANONICAL_DAILY_REPORTS[date];
-      for (const item of canonical.items) {
+    // 1-1) 수주 전표가 없는 날짜 폴백: 생산일보 / 생산실적
+    if (orderItems.length === 0 && CANONICAL_DAILY_REPORTS[date]) {
+      for (const item of CANONICAL_DAILY_REPORTS[date].items) {
         if (item.totalQty > 0) {
-          const norm = normalizeForBom(item.productName);
-          if (norm) {
-            menuQtyByNorm.set(norm, { qty: item.totalQty, code: '', name: item.productName });
-          }
+          orderItems.push({ productId: 0, code: '', name: item.productName, qty: item.totalQty });
         }
       }
     }
-
-    if (menuQtyByNorm.size === 0) {
-      const prodResults = await prisma.productionResult.findMany({
-        where: { resultDate: date },
-      });
+    if (orderItems.length === 0) {
+      const prodResults = await prisma.productionResult.findMany({ where: { resultDate: date } });
       for (const pr of prodResults) {
         const qty = Number(pr.prodQty) || 0;
         if (qty > 0) {
-          const norm = normalizeForBom(pr.productName);
-          if (norm) {
-            menuQtyByNorm.set(norm, { qty, code: pr.productCode || '', name: pr.productName });
-          }
+          orderItems.push({ productId: 0, code: pr.productCode || '', name: pr.productName, qty });
         }
       }
     }
 
-    if (menuQtyByNorm.size === 0) {
+    if (orderItems.length === 0) {
       return NextResponse.json({
         success: true,
         data: { asOf: date, orderCount: 0, rows: [], message: '해당 일자 수주 없음' },
       });
     }
 
-    // 2) BOM 전개 (1: DB bomHeader 기반)
-    const todayKst = kstToday();
+    // 2) 대표품목(ReprProduct) 및 정본 BOM 헤더 1:1 매핑
+    const reprRows = await prisma.reprProduct.findMany({ where: { isUsed: true } });
+    const reprByOrderPid = new Map<number, number>();
+    for (const r of reprRows) reprByOrderPid.set(r.orderProductId, r.reprProductId);
+
     const headers = await prisma.bomHeader.findMany({
       where: { isUsed: true },
       include: {
         parentProduct: true,
-        details: true,
+        details: { include: { childProduct: true } },
       },
-      orderBy: { id: 'desc' },
-    });
-    const seenParent = new Set<number>();
-    const latestHeaders = headers.filter((h) => {
-      if (seenParent.has(h.parentProductId)) return false;
-      seenParent.add(h.parentProductId);
-      return true;
+      orderBy: { id: 'asc' },
     });
 
-    // 자재 id -> productCode/name 조회용 (사용중이며 발주/사용 제외·단종 도래가 아닌 정본 자재만)
-    const childIds = [...new Set(latestHeaders.flatMap((h) => h.details.map((d) => d.childProductId)))];
-    const childProducts = await prisma.product.findMany({
-      where: { id: { in: childIds }, isUsed: true },
-      select: { id: true, productCode: true, name: true, category: true, warehouse: true, discontinuedDate: true },
-    });
-    const childMap = new Map(
-      childProducts
-        .filter((p) => {
-          if (isExcludedFromOrder(p.name, date)) return false;
-          if (p.discontinuedDate && (todayKst >= p.discontinuedDate || date >= p.discontinuedDate)) return false;
-          return true;
-        })
-        .map((p) => [p.id, p])
+    const usableHeaders = headers.filter((h) =>
+      h.details.some(
+        (d) =>
+          !isDummyBomDetail(d.unit, d.unitQty) &&
+          d.childProduct &&
+          d.childProduct.category !== '반제품' &&
+          d.childProduct.category !== '완성품',
+      ),
     );
+    const pool = usableHeaders.length > 0 ? usableHeaders : headers;
 
-    // 3) 자재별 live 일사용량 = SUM(메뉴수량 x 단위소요량) / 1000 (엑셀 H열과 동일식)
-    const acc = new Map<number, { daily: number; menus: { code: string; name: string; qty: number; unitQty: number }[] }>();
-    for (const h of latestHeaders) {
-      let mq = menuQty.get(h.parentProductId);
-      if (!mq && h.parentProduct?.name) {
-        mq = menuQtyByNorm.get(normalizeForBom(h.parentProduct.name));
+    const headerByParentId = new Map<number, (typeof pool)[number]>();
+    const headerByMenuKey = new Map<string, (typeof pool)[number]>();
+    const headerCandidates: Array<{ id: number; parentProductId: number; parentProduct?: { name?: string | null; category?: string | null } | null }> = [];
+
+    for (const h of pool) {
+      if (!headerByParentId.has(h.parentProductId)) {
+        headerByParentId.set(h.parentProductId, h);
+        headerCandidates.push({
+          id: h.id,
+          parentProductId: h.parentProductId,
+          parentProduct: h.parentProduct,
+        });
       }
-      if (!mq || !(mq.qty > 0)) continue;
-      for (const d of h.details) {
-        if (!childMap.has(d.childProductId)) continue;
-        const unitQty = Number(d.unitQty) || 0;
+      const mk = menuKey(h.parentProduct?.name || '');
+      if (mk && !headerByMenuKey.has(mk)) headerByMenuKey.set(mk, h);
+    }
+
+    const headerQtyMap = new Map<
+      number,
+      { header: (typeof pool)[number]; qty: number; code: string; name: string }
+    >();
+
+    for (const item of orderItems) {
+      let matchedHeader: (typeof pool)[number] | undefined;
+      if (item.productId > 0) {
+        const reprPid = reprByOrderPid.get(item.productId);
+        if (reprPid && headerByParentId.has(reprPid)) {
+          matchedHeader = headerByParentId.get(reprPid);
+        }
+      }
+      if (!matchedHeader && item.productId > 0 && headerByParentId.has(item.productId)) {
+        matchedHeader = headerByParentId.get(item.productId);
+      }
+      if (!matchedHeader && item.name) {
+        const mk = menuKey(item.name);
+        if (mk && headerByMenuKey.has(mk)) {
+          matchedHeader = headerByMenuKey.get(mk);
+        } else {
+          const hit = matchBomHeader(item.name, item.productId || null, headerCandidates);
+          if (hit) matchedHeader = headerByParentId.get(hit.parentProductId);
+        }
+      }
+      if (!matchedHeader) continue;
+
+      const cur = headerQtyMap.get(matchedHeader.id) || {
+        header: matchedHeader,
+        qty: 0,
+        code: item.code || matchedHeader.parentProduct?.productCode || '',
+        name: matchedHeader.parentProduct?.name || item.name,
+      };
+      cur.qty += item.qty;
+      headerQtyMap.set(matchedHeader.id, cur);
+    }
+
+    // 3) 자재별 live 일사용량 계산 (Product별 bomDivisor/bomMultiplier/bomRoundDigits & BomDetail.orderBuffer 적용)
+    const acc = new Map<
+      number,
+      {
+        child: any;
+        rawTotalBuffered: number;
+        menus: { code: string; name: string; qty: number; unitQty: number }[];
+      }
+    >();
+
+    for (const { header, qty, code, name } of headerQtyMap.values()) {
+      if (!(qty > 0)) continue;
+      for (const d of header.details) {
+        const cp = d.childProduct as any;
+        if (!cp || !cp.isUsed) continue;
+        if (cp.category === '완성품' || cp.category === '반제품') continue;
+        if (isExcludedFromOrder(cp.name, date)) continue;
+        if (cp.discontinuedDate && date >= cp.discontinuedDate) continue;
+
+        let unitQty = Number(d.unitQty) || 0;
         if (!(unitQty > 0)) continue;
-        const u = (d.unit || '').trim();
-        // 다단계 배치 개봉용 더미 행(1통, 1box, 1캔 등) 필터링
-        if (unitQty === 1 && (u === '통' || u === 'box' || u === '박스' || u === '캔')) continue;
-        const e = acc.get(d.childProductId) || { daily: 0, menus: [] };
-        e.daily += (mq.qty * unitQty) / 1000;
-        e.menus.push({ code: mq.code, name: mq.name, qty: mq.qty, unitQty });
-        acc.set(d.childProductId, e);
+        if (isDummyBomDetail(d.unit, unitQty)) continue;
+
+        const u = (d.unit || '').trim().toLowerCase();
+        const div = Number(cp.bomDivisor) > 0 ? Number(cp.bomDivisor) : 1000;
+        if (u === 'kg' && div >= 100) {
+          unitQty = unitQty * 1000;
+        }
+
+        const orderBuffer = Number((d as any).orderBuffer) > 0 ? Number((d as any).orderBuffer) : 1;
+        const menuRaw = qty * unitQty * orderBuffer;
+
+        const e = acc.get(cp.id) || { child: cp, rawTotalBuffered: 0, menus: [] };
+        e.rawTotalBuffered += menuRaw;
+        e.menus.push({ code, name, qty, unitQty });
+        acc.set(cp.id, e);
       }
     }
 
@@ -169,26 +210,22 @@ export async function GET(req: NextRequest) {
     });
     const invMap = new Map(invSums.map((r) => [r.productId, Number(r._sum.currentQty) || 0]));
 
-    // 전체 Product 품목 맵 (정본 BOM 매칭 및 productCode/재고 연결용)
-    const allProducts = await prisma.product.findMany({
-      select: { id: true, productCode: true, name: true, category: true, warehouse: true },
-    });
-    const prodByNorm = new Map(allProducts.map((p) => [normName(p.name), p]));
-
     const rowsByNorm = new Map<string, any>();
-
-    [...acc.entries()].forEach(([pid, v]) => {
-      const p = childMap.get(pid);
-      const daily = Math.ceil(v.daily * 10) / 10; // ROUNDUP 1자리 (엑셀과 동일)
+    for (const [pid, v] of acc.entries()) {
+      const p = v.child;
+      const div = Number(p.bomDivisor) > 0 ? Number(p.bomDivisor) : 1000;
+      const mult = Number(p.bomMultiplier) > 0 ? Number(p.bomMultiplier) : 1;
+      const digits = Number.isFinite(Number(p.bomRoundDigits)) ? Number(p.bomRoundDigits) : 1;
+      const daily = calcDailyUsageFromParams(v.rawTotalBuffered, div, mult, 1, digits);
       const total = invMap.get(pid) || 0;
-      const nm = p?.name || '';
+      const nm = p.name || '';
       const k = normName(nm);
       if (k) {
         rowsByNorm.set(k, {
           productId: pid,
-          productCode: p?.productCode || '',
+          productCode: p.productCode || '',
           productName: nm,
-          warehouse: p?.warehouse || '',
+          warehouse: p.warehouse || '',
           liveDaily: daily,
           liveTotal: total,
           liveDays: daily > 0 ? total / daily : null,
@@ -197,16 +234,17 @@ export async function GET(req: NextRequest) {
           source: 'DB_BOM',
         });
       }
-    });
+    }
 
     const rows = Array.from(rowsByNorm.values());
+    const distinctMenuKeys = new Set(orderItems.map((it) => normalizeForBom(it.name)).filter(Boolean));
 
     return NextResponse.json({
       success: true,
       data: {
         asOf: date,
-        orderCount: orders.length,
-        menuCount: menuQtyByNorm.size,
+        orderCount: uniqueOrders.length,
+        menuCount: distinctMenuKeys.size,
         rowCount: rows.length,
         rows,
       },
@@ -214,7 +252,7 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'live-usage 계산 실패' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

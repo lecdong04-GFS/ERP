@@ -224,6 +224,8 @@ export const MatOrderNormalView: React.FC = () => {
         body: JSON.stringify({
           orderDate,
           items: targets.map(({ r, c }) => ({
+            productId: r.productId ?? r.id,
+            productCode: (r as any).itemId || undefined,
             name: r.name,
             boxes: c.finalBoxes,
             packUnit: c.pack || r.packUnit,
@@ -241,10 +243,13 @@ export const MatOrderNormalView: React.FC = () => {
       const orderItems = (matJson.data?.matched || [])
         .filter((m: any) => m.productCode)
         .map((m: any) => ({
+          productId: m.productId,
           productCode: m.productCode,
-          productName: m.name,
+          productName: m.productName || m.name,
           orderQty: m.orderQty,
+          unit: 'box',
           unitPrice: m.boxPrice || 0,
+          totalAmount: m.totalAmount || undefined,
           partnerId: m.partnerId || undefined,
           partnerName: m.partnerName || undefined,
         }));

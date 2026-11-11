@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
-
-function calcEffectivePrice(unit: string, purchasePrice: number): number {
-  if (!purchasePrice || purchasePrice <= 0) return 0;
-  const u = (unit || '').toLowerCase().trim();
-  if (u === 'g' || u === 'ml' || u === 'cc') return purchasePrice / 1000;
-  return purchasePrice;
-}
+import {
+  calcBomEffectiveUnitCost,
+  isDummyBomDetail,
+  pickLatestDeliveryPrice,
+  pickLatestValidPrice,
+} from '@/lib/gfs/bomMatch';
 
 function detectVariety(kind?: string | null, name?: string): string {
   if (kind && kind.trim() && kind !== 'N/A' && kind !== '기타' && kind !== '(미분류)') {
@@ -27,15 +26,17 @@ function detectVariety(kind?: string | null, name?: string): string {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const calcMonth = searchParams.get('calcMonth') || new Date().toISOString().slice(0, 7);
+    const calcMonth = searchParams.get('calcMonth') || kstToday().slice(0, 7);
     const recalc = searchParams.get('recalc') === 'true';
+    void recalc;
 
-    // 1. DB의 BOM 및 원부자재 단가 조회
+    // 1. DB의 활성 정본 BOM 및 원부자재 단가 조회
     const boms = await prisma.bomHeader.findMany({
+      where: { isUsed: true },
       include: {
         parentProduct: {
           include: {
-            prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
             gye: true,
           },
         },
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
           include: {
             childProduct: {
               include: {
-                prices: { orderBy: { effectiveDate: 'desc' }, take: 1 },
+                prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
                 partner: true,
               },
             },
@@ -78,52 +79,59 @@ export async function GET(req: NextRequest) {
     const delivPriceMap = new Map(deliveryPrices.map((d) => [d.productCode, d.unitPrice]));
     const savedMap = new Map(savedRecords.map((r) => [r.productId, r]));
 
-    // 3. 114개 BOM에 대해 실시간 레시피원가 및 원가율 계산
-    const list = boms.map((b) => {
-      const p = b.parentProduct;
-      if (!p) return null;
+    // 3. 정본 BOM에 대해 실시간 레시피원가 및 원가율 계산
+    const list = boms
+      .map((b) => {
+        const p = b.parentProduct;
+        if (!p) return null;
 
-      // 저장된 단가 우선 -> 품목 마스터 단가 -> 수주 단가 -> 배송 단가
-      const saved = savedMap.get(p.id);
-      let deliveryPrice =
-        saved?.deliveryPrice ||
-        p.prices?.[0]?.deliveryPrice ||
-        soPriceMap.get(p.id) ||
-        delivPriceMap.get(p.productCode) ||
-        0;
+        // 저장된 단가 우선 -> 품목 마스터 단가 -> 수주 단가 -> 배송 단가
+        const saved = savedMap.get(p.id);
+        const masterDeliv = Number(pickLatestDeliveryPrice(p.prices as any)?.deliveryPrice) || 0;
+        const deliveryPrice =
+          saved?.deliveryPrice ||
+          masterDeliv ||
+          soPriceMap.get(p.id) ||
+          delivPriceMap.get(p.productCode) ||
+          0;
 
-      // 소요 원부자재 투입원가 합산
-      let totalRecipeCost = 0;
-      const details = (b.details || []).map((d) => {
-        const cp = d.childProduct;
-        const purchasePrice = cp?.prices?.[0]?.purchasePrice || 0;
-        const unit = d.unit || cp?.unit || 'g';
-        const yieldRate = d.yieldRate || 100;
-        const inQty = Number(d.unitQty) || 0;
-        const actQty = Math.round((inQty / (yieldRate / 100)) * 1000) / 1000;
-        const effPrice = calcEffectivePrice(unit, purchasePrice);
-        const unitCost = Math.round(actQty * effPrice * 10) / 10;
-        totalRecipeCost += unitCost;
+        // 소요 원부자재 투입원가 합산
+        let totalRecipeCost = 0;
+        const validDetails = (b.details || []).filter((d) => !isDummyBomDetail(d.unit, d.unitQty));
+        const details = validDetails.map((d) => {
+          const cp = d.childProduct as any;
+          const purchasePrice = Number(pickLatestValidPrice(cp?.prices)?.purchasePrice) || 0;
+          const unit = d.unit || cp?.unit || 'g';
+          const yieldRate = d.yieldRate || 100;
+          const inQty = Number(d.unitQty) || 0;
+          const actQty = Math.round((inQty / (yieldRate / 100)) * 1000) / 1000;
+          const div = Number(cp?.bomDivisor) > 0
+            ? Number(cp.bomDivisor)
+            : (unit.toLowerCase() === 'g' || unit.toLowerCase() === 'ml' ? 1000 : 1);
+          const effQty = unit.toLowerCase() === 'kg' && div >= 100 ? actQty * 1000 : actQty;
+          const unitCost =
+            Math.round(calcBomEffectiveUnitCost(effQty, purchasePrice, div) * 10) / 10;
+          totalRecipeCost += unitCost;
 
-        return {
-          id: d.id,
-          childProductId: d.childProductId,
-          partId: cp?.productCode || '',
-          partName: cp?.name || '',
-          category: cp?.category || '원재료',
-          spec: cp?.spec || '',
-          unit,
-          purchasePrice,
-          recipeYield: yieldRate,
-          unitQty: inQty,
-          actualQty: actQty,
-          unitCost,
-          costShare: 0, // 하단에서 산출
-          partnerName: cp?.partner?.name || '',
-          gyeName: d.gye?.name || '',
-          remark: d.remark || '',
-        };
-      });
+          return {
+            id: d.id,
+            childProductId: d.childProductId,
+            partId: cp?.productCode || '',
+            partName: cp?.name || '',
+            category: cp?.category || '원재료',
+            spec: cp?.spec || '',
+            unit,
+            purchasePrice,
+            recipeYield: yieldRate,
+            unitQty: inQty,
+            actualQty: actQty,
+            unitCost,
+            costShare: 0, // 하단에서 산출
+            partnerName: cp?.partner?.name || '',
+            gyeName: d.gye?.name || '',
+            remark: d.remark || '',
+          };
+        });
 
       totalRecipeCost = Math.round(totalRecipeCost * 10) / 10;
 

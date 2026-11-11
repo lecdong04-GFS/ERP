@@ -223,7 +223,7 @@ export const ReceivingUploadModal: React.FC<ReceivingUploadModalProps> = ({
             orderAmt,
             carNo: String(row[colMap.carNo] || '').trim(),
             recvQty,
-            expiryDate: String(row[colMap.expiryDate] || '').trim(),
+            expiryDate: normalizeDate(row[colMap.expiryDate]),
             carTemp: String(row[colMap.carTemp] || '').trim(),
             markStatus: String(row[colMap.markStatus] || 'O').trim(),
             lookStatus: String(row[colMap.lookStatus] || 'O').trim(),

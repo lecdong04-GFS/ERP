@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,9 +10,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const orderDate = searchParams.get('orderDate');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const rawOrderDate = searchParams.get('orderDate');
+    const rawStartDate = searchParams.get('startDate');
+    const rawEndDate = searchParams.get('endDate');
+    const orderDate = rawOrderDate ? normalizeDateYmd(rawOrderDate) : null;
+    const startDate = rawStartDate ? normalizeDateYmd(rawStartDate) : null;
+    const endDate = rawEndDate ? normalizeDateYmd(rawEndDate) : null;
     const status = searchParams.get('status');
     const search = searchParams.get('search');
 
@@ -187,7 +191,7 @@ export async function POST(req: NextRequest) {
           data: {
             totalAmount: newTotalAmount,
             ...(remark !== undefined ? { remark } : {}),
-            ...(deliveryDate !== undefined ? { deliveryDate } : {}),
+            ...(deliveryDate !== undefined ? { deliveryDate: normalizeDateYmd(deliveryDate) } : {}),
           },
         });
       });
