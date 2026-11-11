@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { requireSession } from '@/lib/apiAuth';
 
 const CENTER_NAME_MAP: Record<string, string> = {
   'C60810': '양산조리센터(수D)',
@@ -20,6 +21,8 @@ const CENTER_NAME_MAP: Record<string, string> = {
 // GET /api/management/status?date=2026-11-05
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get('date');
 
@@ -208,6 +211,8 @@ export async function GET(req: NextRequest) {
 // POST /api/management/status
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'management', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { type, ...data } = body;
 

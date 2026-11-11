@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const kpiMonth = searchParams.get('kpiMonth') || '2026-10';
 
@@ -18,6 +21,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'management', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { rows } = body;
 

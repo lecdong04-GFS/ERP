@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { getEstimatedDailyUsageWithDb } from '@/lib/gfs/estimatedUsage';
 import { canonNormName } from '@/lib/gfs/norm';
@@ -18,6 +19,9 @@ const CACHE_TTL_MS = 60 * 1000;
 
 // GET /api/gfs/auto-boot?orderDate=YYYY-MM-DD&stockDate=YYYY-MM-DD&includeMaster=1
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const reqOrderDate = searchParams.get('orderDate') || '';

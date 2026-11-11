@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const prodDate = searchParams.get('prodDate');
     const gyeId = searchParams.get('gyeId');
@@ -24,6 +27,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'production', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { action, id, status, ...data } = body;
 
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
         reason: data.reason || '',
         status: status || '등록',
         remark: data.remark || '',
-        createdBy: data.createdBy || '관리자',
+        createdBy: data.createdBy || auth.user.name || auth.user.loginId,
       },
     });
     return NextResponse.json({ success: true, data: created });

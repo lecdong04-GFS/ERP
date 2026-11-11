@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { normName } from '@/lib/gfs/norm';
 import {
   calcBoxPrice,
@@ -16,6 +15,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // GET /api/inventory/snapshot?latest=1 → 최신 스냅샷 일자
 // GET /api/inventory/snapshot?dates=1 → 저장된 전체 스냅샷 일자 목록
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     if (searchParams.get('dates') === '1') {
@@ -116,9 +118,11 @@ export async function GET(req: NextRequest) {
 // POST /api/inventory/snapshot — 일자별 스냅샷 저장 (같은 날짜는 통째로 교체, 멱등)
 // body: { date, rows: [{productCode?, productName, warehouse, ...}], createdBy? }
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
     const date: string = String(body.date || '');
     const rows = body.rows as any[];
@@ -230,6 +234,9 @@ export async function POST(req: NextRequest) {
 // PUT /api/inventory/snapshot — 과거 스냅샷 행 수정
 // body: { updates: [{ id, currentQty?, unitPrice?, stockAmount?, warehouse?, expiryDate?, safetyStock?, dailyUsage?, packUnit?, boxQty?, pieceQty?, inboundDate?, vendor? }] }
 export async function PUT(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const updates = body.updates as any[];

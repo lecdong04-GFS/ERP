@@ -26,6 +26,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { usePrintReport } from '@/context/PrintReportContext';
+import { escapeHtml } from '@/lib/sanitize';
+import { kstToday } from '@/lib/kst';
 import {
   TIMETABLE_LINES,
   ALL_LINE_ITEM,
@@ -36,7 +38,6 @@ import {
 } from '@/lib/production/workOrderTimetable';
 import { GanttTimelineView } from '@/components/production/GanttTimelineView';
 import { SpeedSimulatorView } from '@/components/production/SpeedSimulatorView';
-import { kstToday } from '@/lib/kst';
 
 const SEONGHYEONG_LINES = [
   { id: 'ALL_SEONGHYEONG', name: '전체 성형장 (9개 라인 종합)', icon: '🌟', count: 9 },
@@ -624,10 +625,11 @@ export const WorkOrderStatusView: React.FC = () => {
     }
 
     // 작업일자 한글 요일 서식 포맷 (예: 2026년 11월 04일 (수요일))
-    const dateParts = (workDate || '2026-11-04').split('-');
-    const year = dateParts[0] || '2026';
-    const month = dateParts[1] || '11';
-    const day = dateParts[2] || '04';
+    const safeWorkDate = workDate || kstToday();
+    const dateParts = safeWorkDate.split('-');
+    const year = dateParts[0] || safeWorkDate.slice(0, 4);
+    const month = dateParts[1] || safeWorkDate.slice(5, 7);
+    const day = dateParts[2] || safeWorkDate.slice(8, 10);
     const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
     const dayOfWeek = isNaN(dateObj.getTime()) ? '수' : dayNames[dateObj.getDay()];
@@ -658,23 +660,24 @@ export const WorkOrderStatusView: React.FC = () => {
         const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} ea` : t.qty || '-';
         const rBadge = getRiceColorBadge(t.item);
         const rTag = rBadge && t.type === '생산'
-          ? `<span class="rice-tag ${rBadge.label === '빨간밥' ? 'rice-tag-red' : rBadge.label.includes('흑미') ? 'rice-tag-purple' : 'rice-tag-white'}">${rBadge.label}</span>`
+          ? `<span class="rice-tag ${rBadge.label === '빨간밥' ? 'rice-tag-red' : rBadge.label.includes('흑미') ? 'rice-tag-purple' : 'rice-tag-white'}">${escapeHtml(rBadge.label)}</span>`
           : '';
+        const typeSafeClass = escapeHtml(t.type).replace(/[^a-zA-Z0-9가-힣_-]/g, '');
 
         return `
           <tr class="${rowClass}">
             <td class="col-center col-seq">${idx + 1}</td>
-            <td class="col-center"><span class="badge ${shiftBadgeClass}">${t.shift}</span></td>
-            <td class="col-center col-time">${t.time}</td>
-            <td class="col-center"><span class="type-pill type-${t.type}">${t.type}</span></td>
-            <td class="col-item">${rTag}${t.item}</td>
-            <td class="col-right col-qty">${formattedQty}</td>
-            <td class="col-center col-duration">${t.duration}</td>
-            <td class="col-center col-workers">${t.workers || '-'}</td>
-            <td class="col-bom">${t.bom || '-'}</td>
-            <td class="col-ccp">${t.ccp || '-'}</td>
+            <td class="col-center"><span class="badge ${shiftBadgeClass}">${escapeHtml(t.shift)}</span></td>
+            <td class="col-center col-time">${escapeHtml(t.time)}</td>
+            <td class="col-center"><span class="type-pill type-${typeSafeClass}">${escapeHtml(t.type)}</span></td>
+            <td class="col-item">${rTag}${escapeHtml(t.item)}</td>
+            <td class="col-right col-qty">${escapeHtml(formattedQty)}</td>
+            <td class="col-center col-duration">${escapeHtml(t.duration)}</td>
+            <td class="col-center col-workers">${escapeHtml(t.workers || '-')}</td>
+            <td class="col-bom">${escapeHtml(t.bom || '-')}</td>
+            <td class="col-ccp">${escapeHtml(t.ccp || '-')}</td>
             <td class="col-center col-check"><div class="check-box"></div></td>
-            <td class="col-center col-assignee">${t.assignee || '미지정'}</td>
+            <td class="col-center col-assignee">${escapeHtml(t.assignee || '미지정')}</td>
           </tr>
         `;
       })
@@ -687,13 +690,14 @@ export const WorkOrderStatusView: React.FC = () => {
             .slice(0, 6)
             .map((m, idx) => {
               const isSufficient = m.currentStock >= m.requiredQty;
+              const whSafeClass = escapeHtml(m.warehouse).replace(/[^a-zA-Z0-9가-힣_-]/g, '');
               return `
               <tr>
                 <td class="col-center" style="font-weight:700;">${idx + 1}</td>
-                <td class="col-center"><span class="wh-tag wh-${m.warehouse}">${m.warehouse}</span></td>
-                <td style="font-weight:700; color:#0f172a;">${m.name} <span style="font-weight:normal; font-size:9px; color:#64748b;">${m.spec ? `(${m.spec})` : ''}</span></td>
-                <td class="col-right" style="font-family:monospace; font-weight:800; color:#1e3a8a;">${m.requiredQty.toLocaleString()} ${m.unit}</td>
-                <td class="col-right" style="font-family:monospace; color:#475569;">${m.currentStock.toLocaleString()} ${m.unit}</td>
+                <td class="col-center"><span class="wh-tag wh-${whSafeClass}">${escapeHtml(m.warehouse)}</span></td>
+                <td style="font-weight:700; color:#0f172a;">${escapeHtml(m.name)} <span style="font-weight:normal; font-size:9px; color:#64748b;">${m.spec ? `(${escapeHtml(m.spec)})` : ''}</span></td>
+                <td class="col-right" style="font-family:monospace; font-weight:800; color:#1e3a8a;">${m.requiredQty.toLocaleString()} ${escapeHtml(m.unit)}</td>
+                <td class="col-right" style="font-family:monospace; color:#475569;">${m.currentStock.toLocaleString()} ${escapeHtml(m.unit)}</td>
                 <td class="col-center" style="font-weight:800; color:${isSufficient ? '#15803d' : '#b91c1c'};">${isSufficient ? '적합' : '부족'}</td>
                 <td class="col-center"><div class="mini-sign">불출확인</div></td>
               </tr>
@@ -707,7 +711,7 @@ export const WorkOrderStatusView: React.FC = () => {
       <html lang="ko">
       <head>
         <meta charset="UTF-8">
-        <title>[GFS] ${selectedLine}_일일작업지시서_${workDate}_${shift}</title>
+        <title>[GFS] ${escapeHtml(selectedLine)}_일일작업지시서_${escapeHtml(safeWorkDate)}_${escapeHtml(shift)}</title>
         <style>
           @page {
             size: A4 landscape;
@@ -1127,7 +1131,7 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
             <div class="main-title">${department === 'SEONGHYEONG' ? '🍱 성형장' : '🍳 전처리실'}: ${selectedLine} 일일 생산 작업지시서</div>
             <div class="doc-meta">
-              <span><strong>문서번호:</strong> ${docNumber}</span>
+              <span><strong>문서번호:</strong> ${escapeHtml(docNumber)}</span>
               <span class="sep">|</span>
               <span><strong>공정:</strong> ${department === 'SEONGHYEONG' ? '성형가공' : '원료전처리'}</span>
               <span class="sep">|</span>
@@ -1142,9 +1146,9 @@ export const WorkOrderStatusView: React.FC = () => {
           <!-- 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 -->
           <div class="date-plaque">
             <div class="date-plaque-label">📅 작업 지시일자 (PRODUCTION DATE)</div>
-            <div class="date-plaque-val">${formattedDateKo}</div>
+            <div class="date-plaque-val">${escapeHtml(formattedDateKo)}</div>
             <div class="date-plaque-shift">
-              <span class="shift-badge-pill">${shiftLabel}</span>
+              <span class="shift-badge-pill">${escapeHtml(shiftLabel)}</span>
             </div>
           </div>
 
@@ -1176,7 +1180,7 @@ export const WorkOrderStatusView: React.FC = () => {
         <div class="kpi-row">
           <div class="kpi-card highlight">
             <div class="kpi-label">일일 총 생산계획</div>
-            <div class="kpi-val" style="color:#1d4ed8;">${realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</div>
+            <div class="kpi-val" style="color:#1d4ed8;">${escapeHtml(realOrderMeta?.lineTotalPlan || currentLine.totalPlan)}</div>
             <div class="kpi-sub">${
               realOrderMeta?.hasRealOrders
                 ? `2편: ${(realOrderMeta.shift2Qty || 0).toLocaleString()} / 1편: ${(realOrderMeta.shift1Qty || 0).toLocaleString()}`
@@ -1185,26 +1189,26 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
           <div class="kpi-card">
             <div class="kpi-label">라인 가동 시간대</div>
-            <div class="kpi-val">${
+            <div class="kpi-val">${escapeHtml(
               scheduleTasks.length > 0
                 ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}`
                 : currentLine.totalTime
-            }</div>
+            )}</div>
             <div class="kpi-sub">총 소요 시간 관리</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">라인 생산속도 (UPH / 분당)</div>
-            <div class="kpi-val" style="color:#059669;">${currentLine.speed}</div>
+            <div class="kpi-val" style="color:#059669;">${escapeHtml(currentLine.speed)}</div>
             <div class="kpi-sub">실측 목표 준수율 관리</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">소인화 투입인원</div>
-            <div class="kpi-val" style="color:#b45309;">${currentLine.personnel}</div>
+            <div class="kpi-val" style="color:#b45309;">${escapeHtml(currentLine.personnel)}</div>
             <div class="kpi-sub">라인 오퍼레이터 및 패커</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">공정 및 품질책임자</div>
-            <div class="kpi-val" style="color:#4f46e5;">${currentLine.leadWorker}</div>
+            <div class="kpi-val" style="color:#4f46e5;">${escapeHtml(currentLine.leadWorker)}</div>
             <div class="kpi-sub">HACCP 안전 관리자 겸임</div>
           </div>
         </div>

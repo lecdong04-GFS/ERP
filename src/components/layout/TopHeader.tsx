@@ -34,17 +34,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
     };
     window.addEventListener('gfs-user-updated', onUserUpdated);
 
-    // 2. DB에서 현재 로그인 사용자 이름 및 부서 로드
-    fetch('/api/admin/user')
+    // 2. DB에서 현재 로그인 사용자 이름 및 부서 로드 (비관리자 포함 본인 정보만 조회)
+    fetch('/api/user/me')
       .then((res) => res.json())
       .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          const currentId = (session?.user as any)?.loginId || 'admin';
-          const me = res.data.find((u: any) => u.loginId === currentId);
-          if (me) {
-            if (me.name) setLiveName(me.name);
-            if (me.department) setLiveDept(me.department);
-          }
+        if (res.success && res.user) {
+          if (res.user.name) setLiveName(res.user.name);
+          if (res.user.department) setLiveDept(res.user.department);
         }
       })
       .catch(() => {});

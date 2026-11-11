@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 const STATUSES = ['대기', '출하', '완료', '취소'] as const;
 
 // PUT /api/sales/delivery/[id] — 납품 상태 변경 및 전표(품목/수량/단가) 수정 파이프라인
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions).catch(() => null);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
 
     const { id } = await context.params;
     const deliveryId = Number(id);
@@ -42,9 +43,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         .create({
           data: {
             logDate: new Date().toISOString(),
-            userId: Number(me.id) || undefined,
-            loginId: String(me.loginId || 'admin'),
-            userName: String(me.name || '관리자'),
+            userId: me.id ?? undefined,
+            loginId: me.loginId,
+            userName: me.name,
             action: '납품상태변경',
             menuId: 'sales-delivery-status-edit',
             menuName: '납품현황및전표수정',
@@ -133,9 +134,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       .create({
         data: {
           logDate: new Date().toISOString(),
-          userId: Number(me.id) || undefined,
-          loginId: String(me.loginId || 'admin'),
-          userName: String(me.name || '관리자'),
+          userId: me.id ?? undefined,
+          loginId: me.loginId,
+          userName: me.name,
           action: '전표상세수정',
           menuId: 'sales-delivery-status-edit',
           menuName: '납품현황및전표수정',
@@ -162,9 +163,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
 // DELETE /api/sales/delivery/[id] — 납품 전표 삭제 파이프라인
 export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireSession({ categoryId: 'sales', action: 'delete' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions).catch(() => null);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
 
     const { id } = await context.params;
     const deliveryId = Number(id);
@@ -188,9 +191,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
       .create({
         data: {
           logDate: new Date().toISOString(),
-          userId: Number(me.id) || undefined,
-          loginId: String(me.loginId || 'admin'),
-          userName: String(me.name || '관리자'),
+          userId: me.id ?? undefined,
+          loginId: me.loginId,
+          userName: me.name,
           action: '전표삭제',
           menuId: 'sales-delivery-status-edit',
           menuName: '납품현황및전표수정',

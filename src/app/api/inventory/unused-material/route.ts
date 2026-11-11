@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const assignDate = searchParams.get('assignDate');
     const status = searchParams.get('status');
@@ -24,8 +27,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { action, id, rows, ...data } = body;
+    const actorName = auth.user.name || auth.user.loginId;
 
     if (action === 'batch' && Array.isArray(rows)) {
       const createdList = [];
@@ -45,7 +51,7 @@ export async function POST(req: NextRequest) {
             useQty: Number(r.useQty) || 0,
             status: r.status || '지정',
             remark: r.remark || '',
-            createdBy: r.createdBy || '관리자',
+            createdBy: r.createdBy || actorName,
           },
         });
         createdList.push(item);
@@ -80,7 +86,7 @@ export async function POST(req: NextRequest) {
         useQty: Number(data.useQty) || 0,
         status: data.status || '지정',
         remark: data.remark || '',
-        createdBy: data.createdBy || '관리자',
+        createdBy: data.createdBy || actorName,
       },
     });
     return NextResponse.json({ success: true, data: created });

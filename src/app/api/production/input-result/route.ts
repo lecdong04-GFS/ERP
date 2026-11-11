@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/production/input-result?resultDate=2026-10-30&gyeId=GFS046
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const resultDate = searchParams.get('resultDate');
@@ -32,9 +36,13 @@ export async function GET(req: NextRequest) {
 
 // POST /api/production/input-result (실적 등록 및 작업지시 업데이트)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'production', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
-    const { resultDate, items = [], createdBy = 'admin' } = body;
+    const { resultDate, items = [] } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     if (!resultDate || items.length === 0) {
       return NextResponse.json(

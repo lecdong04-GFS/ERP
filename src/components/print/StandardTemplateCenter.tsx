@@ -29,10 +29,12 @@ import {
 import { usePrintReport, PrintDocumentType } from '@/context/PrintReportContext';
 import { usePipeline } from '@/context/PipelineContext';
 import { useSession } from 'next-auth/react';
+import { kstToday } from '@/lib/kst';
 import { LotLabelPrint } from './labels/LotLabelPrint';
 import { DeliveryBoxLabel } from './labels/DeliveryBoxLabel';
 import { DeliveryStatementPrint } from './DeliveryStatementPrint';
 import { PurchaseOrderPrint } from './PurchaseOrderPrint';
+import { OperationalPrintTemplates } from './OperationalPrintTemplates';
 
 const SHOPFLOOR_DOC_LABELS: Record<PrintDocumentType, string> = {
   WORK_ORDER: '공정별 작업지시서',
@@ -102,7 +104,7 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
   ]);
 
   // ── 1. HACCP & GS25 공인 감사 패키지 상태 ──
-  const [auditDate, setAuditDate] = useState<string>('2026-11-04');
+  const [auditDate, setAuditDate] = useState<string>(() => kstToday());
   const [auditLine, setAuditLine] = useState<string>('전체 라인');
   const [activeAuditDocIndex, setActiveAuditDocIndex] = useState<number>(0);
 
@@ -114,7 +116,7 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [shiftFilter, setShiftFilter] = useState<'1편' | '2편'>('1편');
-  const printDate = matReqPayload?.date || auditDate || '2026-11-04';
+  const printDate = matReqPayload?.date || auditDate || kstToday();
 
   // ── [감사 패키지] 공인 감사 6대 전표 메타데이터 & 실데이터 ──
   const AUDIT_DOCS = [
@@ -1091,19 +1093,16 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
                   id="printable-report-area"
                   className="bg-white w-[210mm] min-h-[297mm] p-8 shadow-xl border border-slate-300 text-slate-900 font-sans print:w-full print:min-h-0 print:border-0 print:shadow-none print:p-0"
                 >
-                  {activeDocType !== 'PURCHASE_ORDER' &&
-                    activeDocType !== 'DELIVERY_STATEMENT' && (
-                      <div className="text-center pb-4 mb-4 border-b-2 border-slate-900">
-                        <h1 className="text-xl font-black text-slate-900">
-                          {activeDocType === 'WORK_ORDER'
-                            ? '공정별 표준 제조작업지시서'
-                            : '공인 표준 업무 전표'}
-                        </h1>
-                        <p className="text-xs text-slate-500 mt-1 font-mono">
-                          (주)지에프에스 · FRESH FOOD MANUFACTURING · 일자: {printDate}
-                        </p>
-                      </div>
-                    )}
+                  {(activeDocType === 'LOT_LABEL' || activeDocType === 'DELIVERY_BOX_LABEL') && (
+                    <div className="text-center pb-4 mb-4 border-b-2 border-slate-900">
+                      <h1 className="text-xl font-black text-slate-900">
+                        {SHOPFLOOR_DOC_LABELS[activeDocType] || '공인 표준 라벨'}
+                      </h1>
+                      <p className="text-xs text-slate-500 mt-1 font-mono">
+                        (주)GFS 거창식품공장 · FRESH FOOD MANUFACTURING · 일자: {printDate}
+                      </p>
+                    </div>
+                  )}
 
                   {activeDocType === 'PURCHASE_ORDER' ? (
                     <PurchaseOrderPrint
@@ -1118,9 +1117,13 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
                   ) : activeDocType === 'DELIVERY_STATEMENT' ? (
                     <DeliveryStatementPrint payload={printPayload || undefined} />
                   ) : (
-                    <div className="text-center py-16 text-slate-400 text-xs">
-                      선택하신 서식의 데이터가 로드되었습니다. 상단의 [A4 표준 서식 인쇄]를 누르시면 공인 규격으로 즉시 출력됩니다.
-                    </div>
+                    <OperationalPrintTemplates
+                      activeDocType={activeDocType}
+                      printDate={printDate}
+                      matReqPayload={matReqPayload}
+                      workOrderPayload={workOrderPayload}
+                      writerName={writerName}
+                    />
                   )}
                 </div>
               </div>

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/inventory/return?returnDate=2026-10-30
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const returnDate = searchParams.get('returnDate');
@@ -26,9 +30,13 @@ export async function GET(req: NextRequest) {
 
 // POST /api/inventory/return (반품 등록 및 재고/수불부 반영)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
-    const { returnDate, partnerName, items = [], createdBy = 'admin' } = body;
+    const { returnDate, partnerName, items = [] } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     if (!returnDate || items.length === 0) {
       return NextResponse.json(

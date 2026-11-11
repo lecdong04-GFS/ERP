@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   AdminUserItem,
   PagePermItem,
@@ -55,11 +56,19 @@ interface AdminContextType {
 const AdminContext = createContext<AdminContextType | null>(null);
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { data: session, status: sessionStatus } = useSession();
+  const isAdminSession = useMemo(() => {
+    const user = session?.user as Record<string, any> | undefined;
+    if (!user) return false;
+    return String(user.role || '').includes('관리자') || user.loginId === 'admin';
+  }, [session]);
+
   // 1. Users
   const [users, setUsers] = useState<AdminUserItem[]>(INITIAL_ADMIN_USERS);
 
-  // DB 사용자 로드
+  // DB 사용자 로드 (관리자 세션일 때만 호출 — 비관리자 403 오류 방지)
   useEffect(() => {
+    if (sessionStatus !== 'authenticated' || !isAdminSession) return;
     fetch('/api/admin/user')
       .then((res) => res.json())
       .then((res) => {
@@ -70,7 +79,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             userId: u.loginId,
             userName: u.name,
             permLevel: u.role === '관리자' ? '00' : '03',
-            levelName: u.role === '관리자' ? '시스템관리자' : '일반사용자',
+            levelName: u.role === '관리자' ? '시스템관리자' : u.role || '일반사용자',
             department: u.department || '(주)GFS',
             phone: u.tel || '010-0000-0000',
             email: u.email || `${u.loginId}@gfsfood.co.kr`,
@@ -93,7 +102,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       })
       .catch((err) => console.error('Failed to load admin users from DB:', err));
-  }, []);
+  }, [sessionStatus, isAdminSession]);
 
   const updateUser = useCallback((updated: AdminUserItem) => {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -109,7 +118,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         department: updated.department,
         tel: updated.phone,
         email: updated.email,
-        role: (updated.levelName || '').includes('관리자') ? '관리자' : '일반',
+        role: updated.levelName || '일반',
         isActive: updated.status === '정상',
       }),
     }).catch((err) => console.error('Failed to sync user update to DB:', err));
@@ -126,21 +135,50 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         department: newUser.department,
         tel: newUser.phone,
         email: newUser.email,
-        role: (newUser.levelName || '').includes('관리자') ? '관리자' : '일반',
+        role: newUser.levelName || '일반',
         isActive: true,
       }),
-    }).catch((err) => console.error('Failed to sync new user to DB:', err));
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.tempPassword) {
+          alert(`[${newUser.userId}] 계정 생성 완료 — 초기 비밀번호: ${json.tempPassword}`);
+        }
+      })
+      .catch((err) => console.error('Failed to sync new user to DB:', err));
   }, []);
 
   const resetUserLogin = useCallback((userId: string) => {
     setUsers((prev) =>
       prev.map((u) => (u.userId === userId ? { ...u, status: '정상' } : u))
     );
-    alert(`[${userId}] 사용자의 로그인 실패 횟수 및 계정 잠김 상태가 초기화되었습니다.`);
+    fetch('/api/admin/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'unlock', loginId: userId }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        alert(json.message || json.error || `[${userId}] 계정 잠금 해제가 완료되었습니다.`);
+      })
+      .catch((err) => alert(`잠금 해제 요청 실패: ${err.message}`));
   }, []);
 
   const resetUserPassword = useCallback((userId: string) => {
-    alert(`[${userId}] 사용자의 임시 비밀번호가 발급되었습니다: Gfs2026!@#`);
+    fetch('/api/admin/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reset_password', loginId: userId }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success) {
+          alert(`비밀번호 초기화 실패: ${json.error || '오류'}`);
+          return;
+        }
+        alert(json.message || `[${userId}] 사용자의 임시 비밀번호가 발급되었습니다.`);
+      })
+      .catch((err) => alert(`비밀번호 초기화 실패: ${err.message}`));
   }, []);
 
   // 2. Permissions
@@ -208,6 +246,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [changeRequests, setChangeRequests] = useState<ChangeRequestItem[]>(INITIAL_CHANGE_REQUESTS);
 
   useEffect(() => {
+    if (sessionStatus !== 'authenticated' || !isAdminSession) return;
     fetch('/api/admin/change-request')
       .then((res) => res.json())
       .then((json) => {
@@ -229,7 +268,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       })
       .catch((err) => console.error('Fetch change requests failed:', err));
-  }, []);
+  }, [sessionStatus, isAdminSession]);
 
   const addChangeRequest = useCallback((req: ChangeRequestItem) => {
     setChangeRequests((prev) => [req, ...prev]);
@@ -259,6 +298,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedSummaryPageCode, setSelectedSummaryPageCode] = useState<string | null>('Uc_BOM');
 
   useEffect(() => {
+    if (sessionStatus !== 'authenticated' || !isAdminSession) return;
     fetch('/api/admin/system-log')
       .then((res) => res.json())
       .then((json) => {
@@ -276,7 +316,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       })
       .catch((err) => console.error('Fetch system logs failed:', err));
-  }, [selectedDate]);
+  }, [selectedDate, sessionStatus, isAdminSession]);
 
   return (
     <AdminContext.Provider

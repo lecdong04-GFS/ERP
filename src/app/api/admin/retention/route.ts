@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/admin/retention (3년 데이터 보존 및 아카이빙 현황 조회)
 export async function GET(req: NextRequest) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.error) return auth.error;
+
   try {
     const currentYear = new Date().getFullYear();
 

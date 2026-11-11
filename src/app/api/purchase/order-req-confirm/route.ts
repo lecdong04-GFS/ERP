@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday, makeDocNo } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
@@ -416,9 +417,13 @@ export async function GET(req: NextRequest) {
 
 // POST /api/purchase/order-req-confirm (최종 검토 후 발주서 일괄 생성 및 파이프라인 동기화)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
-    const { orderDate, items = [], createdBy = 'admin' } = body;
+    const { orderDate, items = [] } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     const today = orderDate || kstToday();
 

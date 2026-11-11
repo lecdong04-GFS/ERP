@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const resultDate = searchParams.get('resultDate');
     const gyeId = searchParams.get('gyeId');
@@ -31,6 +34,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'production', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { action, id, ...data } = body;
 
@@ -49,7 +54,7 @@ export async function POST(req: NextRequest) {
         defectQty: Number(data.defectQty) || 0,
         yieldRate: Number(data.yieldRate) || 100,
         remark: data.remark || '',
-        createdBy: data.createdBy || '관리자',
+        createdBy: data.createdBy || auth.user.name || auth.user.loginId,
       },
     });
     await touchDashboardSnapshot();

@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const checkDate = searchParams.get('checkDate');
     const warehouse = searchParams.get('warehouse');
@@ -25,6 +28,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { action, id, rows, ...data } = body;
 

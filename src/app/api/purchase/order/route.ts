@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
 import {
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic';
 // GET /api/purchase/order?orderDate=2026-10-30&status=미입고
 // GET /api/purchase/order?startDate=2026-10-01&endDate=2026-10-31 (기간 조회)
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const rawOrderDate = searchParams.get('orderDate');
@@ -167,6 +171,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/purchase/order (발주 상태 변경, 품목 수정, 취소 및 삭제)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { action, id, orderNo, ids, orderNos, status, cancelReason, detailId } = body;
@@ -294,6 +301,9 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/purchase/order (발주서 영구 삭제)
 export async function DELETE(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'delete' });
+  if (auth.error) return auth.error;
+
   try {
     let body: any = {};
     const { searchParams } = new URL(req.url);

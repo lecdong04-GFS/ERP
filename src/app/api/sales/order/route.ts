@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { makeDocNo } from '@/lib/kst';
 
 // GET /api/sales/order?orderDate=2026-10-30&shift=1편
 // GET /api/sales/order?latest=1 → { orderDate: 최신 수주일자, orderCount }
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     if (searchParams.get('latest') === '1') {
@@ -61,6 +63,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/sales/order (주문 등록)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {
@@ -70,9 +75,9 @@ export async function POST(req: NextRequest) {
       orderType = '정규',
       uploadMethod = '수기',
       items = [], // [{ productCode, orderQty1, orderQty2, unitPrice, remark }]
-      createdBy = 'admin',
       remark = '',
     } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     if (!orderDate || items.length === 0) {
       return NextResponse.json(
@@ -148,11 +153,9 @@ export async function POST(req: NextRequest) {
 // DELETE /api/sales/order?date=YYYY-MM-DD — 해당 날짜 수주 완전 삭제
 export async function DELETE(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
-    const me = session.user as any;
+    const auth = await requireSession({ categoryId: 'sales', action: 'delete' });
+    if ('error' in auth) return auth.error;
+    const me = auth.user;
     const date = req.nextUrl.searchParams.get('date');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json({ success: false, error: 'date 파라미터가 필요합니다. (YYYY-MM-DD)' }, { status: 400 });

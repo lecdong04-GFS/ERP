@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { isDummyBomDetail } from '@/lib/gfs/bomMatch';
 import {
@@ -12,6 +13,9 @@ import {
 
 // GET /api/master/product?category=완성품&search=김밥
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
@@ -111,6 +115,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/master/product
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'master', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {

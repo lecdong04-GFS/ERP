@@ -10,10 +10,13 @@ import {
   pickLatestValidPurchasePrice,
   resolveBagPrice,
 } from '@/lib/gfs/pricing';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/inventory/safety-stock?warehouse=냉장1&statusFilter=CRITICAL&search=...
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const warehouse = searchParams.get('warehouse');
     const category = searchParams.get('category');
@@ -259,6 +262,8 @@ export async function GET(req: NextRequest) {
 // POST /api/inventory/safety-stock (안전재고 일괄 저장 및 동기화 파이프라인)
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { action = 'save', rows = [], bufferMultiplier = 1.5 } = body;
 

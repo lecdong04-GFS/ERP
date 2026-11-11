@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import {
   calcBomEffectiveUnitCost,
@@ -24,6 +25,9 @@ function detectVariety(kind?: string | null, name?: string): string {
 
 // GET /api/cost/recipe-rate?calcMonth=2026-11&recalc=false
 export async function GET(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'cost', action: 'read' });
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const calcMonth = searchParams.get('calcMonth') || kstToday().slice(0, 7);
@@ -201,6 +205,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/cost/recipe-rate (납품단가 또는 비고 일괄/단건 저장)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'cost', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const rows = Array.isArray(body) ? body : body.rows || [body];

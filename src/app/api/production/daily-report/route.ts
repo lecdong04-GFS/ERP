@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { requireSession } from '@/lib/apiAuth';
 import {
   INITIAL_DAILY_PRODUCTION_REPORT,
   calculateReportTotals,
@@ -101,6 +102,8 @@ function distributeToCenters(
 // GET /api/production/daily-report?date=2026-11-08
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date') || '2026-11-08';
 
@@ -340,8 +343,15 @@ export async function GET(req: NextRequest) {
 // 생산일보 실적 일괄 저장 및 ProductionResult 테이블 원자적 동기화
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'production', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
-    const { date, issueMemo, items = [], createdBy = '관리자' } = body;
+    const {
+      date,
+      issueMemo,
+      items = [],
+      createdBy = auth.user.name || auth.user.loginId,
+    } = body;
     const targetDate = date || kstToday();
 
     if (!Array.isArray(items) || items.length === 0) {

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { usePipeline } from '@/context/PipelineContext';
+import { kstToday } from '@/lib/kst';
 
 export interface SettlementDetailItem {
   id: number;
@@ -55,7 +56,7 @@ export const ProvisionalSalesStatusView: React.FC = () => {
   const { openExcelOrderModal } = usePipeline();
 
   // 날짜 및 필터 상태
-  const [date, setDate] = useState<string>('2026-11-05');
+  const [date, setDate] = useState<string>(() => kstToday());
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [centerFilter, setCenterFilter] = useState<string>('ALL');
   const [searchKeyword, setSearchKeyword] = useState<string>('');

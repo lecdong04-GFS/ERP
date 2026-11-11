@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const productId = searchParams.get('productId');
 
@@ -22,6 +25,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'master', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const created = await prisma.packagingSpec.create({
       data: {

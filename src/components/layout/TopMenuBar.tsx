@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { MENU_CATEGORIES } from '@/config/menuConfig';
 import { useTabs } from '@/context/TabContext';
+import { usePermissions } from '@/context/PermissionsContext';
 import { MenuItem } from '@/types/erp';
 import { PanelLeft } from 'lucide-react';
 
@@ -13,8 +14,28 @@ interface TopMenuBarProps {
 
 export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSidebarOpen }) => {
   const { openTab } = useTabs();
+  const { canAccessMenu } = usePermissions();
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
+
+  const visibleOpCategories = useMemo(
+    () =>
+      MENU_CATEGORIES.filter((c) => c.id !== 'admin')
+        .map((c) => ({
+          ...c,
+          items: c.items.filter((item) => canAccessMenu(item.id, c.id, 'read')),
+        }))
+        .filter((c) => c.items.length > 0),
+    [canAccessMenu]
+  );
+
+  const visibleAdminCategory = useMemo(() => {
+    const adminCat = MENU_CATEGORIES.find((c) => c.id === 'admin');
+    if (!adminCat) return null;
+    const items = adminCat.items.filter((item) => canAccessMenu(item.id, adminCat.id, 'read'));
+    if (items.length === 0) return null;
+    return { ...adminCat, items };
+  }, [canAccessMenu]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -64,7 +85,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
       {/* Horizontal Main Categories (좌측부터 시원하게 펼쳐지는 1~10 대메뉴) */}
       <div className="hidden md:flex items-center space-x-1 overflow-visible">
         {/* 1~9: 업무관리 ~ 도움말 */}
-        {MENU_CATEGORIES.filter((c) => c.id !== 'admin').map((category) => {
+        {visibleOpCategories.map((category) => {
           const isOpen = openDropdownId === category.id;
 
           return (
@@ -124,7 +145,7 @@ export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onToggleSidebar, isSideb
 
         {/* 관리자전용 */}
         {(() => {
-          const adminCat = MENU_CATEGORIES.find((c) => c.id === 'admin');
+          const adminCat = visibleAdminCategory;
           if (!adminCat) return null;
           const isOpen = openDropdownId === 'admin';
           return (

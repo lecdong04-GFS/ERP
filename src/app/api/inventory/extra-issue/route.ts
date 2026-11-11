@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/inventory/extra-issue?issueDate=2026-11-07&gyeId=GFS005&startDate=...&endDate=...
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const issueDate = searchParams.get('issueDate');
     const startDate = searchParams.get('startDate');
@@ -132,8 +135,15 @@ export async function GET(req: NextRequest) {
 // POST /api/inventory/extra-issue (추가불출 등록 및 현재고 차감 파이프라인)
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
-    const { action = 'batch', rows = [], createdBy = '현장관리자', issueDate = kstToday() } = body;
+    const {
+      action = 'batch',
+      rows = [],
+      createdBy = auth.user.name || auth.user.loginId,
+      issueDate = kstToday(),
+    } = body;
 
     const itemsToProcess = action === 'batch' && Array.isArray(rows) ? rows : [body];
 
@@ -225,6 +235,8 @@ export async function POST(req: NextRequest) {
 // DELETE /api/inventory/extra-issue?id=123 (추가불출 취소 및 현재고 원복)
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'delete' });
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 

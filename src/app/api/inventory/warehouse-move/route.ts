@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/inventory/warehouse-move?moveDate=2026-10-30
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const moveDate = searchParams.get('moveDate');
@@ -26,9 +30,13 @@ export async function GET(req: NextRequest) {
 
 // POST /api/inventory/warehouse-move (창고이동 등록 및 재고 창고 갱신 - 원자적 트랜잭션 보장)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
-    const { moveDate, items = [], createdBy = 'admin' } = body;
+    const { moveDate, items = [] } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     if (!moveDate || items.length === 0) {
       return NextResponse.json(

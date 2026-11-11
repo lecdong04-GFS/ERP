@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/master/partner?type=P&search=CJ&includeProducts=true
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type');
@@ -66,6 +70,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/master/partner (단건 또는 일괄 저장/수정)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'master', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
 
@@ -248,6 +255,9 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/master/partner?id=V001 (삭제 또는 비활성화)
 export async function DELETE(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'master', action: 'delete' });
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import * as XLSX from 'xlsx';
 import { parseOrderSheet } from '@/lib/gfs/canonical';
@@ -12,6 +11,9 @@ const MASTER_KEY = 'gfs_master_workbook';
 
 // GET /api/gfs/master-sheet?meta=1 → 최신 발주서(신메뉴+BOM 마스터) 메타 또는 전체(base64 포함) 조회
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const metaOnly = searchParams.get('meta') === '1';
@@ -57,9 +59,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/gfs/master-sheet — 신메뉴+BOM이 반영된 새 발주서 엑셀 영구 저장 (1~2주 주기 교체용)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
 
     const fileName = String(body.fileName || '').trim() || '발주서_마스터.xlsx';
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest) {
     }
 
     const asOf = kstToday();
-    const uploadedBy = String(me.name || me.loginId || '담당자');
+    const uploadedBy = me.name || me.loginId;
     const payload = {
       fileName,
       base64,
@@ -101,8 +105,8 @@ export async function POST(req: NextRequest) {
       .create({
         data: {
           logDate: kstToday(),
-          userId: me.id ? Number(me.id) : null,
-          loginId: me.loginId || 'admin',
+          userId: me.id,
+          loginId: me.loginId,
           userName: uploadedBy,
           action: '데이터변경',
           menuId: 'pur-mat-order-day',

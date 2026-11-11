@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
   try {
     const { searchParams } = new URL(req.url);
     const discardDate = searchParams.get('discardDate') || kstToday();
@@ -183,11 +186,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'production', action: 'write' });
+    if (auth.error) return auth.error;
+    const me = auth.user;
+
     const body = await req.json();
     const { action, id, rows, ...data } = body;
 
     // 1. 단일 레코드 삭제
     if (action === 'delete') {
+      const delAuth = await requireSession({ categoryId: 'production', action: 'delete' });
+      if (delAuth.error) return delAuth.error;
       const targetId = Number(id || data.id);
       if (!targetId) {
         return NextResponse.json({ success: false, error: '삭제할 ID가 필요합니다.' }, { status: 400 });
@@ -198,8 +207,9 @@ export async function POST(req: NextRequest) {
       await prisma.systemLog.create({
         data: {
           logDate: new Date().toISOString(),
-          loginId: data.loginId || 'admin',
-          userName: data.userName || '시스템관리자',
+          userId: me.id,
+          loginId: me.loginId,
+          userName: me.name,
           action: '폐기삭제',
           menuId: 'prod-discard-reg',
           menuName: '공정 불량/폐기 등록',
@@ -240,7 +250,7 @@ export async function POST(req: NextRequest) {
                 lotNo: row.lotNo || '',
                 expiryDate: row.expiryDate || '',
                 remark: row.remark || '',
-                createdBy: row.createdBy || '관리자',
+                createdBy: row.createdBy || me.name || me.loginId,
               },
             });
           } else {
@@ -258,7 +268,7 @@ export async function POST(req: NextRequest) {
                 lotNo: row.lotNo || '',
                 expiryDate: row.expiryDate || '',
                 remark: row.remark || '',
-                createdBy: row.createdBy || '관리자',
+                createdBy: row.createdBy || me.name || me.loginId,
               },
             });
           }
@@ -291,8 +301,9 @@ export async function POST(req: NextRequest) {
         await tx.systemLog.create({
           data: {
             logDate: new Date().toISOString(),
-            loginId: data.loginId || 'admin',
-            userName: data.userName || '시스템관리자',
+            userId: me.id,
+            loginId: me.loginId,
+            userName: me.name,
             action: '공정폐기등록',
             menuId: 'prod-discard-reg',
             menuName: '공정 불량/폐기 등록',
@@ -328,7 +339,7 @@ export async function POST(req: NextRequest) {
           lotNo: data.lotNo || '',
           expiryDate: data.expiryDate || '',
           remark: data.remark || '',
-          createdBy: data.createdBy || '관리자',
+          createdBy: data.createdBy || me.name || me.loginId,
         },
       });
 

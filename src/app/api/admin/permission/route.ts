@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { ALL_MENU_ITEMS, MENU_CATEGORIES } from '@/config/menuConfig';
+import { MENU_CATEGORIES } from '@/config/menuConfig';
+import { requireSession, invalidateAuthCache } from '@/lib/apiAuth';
+import { buildUserPermissionsMatrix } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
 // GET /api/admin/permission?userId=123 (또는 ?loginId=admin)
 export async function GET(req: NextRequest) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const userIdParam = searchParams.get('userId');
@@ -24,57 +29,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: '사용자를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    // DB에 저장된 권한 목록
     const savedPerms = await prisma.userPermission.findMany({
       where: { userId: user.id },
     });
-    const permByMenu = new Map(savedPerms.map((p) => [p.menuId, p]));
 
-    const isAdmin = (user.role || '').includes('관리자') || user.loginId === 'admin';
-
-    // 전체 실무 메뉴에 대해 권한 매트릭스 완성
-    const fullPermissions = ALL_MENU_ITEMS.map((item, idx) => {
-      const saved = permByMenu.get(item.id);
-      if (saved) {
-        return {
-          id: saved.id,
-          userId: user.id,
-          loginId: user.loginId,
-          userName: user.name,
-          menuId: item.id,
-          menuName: item.title,
-          categoryId: item.categoryId,
-          categoryName: item.categoryName,
-          canRead: saved.canRead,
-          canWrite: saved.canWrite,
-          canDelete: saved.canDelete,
-          canExport: saved.canExport,
-          seq: idx + 1,
-        };
-      }
-
-      // 기본 권한 산출 (관리자는 전체 허용, 일반은 메뉴별 분기)
-      const defaultRead = true;
-      const defaultWrite = isAdmin ? true : !['admin', 'cost'].includes(item.categoryId);
-      const defaultDelete = isAdmin;
-      const defaultExport = true;
-
-      return {
-        id: -idx - 1,
-        userId: user.id,
-        loginId: user.loginId,
-        userName: user.name,
-        menuId: item.id,
-        menuName: item.title,
-        categoryId: item.categoryId,
-        categoryName: item.categoryName,
-        canRead: defaultRead,
-        canWrite: defaultWrite,
-        canDelete: defaultDelete,
-        canExport: defaultExport,
-        seq: idx + 1,
-      };
-    });
+    const fullPermissions = buildUserPermissionsMatrix(user, savedPerms);
 
     return NextResponse.json({
       success: true,
@@ -99,6 +58,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/admin/permission (권한 일괄 저장 및 복사)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
 
@@ -137,6 +99,7 @@ export async function POST(req: NextRequest) {
       );
 
       await prisma.$transaction(ops);
+      invalidateAuthCache();
       return NextResponse.json({ success: true, message: `${sourcePerms.length}개 메뉴 권한이 성공적으로 복사되었습니다.` });
     }
 
@@ -180,6 +143,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    invalidateAuthCache();
     return NextResponse.json({
       success: true,
       message: `${permissions.length}개 메뉴 권한이 데이터베이스에 안전하게 저장되었습니다.`,

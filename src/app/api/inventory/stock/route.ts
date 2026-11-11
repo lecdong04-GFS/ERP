@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
 import { normName } from '@/lib/gfs/norm';
@@ -21,6 +20,9 @@ import {
 
 // GET /api/inventory/stock?category=원재료&warehouse=상온보관고&targetDate=2026-11-09
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
@@ -190,6 +192,9 @@ export async function GET(req: NextRequest) {
 
 // PUT /api/inventory/stock - 재고 정보 직접입력/수정 일괄 저장
 export async function PUT(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const updates: Array<{
@@ -418,9 +423,11 @@ export async function PUT(req: NextRequest) {
 // POST /api/inventory/stock - 재고 신규 생성 (재고조사표 업로드 등)
 // body: { items: [{ productCode?, productName, warehouse, currentQty, unitPrice, expiryDate, vendor? }] }
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
     const items = body.items as Array<{
       productCode?: string;

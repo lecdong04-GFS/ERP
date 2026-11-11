@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
+import { PermissionsProvider } from '@/context/PermissionsContext';
 import { ToastProvider } from '@/context/ToastContext';
 import { ConfirmProvider } from '@/context/ConfirmContext';
 
@@ -27,11 +28,13 @@ export default function RootLayout({
     <html lang="ko" suppressHydrationWarning>
       <body className={`${mono.variable} antialiased min-h-screen h-screen flex flex-col overflow-hidden bg-slate-100`}>
         <AuthProvider>
-          <ToastProvider>
-            <ConfirmProvider>
-              {children}
-            </ConfirmProvider>
-          </ToastProvider>
+          <PermissionsProvider>
+            <ToastProvider>
+              <ConfirmProvider>
+                {children}
+              </ConfirmProvider>
+            </ToastProvider>
+          </PermissionsProvider>
         </AuthProvider>
       </body>
     </html>

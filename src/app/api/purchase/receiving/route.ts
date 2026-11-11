@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { makeDocNo } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
@@ -18,6 +19,9 @@ import {
 // - ?type=pending_orders : 아직 입고되지 않은 발주서(PurchaseOrderDetail) 목록 반환 (입고등록 대기 목록)
 // - ?startDate=...&endDate=...&status=... : 실제 입고 이력(Receiving) 목록 반환
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type');
@@ -192,9 +196,13 @@ export async function GET(req: NextRequest) {
 // 3. MaterialLedger (자재수불부) 입고 거래 자동 기록
 // 4. PurchaseOrderDetail & PurchaseOrder (발주서 잔량 차감 및 입고상태 갱신)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
-    const { receivingDate: rawReceivingDate, partnerId, partnerName, items = [], createdBy = 'admin' } = body;
+    const { receivingDate: rawReceivingDate, partnerId, partnerName, items = [] } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
     const receivingDate = normalizeDateYmd(rawReceivingDate);
 
     if (!receivingDate || items.length === 0) {
@@ -582,6 +590,9 @@ export async function POST(req: NextRequest) {
 // 입고 내역 수정 (수량, 단가, 유통기한, 창고, LOT, 검수결과 등)
 // 변경된 차이(delta)를 현재고(Inventory), 자재수불부(MaterialLedger), 발주서 잔량(PurchaseOrderDetail)에 즉시 원자적 반영
 export async function PUT(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { updates, detailId, status, remark } = body;
@@ -854,6 +865,9 @@ export async function PUT(req: NextRequest) {
 // 입고 취소 / 롤백 (Receiving 또는 개별 ReceivingDetail)
 // 현재고(Inventory)에서 입고수량 원상 차감, 발주서 잔량(remainQty) 복원, 상태를 '취소'로 전환
 export async function DELETE(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'delete' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { receivingIds = [], detailIds = [], cancelReason = '사용자 입고취소 및 재고 롤백' } = body;

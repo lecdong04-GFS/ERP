@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { makeDocNo } from '@/lib/kst';
+import { requireSession } from '@/lib/apiAuth';
+import { kstToday, makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
 import { isDummyBomDetail, menuKey } from '@/lib/gfs/bomMatch';
 import { getCanonicalDailyReport } from '@/components/production/data/dailyProductionReportData';
@@ -606,6 +607,9 @@ function parseTimeToMinutes(timeStr: string): number {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const workDateParam = searchParams.get('workDate');
@@ -622,7 +626,7 @@ export async function GET(req: NextRequest) {
         orderBy: { orderDate: 'desc' },
         select: { orderDate: true },
       });
-      targetDate = latestSo?.orderDate || '2026-11-05';
+      targetDate = latestSo?.orderDate || kstToday();
     }
 
     // 2) 실시간 재고(Inventory) 및 당일 재고조사표 스냅샷(InventorySnapshot) 통합 인덱싱 (단일 진실 공급원 확립)
@@ -1256,12 +1260,17 @@ export async function GET(req: NextRequest) {
 
 // POST /api/production/work-order (일괄 저장, 순서 변경, 개별 상태 업데이트)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'production', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { action, rows, workDate, shift, line } = body;
 
     // 1) 일괄 순서 및 작업지시 동기화 저장 (사용자가 순서/시간 변경 후 [순서 저장] 클릭 시)
     if (action === 'batch_save' && Array.isArray(rows)) {
+      const skipped: Array<{ workOrderNo: string; productName: string; reason: string }> = [];
+
       for (const r of rows) {
         if (!r.workOrderNo) continue;
         const existing = await prisma.workOrder.findUnique({
@@ -1281,11 +1290,14 @@ export async function POST(req: NextRequest) {
             },
           });
         } else {
-          let pId = r.productId;
+          let pId = r.productId ? Number(r.productId) : undefined;
           let gId = r.gyeId;
-          if (!pId && r.productName) {
+          if (!pId && (r.productCode || r.productName)) {
+            const rawName = String(r.productName || '').trim();
             const prod = await prisma.product.findFirst({
-              where: { name: { contains: r.productName.slice(0, 4) } },
+              where: r.productCode
+                ? { productCode: String(r.productCode).trim() }
+                : { OR: [{ name: rawName }, { name: { contains: rawName.slice(0, 4) } }] },
               select: { id: true, productCode: true, spec: true, unit: true },
             });
             if (prod) {
@@ -1294,8 +1306,12 @@ export async function POST(req: NextRequest) {
               if (!r.spec) r.spec = prod.spec;
               if (!r.unit) r.unit = prod.unit;
             } else {
-              const anyP = await prisma.product.findFirst({ select: { id: true } });
-              if (anyP) pId = anyP.id;
+              skipped.push({
+                workOrderNo: String(r.workOrderNo),
+                productName: rawName,
+                reason: '마스터 품목을 찾을 수 없어 생성을 건너뛰었습니다.',
+              });
+              continue;
             }
           }
           if (!gId) {
@@ -1303,37 +1319,48 @@ export async function POST(req: NextRequest) {
               where: { name: { contains: line || '성형' } },
               select: { id: true },
             });
-            gId = anyGye?.id || (await prisma.gyeMaster.findFirst({ select: { id: true } }))?.id || 'GFS004';
+            gId = anyGye?.id || (await prisma.gyeMaster.findFirst({ select: { id: true } }))?.id;
           }
 
-          if (pId && gId) {
-            await prisma.workOrder.create({
-              data: {
-                workOrderNo: r.workOrderNo,
-                workDate: workDate || r.workDate || '2026-11-06',
-                shift: shift || r.shift || '1편',
-                gyeId: gId,
-                gyeName: r.gyeName || line || '성형',
-                productId: pId,
-                productCode: r.productCode || '',
-                productName: r.productName || r.partName || '',
-                spec: r.spec || '',
-                unit: r.unit || 'ea',
-                orderQty: Number(r.orderQty) || 0,
-                prodQty: Number(r.prodQty) || Number(r.orderQty) || 0,
-                workSeq: Number(r.workSeq) || 1,
-                status: r.status || '대기',
-                completeTime: r.timeRange || r.completeTime || '09:30 ~ 10:30',
-                createdBy: r.assignee || '김반장',
-              },
+          if (!pId || !gId) {
+            skipped.push({
+              workOrderNo: String(r.workOrderNo),
+              productName: String(r.productName || ''),
+              reason: !pId ? '품목 ID가 없습니다.' : '공정(계) 정보를 찾을 수 없습니다.',
             });
+            continue;
           }
+
+          await prisma.workOrder.create({
+            data: {
+              workOrderNo: r.workOrderNo,
+              workDate: workDate || r.workDate || kstToday(),
+              shift: shift || r.shift || '1편',
+              gyeId: gId,
+              gyeName: r.gyeName || line || '성형',
+              productId: pId,
+              productCode: r.productCode || '',
+              productName: r.productName || r.partName || '',
+              spec: r.spec || '',
+              unit: r.unit || 'ea',
+              orderQty: Number(r.orderQty) || 0,
+              prodQty: Number(r.prodQty) || Number(r.orderQty) || 0,
+              workSeq: Number(r.workSeq) || 1,
+              status: r.status || '대기',
+              completeTime: r.timeRange || r.completeTime || '09:30 ~ 10:30',
+              createdBy: r.assignee || auth.user.name,
+            },
+          });
         }
       }
 
       return NextResponse.json({
         success: true,
-        message: '작업 순서 및 지시가 성공적으로 전산에 영구 저장되었습니다.',
+        skipped,
+        message:
+          skipped.length > 0
+            ? `작업 순서를 저장했습니다. (미매칭 품목 ${skipped.length}건 제외)`
+            : '작업 순서 및 지시가 성공적으로 전산에 영구 저장되었습니다.',
       });
     }
 

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 // GET /api/gfs/snapshot — 품목별 GFS 버팀일 스냅샷 전체
 export async function GET() {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const rows = await prisma.gfsSnapshot.findMany({ orderBy: { updatedAt: 'desc' } });
     const map: Record<string, { stockDays: number | null; asOf: string; productName: string; source: string }> = {};
@@ -30,9 +32,11 @@ export async function GET() {
 // POST /api/gfs/snapshot — GFS 산출 버팀일 일괄 저장 (productCode 기준 upsert)
 // body: { asOf?: string, items: [{ productCode?, productName?, warehouse?, stockDays }] }
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
     const asOf: string = body.asOf || kstToday();
     const source: string = body.source === 'erp' ? 'erp' : 'gfs';

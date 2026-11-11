@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/user/startup-tabs (사용자별 시작화면 탭 목록 조회)
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
-    const session = await getServerSession(authOptions);
-    const loginId = (session?.user as any)?.loginId || 'admin';
+    const loginId = auth.user.loginId;
 
     const user = await prisma.user.findUnique({
       where: { loginId },
@@ -37,9 +38,11 @@ export async function GET(req: NextRequest) {
 
 // POST /api/user/startup-tabs (사용자별 시작화면 탭 목록 저장)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
-    const session = await getServerSession(authOptions);
-    const loginId = (session?.user as any)?.loginId || 'admin';
+    const loginId = auth.user.loginId;
     const body = await req.json();
     const { startupTabs } = body;
 

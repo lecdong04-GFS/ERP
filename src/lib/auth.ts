@@ -2,6 +2,11 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
+import {
+  checkLoginRateLimit,
+  clearLoginRateLimit,
+  recordLoginFailure,
+} from '@/lib/rateLimit';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,44 +16,60 @@ export const authOptions: NextAuthOptions = {
         loginId: { label: '사번/아이디', type: 'text' },
         password: { label: '비밀번호', type: 'password' },
       },
-      async authorize(credentials) {
-        if (!credentials?.loginId || !credentials?.password) {
+      async authorize(credentials, req) {
+        const loginId = credentials?.loginId?.trim() || '';
+        const password = credentials?.password || '';
+        if (!loginId || !password) {
           throw new Error('사번과 비밀번호를 입력하세요.');
         }
 
+        const rawFwd = (req?.headers as Record<string, string | undefined> | undefined)?.['x-forwarded-for'];
+        const rawReal = (req?.headers as Record<string, string | undefined> | undefined)?.['x-real-ip'];
+        const clientIp = String(rawFwd || rawReal || '').split(',')[0].trim();
+        const limitKeys = [`id:${loginId}`, ...(clientIp ? [`ip:${clientIp}`] : [])];
+
+        for (const key of limitKeys) {
+          const rl = await checkLoginRateLimit(key);
+          if (!rl.allowed) {
+            throw new Error(`로그인 시도가 너무 많습니다. ${rl.retryAfterSec}초 후 다시 시도하세요.`);
+          }
+        }
+
         const user = await prisma.user.findUnique({
-          where: { loginId: credentials.loginId },
-          include: { permissions: true },
+          where: { loginId },
+          select: {
+            id: true,
+            loginId: true,
+            password: true,
+            name: true,
+            email: true,
+            role: true,
+            department: true,
+            position: true,
+            isActive: true,
+          },
         });
 
         if (!user) {
+          await Promise.all(limitKeys.map((key) => recordLoginFailure(key)));
           throw new Error('존재하지 않는 사번입니다.');
         }
 
         if (!user.isActive) {
+          await Promise.all(limitKeys.map((key) => recordLoginFailure(key)));
           throw new Error('비활성화된 계정입니다. 관리자에게 문의하세요.');
         }
 
-        // bcrypt 해시 비교 (해시되지 않은 레거시 비밀번호도 지원)
-        let isValid = false;
-        if (user.password.startsWith('$2')) {
-          isValid = await bcrypt.compare(credentials.password, user.password);
-        } else {
-          // 레거시 평문 비밀번호 (시드 데이터 등)
-          isValid = user.password === credentials.password;
-          if (isValid) {
-            // 최초 로그인 시 bcrypt 해시로 자동 마이그레이션
-            const hashed = await bcrypt.hash(credentials.password, 12);
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { password: hashed },
-            });
-          }
-        }
+        // bcrypt 해시 비밀번호만 허용 (평문 폴백 제거)
+        const isValid =
+          user.password.startsWith('$2') && (await bcrypt.compare(password, user.password));
 
         if (!isValid) {
+          await Promise.all(limitKeys.map((key) => recordLoginFailure(key)));
           throw new Error('비밀번호가 일치하지 않습니다.');
         }
+
+        await Promise.all(limitKeys.map((key) => clearLoginRateLimit(key)));
 
         // 최종 로그인 시각 업데이트
         await prisma.user.update({
@@ -67,6 +88,7 @@ export const authOptions: NextAuthOptions = {
             menuId: 'login',
             menuName: '로그인',
             detail: `${user.name}(${user.loginId}) 로그인 성공`,
+            ipAddress: clientIp,
           },
         });
 
@@ -124,22 +146,6 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
-/** 역할(role) 기반 접근 권한 체크 */
+/** 사용자 역할 타입 (실제 접근 권한은 DB UserPermission + permissions.ts 기준) */
 export type UserRole = '관리자' | '일반' | '생산' | '영업' | '구매' | '재고';
-
-export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  '관리자': ['*'], // 전체 접근
-  '영업': ['sales', 'dashboard', 'master'],
-  '구매': ['purchase', 'dashboard', 'master'],
-  '생산': ['production', 'dashboard', 'master', 'inventory'],
-  '재고': ['inventory', 'dashboard', 'master'],
-  '일반': ['dashboard', 'master'],
-};
-
-export function hasModuleAccess(role: string, moduleId: string): boolean {
-  const perms = ROLE_PERMISSIONS[role as UserRole];
-  if (!perms) return false;
-  if (perms.includes('*')) return true;
-  return perms.includes(moduleId);
-}
 

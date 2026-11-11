@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 export async function GET() {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const list = await prisma.reprProduct.findMany({
       where: { isUsed: true },
       include: {
@@ -19,6 +22,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'master', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { rows, ...single } = body;
 

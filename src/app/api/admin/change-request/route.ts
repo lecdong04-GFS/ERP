@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.error) return auth.error;
+
   try {
     const list = await prisma.changeRequest.findMany({
       orderBy: { id: 'desc' },
@@ -14,6 +18,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const { action, id, ...data } = body;
@@ -38,7 +45,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestNo,
         requestDate: data.requestDate || kstToday(),
-        requester: data.requester || '관리자',
+        requester: data.requester || auth.user.name,
         menuId: data.menuId || '',
         title: data.title || '기능 개선 요청',
         description: data.description || '',

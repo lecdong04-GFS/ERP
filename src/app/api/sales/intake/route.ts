@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { normName } from '@/lib/gfs/canonical';
 import { docHashOf } from '@/lib/gfs/docKey';
 import { kstToday, makeDocNo } from '@/lib/kst';
@@ -22,9 +21,11 @@ interface IntakeItem {
 // body: { orderDate?, centerCode?, orderType? (정규/추가/슈퍼), uploadMethod?, replaceByDate?, docKeys?: string[], items: [...] }
 // 같은 날짜라도 orderType별로 따로 저장(누적) · 같은 파일 재업로드(docKeys 일치)는 스킵
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { name: 'admin', role: '관리자' };
     const body = await req.json();
     const orderDate: string = body.orderDate || kstToday();
     const centerCode: string = body.centerCode || 'GSR-001';

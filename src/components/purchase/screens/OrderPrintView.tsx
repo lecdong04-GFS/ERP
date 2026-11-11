@@ -29,40 +29,6 @@ function kstDaysAgo(n: number): string {
   return new Date(Date.now() + 9 * 3600 * 1000 - n * 86400000).toISOString().slice(0, 10);
 }
 
-// Fallback sample data in case DB is initially empty
-const FALLBACK_ORDER_SUMMARY = [
-  { id: 1, checked: false, issued: false, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25345', status: '미입고', supplier: '평화영농조합', orderAmt: 27000000, method: '카톡', manager: '이창승 상무', tel: '010-3565-92XX', email: 'peace_rice@nonghyup.com', remark: '당일 도정미 직납' },
-  { id: 2, checked: false, issued: false, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25344', status: '미입고', supplier: '사조오양', orderAmt: 84000, method: '카톡', manager: '김영하 대리', tel: '010-4236-04XX', email: 'yhkim@sajo.co.kr', remark: '' },
-  { id: 3, checked: false, issued: true, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25343', status: '미입고', supplier: '이우유통', orderAmt: 4414600, method: '카톡13시', manager: '구동서 부장', tel: '010-4717-25XX', email: 'leewoo_dist@naver.com', remark: '오후 배송 지정' },
-  { id: 4, checked: false, issued: true, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25342', status: '미입고', supplier: '야미푸드', orderAmt: 153000, method: '카톡', manager: '이하경 이사', tel: '010-5661-11XX', email: 'yummy_hk@daum.net', remark: '' },
-  { id: 5, checked: false, issued: true, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25341', status: '미입고', supplier: '한성기업', orderAmt: 3980400, method: '이메일', manager: '정재근 대리', tel: '010-7191-71XX', email: 'hansung_jg@hansung.co.kr', remark: '콜드체인 검수필' },
-  { id: 6, checked: false, issued: true, printBtn: '...', orderDate: '2026-10-30', orderNo: 'pc25340', status: '미입고', supplier: '한성기업', orderAmt: 4608600, method: '이메일', manager: '정재근 대리', tel: '010-7191-71XX', email: 'hansung_jg@hansung.co.kr', remark: '크래미 및 맛살 2편' },
-];
-
-const FALLBACK_DETAILS: Record<number, any[]> = {
-  1: [
-    { id: 101, type: '원재료', name: '국내산 경기미 백미(햅쌀)', spec: '20kg/포', unit: '포', orderQty: 500, unitPrice: 54000, orderAmt: 27000000, recvDate: '2026-10-31', remark: '수분함량 15% 이하' },
-  ],
-  2: [
-    { id: 201, type: '원재료', name: '가공 참치플레이크(오일)', spec: '1.8kg*6캔', unit: 'box', orderQty: 1, unitPrice: 84000, orderAmt: 84000, recvDate: '2026-10-31', remark: '샘플 발주' },
-  ],
-  3: [
-    { id: 301, type: '원재료', name: '골드마요네즈 3.2kg', spec: '3.2kg*4통', unit: 'box', orderQty: 60, unitPrice: 38000, orderAmt: 2280000, recvDate: '2026-10-31', remark: '' },
-    { id: 302, type: '원재료', name: '슬라이스치즈(고소한맛)', spec: '1kg*10팩', unit: 'box', orderQty: 30, unitPrice: 71153, orderAmt: 2134600, recvDate: '2026-10-31', remark: '' },
-  ],
-  4: [
-    { id: 401, type: '부재료', name: '도시락용 조미김 포션', spec: '2g*500봉', unit: 'box', orderQty: 3, unitPrice: 51000, orderAmt: 153000, recvDate: '2026-10-31', remark: '' },
-  ],
-  5: [
-    { id: 501, type: '원재료', name: '[냉장]다진맛살 10kg', spec: '10kg*2ea', unit: 'box', orderQty: 40, unitPrice: 52000, orderAmt: 2080000, recvDate: '2026-10-31', remark: '김밥용 원료' },
-    { id: 502, type: '원재료', name: '[냉동]궁채나물 1kg', spec: '1kg*10ea', unit: 'box', orderQty: 30, unitPrice: 63346, orderAmt: 1900400, recvDate: '2026-10-31', remark: '' },
-  ],
-  6: [
-    { id: 601, type: '원재료', name: '[냉장]볶음김치 5kg', spec: '5kg*3ea', unit: 'box', orderQty: 80, unitPrice: 42000, orderAmt: 3360000, recvDate: '2026-10-31', remark: '제육도시락 볶음김치' },
-    { id: 602, type: '원재료', name: '[냉동]우양지 슬라이스', spec: '2kg*5팩', unit: 'box', orderQty: 10, unitPrice: 124860, orderAmt: 1248600, recvDate: '2026-10-31', remark: '' },
-  ],
-};
-
 const SUMMARY_COLUMNS: PurchaseGridColumnDef[] = [
   { key: 'checked', label: '선택', width: '45px', align: 'center', format: 'checkbox' },
   { key: 'issued', label: '발행여부', width: '65px', align: 'center', format: 'checkbox' },
@@ -103,15 +69,20 @@ export const OrderPrintView: React.FC = () => {
   const [selectedSummaryId, setSelectedSummaryId] = useState<number | string | null>(null);
   const [detailMap, setDetailMap] = useState<Record<string | number, any[]>>({});
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string>('');
 
   const fetchOrders = useCallback(async (s: string, e: string) => {
     setLoading(true);
+    setLoadError('');
     try {
       const params = new URLSearchParams({ startDate: s, endDate: e });
       const res = await fetch(`/api/purchase/order?${params}`, { cache: 'no-store' });
       const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json?.error || `조회 실패 (HTTP ${res.status})`);
+      }
 
-      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (Array.isArray(json.data) && json.data.length > 0) {
         const dMap: Record<string | number, any[]> = {};
         const loaded: any[] = json.data.map((o: any, idx: number) => {
           const id = o.id || idx + 1;
@@ -147,9 +118,9 @@ export const OrderPrintView: React.FC = () => {
             supplier: o.partnerName || o.partner?.name || '공급처',
             orderAmt: totalAmt,
             method: '전산/카톡',
-            manager: o.partner?.ceo || o.createdBy || '담당자',
-            tel: o.partner?.tel || '010-0000-0000',
-            email: o.partner?.email || 'partner@gfs.com',
+            manager: o.partner?.ceo || o.createdBy || '',
+            tel: o.partner?.tel || '',
+            email: o.partner?.email || '',
             remark: o.remark || '',
             deliveryDate: o.deliveryDate || o.orderDate,
           };
@@ -159,16 +130,16 @@ export const OrderPrintView: React.FC = () => {
         setDetailMap(dMap);
         setSelectedSummaryId(loaded[0]?.id || null);
       } else {
-        // Fallback to sample data if no PO in range
-        setSummaryList(FALLBACK_ORDER_SUMMARY);
-        setDetailMap(FALLBACK_DETAILS);
-        setSelectedSummaryId(FALLBACK_ORDER_SUMMARY[0].id);
+        setSummaryList([]);
+        setDetailMap({});
+        setSelectedSummaryId(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load purchase orders for print', err);
-      setSummaryList(FALLBACK_ORDER_SUMMARY);
-      setDetailMap(FALLBACK_DETAILS);
-      setSelectedSummaryId(FALLBACK_ORDER_SUMMARY[0].id);
+      setLoadError(err?.message || '발주 목록 조회 중 오류가 발생했습니다.');
+      setSummaryList([]);
+      setDetailMap({});
+      setSelectedSummaryId(null);
     } finally {
       setLoading(false);
     }
@@ -347,6 +318,11 @@ export const OrderPrintView: React.FC = () => {
 
       {/* 4. 메인 화면 (상단 마스터 요약 + 하단 디테일 내역) */}
       <div className="flex-1 flex flex-col p-1.5 gap-1.5 overflow-hidden">
+        {loadError && (
+          <div className="px-3 py-1.5 bg-rose-50 border border-rose-300 text-rose-700 text-[11px] font-semibold rounded">
+            발주 목록 조회 오류: {loadError}
+          </div>
+        )}
         {/* 상단 [요약] 그리드 */}
         <div className="flex flex-col h-1/2 min-h-0 bg-white border border-gray-400">
           <div className="px-2 py-1 bg-[#e2e8f0] border-b border-gray-300 font-bold text-gray-800 text-[11px] flex items-center justify-between">

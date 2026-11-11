@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { AdminActionBar } from '../common/AdminActionBar';
 import { useAdmin } from '../context/AdminContext';
 import { ChangeRequestItem } from '../data/adminData';
 import { RotateCw, Search, Image as ImageIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { erpConfirm } from '@/context/ConfirmContext';
+import { isSafeImageSrc } from '@/lib/sanitize';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
@@ -23,6 +24,34 @@ export const ChangeRequestView: React.FC = () => {
   const [resultFilter, setResultFilter] = useState<string>('전체');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
   const [previewPhotoReq, setPreviewPhotoReq] = useState<ChangeRequestItem | null>(null);
+  const [photoPreviews, setPhotoPreviews] = useState<Record<number, string>>({});
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !previewPhotoReq) return;
+    if (file.size > 1_500_000) {
+      alert('이미지 파일 크기는 1.5MB 이하만 첨부할 수 있습니다.');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!isSafeImageSrc(dataUrl)) {
+        alert('지원되는 PNG, JPG, WEBP, GIF 이미지 파일만 첨부할 수 있습니다.');
+        return;
+      }
+      const targetId = previewPhotoReq.id;
+      setPhotoPreviews((prev) => ({ ...prev, [targetId]: dataUrl }));
+      setChangeRequests((prev) =>
+        prev.map((row) => (row.id === targetId ? { ...row, hasPhoto: true } : row))
+      );
+      setPreviewPhotoReq((prev) => (prev && prev.id === targetId ? { ...prev, hasPhoto: true } : prev));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Dynamic KPI counts
   const totalCount = changeRequests.length;
@@ -378,21 +407,39 @@ export const ChangeRequestView: React.FC = () => {
               </button>
             </div>
             <div className="p-4 flex flex-col items-center gap-3 bg-[#f8f9fc]">
-              <div className="w-full h-56 bg-gray-100 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-500 gap-2">
-                <ImageIcon className="w-12 h-12 text-blue-500 opacity-60" />
-                <span className="font-semibold text-gray-700">
-                  {previewPhotoReq.hasPhoto
-                    ? '첨부된 화면 캡처 스크린샷 (시스템 화면 증빙)'
-                    : '등록된 첨부 이미지가 없습니다.'}
-                </span>
-                <span className="text-[11px] text-gray-400">
-                  파일 형식: PNG, JPG (최대 10MB)
-                </span>
-              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={handlePhotoFileChange}
+                className="hidden"
+              />
+              {photoPreviews[previewPhotoReq.id] ? (
+                <div className="w-full h-56 bg-white border border-gray-300 rounded overflow-hidden flex items-center justify-center p-1">
+                  <img
+                    src={photoPreviews[previewPhotoReq.id]}
+                    alt={previewPhotoReq.title}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-56 bg-gray-100 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-500 gap-2">
+                  <ImageIcon className="w-12 h-12 text-blue-500 opacity-60" />
+                  <span className="font-semibold text-gray-700">
+                    {previewPhotoReq.hasPhoto
+                      ? '기존 첨부 상태가 기록되어 있습니다. 새 파일로 교체할 수 있습니다.'
+                      : '등록된 첨부 이미지가 없습니다.'}
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    파일 형식: PNG, JPG, WEBP (최대 1.5MB)
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-2 w-full justify-between">
                 <button
-                  onClick={() => alert('새 이미지 캡처 파일 업로드를 준비합니다.')}
-                  className="px-3 py-1 bg-[#4a72a8] hover:bg-[#3d5e8c] text-white font-semibold rounded text-[11px]"
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="px-3 py-1 bg-[#4a72a8] hover:bg-[#3d5e8c] text-white font-semibold rounded text-[11px] cursor-pointer"
                 >
                   새 이미지 첨부...
                 </button>

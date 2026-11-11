@@ -8,13 +8,33 @@ if (process.env.NODE_ENV === 'production' && !secret) {
 
 export default withAuth(
   function middleware(req) {
-    const role = (req.nextauth.token as any)?.role;
-    if (req.nextUrl.pathname.startsWith('/api/admin') && role !== '관리자') {
-      return NextResponse.json(
-        { success: false, error: '관리자 권한이 필요합니다.' },
-        { status: 403 }
-      );
+    const { pathname } = req.nextUrl;
+
+    if (pathname.startsWith('/api/')) {
+      if (pathname.startsWith('/api/auth')) {
+        return NextResponse.next();
+      }
+
+      const token = req.nextauth.token as Record<string, any> | null | undefined;
+      if (!token) {
+        return NextResponse.json(
+          { success: false, error: '인증이 필요합니다.' },
+          { status: 401 }
+        );
+      }
+
+      if (pathname.startsWith('/api/admin')) {
+        const role = String(token.role || '');
+        const loginId = String(token.loginId || '');
+        if (!role.includes('관리자') && loginId !== 'admin') {
+          return NextResponse.json(
+            { success: false, error: '관리자 권한이 필요합니다.' },
+            { status: 403 }
+          );
+        }
+      }
     }
+
     return NextResponse.next();
   },
   {
@@ -24,8 +44,7 @@ export default withAuth(
     ...(secret ? { secret } : {}),
     callbacks: {
       authorized: ({ req, token }) => {
-        // API 경로는 브라우저 fetch()가 307 리디렉션을 따라가 로그인 HTML(<!DOCTYPE)을 JSON으로 파싱하려다
-        // "Unexpected token '<'" 에러가 발생하는 것을 방지하기 위해 통과 처리
+        // API 경로는 307 로그인 HTML 리디렉션 대신 위 middleware()에서 JSON 401/403을 반환하도록 통과
         if (req.nextUrl.pathname.startsWith('/api/')) {
           return true;
         }

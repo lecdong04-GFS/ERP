@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
@@ -30,16 +29,11 @@ interface OrderResultItem {
 // body: { orderDate, partnerId?, memo?, items: OrderResultItem[] }
 export async function POST(req: NextRequest) {
   try {
-    // 로그인 세션 필수: 담당자 신원으로 발주 기록
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { success: false, error: '로그인이 필요합니다.' },
-        { status: 401 }
-      );
-    }
-    const me = session.user as any;
-    const actorLabel = `${me.name || me.loginId || '담당자'}(${me.loginId || me.id || ''})`;
+    // 로그인 세션 및 구매 쓰기 권한 필수: 담당자 신원으로 발주 기록
+    const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+    if (auth.error) return auth.error;
+    const me = auth.user;
+    const actorLabel = `${me.name}(${me.loginId})`;
 
     const body = await req.json();
     const { orderDate, partnerId, memo, items } = body as {
@@ -317,11 +311,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── MaterialRequirement 테이블에 자재발주 확정 내역 동기화 (파이프라인 연계) ──
+    // ── MaterialRequirement 테이블에 자재발주 확정 내역 동기화 (원자적 트랜잭션) ──
     try {
-      await prisma.materialRequirement.deleteMany({
-        where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
-      });
       const matReqData = targetItems
         .filter((it) => {
           if (!(Number(it.orderQty) > 0)) return false;
@@ -351,9 +342,15 @@ export async function POST(req: NextRequest) {
             remark: '자재발주(요일별) 확정',
           };
         });
-      if (matReqData.length > 0) {
-        await prisma.materialRequirement.createMany({ data: matReqData });
-      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.materialRequirement.deleteMany({
+          where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
+        });
+        if (matReqData.length > 0) {
+          await tx.materialRequirement.createMany({ data: matReqData });
+        }
+      });
     } catch (mrErr) {
       console.warn('MaterialRequirement sync warning in order-result:', mrErr);
     }

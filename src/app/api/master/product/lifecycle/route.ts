@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { getClientIp, requireSession } from '@/lib/apiAuth';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
 function nowKstTimestamp(): string {
@@ -16,6 +15,9 @@ function nowKstTimestamp(): string {
  * - ?scope=all: 이관·불용·출고정지·단종·발주제외 포함 비활성 전체 반환
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const scopeParam = searchParams.get('scope');
@@ -158,9 +160,12 @@ export async function GET(req: NextRequest) {
  * - BOM/발주/입고/수불부/재고 외래키 무결성 보호를 위해 물리 DELETE 대신 소프트 삭제/복구 사용
  */
 export async function PATCH(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+  const clientIp = getClientIp(req);
+
   try {
-    const session = await getServerSession(authOptions).catch(() => null);
-    const me = (session?.user as any) || { id: null, loginId: 'admin', name: '담당자' };
     const body = await req.json();
 
     const action = body?.action;
@@ -214,16 +219,16 @@ export async function PATCH(req: NextRequest) {
       await tx.systemLog.createMany({
         data: existing.map((p) => ({
           logDate: ts,
-          userId: me?.id ? Number(me.id) : null,
-          loginId: String(me?.loginId || 'admin'),
-          userName: String(me?.name || '담당자'),
+          userId: me.id,
+          loginId: me.loginId,
+          userName: me.name,
           action: isDelete ? '품목삭제' : '품목복구',
           menuId: 'pur-mat-order-day',
           menuName: '스마트 자재발주(요일별)',
           detail: `[ID:${p.id}] ${p.name} (${p.productCode}) ${
             isDelete ? '발주/재고조회 소프트 삭제' : '정상 품목 복구'
           } (이전: ${p.status || (p.isUsed ? '정상' : '비활성')}${reason ? ` / 사유: ${reason}` : ''})`,
-          ipAddress: '127.0.0.1',
+          ipAddress: clientIp,
         })),
       });
     });

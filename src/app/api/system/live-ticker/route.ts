@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const now = new Date();
     const kstHour = (now.getUTCHours() + 9) % 24;

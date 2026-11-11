@@ -36,7 +36,7 @@ export const StatusBar: React.FC = () => {
 
       {/* Right system flags */}
       <div className="flex items-center gap-2.5 font-mono text-[11px] text-[var(--ink-600)]">
-        <span className="hidden sm:inline-block text-[var(--ink-600)] font-sans">사업장: (주)GFS 음성식품공장</span>
+        <span className="hidden sm:inline-block text-[var(--ink-600)] font-sans">사업장: (주)GFS 거창식품공장</span>
         <span className="text-[var(--line-strong)]">|</span>
         <span className="px-1.5 py-0.2 bg-gray-200 border border-gray-300 text-gray-700 rounded-2xs">CAPS</span>
         <span className="px-1.5 py-0.2 bg-blue-100 border border-blue-300 text-blue-800 font-bold rounded-2xs">NUM</span>

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/master/base-code?classId=STR
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const classId = searchParams.get('classId');
 
@@ -38,6 +41,8 @@ export async function GET(req: NextRequest) {
 // POST /api/master/base-code
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'master', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const { classId, code, name, val1, val2, val3, val4, val5, sortOrder, remark } = body;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { makeDocNo, kstToday } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 
@@ -28,6 +29,9 @@ const CENTER_NAME_MAP: Record<string, string> = {
 // GET /api/sales/delivery?deliveryDate=2026-11-05
 // GET /api/sales/delivery?startDate=2026-10-01&endDate=2026-11-07&status=전체&centerCode=...
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const deliveryDate = searchParams.get('deliveryDate');
@@ -128,6 +132,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/sales/delivery (신규 납품 전표 등록)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json();
     const {
@@ -138,8 +145,8 @@ export async function POST(req: NextRequest) {
       items = [],
       status = '완료',
       remark = '',
-      createdBy = '관리자',
     } = body;
+    const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
 
     if (!deliveryDate || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(

@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { MENU_CATEGORIES, getMenuItemById } from '@/config/menuConfig';
 import { useTabs } from '@/context/TabContext';
+import { usePermissions } from '@/context/PermissionsContext';
 import { MenuItem } from '@/types/erp';
 import {
   Search,
@@ -36,6 +37,7 @@ interface SideNavProps {
 
 export const SideNav: React.FC<SideNavProps> = ({ isOpen, onClose }) => {
   const { openTab, activeTab } = useTabs();
+  const { canAccessMenu } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
     sales: true,
@@ -66,21 +68,33 @@ export const SideNav: React.FC<SideNavProps> = ({ isOpen, onClose }) => {
     setOpenCategories(next);
   };
 
+  // 권한이 허용된 카테고리/메뉴만 표시
+  const readableCategories = useMemo(
+    () =>
+      MENU_CATEGORIES.map((category) => ({
+        ...category,
+        items: category.items.filter((item) => canAccessMenu(item.id, category.id, 'read')),
+      })).filter((category) => category.items.length > 0),
+    [canAccessMenu]
+  );
+
   // Filter categories and items based on search term
   const filteredCategories = useMemo(() => {
-    if (!searchTerm.trim()) return MENU_CATEGORIES;
+    if (!searchTerm.trim()) return readableCategories;
 
     const term = searchTerm.toLowerCase();
-    return MENU_CATEGORIES.map((category) => {
-      const matchingItems = category.items.filter((item) =>
-        item.title.toLowerCase().includes(term)
-      );
-      return {
-        ...category,
-        items: matchingItems,
-      };
-    }).filter((category) => category.items.length > 0);
-  }, [searchTerm]);
+    return readableCategories
+      .map((category) => {
+        const matchingItems = category.items.filter((item) =>
+          item.title.toLowerCase().includes(term)
+        );
+        return {
+          ...category,
+          items: matchingItems,
+        };
+      })
+      .filter((category) => category.items.length > 0);
+  }, [searchTerm, readableCategories]);
 
   if (!isOpen) return null;
 

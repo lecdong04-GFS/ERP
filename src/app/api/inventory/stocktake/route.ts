@@ -9,10 +9,13 @@ import {
   pickLatestValidPurchasePrice,
   resolveBagPrice,
 } from '@/lib/gfs/pricing';
+import { requireSession } from '@/lib/apiAuth';
 
 // GET /api/inventory/stocktake?warehouse=냉장1&category=원재료&stocktakeDate=2026-11-07&search=...
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession();
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const warehouse = searchParams.get('warehouse');
     const category = searchParams.get('category');
@@ -248,12 +251,14 @@ export async function GET(req: NextRequest) {
 // POST /api/inventory/stocktake (현장 실사 재고 일괄 반영 및 확정/임시저장 파이프라인)
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
+    if ('error' in auth) return auth.error;
     const body = await req.json();
     const {
       stocktakeDate = kstToday(),
       mode = 'confirm', // 'confirm' (실사확정: Inventory와 동기화) | 'draft' (임시저장)
       rows = [],
-      createdBy = '관리자',
+      createdBy = auth.user.name || auth.user.loginId,
     } = body;
 
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -407,6 +412,8 @@ export async function POST(req: NextRequest) {
 // 실사 초기화 및 해당 일자 기록 삭제
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'inventory', action: 'delete' });
+    if ('error' in auth) return auth.error;
     const { searchParams } = new URL(req.url);
     const stocktakeDate = searchParams.get('stocktakeDate');
     const warehouse = searchParams.get('warehouse');

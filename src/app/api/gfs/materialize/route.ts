@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { buildAuditMap, getAuditFilePath, normName, readWorkbookFromFile } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
@@ -41,9 +40,11 @@ function isDiscontinuedOrJunkForMaterialize(rawName: string, expiryDate?: string
 // GFS 품명을 ERP 정본(재고조사표)과 대조 → 없으면 자동 생성 → 발주 가능한 형태로 반환
 // body: { items: InItem[], dryRun?: boolean, orderDate?: string }
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
+  if (auth.error) return auth.error;
+  const me = auth.user;
+
   try {
-    const session = await getServerSession(authOptions);
-    const me = (session?.user as any) || { id: 1, loginId: 'admin', name: '관리자' };
     const body = await req.json();
     const { items, dryRun, orderDate } = body as { items: InItem[]; dryRun?: boolean; orderDate?: string };
     if (!items || !Array.isArray(items) || items.length === 0) {

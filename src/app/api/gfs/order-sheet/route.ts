@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
@@ -20,6 +21,9 @@ import {
 // - 발주일수: Product.targetOrderDays 직접 반영 (0이면 미설정 / 자동발주 미생성)
 // - 단종/삭제예정: 조회 기준일(date) 기준 동적 판정
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const rawDate = searchParams.get('date') || '';

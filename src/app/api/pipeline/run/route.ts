@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ProductionCostPipelineDBEngine } from '@/services/pipeline/ProductionCostPipelineDB';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 // POST /api/pipeline/run (DB 실데이터 기반 원클릭 파이프라인 엔진 실행 & DB 영구 저장)
 export async function POST(req: NextRequest) {
+  const auth = await requireSession({ categoryId: 'production', action: 'write' });
+  if (auth.error) return auth.error;
+
   try {
     const body = await req.json().catch(() => ({}));
     const { orderDate = kstToday(), shift = '1편' } = body;

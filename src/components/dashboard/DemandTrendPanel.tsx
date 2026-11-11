@@ -31,6 +31,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { DemandTrendItem, DemandTrendStats } from './dashboardData';
+import { kstToday } from '@/lib/kst';
 
 // React 19 + Recharts defaultProps 경고 억제 (중복 래핑 방지)
 if (typeof window !== 'undefined' && !(console.error as any).__rechartsPatched) {
@@ -53,196 +54,13 @@ interface DemandTrendPanelProps {
   onNavigate?: (menuId: string) => void;
 }
 
-const DEFAULT_TREND_DATA: DemandTrendStats = {
-  baseDate: '2026-10-31',
-  shiftRatio: { shift1Pct: 56.9, shift2Pct: 43.1 },
-  dates14: [
-    '2026-10-18',
-    '2026-10-19',
-    '2026-10-20',
-    '2026-10-21',
-    '2026-10-22',
-    '2026-10-23',
-    '2026-10-24',
-    '2026-10-25',
-    '2026-10-26',
-    '2026-10-27',
-    '2026-10-28',
-    '2026-10-29',
-    '2026-10-30',
-    '2026-10-31',
-  ],
-  surge: [
-    {
-      code: '2700038885836',
-      name: '커플)곱창김참치&비빔밥2',
-      category: '완성품',
-      avgDailyQty: 1248,
-      sumLast7: 8734,
-      sumPrev7: 0,
-      pct: 100,
-      spark14: [0, 0, 0, 0, 0, 0, 0, 0, 0, 2724, 2299, 1929, 787, 995],
-      recommendation: '자재 안전확보',
-    },
-    {
-      code: '2700038873215',
-      name: '혜자)돌아온등심돈까스2편',
-      category: '완성품',
-      avgDailyQty: 229,
-      sumLast7: 1604,
-      sumPrev7: 1476,
-      pct: 8.7,
-      spark14: [195, 210, 215, 208, 224, 218, 206, 215, 230, 240, 228, 235, 226, 230],
-      recommendation: '자재 안전확보',
-    },
-    {
-      code: '2700038883108',
-      name: 'NEW혜자백설갈비양념제육1',
-      category: '완성품',
-      avgDailyQty: 462,
-      sumLast7: 3235,
-      sumPrev7: 2984,
-      pct: 8.4,
-      spark14: [410, 425, 430, 418, 440, 435, 426, 450, 470, 465, 455, 470, 460, 465],
-      recommendation: '자재 안전확보',
-    },
-    {
-      code: '2700038873222',
-      name: '혜자)반반제육도시락2편',
-      category: '완성품',
-      avgDailyQty: 445,
-      sumLast7: 3115,
-      sumPrev7: 2890,
-      pct: 7.8,
-      spark14: [400, 410, 420, 405, 425, 415, 415, 430, 450, 445, 440, 455, 445, 450],
-      recommendation: '자재 안전확보',
-    },
-    {
-      code: '2700038882408',
-      name: '더블치즈소시지김밥2편',
-      category: '완성품',
-      avgDailyQty: 492,
-      sumLast7: 3443,
-      sumPrev7: 3193,
-      pct: 7.8,
-      spark14: [440, 450, 460, 455, 470, 460, 458, 480, 500, 495, 485, 505, 490, 488],
-      recommendation: '자재 안전확보',
-    },
-  ],
-  drop: [
-    {
-      code: '2700038886000',
-      name: '디핑)시장꼬마김밥1편',
-      category: '완성품',
-      avgDailyQty: 442,
-      sumLast7: 3092,
-      sumPrev7: 6314,
-      pct: -51.0,
-      spark14: [0, 0, 2468, 1316, 1112, 817, 601, 634, 569, 475, 440, 383, 303, 288],
-      recommendation: '포장재 발주동결',
-    },
-    {
-      code: '2700038886017',
-      name: '디핑)시장꼬마김밥2편',
-      category: '완성품',
-      avgDailyQty: 291,
-      sumLast7: 2040,
-      sumPrev7: 3653,
-      pct: -44.2,
-      spark14: [0, 0, 1400, 800, 650, 450, 353, 400, 360, 310, 290, 250, 220, 210],
-      recommendation: '포장재 발주동결',
-    },
-    {
-      code: '2700038879804',
-      name: '더큰)맥적구이한상2편',
-      category: '완성품',
-      avgDailyQty: 557,
-      sumLast7: 3902,
-      sumPrev7: 5260,
-      pct: -25.8,
-      spark14: [780, 770, 750, 740, 760, 740, 720, 650, 600, 580, 560, 530, 500, 482],
-      recommendation: '포장재 발주동결',
-    },
-    {
-      code: '2700038879798',
-      name: '더큰)맥적구이한상1편',
-      category: '완성품',
-      avgDailyQty: 817,
-      sumLast7: 5722,
-      sumPrev7: 7589,
-      pct: -24.6,
-      spark14: [1120, 1100, 1080, 1070, 1100, 1070, 1049, 950, 880, 850, 820, 780, 730, 712],
-      recommendation: '포장재 발주동결',
-    },
-    {
-      code: '2700038884907',
-      name: '넷플)더담은K떡갈비김밥2편',
-      category: '완성품',
-      avgDailyQty: 694,
-      sumLast7: 4856,
-      sumPrev7: 5913,
-      pct: -17.9,
-      spark14: [870, 860, 840, 850, 840, 830, 823, 760, 720, 700, 680, 670, 666, 660],
-      recommendation: '포장재 발주동결',
-    },
-  ],
-  volume: [
-    {
-      code: '2700038878531',
-      name: '더큰)스팸김치볶음밥1편',
-      category: '완성품',
-      avgDailyQty: 2983,
-      sumLast7: 20880,
-      sumPrev7: 21743,
-      pct: -4.0,
-      spark14: [3573, 3550, 3057, 3094, 2931, 2880, 2658, 3452, 3350, 2929, 3006, 2881, 2688, 2574],
-      recommendation: '안정 연속생산',
-    },
-    {
-      code: '2700038878517',
-      name: '더큰)스팸계란볶음밥1편',
-      category: '완성품',
-      avgDailyQty: 2518,
-      sumLast7: 17623,
-      sumPrev7: 18450,
-      pct: -4.5,
-      spark14: [2800, 2750, 2600, 2650, 2500, 2550, 2600, 2700, 2650, 2520, 2480, 2450, 2420, 2403],
-      recommendation: '안정 연속생산',
-    },
-    {
-      code: '2700038880121',
-      name: '더큰)들기름묵은지참치1편',
-      category: '완성품',
-      avgDailyQty: 2382,
-      sumLast7: 16673,
-      sumPrev7: 17200,
-      pct: -3.1,
-      spark14: [2600, 2550, 2480, 2500, 2450, 2420, 2200, 2500, 2480, 2400, 2380, 2350, 2300, 2263],
-      recommendation: '안정 연속생산',
-    },
-    {
-      code: '2700038878548',
-      name: '더큰)스팸김치볶음밥2편',
-      category: '완성품',
-      avgDailyQty: 2348,
-      sumLast7: 16434,
-      sumPrev7: 16900,
-      pct: -2.8,
-      spark14: [2500, 2480, 2420, 2450, 2400, 2380, 2270, 2480, 2450, 2380, 2350, 2320, 2254, 2200],
-      recommendation: '안정 연속생산',
-    },
-    {
-      code: '2700038878524',
-      name: '더큰)스팸계란볶음밥2편',
-      category: '완성품',
-      avgDailyQty: 1949,
-      sumLast7: 13640,
-      sumPrev7: 14100,
-      pct: -3.3,
-      spark14: [2100, 2050, 2020, 2000, 1980, 1950, 2000, 2050, 2000, 1980, 1950, 1920, 1890, 1850],
-      recommendation: '안정 연속생산',
-    },
-  ],
+const EMPTY_TREND_DATA: DemandTrendStats = {
+  baseDate: kstToday(),
+  shiftRatio: { shift1Pct: 0, shift2Pct: 0 },
+  dates14: [],
+  surge: [],
+  drop: [],
+  volume: [],
 };
 
 /** 14일 날짜 라벨 목록 생성 헬퍼 */
@@ -277,8 +95,9 @@ function getFormatted14Dates(
     });
   }
 
-  const base = new Date(baseDateStr || '2026-11-04');
-  const validBase = isNaN(base.getTime()) ? new Date('2026-11-04') : base;
+  const todayFallback = kstToday();
+  const base = new Date(baseDateStr || todayFallback);
+  const validBase = isNaN(base.getTime()) ? new Date(todayFallback) : base;
   const result = [];
   for (let i = dataCount - 1; i >= 0; i--) {
     const d = new Date(validBase);
@@ -353,7 +172,7 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
   const data: DemandTrendStats =
     trendData && (trendData.surge?.length || trendData.volume?.length)
       ? trendData
-      : DEFAULT_TREND_DATA;
+      : EMPTY_TREND_DATA;
 
   const topSurge = data.surge?.[0];
   const topVolume = data.volume?.[0];
@@ -763,7 +582,17 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {currentList.map((item, idx) => {
+                    {currentList.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-10 text-center text-slate-400 text-[13px] font-medium"
+                        >
+                          표시할 수주 추이 실데이터가 없습니다. 수주/생산 실적을 적재해 주세요.
+                        </td>
+                      </tr>
+                    ) : (
+                      currentList.map((item, idx) => {
                       const isPositive = item.pct > 0;
                       const isNegative = item.pct < 0;
                       const isSelected = selectedIdx === idx;
@@ -839,7 +668,8 @@ export const DemandTrendPanel: React.FC<DemandTrendPanelProps> = ({
                           </td>
                         </tr>
                       );
-                    })}
+                    })
+                    )}
                   </tbody>
                 </table>
               </div>
