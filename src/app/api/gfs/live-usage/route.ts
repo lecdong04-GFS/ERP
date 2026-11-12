@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
@@ -16,6 +17,9 @@ import {
 // GET /api/gfs/live-usage?date=YYYY-MM-DD
 // ERP 자체 계산: 금일 완제품 수주량 x 정본 BOM = 자재별 live 일사용량 (PostgreSQL 단일 진실 공급원)
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const reqDate = searchParams.get('date') || '';

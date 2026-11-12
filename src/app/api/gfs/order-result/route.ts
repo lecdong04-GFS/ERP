@@ -156,25 +156,27 @@ export async function POST(req: NextRequest) {
       detail: string;
     }[] = [];
 
-    // 발주번호 채번 시퀀스 (당일 기존 번호 기준 중복 없이 연속 채번 - 최대 시퀀스 번호 추적)
     const prefix = `PO-${today.replace(/-/g, '')}`;
-    const existingOrders = await prisma.purchaseOrder.findMany({
-      where: { orderNo: { startsWith: prefix } },
-      select: { orderNo: true },
-    });
-    let maxSeq = 0;
-    for (const o of existingOrders) {
-      const match = o.orderNo.match(/PO-\d{8}-(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxSeq) maxSeq = num;
-      }
-    }
-    let orderSeq = maxSeq;
-
     let skippedExcludedCount = 0;
 
-    // 발주서 생성: 거래처별 순차 생성 (어떤 품목도 누락되지 않고 100% 저장)
+    // ── 발주서 다건 생성 + 채번 + 감사로그를 단일 트랜잭션으로 원자화 ──
+    const preparedBatches: {
+      partner: { id: string; name: string; leadTime: number | null };
+      detailData: {
+        productId: number;
+        productCode: string;
+        productName: string;
+        category: string;
+        unit: string;
+        orderQty: number;
+        unitPrice: number;
+        amount: number;
+        remainQty: number;
+      }[];
+      totalAmount: number;
+      earliestDeliveryDate: string;
+    }[] = [];
+
     for (const [pid, groupItems] of groups) {
       const usePartnerId = pid === '__DEFAULT__' ? resolvedDefaultPartner.id : pid;
       const partner =
@@ -264,47 +266,74 @@ export async function POST(req: NextRequest) {
         continue; // 매칭 품목 없음 → 해당 그룹 스킵 (불필요한 채번 방지)
       }
 
-      orderSeq += 1;
-      let orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
-      while (await prisma.purchaseOrder.findUnique({ where: { orderNo }, select: { id: true } })) {
-        orderSeq += 1;
-        orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
-      }
-
-      const totalAmount = Math.round(detailData.reduce((a, d) => a + d.amount, 0));
-
-      const earliestDeliveryDate = expectedDates.sort()[0] || '';
-
-      await prisma.purchaseOrder.create({
-        data: {
-          orderNo,
-          orderDate: today,
-          deliveryDate: earliestDeliveryDate,
-          partnerId: partner.id,
-          partnerName: partner.name,
-          orderType: '자재발주',
-          status: '발주',
-          totalAmount,
-          remark: memo || '자재발주(요일별) 연동 생성',
-          createdBy: actorLabel,
-          details: { create: detailData },
-        },
-      });
-
-      createdOrders.push({ orderNo, itemCount: detailData.length });
-      logRows.push({
-        logDate: new Date().toISOString(),
-        ...(Number.isFinite(Number((me as any)?.id)) ? { userId: Number((me as any).id) } : {}),
-        loginId: String(me.loginId || ''),
-        userName: String(me.name || ''),
-        action: '자재발주생성',
-        menuId: 'pur-mat-order-day',
-        menuName: '자재발주(요일별)',
-        detail: `${actorLabel} 발주서 ${orderNo} 생성 (${detailData.length}품목, ${totalAmount.toLocaleString()}원)`,
+      preparedBatches.push({
+        partner,
+        detailData,
+        totalAmount: Math.round(detailData.reduce((a, d) => a + d.amount, 0)),
+        earliestDeliveryDate: expectedDates.sort()[0] || '',
       });
     }
-    if (logRows.length > 0) {
-      await prisma.systemLog.createMany({ data: logRows }).catch(() => {});
+
+    if (preparedBatches.length > 0) {
+      await prisma.$transaction(
+        async (tx) => {
+          const existingOrders = await tx.purchaseOrder.findMany({
+            where: { orderNo: { startsWith: prefix } },
+            select: { orderNo: true },
+          });
+          let maxSeq = 0;
+          for (const o of existingOrders) {
+            const match = o.orderNo.match(/PO-\d{8}-(\d+)/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxSeq) maxSeq = num;
+            }
+          }
+          let orderSeq = maxSeq;
+
+          for (const batch of preparedBatches) {
+            orderSeq += 1;
+            let orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+            while (await tx.purchaseOrder.findUnique({ where: { orderNo }, select: { id: true } })) {
+              orderSeq += 1;
+              orderNo = `${prefix}-${String(orderSeq).padStart(3, '0')}`;
+            }
+
+            await tx.purchaseOrder.create({
+              data: {
+                orderNo,
+                orderDate: today,
+                deliveryDate: batch.earliestDeliveryDate,
+                partnerId: batch.partner.id,
+                partnerName: batch.partner.name,
+                orderType: '자재발주',
+                status: '발주',
+                totalAmount: batch.totalAmount,
+                remark: memo || '자재발주(요일별) 연동 생성',
+                createdBy: actorLabel,
+                details: { create: batch.detailData },
+              },
+            });
+
+            createdOrders.push({ orderNo, itemCount: batch.detailData.length });
+            logRows.push({
+              logDate: new Date().toISOString(),
+              ...(Number.isFinite(Number((me as any)?.id)) ? { userId: Number((me as any).id) } : {}),
+              loginId: String(me.loginId || ''),
+              userName: String(me.name || ''),
+              action: '자재발주생성',
+              menuId: 'pur-mat-order-day',
+              menuName: '자재발주(요일별)',
+              detail: `${actorLabel} 발주서 ${orderNo} 생성 (${batch.detailData.length}품목, ${batch.totalAmount.toLocaleString()}원)`,
+            });
+          }
+
+          if (logRows.length > 0) {
+            await tx.systemLog.createMany({ data: logRows });
+          }
+        },
+        { maxWait: 20000, timeout: 60000 }
+      );
     }
 
     if (createdOrders.length === 0) {

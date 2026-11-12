@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
@@ -25,6 +26,9 @@ import {
 
 // GET /api/purchase/mat-req-print?date=2026-10-30&shift=ALL&gye=ALL&category=ALL&search=
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const dateParam = searchParams.get('date');

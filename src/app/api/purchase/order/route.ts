@@ -15,6 +15,30 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+type AuditActor = { id?: number | string | null; loginId?: string | null; name?: string | null } | undefined;
+
+async function recordOrderAuditLog(
+  tx: any,
+  user: AuditActor,
+  action: string,
+  detail: string
+) {
+  const actorLabel = user?.name ? `${user.name}(${user.loginId || ''})` : String(user?.loginId || 'system');
+  const parsedUid = user?.id !== null && user?.id !== undefined && user?.id !== '' ? Number(user.id) : NaN;
+  await tx.systemLog.create({
+    data: {
+      logDate: new Date().toISOString(),
+      ...(Number.isFinite(parsedUid) ? { userId: parsedUid } : {}),
+      loginId: String(user?.loginId || ''),
+      userName: String(user?.name || ''),
+      action,
+      menuId: 'pur-order-mgmt',
+      menuName: '발주관리',
+      detail: `${actorLabel} ${detail}`,
+    },
+  });
+}
+
 // GET /api/purchase/order?orderDate=2026-10-30&status=미입고
 // GET /api/purchase/order?startDate=2026-10-01&endDate=2026-10-31 (기간 조회)
 export async function GET(req: NextRequest) {
@@ -108,7 +132,7 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: [{ orderDate: 'desc' }, { id: 'desc' }],
-      take: startDate || endDate ? 500 : 200,
+      take: startDate || endDate ? 2000 : 200,
     });
 
     const enrichedOrders = orders.map((po) => {
@@ -190,6 +214,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireSession({ categoryId: 'purchase', action: 'write' });
   if (auth.error) return auth.error;
+  const actor = auth.user;
 
   try {
     const body = await req.json();
@@ -204,40 +229,51 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: '유효한 발주 ID 또는 번호가 필요합니다.' }, { status: 400 });
       }
 
-      const targets = await prisma.purchaseOrder.findMany({
-        where: {
-          OR: [
-            ...(targetIds.length > 0 ? [{ id: { in: targetIds } }] : []),
-            ...(targetOrderNos.length > 0 ? [{ orderNo: { in: targetOrderNos } }] : []),
-          ],
-        },
-        include: { details: { select: { receivedQty: true } } },
-      });
+      const reason = cancelReason || '사용자 요청에 의한 발주 취소';
+      const cancelResult = await prisma.$transaction(async (tx) => {
+        const targets = await tx.purchaseOrder.findMany({
+          where: {
+            OR: [
+              ...(targetIds.length > 0 ? [{ id: { in: targetIds } }] : []),
+              ...(targetOrderNos.length > 0 ? [{ orderNo: { in: targetOrderNos } }] : []),
+            ],
+          },
+          include: { details: { select: { receivedQty: true } } },
+        });
+        const blocked = targets.filter(
+          (po) =>
+            po.status === '입고완료' ||
+            po.status === '부분입고' ||
+            po.details.some((d) => Number(d.receivedQty || 0) > 0)
+        );
+        if (blocked.length > 0) {
+          return { blocked };
+        }
+        await tx.purchaseOrder.updateMany({
+          where: { id: { in: targets.map((t) => t.id) } },
+          data: {
+            status: '발주취소',
+            cancelReason: reason,
+            cancelDate: kstToday(),
+          },
+        });
+        if (targets.length > 0) {
+          const orderNoSummary = targets.slice(0, 5).map((t) => t.orderNo).join(', ') + (targets.length > 5 ? ` 외 ${targets.length - 5}건` : '');
+          await recordOrderAuditLog(tx, actor, '발주취소', `발주서 ${targets.length}건 취소 (${orderNoSummary}) - ${reason}`);
+        }
+        return { blocked: [], count: targets.length };
+      }, { maxWait: 20000, timeout: 60000 });
 
-      const blocked = targets.filter(
-        (po) =>
-          po.status === '입고완료' ||
-          po.status === '부분입고' ||
-          po.details.some((d) => Number(d.receivedQty || 0) > 0)
-      );
-      if (blocked.length > 0) {
+      if (cancelResult.blocked.length > 0) {
         return NextResponse.json(
           {
             success: false,
-            error: `이미 입고된 품목이 포함된 발주는 취소할 수 없습니다. (${blocked.map((b) => b.orderNo).join(', ')})`,
+            error: `이미 입고된 품목이 포함된 발주는 취소할 수 없습니다. (${cancelResult.blocked.map((b) => b.orderNo).join(', ')})`,
           },
           { status: 400 }
         );
       }
 
-      await prisma.purchaseOrder.updateMany({
-        where: { id: { in: targets.map((t) => t.id) } },
-        data: {
-          status: '발주취소',
-          cancelReason: cancelReason || '사용자 요청에 의한 발주 취소',
-          cancelDate: kstToday(),
-        },
-      });
       return NextResponse.json({ success: true, message: '발주가 성공적으로 취소되었습니다.' });
     }
 
@@ -245,21 +281,21 @@ export async function POST(req: NextRequest) {
     if (action === 'delete') {
       const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
       if (delAuth.error) return delAuth.error;
-      return await handleDeleteOrders(body);
+      return await handleDeleteOrders(body, delAuth.user);
     }
 
     // 3) 단일 발주 품목 삭제
     if (action === 'delete_detail' && (detailId || id)) {
       const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
       if (delAuth.error) return delAuth.error;
-      return await handleDeleteDetail(Number(detailId || id));
+      return await handleDeleteDetail(Number(detailId || id), delAuth.user);
     }
 
     // 3-2) 다중 발주 품목 일괄 삭제
     if (action === 'delete_details' && Array.isArray(body.detailIds) && body.detailIds.length > 0) {
       const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
       if (delAuth.error) return delAuth.error;
-      return await handleDeleteDetails(body.detailIds.map(Number));
+      return await handleDeleteDetails(body.detailIds.map(Number), delAuth.user);
     }
 
     if (action === 'update_status' && id) {
@@ -268,9 +304,13 @@ export async function POST(req: NextRequest) {
       if (!Number.isInteger(numId) || numId <= 0 || !allowedStatuses.includes(String(status || ''))) {
         return NextResponse.json({ success: false, error: '유효하지 않은 발주 ID 또는 상태값입니다.' }, { status: 400 });
       }
-      const updated = await prisma.purchaseOrder.update({
-        where: { id: numId },
-        data: { status },
+      const updated = await prisma.$transaction(async (tx) => {
+        const res = await tx.purchaseOrder.update({
+          where: { id: numId },
+          data: { status },
+        });
+        await recordOrderAuditLog(tx, actor, '발주상태변경', `발주서 ${res.orderNo} 상태 변경 → ${status}`);
+        return res;
       });
       return NextResponse.json({ success: true, data: updated });
     }
@@ -315,20 +355,35 @@ export async function POST(req: NextRequest) {
 
         const allDetails = await tx.purchaseOrderDetail.findMany({
           where: { purchaseOrderId: po.id },
-          select: { amount: true },
+          select: { amount: true, remainQty: true, receivedQty: true },
         });
         const newTotalAmount = Math.round(
           allDetails.reduce((s, d) => s + (Number(d.amount) || 0), 0)
         );
+        const isCancelled = po.status === '발주취소' || po.status === '취소';
+        let nextStatus = po.status;
+        if (!isCancelled && allDetails.length > 0) {
+          const anyRecv = allDetails.some((d) => (Number(d.receivedQty) || 0) > 0);
+          const allClosed = allDetails.every((d) => (Number(d.remainQty) || 0) <= 0);
+          nextStatus = anyRecv ? (allClosed ? '입고완료' : '부분입고') : '발주';
+        }
 
         await tx.purchaseOrder.update({
           where: { id: po.id },
           data: {
             totalAmount: newTotalAmount,
+            status: nextStatus,
             ...(remark !== undefined ? { remark } : {}),
             ...(deliveryDate !== undefined ? { deliveryDate: normalizeDateYmd(deliveryDate) } : {}),
           },
         });
+
+        await recordOrderAuditLog(
+          tx,
+          actor,
+          '발주서수정',
+          `발주서 ${po.orderNo} 수정 (총액 ${newTotalAmount.toLocaleString()}원, 상태 ${nextStatus})`
+        );
       }, { maxWait: 20000, timeout: 60000 });
 
       const refreshed = await prisma.purchaseOrder.findUnique({
@@ -375,10 +430,10 @@ export async function DELETE(req: NextRequest) {
     const detailId = body.detailId || searchParams.get('detailId');
 
     if (detailId) {
-      return await handleDeleteDetail(Number(detailId));
+      return await handleDeleteDetail(Number(detailId), auth.user);
     }
 
-    return await handleDeleteOrders({ id, ids, orderNo, orderNos });
+    return await handleDeleteOrders({ id, ids, orderNo, orderNos }, auth.user);
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || '발주서 삭제 처리 중 오류가 발생했습니다.' },
@@ -388,12 +443,15 @@ export async function DELETE(req: NextRequest) {
 }
 
 /** 발주서 영구 삭제 로직 (공통) */
-async function handleDeleteOrders(params: {
-  id?: number | string;
-  ids?: (number | string)[];
-  orderNo?: string;
-  orderNos?: string[];
-}) {
+async function handleDeleteOrders(
+  params: {
+    id?: number | string;
+    ids?: (number | string)[];
+    orderNo?: string;
+    orderNos?: string[];
+  },
+  actor?: AuditActor
+) {
   const { id, ids, orderNo, orderNos } = params;
   const numIds = Array.isArray(ids)
     ? ids.map(Number).filter((n) => !isNaN(n))
@@ -414,67 +472,88 @@ async function handleDeleteOrders(params: {
     );
   }
 
-  // 1. 대상 발주서 조회 및 입고 상태 검증
-  const targetOrders = await prisma.purchaseOrder.findMany({
-    where: {
-      OR: [
-        ...(numIds.length > 0 ? [{ id: { in: numIds } }] : []),
-        ...(targetOrderNos.length > 0 ? [{ orderNo: { in: targetOrderNos } }] : []),
-      ],
-    },
-    include: { details: true },
-  });
+  // 조회·입고검증·삭제·감사로그를 단일 트랜잭션으로 원자화 (동시 입고와의 경합 방지)
+  const txRes = await prisma.$transaction(
+    async (tx) => {
+      const targetOrders = await tx.purchaseOrder.findMany({
+        where: {
+          OR: [
+            ...(numIds.length > 0 ? [{ id: { in: numIds } }] : []),
+            ...(targetOrderNos.length > 0 ? [{ orderNo: { in: targetOrderNos } }] : []),
+          ],
+        },
+        include: { details: true },
+      });
 
-  if (targetOrders.length === 0) {
+      if (targetOrders.length === 0) {
+        return { kind: 'not_found' as const };
+      }
+
+      const blockedOrders = targetOrders.filter(
+        (o) =>
+          o.status === '입고완료' ||
+          o.status === '부분입고' ||
+          o.details.some((d) => (d.receivedQty || 0) > 0)
+      );
+
+      if (blockedOrders.length > 0) {
+        return {
+          kind: 'blocked' as const,
+          blockedNos: blockedOrders.map((o) => o.orderNo).join(', '),
+        };
+      }
+
+      const orderIdsToDelete = targetOrders.map((o) => o.id);
+      await tx.purchaseOrderDetail.deleteMany({
+        where: { purchaseOrderId: { in: orderIdsToDelete } },
+      });
+      const res = await tx.purchaseOrder.deleteMany({
+        where: { id: { in: orderIdsToDelete } },
+      });
+      const orderNoSummary =
+        targetOrders.slice(0, 5).map((o) => o.orderNo).join(', ') +
+        (targetOrders.length > 5 ? ` 외 ${targetOrders.length - 5}건` : '');
+      await recordOrderAuditLog(
+        tx,
+        actor,
+        '발주서삭제',
+        `발주서 ${res.count}건 영구 삭제 (${orderNoSummary})`
+      );
+      return {
+        kind: 'deleted' as const,
+        deletedCount: res.count,
+        deletedOrderNos: targetOrders.map((o) => o.orderNo),
+      };
+    },
+    { maxWait: 20000, timeout: 60000 }
+  );
+
+  if (txRes.kind === 'not_found') {
     return NextResponse.json(
       { success: false, error: '삭제 대상 발주서를 찾을 수 없습니다.' },
       { status: 404 }
     );
   }
-
-  // 2. 이미 입고 처리된 발주서가 포함되어 있는지 안전 검증
-  const blockedOrders = targetOrders.filter(
-    (o) => o.status === '입고완료' || o.details.some((d) => (d.receivedQty || 0) > 0)
-  );
-
-  if (blockedOrders.length > 0) {
-    const blockedNos = blockedOrders.map((o) => o.orderNo).join(', ');
+  if (txRes.kind === 'blocked') {
     return NextResponse.json(
       {
         success: false,
-        error: `이미 입고 처리되었거나 부분 입고된 발주서(${blockedNos})는 삭제할 수 없습니다. 입고등록 화면에서 입고를 먼저 취소한 후 삭제해주세요.`,
+        error: `이미 입고 처리되었거나 부분 입고된 발주서(${txRes.blockedNos})는 삭제할 수 없습니다. 입고등록 화면에서 입고를 먼저 취소한 후 삭제해주세요.`,
       },
       { status: 400 }
     );
   }
 
-  // 3. 트랜잭션으로 상세 품목 및 헤더 삭제
-  const orderIdsToDelete = targetOrders.map((o) => o.id);
-  const deletedCount = await prisma.$transaction(
-    async (tx) => {
-      // 상세 품목 삭제
-      await tx.purchaseOrderDetail.deleteMany({
-        where: { purchaseOrderId: { in: orderIdsToDelete } },
-      });
-      // 헤더 삭제
-      const res = await tx.purchaseOrder.deleteMany({
-        where: { id: { in: orderIdsToDelete } },
-      });
-      return res.count;
-    },
-    { maxWait: 20000, timeout: 60000 }
-  );
-
   return NextResponse.json({
     success: true,
-    message: `선택하신 ${deletedCount}건의 발주서가 완전히 삭제되었습니다.`,
-    deletedCount,
-    deletedOrderNos: targetOrders.map((o) => o.orderNo),
+    message: `선택하신 ${txRes.deletedCount}건의 발주서가 완전히 삭제되었습니다.`,
+    deletedCount: txRes.deletedCount,
+    deletedOrderNos: txRes.deletedOrderNos,
   });
 }
 
 /** 단일 발주 품목 삭제 로직 */
-async function handleDeleteDetail(detailId: number) {
+async function handleDeleteDetail(detailId: number, actor?: AuditActor) {
   if (!detailId || isNaN(detailId)) {
     return NextResponse.json(
       { success: false, error: '유효한 품목 ID가 아닙니다.' },
@@ -482,42 +561,31 @@ async function handleDeleteDetail(detailId: number) {
     );
   }
 
-  const detail = await prisma.purchaseOrderDetail.findUnique({
-    where: { id: detailId },
-    include: {
-      purchaseOrder: {
-        include: { details: true },
-      },
-    },
-  });
-
-  if (!detail) {
-    return NextResponse.json(
-      { success: false, error: '삭제할 발주 품목을 찾을 수 없습니다.' },
-      { status: 404 }
-    );
-  }
-
-  if ((detail.receivedQty || 0) > 0) {
-    return NextResponse.json(
-      { success: false, error: '이미 입고 처리된 품목은 삭제할 수 없습니다.' },
-      { status: 400 }
-    );
-  }
-
-  const parentOrder = detail.purchaseOrder;
-
-  await prisma.$transaction(
+  const txRes = await prisma.$transaction(
     async (tx) => {
-      // 해당 품목 삭제
+      const detail = await tx.purchaseOrderDetail.findUnique({
+        where: { id: detailId },
+        include: {
+          purchaseOrder: {
+            include: { details: true },
+          },
+        },
+      });
+
+      if (!detail) {
+        return { kind: 'not_found' as const };
+      }
+      if ((detail.receivedQty || 0) > 0) {
+        return { kind: 'blocked' as const };
+      }
+
+      const parentOrder = detail.purchaseOrder;
       await tx.purchaseOrderDetail.delete({
         where: { id: detailId },
       });
 
-      // 남은 품목들의 합계금액 계산
       const remaining = parentOrder.details.filter((d) => d.id !== detailId);
       if (remaining.length === 0) {
-        // 발주 품목이 0개가 되면 발주서 헤더도 함께 삭제
         await tx.purchaseOrder.delete({
           where: { id: parentOrder.id },
         });
@@ -528,43 +596,59 @@ async function handleDeleteDetail(detailId: number) {
           data: { totalAmount: newTotal },
         });
       }
+
+      await recordOrderAuditLog(
+        tx,
+        actor,
+        '발주품목삭제',
+        `발주서 ${parentOrder.orderNo} 품목 삭제 [${detail.productName || detail.productCode}]`
+      );
+      return { kind: 'deleted' as const, label: detail.productName || detail.productCode };
     },
     { maxWait: 20000, timeout: 60000 }
   );
 
-  return NextResponse.json({
-    success: true,
-    message: `품목 [${detail.productName || detail.productCode}]이(가) 발주서에서 삭제되었습니다.`,
-  });
-}
-
-/** 다중 발주 품목 일괄 삭제 로직 */
-async function handleDeleteDetails(detailIds: number[]) {
-  if (!Array.isArray(detailIds) || detailIds.length === 0) {
-    return NextResponse.json({ success: false, error: '삭제할 품목 ID 목록이 없습니다.' }, { status: 400 });
-  }
-
-  const details = await prisma.purchaseOrderDetail.findMany({
-    where: { id: { in: detailIds } },
-    select: { id: true, purchaseOrderId: true, receivedQty: true, productName: true, productCode: true },
-  });
-
-  if (details.length === 0) {
-    return NextResponse.json({ success: false, error: '삭제할 품목을 찾을 수 없습니다.' }, { status: 404 });
-  }
-
-  const received = details.filter((d) => (d.receivedQty || 0) > 0);
-  if (received.length > 0) {
+  if (txRes.kind === 'not_found') {
     return NextResponse.json(
-      { success: false, error: '이미 입고 처리된 품목이 포함되어 있어 삭제할 수 없습니다.' },
+      { success: false, error: '삭제할 발주 품목을 찾을 수 없습니다.' },
+      { status: 404 }
+    );
+  }
+  if (txRes.kind === 'blocked') {
+    return NextResponse.json(
+      { success: false, error: '이미 입고 처리된 품목은 삭제할 수 없습니다.' },
       { status: 400 }
     );
   }
 
-  const parentOrderIds = [...new Set(details.map((d) => d.purchaseOrderId))];
+  return NextResponse.json({
+    success: true,
+    message: `품목 [${txRes.label}]이(가) 발주서에서 삭제되었습니다.`,
+  });
+}
 
-  await prisma.$transaction(
+/** 다중 발주 품목 일괄 삭제 로직 */
+async function handleDeleteDetails(detailIds: number[], actor?: AuditActor) {
+  if (!Array.isArray(detailIds) || detailIds.length === 0) {
+    return NextResponse.json({ success: false, error: '삭제할 품목 ID 목록이 없습니다.' }, { status: 400 });
+  }
+
+  const txRes = await prisma.$transaction(
     async (tx) => {
+      const details = await tx.purchaseOrderDetail.findMany({
+        where: { id: { in: detailIds } },
+        select: { id: true, purchaseOrderId: true, receivedQty: true, productName: true, productCode: true },
+      });
+
+      if (details.length === 0) {
+        return { kind: 'not_found' as const };
+      }
+      if (details.some((d) => (d.receivedQty || 0) > 0)) {
+        return { kind: 'blocked' as const };
+      }
+
+      const parentOrderIds = [...new Set(details.map((d) => d.purchaseOrderId))];
+
       // 1. 해당 품목들 일괄 삭제
       await tx.purchaseOrderDetail.deleteMany({
         where: { id: { in: detailIds } },
@@ -597,13 +681,31 @@ async function handleDeleteDetails(detailIds: number[]) {
           data: { totalAmount: Math.round(newTotal) },
         });
       }
+
+      await recordOrderAuditLog(
+        tx,
+        actor,
+        '발주품목삭제',
+        `발주 품목 ${details.length}건 일괄 삭제 (빈 발주서 ${emptyOrderIds.length}건 함께 삭제)`
+      );
+      return { kind: 'deleted' as const, deletedCount: details.length };
     },
     { maxWait: 20000, timeout: 60000 }
   );
 
+  if (txRes.kind === 'not_found') {
+    return NextResponse.json({ success: false, error: '삭제할 품목을 찾을 수 없습니다.' }, { status: 404 });
+  }
+  if (txRes.kind === 'blocked') {
+    return NextResponse.json(
+      { success: false, error: '이미 입고 처리된 품목이 포함되어 있어 삭제할 수 없습니다.' },
+      { status: 400 }
+    );
+  }
+
   return NextResponse.json({
     success: true,
-    message: `선택하신 ${details.length}개 품목이 발주서에서 완전히 삭제되었습니다.`,
-    deletedCount: details.length,
+    message: `선택하신 ${txRes.deletedCount}개 품목이 발주서에서 완전히 삭제되었습니다.`,
+    deletedCount: txRes.deletedCount,
   });
 }

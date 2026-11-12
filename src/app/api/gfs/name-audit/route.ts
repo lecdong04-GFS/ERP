@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { normName } from '@/lib/gfs/canonical';
 import { menuKey } from '@/lib/gfs/bomMatch';
 
 // GET /api/gfs/name-audit — PostgreSQL 단일 진실 공급원 기준 품명·BOM·수주 정합성 대조
 export async function GET() {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const erpProducts = await prisma.product.findMany({
       where: { isUsed: true },

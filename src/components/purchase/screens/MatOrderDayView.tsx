@@ -515,6 +515,8 @@ export const MatOrderDayView: React.FC = () => {
             discontinuedDate: r.discontinuedDate || '',
             status: r.status || '정상',
             orderCycle: r.orderCycle || '',
+            isReplaced: Boolean(r.isReplaced),
+            replacementNote: r.replacementNote || '',
           };
         });
         setRows(loaded);
@@ -711,7 +713,9 @@ export const MatOrderDayView: React.FC = () => {
       });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        const valid = json.data.filter((po: any) => po.status !== '발주취소');
+        const valid = json.data.filter(
+          (po: any) => po.status !== '발주취소' && po.status !== '취소'
+        );
         setWeekConfirmedPoList(valid);
       } else {
         setWeekConfirmedPoList([]);
@@ -1832,6 +1836,7 @@ export const MatOrderDayView: React.FC = () => {
       setIsSaving(true);
       try {
         const succeededDates = new Set<string>();
+        const failedNamesByDate = new Map<string, Set<string>>();
         const allCreated: { orderDate: string; orderNo: string; itemCount: number }[] = [];
         const allFailedMat: { orderDate: string; name: string; reason: string }[] = [];
         const dateErrors: string[] = [];
@@ -1851,9 +1856,15 @@ export const MatOrderDayView: React.FC = () => {
             }))
           );
 
-          result.failedMat.forEach((f: any) =>
-            allFailedMat.push({ orderDate: group.orderDate, name: f.name, reason: f.reason })
-          );
+          result.failedMat.forEach((f: any) => {
+            allFailedMat.push({ orderDate: group.orderDate, name: f.name, reason: f.reason });
+            if (f?.name) {
+              if (!failedNamesByDate.has(group.orderDate)) {
+                failedNamesByDate.set(group.orderDate, new Set());
+              }
+              failedNamesByDate.get(group.orderDate)!.add(String(f.name).trim());
+            }
+          });
 
           if (result.ok) {
             succeededDates.add(group.orderDate);
@@ -1871,6 +1882,12 @@ export const MatOrderDayView: React.FC = () => {
             Object.entries(prev).forEach(([k, entry]) => {
               if (!succeededDates.has(entry.orderDate)) {
                 next[k] = entry;
+                return;
+              }
+              // 매칭 실패(failedMat) 품목은 바구니에 남겨 재확인 가능하게 유지하고, 성공 품목 및 0박스 임시 항목만 정리
+              const failedSet = failedNamesByDate.get(entry.orderDate);
+              if (entry.qty > 0 && failedSet?.has(String(entry.name || '').trim())) {
+                next[k] = entry;
               }
             });
             return next;
@@ -1886,7 +1903,7 @@ export const MatOrderDayView: React.FC = () => {
             });
             return changed ? next : prev;
           });
-          if (dateErrors.length === 0) {
+          if (dateErrors.length === 0 && allFailedMat.length === 0) {
             setShowBasketModal(false);
           }
           await Promise.all([loadConfirmedPo(), loadInboundPending(), loadOrderSheet()]);
@@ -2011,6 +2028,17 @@ export const MatOrderDayView: React.FC = () => {
             `• 상단의 [발주서 ${orderCount}건 발행] 버튼을 누르면 거래처별 전표 내역을 바로 확인하실 수 있습니다.` +
             failedWarn
         );
+        setStagedOrders((prev) => {
+          const next = { ...prev };
+          let changed = false;
+          Object.entries(prev).forEach(([k, entry]) => {
+            if (entry.orderDate === currentDayDate && entry.qty <= 0) {
+              delete next[k];
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
+        });
         setOverrides((prev) => {
           if (!prev[currentDayDate]) return prev;
           const next = { ...prev };
@@ -3571,8 +3599,11 @@ export const MatOrderDayView: React.FC = () => {
                       <td colSpan={13} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           {confirmedPoList.length > 0 &&
+                          supplierFilter === '전체' &&
                           warehouseFilter === '전체' &&
+                          patternFilter === '전체' &&
                           urgencyFilter === 'all' &&
+                          !showOnlyUrgentUnallocated &&
                           !keyword.trim() ? (
                             <>
                               <CheckCircle2 className="w-12 h-12 text-emerald-500" />

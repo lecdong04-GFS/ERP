@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isDummyBomDetail, matchBomHeader } from '@/lib/gfs/bomMatch';
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/purchase/simulation?date=YYYY-MM-DD
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const todayKst = kstToday();

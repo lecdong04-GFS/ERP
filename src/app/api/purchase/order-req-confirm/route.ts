@@ -25,6 +25,9 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/purchase/order-req-confirm?date=2026-10-30&supplier=ALL&search=
 export async function GET(req: NextRequest) {
+  const auth = await requireSession();
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const todayKst = kstToday();

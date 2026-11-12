@@ -370,19 +370,20 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const confirmedDatesByPid = new Map<number, Set<string>>();
     const confirmedDatesByName = new Map<string, Set<string>>();
     for (const po of todayPurchaseOrders) {
-      const isTodayPo = po.orderDate === today;
+      const poOrderDate = String(po.orderDate || '').slice(0, 10);
+      const isTodayPo = poOrderDate === today;
       if (isTodayPo) todayPurchaseItemCount += po.details.length;
       for (const d of po.details) {
         if (d.productId) {
           if (!confirmedDatesByPid.has(d.productId)) confirmedDatesByPid.set(d.productId, new Set());
-          confirmedDatesByPid.get(d.productId)!.add(po.orderDate);
+          confirmedDatesByPid.get(d.productId)!.add(poOrderDate);
         }
         const nm = String(d.productName || d.product?.name || '')
           .trim()
           .toLowerCase();
         if (nm) {
           if (!confirmedDatesByName.has(nm)) confirmedDatesByName.set(nm, new Set());
-          confirmedDatesByName.get(nm)!.add(po.orderDate);
+          confirmedDatesByName.get(nm)!.add(poOrderDate);
         }
         if (isTodayPo) {
           const masterBag = pickLatestValidPurchasePrice(d.product?.prices);
