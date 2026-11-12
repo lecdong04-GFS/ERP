@@ -8,6 +8,7 @@ import {
   getScheduledExclusion,
   splitWeek,
 } from '@/lib/gfs/orderCalc';
+import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
 import {
   ActionItem,
   ChartPoint,
@@ -81,6 +82,8 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const weekAgo = kstDate(-6);
     const monthAgo = kstDate(-29);
     const thisYear = today.slice(0, 4);
+    const todayDowMon0 = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+    const weekSunday = kstDate(6 - todayDowMon0);
 
     // ── 1. 병렬 조회 (연도 1회 조회 후 30일/7일 파생) ───────
     const [
@@ -167,7 +170,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         orderBy: { sortOrder: 'asc' },
       }),
       prisma.purchaseOrder.findMany({
-        where: { orderDate: today, status: { notIn: ['취소', '발주취소'] } },
+        where: { orderDate: { gte: today, lte: weekSunday }, status: { notIn: ['취소', '발주취소'] } },
         include: {
           details: {
             include: {
@@ -360,25 +363,35 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const todaySalesAmount = todayOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
     const yesterdaySalesAmount = yesterdayOrders.reduce((s, o) => s + (o.totalAmount || 0), 0);
 
-    const todayPurchasePartnerCount = new Set(todayPurchaseOrders.map((p) => p.partnerName)).size;
+    const todayOnlyOrders = todayPurchaseOrders.filter((p) => p.orderDate === today);
+    const todayPurchasePartnerCount = new Set(todayOnlyOrders.map((p) => p.partnerName)).size;
     let todayPurchaseItemCount = 0;
     let todayPurchaseAmount = 0;
-    const confirmedProductIdsToday = new Set<number>();
-    const confirmedNamesToday = new Set<string>();
+    const confirmedDatesByPid = new Map<number, Set<string>>();
+    const confirmedDatesByName = new Map<string, Set<string>>();
     for (const po of todayPurchaseOrders) {
-      todayPurchaseItemCount += po.details.length;
+      const isTodayPo = po.orderDate === today;
+      if (isTodayPo) todayPurchaseItemCount += po.details.length;
       for (const d of po.details) {
-        if (d.productId) confirmedProductIdsToday.add(d.productId);
+        if (d.productId) {
+          if (!confirmedDatesByPid.has(d.productId)) confirmedDatesByPid.set(d.productId, new Set());
+          confirmedDatesByPid.get(d.productId)!.add(po.orderDate);
+        }
         const nm = String(d.productName || d.product?.name || '')
           .trim()
           .toLowerCase();
-        if (nm) confirmedNamesToday.add(nm);
-        const masterBag = pickLatestValidPurchasePrice(d.product?.prices);
-        const p =
-          Number(d.unitPrice) > 0
-            ? Number(d.unitPrice)
-            : unitPriceForOrderUnit(masterBag, d.unit, d.product?.boxQty);
-        todayPurchaseAmount += (d.orderQty || 1) * p;
+        if (nm) {
+          if (!confirmedDatesByName.has(nm)) confirmedDatesByName.set(nm, new Set());
+          confirmedDatesByName.get(nm)!.add(po.orderDate);
+        }
+        if (isTodayPo) {
+          const masterBag = pickLatestValidPurchasePrice(d.product?.prices);
+          const p =
+            Number(d.unitPrice) > 0
+              ? Number(d.unitPrice)
+              : unitPriceForOrderUnit(masterBag, d.unit, d.product?.boxQty);
+          todayPurchaseAmount += (d.orderQty || 1) * p;
+        }
       }
     }
 
@@ -390,8 +403,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       latestPreTodaySnap?.snapshotDate || orderSheetData?.dormantLatestSnapDate || '';
 
     if (orderSheetData && Array.isArray(orderSheetData.rows)) {
-      const todayDowMon0 = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
-      const activeDayMask = Array.from({ length: 7 }, (_, i) => i >= todayDowMon0);
+      const weekDateList = Array.from({ length: 7 }, (_, i) => kstDate(i - todayDowMon0));
 
       for (const r of orderSheetData.rows) {
         if (r.isDormant || r.isReplaced) continue;
@@ -399,12 +411,19 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         const nmKey = String(r.name || '')
           .trim()
           .toLowerCase();
-        if ((pid > 0 && confirmedProductIdsToday.has(pid)) || (nmKey && confirmedNamesToday.has(nmKey))) {
+        const pidDates = pid > 0 ? confirmedDatesByPid.get(pid) : undefined;
+        const nameDates = nmKey ? confirmedDatesByName.get(nmKey) : undefined;
+        const isConfirmedToday = Boolean(pidDates?.has(today) || nameDates?.has(today));
+        if (isConfirmedToday) {
           continue;
         }
         const scheduledExcl = getScheduledExclusion(r.name || '');
         const schedDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
-        if (schedDate && today >= schedDate) continue;
+        const lifecycle = getProductLifecycleInfo(
+          { status: r.status, discontinuedDate: schedDate, name: r.name },
+          today
+        );
+        if ((schedDate && today >= schedDate) || lifecycle?.isBlocked) continue;
 
         const dailyUsage = Number(r.dailyUsage) || 0;
         if (dailyUsage <= 0) continue;
@@ -428,7 +447,11 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         const suggestedBoxes = shortageBags > 0 ? Math.ceil(shortageBags / pack) : 0;
         if (suggestedBoxes <= 0) continue;
 
-        const week = splitWeek(r, suggestedBoxes, activeDayMask);
+        const itemDayMask = weekDateList.map((dStr, i) => {
+          if (i < todayDowMon0) return false;
+          return !(pidDates?.has(dStr) || nameDates?.has(dStr));
+        });
+        const week = splitWeek(r, suggestedBoxes, itemDayMask);
         const todayBoxes = week[todayDowMon0] || 0;
         if (todayBoxes > 0) {
           const boxPrice = Number(r.boxPrice) || calcBoxPrice(Number(r.bagPrice) || 0, pack);

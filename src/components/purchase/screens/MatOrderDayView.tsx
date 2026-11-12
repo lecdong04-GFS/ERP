@@ -267,8 +267,8 @@ export const MatOrderDayView: React.FC = () => {
   const [keyword, setKeyword] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  // 요일별 수동 수정값: dayIdx -> rowId -> 수량
-  const [overrides, setOverrides] = useState<Record<number, Record<number, number>>>({});
+  // 날짜별 수동 수정값: YYYY-MM-DD -> rowId -> 수량 (주차 이동 시 타 주차 오적용 방지)
+  const [overrides, setOverrides] = useState<Record<string, Record<number, number>>>({});
 
   // 발주 담기(장바구니) 상태: 여러 요일·검색·거래처에서 선택한 항목을 누적 후 한 번에 확정 저장
   const [stagedOrders, setStagedOrders] = useState<Record<string, StagedOrderEntry>>({});
@@ -609,17 +609,19 @@ export const MatOrderDayView: React.FC = () => {
         return next;
       });
       setOverrides((prev) => {
-        const next: Record<number, Record<number, number>> = {};
-        Object.entries(prev).forEach(([k, map]) => {
+        const next: Record<string, Record<number, number>> = {};
+        let changed = false;
+        Object.entries(prev).forEach(([dateKey, map]) => {
           if (map[targetRow.id] !== undefined) {
             const copy = { ...map };
             delete copy[targetRow.id];
-            next[Number(k)] = copy;
+            next[dateKey] = copy;
+            changed = true;
           } else {
-            next[Number(k)] = map;
+            next[dateKey] = map;
           }
         });
-        return next;
+        return changed ? next : prev;
       });
       setStagedOrders((prev) => {
         const next: Record<string, StagedOrderEntry> = {};
@@ -798,9 +800,9 @@ export const MatOrderDayView: React.FC = () => {
     setDayIdx((t.getDay() + 6) % 7);
   };
 
-  // ── 품목별 다이내믹 지표 산출 함수 (재고유지일, 3단 전략 모드, 안전재고, 4대 감사) ──
-  const getRowMetrics = useCallback(
-    (r: SheetRow, targetDayIdx: number) => {
+  // ── 품목별 자동 계산 플랜 (getRowMetrics 및 3대 전략 미리보기 공용) ──
+  const computeRowAutoPlan = useCallback(
+    (r: SheetRow, targetDayIdx: number, mode: StrategyMode) => {
       const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 1;
       const totalStock = (r.incoming || 0) + (r.currentStock || 0);
       const dailyUsage = r.dailyUsage || 0;
@@ -809,13 +811,12 @@ export const MatOrderDayView: React.FC = () => {
       const pattern = classifyPattern(r.supplier, r.orderDay);
       const isDaily = pattern === '매일';
 
-      // 마스터 DB의 발주일수 + 3대 전략 모드(타이트/표준/안전) 적용
       const masterOrderDays = Number(r.targetOrderDays ?? r.days) || 0;
       const strategyCalc = calcStrategyOrderDays({
         masterOrderDays,
         pattern,
         orderCycle: r.orderCycle,
-        strategyMode,
+        strategyMode: mode,
       });
       const baseTargetDays =
         itemTargetDaysOverrides[r.id] !== undefined
@@ -823,12 +824,10 @@ export const MatOrderDayView: React.FC = () => {
           : strategyCalc.effectiveDays;
       const minFloorDays = itemTargetDaysOverrides[r.id] !== undefined ? 0 : strategyCalc.minFloorDays;
 
-      // 보수적 안전 모드일 경우 발주일수가 설정된 품목에 한해 공정 감모 로스 5% 버퍼 가산
-      const lossRate = baseTargetDays > 0 && strategyMode === 'safety' ? 1.05 : 1.0;
+      const lossRate = baseTargetDays > 0 && mode === 'safety' ? 1.05 : 1.0;
       const targetStock = Math.round(dailyUsage * baseTargetDays * lossRate);
       const shortageBags = Math.max(0, targetStock - totalStock);
 
-      // 4대 안전 감사 판정 (shortageBags 계산 시 incoming을 이미 차감했으므로 기발주가 있어도 목표 미달이면 부족분 추천 유지)
       const hasIncoming = (r.incoming || 0) > 0;
       const isOverstocked = stockDays >= 60;
       const isPendingOverlap = dailyUsage > 0 && (r.incoming || 0) >= dailyUsage * 1.8;
@@ -873,7 +872,6 @@ export const MatOrderDayView: React.FC = () => {
         auditLabel = '기발주 입고충분';
       }
 
-      // 추천 박스수: 대체 완료/삭제예정일 도래/과잉재고/일소진량 0만 차단 (기발주분은 totalStock에서 이미 차감됨)
       const suggestedBoxes =
         isOverstocked || isReplacedItem || isPastScheduledDeletion || dailyUsage <= 0
           ? 0
@@ -881,24 +879,13 @@ export const MatOrderDayView: React.FC = () => {
           ? Math.ceil(shortageBags / pack)
           : 0;
 
-      // 요일 분할 (오늘 이후 실제 발주 가능 요일 중 '이미 발주 확정된 날짜'는 제외하고 남은 요일에만 배분)
       const baseMask = activeDayMask || weekDates.map(() => true);
       const itemDayMask = weekDates.map(
         (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
       );
       const week = splitWeek(r, suggestedBoxes, itemDayMask);
       const targetDayConfirm = getRowDayConfirmStatus(targetDayDate, r);
-      const stagedEntry = stagedOrders[makeStagedKey(targetDayDate, r.id)];
-      const override = isPastScheduledDeletion ? 0 : overrides[targetDayIdx]?.[r.id];
-      const dayQty = isPastScheduledDeletion
-        ? 0
-        : stagedEntry !== undefined
-        ? stagedEntry.qty
-        : override !== undefined
-        ? override
-        : week[targetDayIdx];
       const boxPrice = calcBoxPrice(r.bagPrice, pack);
-      const amount = dayQty * boxPrice;
 
       return {
         pack,
@@ -921,23 +908,44 @@ export const MatOrderDayView: React.FC = () => {
         scheduledDate,
         suggestedBoxes,
         week,
+        targetDayDate,
         isConfirmedOnTargetDay: Boolean(targetDayConfirm),
         confirmedTodayBoxes: targetDayConfirm?.boxes || 0,
         confirmedTodayOrderNos: targetDayConfirm?.orderNos || [],
-        dayQty,
-        amount,
+        autoDayQty: isPastScheduledDeletion ? 0 : week[targetDayIdx] || 0,
       };
     },
     [
-      strategyMode,
       itemTargetDaysOverrides,
-      overrides,
-      stagedOrders,
       weekDates,
       currentDayDate,
       activeDayMask,
       getRowDayConfirmStatus,
     ]
+  );
+
+  // ── 품목별 다이내믹 지표 산출 함수 (자동 플랜 + 날짜별 바구니·수동수정 반영) ──
+  const getRowMetrics = useCallback(
+    (r: SheetRow, targetDayIdx: number) => {
+      const plan = computeRowAutoPlan(r, targetDayIdx, strategyMode);
+      const stagedEntry = stagedOrders[makeStagedKey(plan.targetDayDate, r.id)];
+      const override = plan.isPastScheduledDeletion ? 0 : overrides[plan.targetDayDate]?.[r.id];
+      const dayQty = plan.isPastScheduledDeletion
+        ? 0
+        : stagedEntry !== undefined
+        ? stagedEntry.qty
+        : override !== undefined
+        ? override
+        : plan.autoDayQty;
+      const amount = dayQty * plan.boxPrice;
+
+      return {
+        ...plan,
+        dayQty,
+        amount,
+      };
+    },
+    [computeRowAutoPlan, strategyMode, overrides, stagedOrders]
   );
 
   // 품목별 발주일수 미세조정 핸들러 (±0.5일, 0일 가능)
@@ -1227,16 +1235,22 @@ export const MatOrderDayView: React.FC = () => {
     });
 
     const avgRunway = countWithUsage > 0 ? totalStockDaysSum / countWithUsage : 0;
-    const manualOverrideCount = Object.keys(overrides[dayIdx] || {}).length;
+    const lockedIds = new Set<number>(
+      Object.keys(overrides[currentDayDate] || {}).map((k) => Number(k))
+    );
+    Object.values(stagedOrders).forEach((entry) => {
+      if (entry.orderDate === currentDayDate) lockedIds.add(entry.rowId);
+    });
+    const manualOverrideCount = lockedIds.size;
     return { boxes, amt, criticalCount, warningCount, zeroPriceCount, manualOverrideCount, avgRunway };
-  }, [dayRows, overrides, dayIdx]);
+  }, [dayRows, overrides, stagedOrders, currentDayDate]);
 
   // 3대 전략(타이트/표준/안전)별 순수 자동 계산 예상 금액 비교 (바구니·수동수정 제외한 요일 기준 금액)
   const strategyPreview = useMemo(() => {
     const calcMode = (mode: StrategyMode) => {
+      let count = 0;
       let boxes = 0;
       let amt = 0;
-      const baseMask = activeDayMask || weekDates.map(() => true);
       const kw = keyword.trim().toLowerCase();
       rows.forEach((r) => {
         if (!showDormant && r.isDormant && !kw) return;
@@ -1246,52 +1260,27 @@ export const MatOrderDayView: React.FC = () => {
         if (patternFilter !== '전체' && pattern !== patternFilter) return;
         if (kw && !r.name.toLowerCase().includes(kw) && !r.supplier.toLowerCase().includes(kw)) return;
 
-        const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 1;
-        const totalStock = (r.incoming || 0) + (r.currentStock || 0);
-        const dailyUsage = r.dailyUsage || 0;
-        const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : totalStock > 0 ? 99 : 0;
-        if (stockDays >= 60 || dailyUsage <= 0) return;
+        const plan = computeRowAutoPlan(r, dayIdx, mode);
+        if (urgencyFilter === 'critical' && plan.auditStatus !== 'critical') return;
+        if (urgencyFilter === 'warning' && plan.auditStatus !== 'warning') return;
+        if (urgencyFilter === 'pending' && !(Number(r.pendingBoxes || 0) > 0)) return;
+        if (showOnlyUrgentUnallocated) {
+          if (
+            plan.isConfirmedOnTargetDay ||
+            !(plan.suggestedBoxes > 0 && plan.autoDayQty === 0 && (plan.stockDays < 1.5 || r.currentStock <= 0))
+          ) {
+            return;
+          }
+        }
 
-        const isReplacedItem = r.name.includes('스팸(340g*20캔)') || (r as any).isReplaced;
-        if (isReplacedItem) return;
-
-        const targetDayDate = weekDates[dayIdx] || currentDayDate || kstToday();
-        const scheduledExcl = getScheduledExclusion(r.name);
-        const scheduledDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
-        const lifecycle = getProductLifecycleInfo(
-          { status: r.status, discontinuedDate: scheduledDate, name: r.name },
-          targetDayDate
-        );
-        if ((scheduledDate && targetDayDate >= scheduledDate) || lifecycle?.isBlocked) return;
-
-        const masterOrderDays = Number(r.targetOrderDays ?? r.days) || 0;
-        const strategyCalc = calcStrategyOrderDays({
-          masterOrderDays,
-          pattern,
-          orderCycle: r.orderCycle,
-          strategyMode: mode,
-        });
-        const baseTargetDays =
-          itemTargetDaysOverrides[r.id] !== undefined
-            ? itemTargetDaysOverrides[r.id]
-            : strategyCalc.effectiveDays;
-        const lossRate = baseTargetDays > 0 && mode === 'safety' ? 1.05 : 1.0;
-        const targetStock = Math.round(dailyUsage * baseTargetDays * lossRate);
-        const shortageBags = Math.max(0, targetStock - totalStock);
-        const suggestedBoxes = pack > 0 && shortageBags > 0 ? Math.ceil(shortageBags / pack) : 0;
-        if (suggestedBoxes <= 0) return;
-
-        const itemDayMask = weekDates.map(
-          (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
-        );
-        const week = splitWeek(r, suggestedBoxes, itemDayMask);
-        const qty = week[dayIdx] || 0;
+        const qty = plan.autoDayQty;
         if (qty > 0) {
+          count += 1;
           boxes += qty;
-          amt += qty * calcBoxPrice(r.bagPrice, pack);
+          amt += qty * plan.boxPrice;
         }
       });
-      return { boxes, amt: Math.round(amt) };
+      return { count, boxes, amt: Math.round(amt) };
     };
 
     return {
@@ -1306,12 +1295,10 @@ export const MatOrderDayView: React.FC = () => {
     warehouseFilter,
     patternFilter,
     keyword,
+    urgencyFilter,
+    showOnlyUrgentUnallocated,
     dayIdx,
-    activeDayMask,
-    weekDates,
-    currentDayDate,
-    itemTargetDaysOverrides,
-    getRowDayConfirmStatus,
+    computeRowAutoPlan,
   ]);
 
   // ── 발주 담기(장바구니) 요약·그룹 계산 ──
@@ -1428,7 +1415,7 @@ export const MatOrderDayView: React.FC = () => {
     const num = Math.max(0, Math.ceil(Number(val) || 0));
     setOverrides((prev) => ({
       ...prev,
-      [dayIdx]: { ...(prev[dayIdx] || {}), [r.id]: num },
+      [currentDayDate]: { ...(prev[currentDayDate] || {}), [r.id]: num },
     }));
     if (m.isPastScheduledDeletion) return;
 
@@ -1468,10 +1455,10 @@ export const MatOrderDayView: React.FC = () => {
       });
       // 선택 해지 시 해당 품목에 걸려 있던 수동 고정(overrides)도 함께 풀어 전략 변경이 즉시 반영되도록 함
       setOverrides((prev) => {
-        if (!prev[dayIdx] || prev[dayIdx][r.id] === undefined) return prev;
-        const copy = { ...prev[dayIdx] };
+        if (!prev[currentDayDate] || prev[currentDayDate][r.id] === undefined) return prev;
+        const copy = { ...prev[currentDayDate] };
         delete copy[r.id];
-        return { ...prev, [dayIdx]: copy };
+        return { ...prev, [currentDayDate]: copy };
       });
       return;
     }
@@ -1480,7 +1467,7 @@ export const MatOrderDayView: React.FC = () => {
     if (m.dayQty <= 0) {
       setOverrides((prev) => ({
         ...prev,
-        [dayIdx]: { ...(prev[dayIdx] || {}), [r.id]: initialQty },
+        [currentDayDate]: { ...(prev[currentDayDate] || {}), [r.id]: initialQty },
       }));
     }
     setStagedOrders((prev) => ({
@@ -1509,8 +1496,8 @@ export const MatOrderDayView: React.FC = () => {
         return next;
       });
       setOverrides((prev) => {
-        if (!prev[dayIdx]) return prev;
-        const copy = { ...prev[dayIdx] };
+        if (!prev[currentDayDate]) return prev;
+        const copy = { ...prev[currentDayDate] };
         let changed = false;
         visibleStageableRows.forEach(({ r }) => {
           if (copy[r.id] !== undefined) {
@@ -1518,7 +1505,7 @@ export const MatOrderDayView: React.FC = () => {
             changed = true;
           }
         });
-        return changed ? { ...prev, [dayIdx]: copy } : prev;
+        return changed ? { ...prev, [currentDayDate]: copy } : prev;
       });
       return;
     }
@@ -1552,13 +1539,10 @@ export const MatOrderDayView: React.FC = () => {
       if (!prev[key]) return prev;
       return { ...prev, [key]: { ...prev[key], qty: nextQty } };
     });
-    const matchedDayIdx = weekDates.indexOf(entry.orderDate);
-    if (matchedDayIdx >= 0) {
-      setOverrides((prev) => ({
-        ...prev,
-        [matchedDayIdx]: { ...(prev[matchedDayIdx] || {}), [entry.rowId]: nextQty },
-      }));
-    }
+    setOverrides((prev) => ({
+      ...prev,
+      [entry.orderDate]: { ...(prev[entry.orderDate] || {}), [entry.rowId]: nextQty },
+    }));
   };
 
   // 바구니 단일 항목 제외
@@ -1571,15 +1555,12 @@ export const MatOrderDayView: React.FC = () => {
       return next;
     });
     if (entry) {
-      const matchedDayIdx = weekDates.indexOf(entry.orderDate);
-      if (matchedDayIdx >= 0) {
-        setOverrides((prev) => {
-          if (!prev[matchedDayIdx] || prev[matchedDayIdx][entry.rowId] === undefined) return prev;
-          const copy = { ...prev[matchedDayIdx] };
-          delete copy[entry.rowId];
-          return { ...prev, [matchedDayIdx]: copy };
-        });
-      }
+      setOverrides((prev) => {
+        if (!prev[entry.orderDate] || prev[entry.orderDate][entry.rowId] === undefined) return prev;
+        const copy = { ...prev[entry.orderDate] };
+        delete copy[entry.rowId];
+        return { ...prev, [entry.orderDate]: copy };
+      });
     }
   };
 
@@ -1591,10 +1572,9 @@ export const MatOrderDayView: React.FC = () => {
         const next = { ...prev };
         let changed = false;
         stagedList.forEach((entry) => {
-          const matchedDayIdx = weekDates.indexOf(entry.orderDate);
-          if (matchedDayIdx >= 0 && next[matchedDayIdx]?.[entry.rowId] !== undefined) {
-            next[matchedDayIdx] = { ...next[matchedDayIdx] };
-            delete next[matchedDayIdx][entry.rowId];
+          if (next[entry.orderDate]?.[entry.rowId] !== undefined) {
+            next[entry.orderDate] = { ...next[entry.orderDate] };
+            delete next[entry.orderDate][entry.rowId];
             changed = true;
           }
         });
@@ -1609,8 +1589,9 @@ export const MatOrderDayView: React.FC = () => {
   const handleResetDay = () => {
     if (confirm(`[${DAY_CHARS[dayIdx]}요일]의 수동 수정·바구니 선택을 모두 해제하고 현재 전략 계산값으로 복원하시겠습니까?`)) {
       setOverrides((prev) => {
+        if (!prev[currentDayDate]) return prev;
         const next = { ...prev };
-        delete next[dayIdx];
+        delete next[currentDayDate];
         return next;
       });
       setStagedOrders((prev) => {
@@ -1814,9 +1795,9 @@ export const MatOrderDayView: React.FC = () => {
           setOverrides((prev) => {
             const next = { ...prev };
             let changed = false;
-            weekDates.forEach((d, idx) => {
-              if (succeededDates.has(d) && next[idx]) {
-                delete next[idx];
+            succeededDates.forEach((d) => {
+              if (next[d]) {
+                delete next[d];
                 changed = true;
               }
             });
@@ -1948,9 +1929,9 @@ export const MatOrderDayView: React.FC = () => {
             failedWarn
         );
         setOverrides((prev) => {
-          if (!prev[dayIdx]) return prev;
+          if (!prev[currentDayDate]) return prev;
           const next = { ...prev };
-          delete next[dayIdx];
+          delete next[currentDayDate];
           return next;
         });
         await Promise.all([loadConfirmedPo(), loadInboundPending(), loadOrderSheet()]);
@@ -2714,23 +2695,34 @@ export const MatOrderDayView: React.FC = () => {
                   })}
                 </div>
 
-                {(dayTotals.manualOverrideCount > 0 || (stagedCountByDate[currentDayDate]?.count || 0) > 0) ? (
+                {dayTotals.manualOverrideCount > 0 ? (
                   <button
                     type="button"
                     onClick={handleResetDay}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-black transition cursor-pointer"
                     title="바구니 담기나 수동 수정(+/-)이 걸린 품목은 전략 변경 시에도 고정됩니다. 클릭 시 해제하고 현재 전략 수량으로 돌아갑니다."
                   >
-                    <span>
-                      고정 {Math.max(dayTotals.manualOverrideCount, stagedCountByDate[currentDayDate]?.count || 0)}건 · 해제
-                    </span>
+                    <span>고정 {dayTotals.manualOverrideCount}건 · 해제</span>
                   </button>
-                ) : confirmedPoList.length > 0 && strategyPreview.standard.boxes === 0 ? (
+                ) : confirmedPoList.length > 0 &&
+                  strategyPreview.tight.boxes === 0 &&
+                  strategyPreview.standard.boxes === 0 &&
+                  strategyPreview.safety.boxes === 0 ? (
                   <span
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold"
                     title="오늘 요일은 이미 발주 확정되어 모든 전략이 ₩0입니다. 위 요일 탭에서 미확정 요일(금·토)을 선택하면 전략별 차이를 비교할 수 있습니다."
                   >
                     당일확정 완료 · 금/토 탭 비교
+                  </span>
+                ) : confirmedPoList.length > 0 &&
+                  strategyPreview.tight.boxes === 0 &&
+                  strategyPreview.standard.boxes === 0 &&
+                  strategyPreview.safety.boxes > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold"
+                    title={`타이트·표준 발주는 이미 확정 완료되었고, 안전 모드 선택 시 추가 가능 ${strategyPreview.safety.count}건이 있습니다. 미확정 요일(금·토) 탭에서도 전략별 차이를 비교할 수 있습니다.`}
+                  >
+                    표준 확정완료 · 안전 +{strategyPreview.safety.count}건
                   </span>
                 ) : null}
               </div>
