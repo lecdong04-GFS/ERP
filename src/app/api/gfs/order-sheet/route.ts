@@ -5,6 +5,7 @@ import { kstToday } from '@/lib/kst';
 import { normName } from '@/lib/gfs/canonical';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { getLiveBomUsageMap, LiveBomUsageMap } from '@/lib/gfs/liveUsage';
+import { analyzeDormantMaterials, DormantAnalysisResult } from '@/lib/gfs/dormantMaterials';
 import { pickLatestValidPrice, normalizeDateYmd } from '@/lib/gfs/bomMatch';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
@@ -28,6 +29,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const rawDate = searchParams.get('date') || '';
     const targetDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : '';
+    const rawDormant = searchParams.get('dormantDays');
+    const parsedDormant = rawDormant !== null && rawDormant !== '' ? Number(rawDormant) : 14;
+    const dormantDays = Number.isFinite(parsedDormant)
+      ? Math.max(0, Math.min(90, Math.round(parsedDormant)))
+      : 14;
     const todayKst = kstToday();
     const checkDate = targetDate || todayKst;
     const errors: string[] = [];
@@ -50,12 +56,22 @@ export async function GET(req: NextRequest) {
       orderBy: { productCode: 'asc' },
     });
 
-    // 2. 최신 GS25 완제품 수주량 x BOM 레시피 전개 실시간 일사용량 산출
+    // 2. 최신 GS25 완제품 수주량 x BOM 레시피 전개 실시간 일사용량 + 최근 N일 수주·재고조사표 휴면 분석 병렬 실행
+    const [bomOutcome, dormantOutcome] = await Promise.allSettled([
+      getLiveBomUsageMap(targetDate),
+      analyzeDormantMaterials(checkDate, dormantDays),
+    ]);
     let liveBomUsage: LiveBomUsageMap | null = null;
-    try {
-      liveBomUsage = await getLiveBomUsageMap(targetDate);
-    } catch (bomErr: any) {
-      errors.push(`실시간 BOM 일사용량 산출 연동 실패(기준 일사용량 폴백): ${bomErr?.message || bomErr}`);
+    if (bomOutcome.status === 'fulfilled') {
+      liveBomUsage = bomOutcome.value;
+    } else {
+      errors.push(`실시간 BOM 일사용량 산출 연동 실패(기준 일사용량 폴백): ${bomOutcome.reason?.message || bomOutcome.reason}`);
+    }
+    let dormantAnalysis: DormantAnalysisResult | null = null;
+    if (dormantOutcome.status === 'fulfilled') {
+      dormantAnalysis = dormantOutcome.value;
+    } else {
+      errors.push(`비수주·휴면 재고 교차 분석 실패(전체 표시): ${dormantOutcome.reason?.message || dormantOutcome.reason}`);
     }
 
     // 3. DB에서 현재 미입고 상태인 '기발주(Pending PO)' 내역 실시간 일괄 조회
@@ -181,9 +197,18 @@ export async function GET(req: NextRequest) {
       });
       const boxPrice = calcBoxPrice(unitPrice, pack);
 
-      // 자재 대체/단종 안전 제어: 스팸 ➔ 고미트햄(한성) 대체 완료
+      // 자재 대체/단종 안전 제어 + 최근 N일 비수주·휴면 재고 자동 일사용량 차단
       const isReplacedSpam = name.includes('스팸(340g*20캔)') || (name.includes('스팸') && supplier.includes('튀김실'));
-      const effectiveDailyUsage = isReplacedSpam ? 0 : Number(baseDailyUsage) || 0;
+      const hasPendingPo = rawBoxes > 0 || directBags > 0;
+      const activity = dormantAnalysis ? dormantAnalysis.getInfo(p.id, name) : null;
+      // 당일 BOM 소요가 있거나 미입고 기발주 잔량이 있는 품목은 휴면으로 숨기지 않음
+      const isDormant = Boolean(activity?.isDormant && !isBomDriven && !hasPendingPo);
+      const dormantTier: 'active' | 'dormant' | 'unlinked_dormant' = isDormant
+        ? activity?.dormantTier || 'dormant'
+        : 'active';
+      // 최근 수주도 없고 재고조사표 감소도 없는 휴면 품목은 과거 기준소진량(surveyDaily)으로 오발주되지 않도록 일사용량을 0으로 차단
+      const suppressedSurveyDailyUsage = isDormant && !isBomDriven && surveyDaily > 0 ? surveyDaily : 0;
+      const effectiveDailyUsage = isReplacedSpam || isDormant ? 0 : Number(baseDailyUsage) || 0;
       const effectiveBoxesBase = isReplacedSpam ? 0 : Math.floor(current / pack);
       const stockDays = effectiveDailyUsage > 0 ? Math.round((current / effectiveDailyUsage) * 10) / 10 : null;
 
@@ -203,6 +228,12 @@ export async function GET(req: NextRequest) {
         usageSource: isBomDriven ? 'BOM실시간' : '기준소진량',
         liveBomUsage: liveBomVal ?? null,
         surveyDailyUsage: surveyDaily,
+        suppressedSurveyDailyUsage,
+        isDormant,
+        dormantTier,
+        activeBomCount: activity?.activeBomCount ?? 0,
+        lastBomOrderDate: activity?.lastBomOrderDate || '',
+        lastSnapDecreaseDate: activity?.lastSnapDecreaseDate || '',
         incoming: totalIncoming,
         baseIncoming,
         pendingBoxes,
@@ -228,6 +259,8 @@ export async function GET(req: NextRequest) {
 
     rows.sort((a, b) => String(a.warehouse).localeCompare(String(b.warehouse)) || String(a.itemId).localeCompare(String(b.itemId)));
     const suppliers = Array.from(suppliersSet).sort();
+    const dormantCount = rows.filter((r) => r.isDormant).length;
+    const unlinkedDormantCount = rows.filter((r) => r.dormantTier === 'unlinked_dormant').length;
 
     return NextResponse.json({
       success: true,
@@ -239,6 +272,11 @@ export async function GET(req: NextRequest) {
         rowCount: rows.length,
         liveBomDate: liveBomUsage?.asOfDate || '',
         liveBomCount: liveBomUsage?.rowCount || 0,
+        dormantDays,
+        dormantCount,
+        unlinkedDormantCount,
+        dormantLatestOrderDate: dormantAnalysis?.latestOrderDate || '',
+        dormantLatestSnapDate: dormantAnalysis?.latestSnapDate || '',
         orderFile: 'PostgreSQL DB + 완제품 수주 x BOM 실시간 일사용량',
         masterSource: 'db_live_bom',
         auditFile: null,

@@ -293,6 +293,21 @@ export const MatOrderDayView: React.FC = () => {
     partner: string;
   } | null>(null);
 
+  // ── 비수주·장기무변동(휴면) 재고 자동 제외 상태 ──
+  const [dormantDays, setDormantDays] = useState<number>(14);
+  const [showDormant, setShowDormant] = useState<boolean>(false);
+  const [dormantMeta, setDormantMeta] = useState<{
+    dormantCount: number;
+    unlinkedDormantCount: number;
+    latestOrderDate: string;
+    latestSnapDate: string;
+  }>({ dormantCount: 0, unlinkedDormantCount: 0, latestOrderDate: '', latestSnapDate: '' });
+  const [showDormantModal, setShowDormantModal] = useState<boolean>(false);
+  const [dormantFilterTab, setDormantFilterTab] = useState<'all' | 'unlinked'>('unlinked');
+  const [dormantKeyword, setDormantKeyword] = useState<string>('');
+  const [dormantSelectedIds, setDormantSelectedIds] = useState<Set<number>>(new Set());
+  const [isExcludingDormant, setIsExcludingDormant] = useState<boolean>(false);
+
   // 전표 드롭다운 바깥 클릭 시 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -363,11 +378,14 @@ export const MatOrderDayView: React.FC = () => {
     return confirmedPoList.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
   }, [confirmedPoList]);
 
-  // 1. 발주시트 정본 로드 (스마트발주 GFS 마스터와 실시간 동기화) — 선택 요일 날짜 기준 (단종/삭제예정 동적 판정)
+  // 1. 발주시트 정본 로드 (스마트발주 GFS 마스터와 실시간 동기화) — 선택 요일 날짜 + 비수주 기준일수 기준
   const loadOrderSheet = useCallback(async () => {
     setIsLoading(true);
     try {
-      const qs = currentDayDate ? `?date=${encodeURIComponent(currentDayDate)}` : '';
+      const params = new URLSearchParams();
+      if (currentDayDate) params.set('date', currentDayDate);
+      params.set('dormantDays', String(dormantDays));
+      const qs = `?${params.toString()}`;
       const res = await fetch(`/api/gfs/order-sheet${qs}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`발주시트 조회 실패 (HTTP ${res.status})`);
       const json = await res.json();
@@ -405,6 +423,12 @@ export const MatOrderDayView: React.FC = () => {
             usageSource: r.usageSource,
             liveBomUsage: r.liveBomUsage,
             surveyDailyUsage: r.surveyDailyUsage,
+            suppressedSurveyDailyUsage: r.suppressedSurveyDailyUsage || 0,
+            isDormant: Boolean(r.isDormant),
+            dormantTier: r.dormantTier || 'active',
+            activeBomCount: Number(r.activeBomCount) || 0,
+            lastBomOrderDate: r.lastBomOrderDate || '',
+            lastSnapDecreaseDate: r.lastSnapDecreaseDate || '',
             discontinuedDate: r.discontinuedDate || '',
             status: r.status || '정상',
             orderCycle: r.orderCycle || '',
@@ -412,13 +436,21 @@ export const MatOrderDayView: React.FC = () => {
         });
         setRows(loaded);
         setSuppliers(json.data.suppliers || []);
+        setDormantMeta({
+          dormantCount: Number(json.data.dormantCount) || loaded.filter((x) => x.isDormant).length,
+          unlinkedDormantCount:
+            Number(json.data.unlinkedDormantCount) ||
+            loaded.filter((x) => x.dormantTier === 'unlinked_dormant').length,
+          latestOrderDate: json.data.dormantLatestOrderDate || '',
+          latestSnapDate: json.data.dormantLatestSnapDate || '',
+        });
       }
     } catch (err) {
       console.error('Failed to load order sheet', err);
     } finally {
       setIsLoading(false);
     }
-  }, [currentDayDate]);
+  }, [currentDayDate, dormantDays]);
 
   useEffect(() => {
     loadOrderSheet();
@@ -878,6 +910,7 @@ export const MatOrderDayView: React.FC = () => {
       let boxes = 0;
       let amt = 0;
       rows.forEach((r) => {
+        if (!showDormant && r.isDormant && !keyword.trim()) return;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
         if (patternFilter !== '전체' && classifyPattern(r.supplier, r.orderDay) !== patternFilter) return;
         if (
@@ -896,12 +929,13 @@ export const MatOrderDayView: React.FC = () => {
       });
       return { items, boxes, amt };
     });
-  }, [rows, supplierFilter, patternFilter, keyword, getRowMetrics]);
+  }, [rows, showDormant, supplierFilter, patternFilter, keyword, getRowMetrics]);
 
-  // 타 요일 납품 등으로 오늘 배정이 0이지만 재고가 매우 부족(1.5일 미만)한 품목 감지
+  // 타 요일 납품 등으로 오늘 배정이 0이지만 재고가 매우 부족(1.5일 미만)한 품목 감지 (비수주 휴면 품목 제외)
   const offScheduleUrgentItems = useMemo(() => {
     return rows
       .map((r) => {
+        if (r.isDormant) return null;
         const pattern = classifyPattern(r.supplier, r.orderDay);
         const m = getRowMetrics(r, dayIdx);
         if (m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0)) {
@@ -917,6 +951,7 @@ export const MatOrderDayView: React.FC = () => {
   const dayRows = useMemo(() => {
     const mapped = rows
       .map((r) => {
+        if (!showDormant && r.isDormant && !keyword.trim()) return null;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
         const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
@@ -952,6 +987,7 @@ export const MatOrderDayView: React.FC = () => {
     return mapped;
   }, [
     rows,
+    showDormant,
     supplierFilter,
     patternFilter,
     keyword,
@@ -961,6 +997,77 @@ export const MatOrderDayView: React.FC = () => {
     showOnlyUrgentUnallocated,
     sortMode,
   ]);
+
+  // 비수주·장기무변동 휴면 재고 목록 (모달 검토용)
+  const dormantRows = useMemo(() => {
+    return rows.filter((r) => r.isDormant);
+  }, [rows]);
+
+  const dormantFilteredModalRows = useMemo(() => {
+    const q = dormantKeyword.trim().toLowerCase();
+    return dormantRows.filter((r) => {
+      if (dormantFilterTab === 'unlinked' && r.dormantTier !== 'unlinked_dormant') return false;
+      if (
+        q &&
+        !r.name.toLowerCase().includes(q) &&
+        !(r.supplier || '').toLowerCase().includes(q) &&
+        !(r.warehouse || '').toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [dormantRows, dormantFilterTab, dormantKeyword]);
+
+  const handleExcludeDormantSelected = async () => {
+    const ids = Array.from(dormantSelectedIds);
+    if (ids.length === 0 || isExcludingDormant) return;
+    if (
+      !window.confirm(
+        `선택한 ${ids.length}개 비수주·휴면 품목을 '발주제외' 상태로 전환할까요?\n(발주 화면과 재고조회 기본 목록에서 제외되며, [삭제복구]에서 언제든 다시 복구할 수 있습니다.)`
+      )
+    ) {
+      return;
+    }
+    setIsExcludingDormant(true);
+    try {
+      const res = await fetch('/api/master/product/lifecycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids,
+          action: 'delete',
+          targetStatus: '발주제외',
+          reason: `최근 ${dormantDays}일 비수주·재고무변동 일괄 발주제외`,
+        }),
+      });
+      const text = await res.text();
+      let json: any = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`서버 응답 오류 (HTTP ${res.status})`);
+      }
+      if (!res.ok || !json.success) {
+        alert('발주제외 전환 실패: ' + (json.error || `HTTP ${res.status}`));
+        return;
+      }
+      const excludedSet = new Set(ids);
+      setRows((prev) => prev.filter((item) => !excludedSet.has(item.productId ?? item.id)));
+      setDormantSelectedIds(new Set());
+      void loadDeletedProducts();
+      window.dispatchEvent(
+        new CustomEvent('gfs-product-lifecycle-changed', {
+          detail: { source: 'order', action: 'delete', ids },
+        })
+      );
+      alert(`${json.count || ids.length}개 품목이 '발주제외'로 정리되었습니다.`);
+    } catch (err: any) {
+      alert('발주제외 처리 중 오류: ' + (err?.message || String(err)));
+    } finally {
+      setIsExcludingDormant(false);
+    }
+  };
 
   // 합계 계산 (발주 및 런웨이 지표)
   const dayTotals = useMemo(() => {
@@ -2042,6 +2149,27 @@ export const MatOrderDayView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  setDormantSelectedIds(new Set());
+                  setShowDormantModal(true);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                  dormantRows.length > 0
+                    ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                }`}
+                title={`최근 ${dormantDays}일간 수주 BOM 소요도 없고 재고조사표 수량 감소도 없는 휴면 품목을 확인하고 발주제외로 정리합니다.`}
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <span>비수주 휴면</span>
+                {dormantRows.length > 0 && (
+                  <span className="px-1.5 py-[1px] rounded-full bg-amber-600 text-white text-[11px] font-mono font-bold">
+                    {dormantRows.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setShowDeletedModal(true);
                   void loadDeletedProducts();
                 }}
@@ -2489,6 +2617,45 @@ export const MatOrderDayView: React.FC = () => {
                   {dayRows.length}
                 </span>
               </button>
+
+              {/* 최근 N일 비수주·무변동(휴면) 자동 제외 컨트롤 */}
+              <div className="flex items-center bg-amber-50/80 border border-amber-200 rounded-lg p-0.5 gap-0.5 whitespace-nowrap">
+                <select
+                  value={dormantDays}
+                  onChange={(e) => setDormantDays(Number(e.target.value))}
+                  aria-label="비수주 휴면 판정 기준 일수"
+                  title="최근 N일 동안 수주 BOM 소요도 없고 재고 감소도 없으면 발주 대상에서 자동 제외합니다."
+                  className="bg-transparent px-1.5 py-0.5 text-[11.5px] font-black text-amber-900 focus:outline-none cursor-pointer"
+                >
+                  <option value={10}>비수주 10일</option>
+                  <option value={14}>비수주 14일</option>
+                  <option value={21}>비수주 21일</option>
+                  <option value={30}>비수주 30일</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowDormant((prev) => !prev)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-black transition cursor-pointer ${
+                    showDormant
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-100'
+                  }`}
+                  title={
+                    showDormant
+                      ? `최근 ${dormantDays}일 비수주·무변동 품목(${dormantRows.length}건)을 함께 표시 중입니다. 클릭 시 다시 숨깁니다.`
+                      : `최근 ${dormantDays}일 비수주·무변동 품목 ${dormantRows.length}건을 발주 목록에서 자동 제외(일사용량 0 차단) 중입니다. 클릭 시 확인합니다.`
+                  }
+                >
+                  <span>{showDormant ? '휴면 포함' : '휴면 제외중'}</span>
+                  <span
+                    className={`font-mono text-[10.5px] px-1 rounded-full ${
+                      showDormant ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
+                    }`}
+                  >
+                    {dormantRows.length}
+                  </span>
+                </button>
+              </div>
 
               {/* 정렬 모드 전환 (긴급도순 vs 창고·품목순) */}
               <button
@@ -3040,6 +3207,22 @@ export const MatOrderDayView: React.FC = () => {
                                     {m.cautionLabel}
                                   </span>
                                 )}
+                                {r.isDormant && (
+                                  <span
+                                    className={`inline-flex items-center gap-0.5 text-[10.5px] 2xl:text-[11px] font-black px-1.5 py-0.5 rounded-full border whitespace-nowrap ${
+                                      r.dormantTier === 'unlinked_dormant'
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : 'bg-slate-100 text-slate-700 border-slate-300'
+                                    }`}
+                                    title={`최근 ${dormantDays}일간 수주 BOM 소요 없음 (최근수주: ${
+                                      r.lastBomOrderDate || '없음'
+                                    } / 재고감소: ${r.lastSnapDecreaseDate || '없음'} / 활성BOM: ${
+                                      r.activeBomCount ?? 0
+                                    }개)`}
+                                  >
+                                    {r.dormantTier === 'unlinked_dormant' ? '미연결·휴면' : `비수주 ${dormantDays}일+`}
+                                  </span>
+                                )}
                               </span>
                             </div>
                           </td>
@@ -3115,6 +3298,16 @@ export const MatOrderDayView: React.FC = () => {
                                     BOM
                                   </span>
                                 )}
+                              </div>
+                            ) : (r.suppressedSurveyDailyUsage || 0) > 0 ? (
+                              <div
+                                className="flex flex-col items-end leading-tight"
+                                title={`최근 ${dormantDays}일 수주 BOM 소요와 재고 감소가 없어 과거 기준소진량(${r.suppressedSurveyDailyUsage}봉/일) 기반 자동발주를 차단했습니다.`}
+                              >
+                                <span className="text-slate-400 font-bold">0</span>
+                                <span className="text-[10px] px-1 py-[1px] rounded bg-amber-50 text-amber-700 border border-amber-200 font-sans font-bold">
+                                  휴면차단
+                                </span>
                               </div>
                             ) : (
                               <span className="text-slate-400 font-bold">-</span>
@@ -4375,6 +4568,255 @@ export const MatOrderDayView: React.FC = () => {
                     {isSaving
                       ? '확정 저장 중...'
                       : `한꺼번에 ERP 발주 확정 저장 (${stagedTotals.count}건)`}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 비수주·장기무변동(휴면) 재고 검토 및 발주제외 관리 모달 ── */}
+      {showDormantModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => !isExcludingDormant && setShowDormantModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[86vh] flex flex-col overflow-hidden select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="px-5 py-4 bg-amber-50/70 border-b border-amber-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <Clock className="w-[18px] h-[18px]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    비수주·휴면 재고 관리 (최근 {dormantDays}일 기준)
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium">
+                    최근 {dormantDays}일간 <strong>수주 완제품 BOM 소요 = 0</strong> 이면서{' '}
+                    <strong>재고조사표 감소 = 0</strong>인 품목입니다. 기본 발주목록에서는 자동 제외(일사용량 0 차단)됩니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isExcludingDormant}
+                onClick={() => setShowDormantModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-amber-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 필터·기간·검색 툴바 */}
+            <div className="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 bg-white">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setDormantFilterTab('unlinked')}
+                    className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                      dormantFilterTab === 'unlinked'
+                        ? 'bg-amber-600 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                    }`}
+                  >
+                    BOM 미연결 완전미사용 ({dormantMeta.unlinkedDormantCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDormantFilterTab('all')}
+                    className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                      dormantFilterTab === 'all'
+                        ? 'bg-slate-800 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                    }`}
+                  >
+                    전체 휴면 ({dormantRows.length})
+                  </button>
+                </div>
+
+                <select
+                  value={dormantDays}
+                  onChange={(e) => setDormantDays(Number(e.target.value))}
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 cursor-pointer"
+                >
+                  <option value={10}>기준: 최근 10일</option>
+                  <option value={14}>기준: 최근 14일</option>
+                  <option value={21}>기준: 최근 21일</option>
+                  <option value={30}>기준: 최근 30일</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex items-center">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={dormantKeyword}
+                    onChange={(e) => setDormantKeyword(e.target.value)}
+                    placeholder="품명 / 거래처 / 창고 검색..."
+                    className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 w-52"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const visibleIds = dormantFilteredModalRows.map((r) => r.productId ?? r.id);
+                    const allChecked = visibleIds.length > 0 && visibleIds.every((id) => dormantSelectedIds.has(id));
+                    setDormantSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (allChecked) {
+                        visibleIds.forEach((id) => next.delete(id));
+                      } else {
+                        visibleIds.forEach((id) => next.add(id));
+                      }
+                      return next;
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-black text-slate-700 cursor-pointer transition"
+                >
+                  표시항목 전체선택
+                </button>
+              </div>
+            </div>
+
+            {/* 목록 테이블 */}
+            <div className="flex-1 overflow-auto bg-white">
+              {dormantFilteredModalRows.length === 0 ? (
+                <div className="py-16 text-center text-sm text-slate-500 font-bold">
+                  해당 조건의 비수주·휴면 품목이 없습니다.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 text-slate-600 font-extrabold">
+                    <tr>
+                      <th className="py-2.5 px-3 w-10 text-center">선택</th>
+                      <th className="py-2.5 px-2">품목명</th>
+                      <th className="py-2.5 px-2 text-center">창고</th>
+                      <th className="py-2.5 px-2">거래처</th>
+                      <th className="py-2.5 px-2 text-right">현재고</th>
+                      <th className="py-2.5 px-2 text-center">활성BOM</th>
+                      <th className="py-2.5 px-2 text-center">최근수주일</th>
+                      <th className="py-2.5 px-2 text-center">마지막감소일</th>
+                      <th className="py-2.5 px-2 text-right">기존기준일사용</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dormantFilteredModalRows.map((r) => {
+                      const pid = r.productId ?? r.id;
+                      const checked = dormantSelectedIds.has(pid);
+                      return (
+                        <tr
+                          key={r.id}
+                          onClick={() =>
+                            setDormantSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(pid)) next.delete(pid);
+                              else next.add(pid);
+                              return next;
+                            })
+                          }
+                          className={`cursor-pointer transition-colors ${
+                            checked ? 'bg-amber-50/80 hover:bg-amber-100/70' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                setDormantSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(pid)) next.delete(pid);
+                                  else next.add(pid);
+                                  return next;
+                                })
+                              }
+                              className="w-3.5 h-3.5 accent-amber-600 cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-2 px-2 font-bold text-slate-900">
+                            <span>{r.name}</span>
+                            {r.dormantTier === 'unlinked_dormant' && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black">
+                                BOM 미연결
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-slate-600">{r.warehouse || '-'}</td>
+                          <td className="py-2 px-2 text-slate-600 truncate max-w-[140px]">{r.supplier || '-'}</td>
+                          <td className="py-2 px-2 text-right font-mono font-bold text-slate-800">
+                            {Number(r.currentStock || 0).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-2 text-center font-mono">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                                (r.activeBomCount || 0) === 0
+                                  ? 'bg-slate-100 text-slate-500'
+                                  : 'bg-blue-50 text-blue-700'
+                              }`}
+                            >
+                              {r.activeBomCount || 0}개
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-center font-mono text-slate-600">
+                            {r.lastBomOrderDate || '없음'}
+                          </td>
+                          <td className="py-2 px-2 text-center font-mono text-slate-600">
+                            {r.lastSnapDecreaseDate || '없음'}
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono">
+                            {(r.suppressedSurveyDailyUsage || 0) > 0 ? (
+                              <span className="text-amber-700 font-black">
+                                {r.suppressedSurveyDailyUsage?.toLocaleString()} (차단됨)
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* 푸터 */}
+            <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs text-slate-600 font-medium">
+                {dormantMeta.latestOrderDate && (
+                  <span>최근 수주 기준: <strong className="font-mono">{dormantMeta.latestOrderDate}</strong></span>
+                )}
+                {dormantMeta.latestSnapDate && (
+                  <span className="ml-3">최근 재고조사표: <strong className="font-mono">{dormantMeta.latestSnapDate}</strong></span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isExcludingDormant}
+                  onClick={() => setShowDormantModal(false)}
+                  className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 text-xs font-black cursor-pointer transition"
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  disabled={isExcludingDormant || dormantSelectedIds.size === 0}
+                  onClick={() => void handleExcludeDormantSelected()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs font-black shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {isExcludingDormant
+                      ? '처리 중...'
+                      : `선택 품목 영구 발주제외 (${dormantSelectedIds.size}건)`}
                   </span>
                 </button>
               </div>

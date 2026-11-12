@@ -137,6 +137,12 @@ export interface SheetRowInput {
   status?: string;
   orderCycle?: string;
   discontinuedDate?: string;
+  isDormant?: boolean;
+  dormantTier?: 'active' | 'dormant' | 'unlinked_dormant';
+  activeBomCount?: number;
+  lastBomOrderDate?: string;
+  lastSnapDecreaseDate?: string;
+  suppressedSurveyDailyUsage?: number;
 }
 
 export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as const;

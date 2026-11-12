@@ -206,12 +206,13 @@ export async function PATCH(req: NextRequest) {
     const foundIds = existing.map((p) => p.id);
     const reason = String(body?.reason || '').trim();
     const isDelete = action === 'delete';
+    const nextDeleteStatus = body?.targetStatus === '발주제외' ? '발주제외' : '삭제';
 
     await prisma.$transaction(async (tx) => {
       await tx.product.updateMany({
         where: { id: { in: foundIds } },
         data: isDelete
-          ? { isUsed: false, status: '삭제' }
+          ? { isUsed: false, status: nextDeleteStatus }
           : { isUsed: true, status: '정상' },
       });
 
@@ -226,7 +227,11 @@ export async function PATCH(req: NextRequest) {
           menuId: 'pur-mat-order-day',
           menuName: '스마트 자재발주(요일별)',
           detail: `[ID:${p.id}] ${p.name} (${p.productCode}) ${
-            isDelete ? '발주/재고조회 소프트 삭제' : '정상 품목 복구'
+            isDelete
+              ? nextDeleteStatus === '발주제외'
+                ? '비수주/휴면 품목 영구 발주제외'
+                : '발주/재고조회 소프트 삭제'
+              : '정상 품목 복구'
           } (이전: ${p.status || (p.isUsed ? '정상' : '비활성')}${reason ? ` / 사유: ${reason}` : ''})`,
           ipAddress: clientIp,
         })),
