@@ -145,6 +145,13 @@ export const Dashboard: React.FC = () => {
   const actualPoItemCount = k.todayPurchaseItemCount || 0;
   const actualPoAmount = k.todayPurchaseAmount || 0;
   const actualPoPartnerCount = k.todayPurchasePartnerCount || 0;
+  const expectedPoItemCount = k.expectedPurchaseItemCount || 0;
+  const expectedPoAmount = k.expectedPurchaseAmount || 0;
+  const expectedPoPartnerCount = k.expectedPurchasePartnerCount || 0;
+  const expectedStockDate = k.expectedPurchaseStockDate || '';
+  const stockBasisLabel = expectedStockDate
+    ? `전일(${expectedStockDate.slice(5).replace('-', '/')}) 17시 재고`
+    : '전일 17시 재고';
 
   // 실제 전 창고 실시간 재고 현황
   const warehouseTotal = stats.warehouseStockTotal || 0;
@@ -302,7 +309,7 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 카드 3: [예상발주량] 금일 자재 예상발주량 */}
+        {/* 카드 3: [예상발주량] 전일 17시 실사재고 기준 금일 발주 판단/확정 현황 */}
         <div
           onClick={() => navigate('pur-mat-order-day')}
           className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
@@ -317,43 +324,73 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div>
-            <div className="text-[11.5px] font-extrabold text-amber-800 uppercase tracking-wide flex items-center gap-1 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-600 inline-block" />
-              발주예정액
+            <div className="text-[11.5px] font-extrabold text-amber-800 tracking-wide flex items-center justify-between gap-1 mb-1">
+              <span className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${actualPoAmount > 0 ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+                {actualPoAmount > 0 ? '금일 확정 발주액' : `발주예정액 (${stockBasisLabel})`}
+              </span>
+              {actualPoAmount > 0 && expectedPoAmount > 0 && (
+                <span className="text-[10.5px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                  잔여예상 ₩{Math.round(expectedPoAmount).toLocaleString()}
+                </span>
+              )}
             </div>
 
             <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
               {actualPoAmount > 0 ? (
                 <>
+                  <span className="text-xl sm:text-2xl font-bold text-emerald-600 mr-1">₩</span>
+                  <span className="text-emerald-950">{Math.round(actualPoAmount).toLocaleString()}</span>
+                </>
+              ) : expectedPoAmount > 0 ? (
+                <>
                   <span className="text-xl sm:text-2xl font-bold text-amber-600 mr-1">₩</span>
-                  <span className="text-amber-950">{Math.round(actualPoAmount).toLocaleString()}</span>
+                  <span className="text-amber-950">{Math.round(expectedPoAmount).toLocaleString()}</span>
                 </>
               ) : (
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(5시 산출)</span>
+                  <span className="text-[12px] font-bold text-slate-400">(발주 불필요)</span>
                 </div>
               )}
             </div>
 
-            {/* 발주 대상 품목 및 협력사 */}
-            <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-50/80 border border-amber-200 flex items-center justify-between">
-              <span className="text-[12px] font-extrabold text-amber-900">발주대상</span>
-              {actualPoItemCount > 0 ? (
-                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-amber-800 leading-none">
+            {/* 발주 대상(확정/예정) 품목 및 협력사 */}
+            <div className={`mt-2.5 px-3 py-2 rounded-xl border flex items-center justify-between ${
+              actualPoAmount > 0
+                ? 'bg-emerald-50/80 border-emerald-200'
+                : 'bg-amber-50/80 border-amber-200'
+            }`}>
+              <span className={`text-[12px] font-extrabold ${actualPoAmount > 0 ? 'text-emerald-900' : 'text-amber-900'}`}>
+                {actualPoAmount > 0 ? '발주확정' : '발주대상'}
+              </span>
+              {actualPoAmount > 0 ? (
+                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-emerald-800 leading-none">
                   {actualPoItemCount.toLocaleString()}
-                  <span className="text-[13px] font-extrabold text-amber-900 ml-1">품목</span>
+                  <span className="text-[13px] font-extrabold text-emerald-900 ml-1">품목</span>
                   {actualPoPartnerCount > 0 && (
-                    <span className="text-[11.5px] font-bold text-amber-700 ml-1">({actualPoPartnerCount}개사)</span>
+                    <span className="text-[11.5px] font-bold text-emerald-700 ml-1">({actualPoPartnerCount}개사)</span>
+                  )}
+                </span>
+              ) : expectedPoItemCount > 0 ? (
+                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-amber-800 leading-none">
+                  {expectedPoItemCount.toLocaleString()}
+                  <span className="text-[13px] font-extrabold text-amber-900 ml-1">품목</span>
+                  {expectedPoPartnerCount > 0 && (
+                    <span className="text-[11.5px] font-bold text-amber-700 ml-1">({expectedPoPartnerCount}개사)</span>
                   )}
                 </span>
               ) : (
-                <span className="text-[12.5px] font-bold text-slate-400">오후 5시 자동산출</span>
+                <span className="text-[12.5px] font-bold text-slate-400">금일 발주 필요 없음</span>
               )}
             </div>
 
             <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-slate-500 font-medium truncate">오후 5시 재고실사 후 확정</span>
+              <span className="text-slate-500 font-medium truncate">
+                {actualPoAmount > 0
+                  ? `${stockBasisLabel} 기준 확정완료`
+                  : `${stockBasisLabel} 기준 익일발주`}
+              </span>
               <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 자재발주(요일별) <ArrowRight className="w-3.5 h-3.5" />
               </span>

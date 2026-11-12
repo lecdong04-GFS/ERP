@@ -87,6 +87,10 @@ export interface KpiSummary {
   todayPurchaseItemCount: number;
   todayPurchaseAmount: number;
   todayPurchasePartnerCount: number;
+  expectedPurchaseItemCount?: number;
+  expectedPurchaseAmount?: number;
+  expectedPurchasePartnerCount?: number;
+  expectedPurchaseStockDate?: string;
   todayReceivingTotal: number;
   todayReceivingDone: number;
   todayReceivingAmount: number;
@@ -175,6 +179,10 @@ export const EMPTY_STATS: DashboardStats = {
     todayPurchaseItemCount: 0,
     todayPurchaseAmount: 0,
     todayPurchasePartnerCount: 0,
+    expectedPurchaseItemCount: 0,
+    expectedPurchaseAmount: 0,
+    expectedPurchasePartnerCount: 0,
+    expectedPurchaseStockDate: '',
     todayReceivingTotal: 0,
     todayReceivingDone: 0,
     todayReceivingAmount: 0,

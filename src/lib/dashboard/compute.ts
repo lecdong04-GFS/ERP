@@ -1,6 +1,13 @@
 import { nextCutoff } from './cutoff';
 import prisma from '@/lib/prisma';
-import { pickLatestValidPurchasePrice, unitPriceForOrderUnit } from '@/lib/gfs/pricing';
+import { pickLatestValidPurchasePrice, unitPriceForOrderUnit, calcBoxPrice } from '@/lib/gfs/pricing';
+import { buildOrderSheet } from '@/lib/gfs/orderSheetBuilder';
+import {
+  calcStrategyOrderDays,
+  classifyPattern,
+  getScheduledExclusion,
+  splitWeek,
+} from '@/lib/gfs/orderCalc';
 import {
   ActionItem,
   ChartPoint,
@@ -91,6 +98,8 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       gyeRows,
       todayPurchaseOrders,
       todayReceivingRows,
+      latestPreTodaySnap,
+      orderSheetData,
     ] = await Promise.all([
       prisma.salesOrder.findMany({
         where: { orderDate: { startsWith: thisYear }, status: { not: '취소' } },
@@ -158,7 +167,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         orderBy: { sortOrder: 'asc' },
       }),
       prisma.purchaseOrder.findMany({
-        where: { orderDate: today, status: { not: '취소' } },
+        where: { orderDate: today, status: { notIn: ['취소', '발주취소'] } },
         include: {
           details: {
             include: {
@@ -175,6 +184,12 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         where: { receivingDate: today, status: { not: '취소' } },
         select: { id: true, totalAmount: true, status: true, partnerName: true },
       }),
+      prisma.inventorySnapshot.findFirst({
+        where: { snapshotDate: { lt: today } },
+        orderBy: { snapshotDate: 'desc' },
+        select: { snapshotDate: true },
+      }),
+      buildOrderSheet({ targetDate: today, dormantDays: 14 }).catch(() => null),
     ]);
 
     const inMonth = (date: string) => date >= monthAgo && date <= today;
@@ -348,9 +363,16 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const todayPurchasePartnerCount = new Set(todayPurchaseOrders.map((p) => p.partnerName)).size;
     let todayPurchaseItemCount = 0;
     let todayPurchaseAmount = 0;
+    const confirmedProductIdsToday = new Set<number>();
+    const confirmedNamesToday = new Set<string>();
     for (const po of todayPurchaseOrders) {
       todayPurchaseItemCount += po.details.length;
       for (const d of po.details) {
+        if (d.productId) confirmedProductIdsToday.add(d.productId);
+        const nm = String(d.productName || d.product?.name || '')
+          .trim()
+          .toLowerCase();
+        if (nm) confirmedNamesToday.add(nm);
         const masterBag = pickLatestValidPurchasePrice(d.product?.prices);
         const p =
           Number(d.unitPrice) > 0
@@ -359,6 +381,64 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         todayPurchaseAmount += (d.orderQty || 1) * p;
       }
     }
+
+    // 전일(17시 실사) 마감재고 + 금일 수주×BOM 기준 금일 예상(미확정) 발주량 산출
+    let expectedPurchaseItemCount = 0;
+    let expectedPurchaseAmount = 0;
+    const expectedPartnersSet = new Set<string>();
+    const expectedPurchaseStockDate =
+      latestPreTodaySnap?.snapshotDate || orderSheetData?.dormantLatestSnapDate || '';
+
+    if (orderSheetData && Array.isArray(orderSheetData.rows)) {
+      const todayDowMon0 = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
+      const activeDayMask = Array.from({ length: 7 }, (_, i) => i >= todayDowMon0);
+
+      for (const r of orderSheetData.rows) {
+        if (r.isDormant || r.isReplaced) continue;
+        const pid = Number(r.productId ?? r.id) || 0;
+        const nmKey = String(r.name || '')
+          .trim()
+          .toLowerCase();
+        if ((pid > 0 && confirmedProductIdsToday.has(pid)) || (nmKey && confirmedNamesToday.has(nmKey))) {
+          continue;
+        }
+        const scheduledExcl = getScheduledExclusion(r.name || '');
+        const schedDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
+        if (schedDate && today >= schedDate) continue;
+
+        const dailyUsage = Number(r.dailyUsage) || 0;
+        if (dailyUsage <= 0) continue;
+
+        const totalStock = (Number(r.incoming) || 0) + (Number(r.currentStock) || 0);
+        const stockDays = totalStock / dailyUsage;
+        if (stockDays >= 60) continue;
+
+        const pattern = classifyPattern(r.supplier || '', r.orderDay);
+        const strategy = calcStrategyOrderDays({
+          masterOrderDays: Number(r.targetOrderDays ?? r.days) || 0,
+          pattern,
+          orderCycle: r.orderCycle,
+          strategyMode: 'standard',
+        });
+        if (strategy.effectiveDays <= 0) continue;
+
+        const targetStock = Math.round(dailyUsage * strategy.effectiveDays);
+        const shortageBags = Math.max(0, targetStock - totalStock);
+        const pack = Number(r.packUnit) > 0 ? Number(r.packUnit) : 1;
+        const suggestedBoxes = shortageBags > 0 ? Math.ceil(shortageBags / pack) : 0;
+        if (suggestedBoxes <= 0) continue;
+
+        const week = splitWeek(r, suggestedBoxes, activeDayMask);
+        const todayBoxes = week[todayDowMon0] || 0;
+        if (todayBoxes > 0) {
+          const boxPrice = Number(r.boxPrice) || calcBoxPrice(Number(r.bagPrice) || 0, pack);
+          expectedPurchaseItemCount += 1;
+          expectedPurchaseAmount += todayBoxes * boxPrice;
+          if (r.supplier) expectedPartnersSet.add(r.supplier);
+        }
+      }
+    }
+    const expectedPurchasePartnerCount = expectedPartnersSet.size;
 
     const deliveryTotalCount = todayDeliveries.length;
     const deliveryDoneCount = todayDeliveries.filter((d) => d.status === '완료').length;
@@ -599,6 +679,10 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         todayPurchaseItemCount,
         todayPurchaseAmount: Math.round(todayPurchaseAmount),
         todayPurchasePartnerCount,
+        expectedPurchaseItemCount,
+        expectedPurchaseAmount: Math.round(expectedPurchaseAmount),
+        expectedPurchasePartnerCount,
+        expectedPurchaseStockDate,
         todayReceivingTotal,
         todayReceivingDone,
         todayReceivingAmount: Math.round(todayReceivingAmount),
