@@ -1235,15 +1235,9 @@ export const MatOrderDayView: React.FC = () => {
     });
 
     const avgRunway = countWithUsage > 0 ? totalStockDaysSum / countWithUsage : 0;
-    const lockedIds = new Set<number>(
-      Object.keys(overrides[currentDayDate] || {}).map((k) => Number(k))
-    );
-    Object.values(stagedOrders).forEach((entry) => {
-      if (entry.orderDate === currentDayDate) lockedIds.add(entry.rowId);
-    });
-    const manualOverrideCount = lockedIds.size;
+    const manualOverrideCount = Object.keys(overrides[currentDayDate] || {}).length;
     return { boxes, amt, criticalCount, warningCount, zeroPriceCount, manualOverrideCount, avgRunway };
-  }, [dayRows, overrides, stagedOrders, currentDayDate]);
+  }, [dayRows, overrides, currentDayDate]);
 
   // 3대 전략(타이트/표준/안전)별 순수 자동 계산 예상 금액 비교 (바구니·수동수정 제외한 요일 기준 금액)
   const strategyPreview = useMemo(() => {
@@ -1303,12 +1297,14 @@ export const MatOrderDayView: React.FC = () => {
 
   // ── 발주 담기(장바구니) 요약·그룹 계산 ──
   const stagedList = useMemo(() => {
-    return Object.values(stagedOrders).sort(
-      (a, b) =>
-        a.orderDate.localeCompare(b.orderDate) ||
-        a.supplier.localeCompare(b.supplier, 'ko') ||
-        a.name.localeCompare(b.name, 'ko')
-    );
+    return Object.values(stagedOrders)
+      .filter((e) => e.qty > 0)
+      .sort(
+        (a, b) =>
+          a.orderDate.localeCompare(b.orderDate) ||
+          a.supplier.localeCompare(b.supplier, 'ko') ||
+          a.name.localeCompare(b.name, 'ko')
+      );
   }, [stagedOrders]);
 
   const stagedGroupedByDate = useMemo(() => {
@@ -1379,7 +1375,10 @@ export const MatOrderDayView: React.FC = () => {
   const isAllVisibleStaged = useMemo(
     () =>
       visibleStageableRows.length > 0 &&
-      visibleStageableRows.every(({ r }) => Boolean(stagedOrders[makeStagedKey(currentDayDate, r.id)])),
+      visibleStageableRows.every(({ r }) => {
+        const entry = stagedOrders[makeStagedKey(currentDayDate, r.id)];
+        return Boolean(entry && entry.qty > 0);
+      }),
     [visibleStageableRows, stagedOrders, currentDayDate]
   );
 
@@ -1452,7 +1451,8 @@ export const MatOrderDayView: React.FC = () => {
   const handleToggleStageRow = (r: SheetRow, m: ReturnType<typeof getRowMetrics>) => {
     if (m.isPastScheduledDeletion) return;
     const key = makeStagedKey(currentDayDate, r.id);
-    const isStaged = Boolean(stagedOrders[key]);
+    const existing = stagedOrders[key];
+    const isStaged = Boolean(existing && existing.qty > 0);
     if (isStaged) {
       setStagedOrders((prev) => {
         const next = { ...prev };
@@ -1499,6 +1499,12 @@ export const MatOrderDayView: React.FC = () => {
         visibleStageableRows.forEach(({ r }) => {
           delete next[makeStagedKey(currentDayDate, r.id)];
         });
+        // 전략 전환 중 0박스가 되어 숨겨진 당일 임시 기억 항목도 함께 정리
+        Object.entries(next).forEach(([k, entry]) => {
+          if (entry.orderDate === currentDayDate && entry.qty <= 0) {
+            delete next[k];
+          }
+        });
         return next;
       });
       setOverrides((prev) => {
@@ -1533,6 +1539,77 @@ export const MatOrderDayView: React.FC = () => {
         );
       });
       return next;
+    });
+  };
+
+  // 전략 모드(타이트/표준/안전) 변경: 수동 수정(overrides)이 없는 당일 선택 품목도 새 전략 수량으로 즉시 재계산
+  const handleSelectStrategyMode = (nextMode: StrategyMode) => {
+    setStrategyMode(nextMode);
+    const dayOverrides = overrides[currentDayDate] || {};
+    const rowMap = new Map(rows.map((r) => [r.id, r]));
+    const wasAllVisibleStaged = isAllVisibleStaged;
+
+    setStagedOrders((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      Object.entries(prev).forEach(([key, entry]) => {
+        if (entry.orderDate !== currentDayDate) return;
+        if (dayOverrides[entry.rowId] !== undefined) return;
+        const row = rowMap.get(entry.rowId);
+        if (!row) return;
+        const plan = computeRowAutoPlan(row, dayIdx, nextMode);
+        const nextQty = plan.isPastScheduledDeletion ? 0 : plan.autoDayQty;
+        const nextRec = plan.week[dayIdx] || 0;
+        if (entry.qty !== nextQty || entry.recommendedQty !== nextRec) {
+          next[key] = buildStagedEntry(
+            row,
+            plan.pack,
+            plan.boxPrice,
+            nextRec,
+            currentDayDate,
+            dayIdx,
+            nextQty
+          );
+          changed = true;
+        }
+      });
+
+      // 전체 선택 상태였다면 새 전략에서 추가로 발주 가능해진 화면 품목도 자동 반영
+      if (wasAllVisibleStaged && !showOnlyUrgentUnallocated) {
+        const q = keyword.trim().toLowerCase();
+        rows.forEach((r) => {
+          if (!showDormant && r.isDormant && !q) return;
+          if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
+          if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return;
+          const pattern = classifyPattern(r.supplier, r.orderDay);
+          if (patternFilter !== '전체' && pattern !== patternFilter) return;
+          if (q && !r.name.toLowerCase().includes(q) && !r.supplier.toLowerCase().includes(q)) return;
+          if (dayOverrides[r.id] !== undefined) return;
+
+          const key = makeStagedKey(currentDayDate, r.id);
+          if (next[key]) return;
+
+          const plan = computeRowAutoPlan(r, dayIdx, nextMode);
+          if (plan.isPastScheduledDeletion || plan.autoDayQty <= 0) return;
+          if (urgencyFilter === 'critical' && plan.auditStatus !== 'critical') return;
+          if (urgencyFilter === 'warning' && plan.auditStatus !== 'warning') return;
+          if (urgencyFilter === 'pending' && !(Number(r.pendingBoxes || 0) > 0)) return;
+
+          next[key] = buildStagedEntry(
+            r,
+            plan.pack,
+            plan.boxPrice,
+            plan.week[dayIdx] || 0,
+            currentDayDate,
+            dayIdx,
+            plan.autoDayQty
+          );
+          changed = true;
+        });
+      }
+
+      return changed ? next : prev;
     });
   };
 
@@ -2682,7 +2759,7 @@ export const MatOrderDayView: React.FC = () => {
                       <button
                         key={item.mode}
                         type="button"
-                        onClick={() => setStrategyMode(item.mode)}
+                        onClick={() => handleSelectStrategyMode(item.mode)}
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
                           active ? item.activeClass : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                         }`}
@@ -2706,7 +2783,7 @@ export const MatOrderDayView: React.FC = () => {
                     type="button"
                     onClick={handleResetDay}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-black transition cursor-pointer"
-                    title="바구니 담기나 수동 수정(+/-)이 걸린 품목은 전략 변경 시에도 고정됩니다. 클릭 시 해제하고 현재 전략 수량으로 돌아갑니다."
+                    title="수량 직접 수정(+/-)이 걸린 품목은 전략 변경 시에도 고정됩니다. 클릭 시 해제하고 현재 전략 수량으로 돌아갑니다."
                   >
                     <span>고정 {dayTotals.manualOverrideCount}건 · 해제</span>
                   </button>
@@ -3559,7 +3636,8 @@ export const MatOrderDayView: React.FC = () => {
                   ) : (
                     dayRows.map(({ r, m, pattern }, idx) => {
                       const isBriefingOpen = activeBriefingId === r.id;
-                      const isRowStaged = Boolean(stagedOrders[makeStagedKey(currentDayDate, r.id)]);
+                      const stagedEntry = stagedOrders[makeStagedKey(currentDayDate, r.id)];
+                      const isRowStaged = Boolean(stagedEntry && stagedEntry.qty > 0);
                       return (
                         <tr
                           key={r.id}
