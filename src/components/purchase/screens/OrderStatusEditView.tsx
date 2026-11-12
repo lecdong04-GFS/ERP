@@ -34,6 +34,10 @@ import {
   calcBagPriceFromBox,
   isBoxUnitLabel,
 } from '@/lib/gfs/pricing';
+import {
+  calcExpectedDeliveryInfo,
+  getWeekdayCharYmd,
+} from '@/lib/gfs/orderCalc';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -53,6 +57,9 @@ export interface FlatOrderItemRow {
   orderId: number; // parent purchaseOrder.id
   orderNo: string;
   orderDate: string;
+  orderCycle: string;
+  leadDays: number | null;
+  expectedDeliveryDate: string;
   partnerId?: string;
   partnerName: string;
   productCode: string;
@@ -157,6 +164,7 @@ export const OrderStatusEditView: React.FC = () => {
   // 필터 & 검색
   const [supplierFilter, setSupplierFilter] = useState('전체');
   const [statusFilter, setStatusFilter] = useState('전체');
+  const [expectedDateFilter, setExpectedDateFilter] = useState('전체');
   const [searchKeyword, setSearchKeyword] = useState('');
 
   // 뷰 모드 탭: 'items'(전체 품목별 모아보기 - 추천) vs 'suppliers'(거래처별 모아보기)
@@ -230,11 +238,24 @@ export const OrderStatusEditView: React.FC = () => {
           const masterBoxPrice = Number(d.masterBoxPrice) || 0;
           const lineAmt = Number(d.amount) != null && !isNaN(Number(d.amount)) ? Number(d.amount) : Math.round(orderQty * unitPrice);
 
+          const fallbackExpected = calcExpectedDeliveryInfo({
+            orderDate: po.orderDate,
+            explicitDeliveryDate: po.deliveryDate,
+            orderCycle: d.orderCycle || d.product?.orderCycle,
+            partnerLeadTime: po.partner?.leadTime,
+          });
+          const orderCycle = d.orderCycle || fallbackExpected.orderCycle || '';
+          const leadDays = d.leadDays != null ? Number(d.leadDays) : fallbackExpected.leadDays;
+          const expectedDeliveryDate = d.expectedDeliveryDate || fallbackExpected.expectedDate || '';
+
           const itemRow: FlatOrderItemRow = {
             id: d.id,
             orderId: po.id,
             orderNo: po.orderNo,
             orderDate: po.orderDate,
+            orderCycle,
+            leadDays,
+            expectedDeliveryDate,
             partnerId: po.partnerId || undefined,
             partnerName: supplierName,
             productCode: d.productCode || '',
@@ -262,6 +283,12 @@ export const OrderStatusEditView: React.FC = () => {
           return itemRow;
         });
 
+        const expectedCandidates = poDetailItems
+          .map((item) => item.expectedDeliveryDate)
+          .filter(Boolean)
+          .sort();
+        const derivedExpectedDate = po.deliveryDate || expectedCandidates[0] || po.orderDate;
+
         const totalAmt =
           po.totalAmount != null && !isNaN(Number(po.totalAmount))
             ? Number(po.totalAmount)
@@ -283,7 +310,7 @@ export const OrderStatusEditView: React.FC = () => {
           orderAmt: totalAmt,
           receivedAmt,
           unreceivedAmt: Math.max(0, totalAmt - receivedAmt),
-          expectedDate: po.deliveryDate || po.orderDate,
+          expectedDate: derivedExpectedDate,
           manager: po.createdBy || '-',
           tel: po.partner?.tel || '-',
           remark: po.remark || '',
@@ -339,10 +366,25 @@ export const OrderStatusEditView: React.FC = () => {
     return ['전체', ...Array.from(set).sort()];
   }, [masterList]);
 
+  const expectedDateOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    flatItems.forEach((item) => {
+      if (item.expectedDeliveryDate) {
+        counts.set(item.expectedDeliveryDate, (counts.get(item.expectedDeliveryDate) || 0) + 1);
+      }
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({ date, count }));
+  }, [flatItems]);
+
   const filteredItems = useMemo(() => {
     return flatItems.filter((item) => {
       if (supplierFilter !== '전체' && item.partnerName !== supplierFilter) return false;
       if (statusFilter !== '전체' && item.status !== statusFilter) return false;
+      if (expectedDateFilter !== '전체' && (item.expectedDeliveryDate || '') !== expectedDateFilter) {
+        return false;
+      }
       if (searchKeyword.trim()) {
         const kw = searchKeyword.trim().toLowerCase();
         const matchName = item.productName.toLowerCase().includes(kw);
@@ -353,12 +395,19 @@ export const OrderStatusEditView: React.FC = () => {
       }
       return true;
     });
-  }, [flatItems, supplierFilter, statusFilter, searchKeyword]);
+  }, [flatItems, supplierFilter, statusFilter, expectedDateFilter, searchKeyword]);
 
   const filteredMasters = useMemo(() => {
     return masterList.filter((m) => {
       if (supplierFilter !== '전체' && m.supplier !== supplierFilter) return false;
       if (statusFilter !== '전체' && m.status !== statusFilter) return false;
+      if (
+        expectedDateFilter !== '전체' &&
+        !m.details.some((d) => (d.expectedDeliveryDate || '') === expectedDateFilter) &&
+        m.expectedDate !== expectedDateFilter
+      ) {
+        return false;
+      }
       if (searchKeyword.trim()) {
         const kw = searchKeyword.trim().toLowerCase();
         const matchSupplier = m.supplier.toLowerCase().includes(kw);
@@ -368,7 +417,7 @@ export const OrderStatusEditView: React.FC = () => {
       }
       return true;
     });
-  }, [masterList, supplierFilter, statusFilter, searchKeyword]);
+  }, [masterList, supplierFilter, statusFilter, expectedDateFilter, searchKeyword]);
 
   // 상단 요약 카드 집계 (필터된 결과 기준)
   const summaryKpi = useMemo(() => {
@@ -675,6 +724,8 @@ export const OrderStatusEditView: React.FC = () => {
         sheetName: '발주품목목록',
         columns: [
           { key: 'orderDate', label: '발주일자', format: 'date' },
+          { key: 'expectedDeliveryDate', label: '입고예정일', format: 'date' },
+          { key: 'orderCycle', label: '리드타임' },
           { key: 'orderNo', label: '발주번호' },
           { key: 'partnerName', label: '거래처명' },
           { key: 'productCode', label: '품목코드' },
@@ -701,6 +752,7 @@ export const OrderStatusEditView: React.FC = () => {
         sheetName: '발주서목록',
         columns: [
           { key: 'orderDate', label: '발주일자', format: 'date' },
+          { key: 'expectedDate', label: '입고예정일', format: 'date' },
           { key: 'orderNo', label: '발주번호' },
           { key: 'supplier', label: '거래처명' },
           { key: 'itemCount', label: '품목수', format: 'number' },
@@ -735,7 +787,7 @@ export const OrderStatusEditView: React.FC = () => {
         qty: d.orderQty,
         price: d.unitPrice,
         amt: d.amount,
-        recvDate: master.expectedDate || master.orderDate,
+        recvDate: d.expectedDeliveryDate || master.expectedDate || master.orderDate,
         remark: d.remark,
       })),
     };
@@ -914,6 +966,7 @@ export const OrderStatusEditView: React.FC = () => {
             </th>
             <th className="py-3 px-2 text-center w-14">No</th>
             <th className="py-3 px-3 w-28 text-center">발주일자</th>
+            <th className="py-3 px-3 w-28 text-center">입고예정</th>
             <th className="py-3 px-3 w-36 text-center">발주번호</th>
             <th className="py-3 px-3 w-40">거래처명</th>
             <th className="py-3 px-4 min-w-[220px]">품명</th>
@@ -937,7 +990,7 @@ export const OrderStatusEditView: React.FC = () => {
         <tbody className={`divide-y divide-slate-100 ${bodyTextCls}`}>
           {rowsToRender.length === 0 ? (
             <tr>
-              <td colSpan={15} className="py-16 text-center">
+              <td colSpan={16} className="py-16 text-center">
                 <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                   <Package className="w-12 h-12 text-slate-300" />
                   <div className="text-[15px] font-black text-slate-700">
@@ -1005,7 +1058,30 @@ export const OrderStatusEditView: React.FC = () => {
 
                   {/* 발주일자 */}
                   <td className={`${cellPadCls} text-center font-mono text-slate-600`}>
-                    {item.orderDate}
+                    <div>{item.orderDate}</div>
+                    {getWeekdayCharYmd(item.orderDate) && (
+                      <div className="text-[10.5px] text-slate-400">
+                        ({getWeekdayCharYmd(item.orderDate)})
+                      </div>
+                    )}
+                  </td>
+
+                  {/* 입고예정일 (D+1/D+2) */}
+                  <td className={`${cellPadCls} text-center`}>
+                    {item.expectedDeliveryDate ? (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="font-mono text-[12px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                          {item.expectedDeliveryDate.slice(5)}({getWeekdayCharYmd(item.expectedDeliveryDate) || '-'})
+                        </span>
+                        {(item.orderCycle || item.leadDays != null) && (
+                          <span className="text-[10px] font-bold text-slate-500">
+                            {item.orderCycle || `D+${item.leadDays}`}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
 
                   {/* 발주번호 (클릭 시 해당 발주서 큰 팝업 열기) */}
@@ -1144,6 +1220,11 @@ export const OrderStatusEditView: React.FC = () => {
                     >
                       {item.status === '발주' ? '미입고(발주)' : item.status}
                     </span>
+                    {item.receivedQty > 0 && item.remainQty > 0 && (
+                      <div className="text-[10.5px] font-mono font-bold text-amber-700 mt-0.5 whitespace-nowrap">
+                        기입고 {item.receivedQty} / 미입고 {item.remainQty}
+                      </div>
+                    )}
                   </td>
 
                   {/* 비고 인라인 수정 */}
@@ -1313,6 +1394,25 @@ export const OrderStatusEditView: React.FC = () => {
               {supplierOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   거래처: {opt}
+                </option>
+              ))}
+            </select>
+
+            {/* 입고예정일 필터 */}
+            <select
+              value={expectedDateFilter}
+              onChange={(e) => setExpectedDateFilter(e.target.value)}
+              className={`border rounded-xl px-3 py-1.5 text-[13px] font-bold outline-none shadow-2xs cursor-pointer ${
+                expectedDateFilter !== '전체'
+                  ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
+                  : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400'
+              }`}
+              title="입고예정일(리드타임 D+N 기준) 필터"
+            >
+              <option value="전체">입고예정: 전체</option>
+              {expectedDateOptions.map((opt) => (
+                <option key={opt.date} value={opt.date}>
+                  예정 {opt.date.slice(5)}({getWeekdayCharYmd(opt.date)}) · {opt.count}
                 </option>
               ))}
             </select>

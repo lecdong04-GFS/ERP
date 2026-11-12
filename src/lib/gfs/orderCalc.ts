@@ -15,6 +15,54 @@ export function parseLeadTimeDays(orderCycle?: string): number {
   return Math.min(14, Math.max(...nums));
 }
 
+/** YYYY-MM-DD 문자열 기준 날짜 덧셈/뺄셈 (타임존 안전 UTC 연산) */
+export function addDaysYmd(ymd: string, days: number): string {
+  const norm = normalizeDateYmd(ymd);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(norm)) return '';
+  const [y, m, d] = norm.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + (Number(days) || 0)));
+  return dt.toISOString().slice(0, 10);
+}
+
+const WEEKDAY_SUN0 = ['일', '월', '화', '수', '목', '금', '토'] as const;
+
+/** YYYY-MM-DD -> 한국어 요일 한 글자 ('월'~'일', 유효하지 않으면 '') */
+export function getWeekdayCharYmd(ymd?: string | null): string {
+  const norm = normalizeDateYmd(ymd || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(norm)) return '';
+  const [y, m, d] = norm.split('-').map(Number);
+  return WEEKDAY_SUN0[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/**
+ * 발주일 + 품목 발주주기(orderCycle) / 협력사 리드타임 기반 입고예정일 계산
+ * - explicitDeliveryDate가 유효한 YYYY-MM-DD면 우선 사용
+ */
+export function calcExpectedDeliveryInfo(params: {
+  orderDate?: string | null;
+  orderCycle?: string | null;
+  explicitDeliveryDate?: string | null;
+  partnerLeadTime?: number | null;
+}): { expectedDate: string; leadDays: number; orderCycle: string } {
+  const baseOrderDate = normalizeDateYmd(params.orderDate || '');
+  const rawCycle = String(params.orderCycle || '').trim();
+  const resolvedCycle =
+    rawCycle ||
+    (params.partnerLeadTime && params.partnerLeadTime > 0 ? `D+${params.partnerLeadTime}` : '');
+  const leadDays = parseLeadTimeDays(resolvedCycle);
+  const explicit = normalizeDateYmd(params.explicitDeliveryDate || '');
+  const expectedDate = /^\d{4}-\d{2}-\d{2}$/.test(explicit)
+    ? explicit
+    : /^\d{4}-\d{2}-\d{2}$/.test(baseOrderDate)
+      ? addDaysYmd(baseOrderDate, leadDays)
+      : '';
+  return {
+    expectedDate,
+    leadDays,
+    orderCycle: resolvedCycle || `D+${leadDays}`,
+  };
+}
+
 /**
  * 3대 발주 전략 모드(타이트/표준/안전)별 적용 발주일수 및 로스 버퍼 산출
  * - 표준: 마스터(DB) 발주일수 100% 그대로

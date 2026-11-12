@@ -46,6 +46,8 @@ import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
 import {
   DAY_CHARS,
   WEEKDAY_DEMAND_FACTORS,
+  addDaysYmd,
+  getWeekdayCharYmd,
   calcRow,
   splitWeek,
   classifyPattern,
@@ -148,6 +150,9 @@ interface InboundInspectItem {
   orderId: number;
   orderNo: string;
   orderDate: string;
+  orderCycle: string;
+  leadDays: number;
+  expectedDeliveryDate: string;
   partnerId: string;
   partnerName: string;
   productCode: string;
@@ -265,6 +270,10 @@ export const MatOrderDayView: React.FC = () => {
   const [isLoadingInbound, setIsLoadingInbound] = useState<boolean>(false);
   const [isReceivingSaving, setIsReceivingSaving] = useState<boolean>(false);
   const [inboundStatusFilter, setInboundStatusFilter] = useState<string>('전체');
+  const [inboundReceivingDate, setInboundReceivingDate] = useState<string>(() => kstToday());
+  const [inboundOrderDateFilter, setInboundOrderDateFilter] = useState<string>('ALL');
+  const [inboundExpectedDateFilter, setInboundExpectedDateFilter] = useState<string>('ALL');
+  const [inboundSkipStock, setInboundSkipStock] = useState<boolean>(false);
 
   // ── 품목 삭제 & 복구 상태 ──
   const [deletedCount, setDeletedCount] = useState<number>(0);
@@ -615,7 +624,10 @@ export const MatOrderDayView: React.FC = () => {
             detailId: item.id,
             orderId: item.purchaseOrderId,
             orderNo: po.orderNo || '',
-            orderDate: po.orderDate || '',
+            orderDate: item.orderDate || po.orderDate || '',
+            orderCycle: item.orderCycle || prod.orderCycle || '',
+            leadDays: Number(item.leadDays) || 1,
+            expectedDeliveryDate: item.expectedDeliveryDate || po.deliveryDate || '',
             partnerId: po.partnerId || '',
             partnerName: po.partnerName || po.partner?.name || '일반거래처',
             productCode: item.productCode || prod.productCode || '',
@@ -1614,6 +1626,97 @@ export const MatOrderDayView: React.FC = () => {
     });
   };
 
+  // ── 입고 필터 옵션 (발주일 / 입고예정일 / 거래처) ──
+  const inboundOrderDateOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    inboundItems.forEach((it) => {
+      if (it.orderDate) counts.set(it.orderDate, (counts.get(it.orderDate) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, count]) => ({ date, count }));
+  }, [inboundItems]);
+
+  const inboundExpectedDateOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    inboundItems.forEach((it) => {
+      const target = it.expectedDeliveryDate || '';
+      if (target) counts.set(target, (counts.get(target) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, count]) => ({ date, count }));
+  }, [inboundItems]);
+
+  const inboundSuppliers = useMemo(() => {
+    const set = new Set<string>();
+    inboundItems.forEach((it) => {
+      if (it.partnerName) set.add(it.partnerName);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+  }, [inboundItems]);
+
+  // 입고 필터링된 품목 목록
+  const filteredInboundItems = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return inboundItems.filter((it) => {
+      if (inboundOrderDateFilter !== 'ALL' && it.orderDate !== inboundOrderDateFilter) return false;
+      if (
+        inboundExpectedDateFilter !== 'ALL' &&
+        (it.expectedDeliveryDate || '') !== inboundExpectedDateFilter
+      ) {
+        return false;
+      }
+      if (supplierFilter !== '전체' && it.partnerName !== supplierFilter) return false;
+      if (
+        kw &&
+        !it.productName.toLowerCase().includes(kw) &&
+        !it.partnerName.toLowerCase().includes(kw) &&
+        !it.orderNo.toLowerCase().includes(kw)
+      ) {
+        return false;
+      }
+      if (inboundStatusFilter === '미납') {
+        return it.actualRecvQty < it.orderQty;
+      }
+      if (inboundStatusFilter === '정상') {
+        return it.actualRecvQty >= it.orderQty;
+      }
+      return true;
+    });
+  }, [
+    inboundItems,
+    inboundOrderDateFilter,
+    inboundExpectedDateFilter,
+    supplierFilter,
+    keyword,
+    inboundStatusFilter,
+  ]);
+
+  // 입고 통계 (현재 필터된 목록 기준)
+  const inboundStats = useMemo(() => {
+    let totalOrder = 0;
+    let totalActual = 0;
+    let totalAmount = 0;
+    let shortCount = 0;
+    filteredInboundItems.forEach((it) => {
+      totalOrder += it.orderQty;
+      totalActual += it.actualRecvQty;
+      totalAmount += Math.round(it.actualRecvQty * it.unitPrice);
+      if (it.actualRecvQty < it.orderQty) shortCount++;
+    });
+    return {
+      totalOrder,
+      totalActual,
+      diff: totalOrder - totalActual,
+      totalAmount,
+      shortCount,
+    };
+  }, [filteredInboundItems]);
+
+  const isAllInboundChecked =
+    filteredInboundItems.length > 0 && filteredInboundItems.every((it) => it.checked);
+
   // ── 입고 검수 핸들러 ──
   const handleInboundQtyChange = (detailId: number, val: string) => {
     const num = Math.max(0, Number(val) || 0);
@@ -1632,34 +1735,48 @@ export const MatOrderDayView: React.FC = () => {
     );
   };
 
+  // 현재 필터로 보이는 행만 일괄 선택/해제 (숨겨진 다른 날짜 발주 오작동 방지)
   const handleToggleAllInbound = (checked: boolean) => {
-    setInboundItems((prev) => prev.map((it) => ({ ...it, checked })));
+    const visibleIds = new Set(filteredInboundItems.map((it) => it.detailId));
+    setInboundItems((prev) =>
+      prev.map((it) => (visibleIds.has(it.detailId) ? { ...it, checked } : it))
+    );
   };
 
-  // 모든 검수 수량을 발주수량(100% 정상)으로 자동 채우기
+  // 현재 필터로 보이는 행의 검수 수량만 발주수량(100% 정상)으로 채우기
   const handleFillAllOrderQty = () => {
+    const visibleIds = new Set(filteredInboundItems.map((it) => it.detailId));
     setInboundItems((prev) =>
-      prev.map((it) => ({
-        ...it,
-        actualRecvQty: it.orderQty,
-        amount: Math.round(it.orderQty * it.unitPrice),
-      }))
+      prev.map((it) =>
+        visibleIds.has(it.detailId)
+          ? {
+              ...it,
+              actualRecvQty: it.orderQty,
+              amount: Math.round(it.orderQty * it.unitPrice),
+            }
+          : it
+      )
     );
   };
 
   // ── 입고 검수 완료 및 실제 재고 반영 (POST /api/purchase/receiving) ──
   const handleConfirmInboundReceiving = async () => {
-    const selected = inboundItems.filter((it) => it.checked);
-    if (selected.length === 0) {
-      alert('입고 검수 및 재고에 반영할 품목을 선택해주세요.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inboundReceivingDate)) {
+      alert('유효한 입고처리 일자(YYYY-MM-DD)를 선택해 주세요.');
       return;
     }
 
-    const shortItems = selected.filter((it) => it.actualRecvQty < it.orderQty);
-    const zeroItems = selected.filter((it) => it.actualRecvQty === 0);
+    const selected = filteredInboundItems.filter((it) => it.checked);
+    if (selected.length === 0) {
+      alert('현재 조회 목록에서 입고 처리할 품목을 체크해 주세요.');
+      return;
+    }
+
     const totalOrderQty = selected.reduce((s, it) => s + it.orderQty, 0);
     const totalActualQty = selected.reduce((s, it) => s + it.actualRecvQty, 0);
     const diffQty = totalOrderQty - totalActualQty;
+    const recvDayChar = getWeekdayCharYmd(inboundReceivingDate);
+    const isTodayRecv = inboundReceivingDate === kstToday();
 
     let warningText = '';
     if (diffQty > 0) {
@@ -1667,16 +1784,21 @@ export const MatOrderDayView: React.FC = () => {
         `\n\n⚠️ [미납/결품 안내]\n` +
         `• 총 발주량: ${totalOrderQty}box 중 ${totalActualQty}box만 도착했습니다.\n` +
         `• 미납 잔량: 총 ${diffQty}box 가 덜 들어왔습니다.\n` +
-        `• 실제 도착한 ${totalActualQty}box만 창고 현재고와 자재수불부에 반영되고, ${diffQty}box는 '미입고 잔량'으로 기록됩니다.`;
+        `• ${totalActualQty}box만 입고 기록되고, ${diffQty}box는 '미입고 잔량'으로 남습니다.`;
     }
 
+    const stockActionLine = inboundSkipStock
+      ? `• 재고 반영: ⚠️ 실재고 가산 제외 (이미 실사 반영됨 — 입고전표·수불부·발주완료만 기록)`
+      : `• 재고 반영: 창고 현재고(+) 및 자재수불부 즉시 반영`;
+
     const ok = window.confirm(
-      `[창고 입고 검수 완료 & 재고 즉시 반영]\n\n` +
-        `• 검수 대상: 총 ${selected.length}개 품목\n` +
+      `[창고 입고 검수 완료${inboundSkipStock ? ' (전표·발주만 기록)' : ' & 재고 즉시 반영'}]\n\n` +
+        `• 검수 대상: 현재 화면 체크 ${selected.length}개 품목\n` +
         `• 실제 입고량: 총 ${totalActualQty.toLocaleString()} box\n` +
-        `• 입고 일자: ${kstToday()} (오늘 당일 입고)` +
+        `• 입고 일자: ${inboundReceivingDate}${recvDayChar ? ` (${recvDayChar})` : ''}${isTodayRecv ? ' (오늘 당일)' : ' ← 지정/소급 입고일'}\n` +
+        `${stockActionLine}` +
         warningText +
-        `\n\n실제 도착한 수량만 창고 현재고에 반영하시겠습니까?`
+        `\n\n선택한 [${inboundReceivingDate}] 일자로 입고 확정하시겠습니까?`
     );
 
     if (!ok) return;
@@ -1691,11 +1813,11 @@ export const MatOrderDayView: React.FC = () => {
         byPartner.get(pid)!.push(it);
       });
 
-      let successCount = 0;
       for (const [pid, pItems] of byPartner.entries()) {
         const pName = pItems[0]?.partnerName || '';
         const payload = {
-          receivingDate: kstToday(),
+          receivingDate: inboundReceivingDate,
+          skipInventoryUpdate: inboundSkipStock,
           partnerId: pid === 'DEFAULT' ? undefined : pid,
           partnerName: pName,
           createdBy: '창고검수자',
@@ -1722,75 +1844,28 @@ export const MatOrderDayView: React.FC = () => {
           body: JSON.stringify(payload),
         });
         const json = await res.json();
-        if (json.success) {
-          successCount++;
-        } else {
+        if (!json.success) {
           throw new Error(json.error || `${pName} 입고 반영 실패`);
         }
       }
 
       alert(
-        `✅ 총 ${selected.length}개 품목의 입고 검수 및 재고 반영이 완료되었습니다!\n\n` +
-          `• 실제 도착한 ${totalActualQty.toLocaleString()}box가 창고 현재고 및 [자재수불부]에 즉시 등록되었습니다.\n` +
+        `✅ ${inboundReceivingDate}${recvDayChar ? `(${recvDayChar})` : ''} 일자로 총 ${selected.length}개 품목의 입고 처리가 완료되었습니다!\n\n` +
+          (inboundSkipStock
+            ? `• 현재고는 추가 가산하지 않았으며, 입고 전표 및 발주서 진행상태만 기록되었습니다.\n`
+            : `• 실제 도착한 ${totalActualQty.toLocaleString()}box가 창고 현재고 및 [자재수불부]에 즉시 등록되었습니다.\n`) +
           (diffQty > 0
             ? `• 미납된 ${diffQty}box는 '미입고 잔량'으로 기록되어 [발주현황/수정] 메뉴에서 부분입고 상태로 확인하실 수 있습니다.`
             : `• 전량 정상 입고 처리되었습니다.`)
       );
 
-      await loadInboundPending();
-      await loadConfirmedPo();
+      await Promise.all([loadInboundPending(), loadConfirmedPo()]);
     } catch (err: any) {
       alert('입고 처리 중 오류: ' + err.message);
     } finally {
       setIsReceivingSaving(false);
     }
   };
-
-  // 입고 필터링된 품목 목록
-  const filteredInboundItems = useMemo(() => {
-    return inboundItems.filter((it) => {
-      if (supplierFilter !== '전체' && it.partnerName !== supplierFilter) return false;
-      if (
-        keyword.trim() &&
-        !it.productName.toLowerCase().includes(keyword.trim().toLowerCase()) &&
-        !it.partnerName.toLowerCase().includes(keyword.trim().toLowerCase()) &&
-        !it.orderNo.toLowerCase().includes(keyword.trim().toLowerCase())
-      ) {
-        return false;
-      }
-      if (inboundStatusFilter === '미납') {
-        return it.actualRecvQty < it.orderQty;
-      }
-      if (inboundStatusFilter === '정상') {
-        return it.actualRecvQty >= it.orderQty;
-      }
-      return true;
-    });
-  }, [inboundItems, supplierFilter, keyword, inboundStatusFilter]);
-
-  // 입고 통계
-  const inboundStats = useMemo(() => {
-    let totalOrder = 0;
-    let totalActual = 0;
-    let totalAmount = 0;
-    let shortCount = 0;
-    filteredInboundItems.forEach((it) => {
-      totalOrder += it.orderQty;
-      totalActual += it.actualRecvQty;
-      totalAmount += Math.round(it.actualRecvQty * it.unitPrice);
-      if (it.actualRecvQty < it.orderQty) shortCount++;
-    });
-    return {
-      totalOrder,
-      totalActual,
-      diff: totalOrder - totalActual,
-      totalAmount,
-      shortCount,
-    };
-  }, [filteredInboundItems]);
-
-  const isAllInboundChecked =
-    filteredInboundItems.length > 0 && filteredInboundItems.every((it) => it.checked);
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-100 text-slate-800 p-2 sm:p-3 overflow-hidden gap-2 select-none font-sans">
@@ -1970,13 +2045,25 @@ export const MatOrderDayView: React.FC = () => {
                 disabled={isReceivingSaving || filteredInboundItems.length === 0}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13.5px] font-black text-white shadow-xs transition cursor-pointer whitespace-nowrap ${
                   filteredInboundItems.length > 0
-                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
+                    ? inboundSkipStock
+                      ? 'bg-indigo-600 hover:bg-indigo-500 active:scale-98'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
                     : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 }`}
-                title="실제 도착한 수량만 창고 현재고와 자재수불부에 즉시 반영합니다."
+                title={
+                  inboundSkipStock
+                    ? `${inboundReceivingDate} 입고 이력·발주잔량만 확정합니다 (실사 반영됨 — 현재고 가산 제외).`
+                    : `${inboundReceivingDate} 기준으로 실제 도착한 수량을 창고 현재고와 자재수불부에 즉시 반영합니다.`
+                }
               >
                 <Truck className="w-4 h-4 stroke-[2.5]" />
-                <span>{isReceivingSaving ? '반영 중...' : '[ 🚚 검수완료 & 재고 즉시 반영 ]'}</span>
+                <span>
+                  {isReceivingSaving
+                    ? '반영 중...'
+                    : inboundSkipStock
+                      ? `[ 📦 ${inboundReceivingDate.slice(5)} 입고확정 (재고가산 제외) ]`
+                      : `[ 🚚 ${inboundReceivingDate.slice(5)} 검수완료 & 재고반영 ]`}
+                </span>
               </button>
               <button
                 type="button"
@@ -2154,27 +2241,106 @@ export const MatOrderDayView: React.FC = () => {
         ) : (
           /* 입고 검수 모드 서브 바 */
           <>
-            <div className="flex items-center gap-2 whitespace-nowrap">
-              <span className="text-xs sm:text-[13px] font-black text-slate-700 whitespace-nowrap">검수 상태:</span>
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
-                {[
-                  { id: '전체', label: '전체 보기' },
-                  { id: '미납', label: '⚠️ 미납/결품만' },
-                  { id: '정상', label: '✅ 정상입고만' },
-                ].map((tab) => (
+            <div className="flex flex-wrap items-center gap-3 whitespace-nowrap">
+              {/* 입고처리 일자 선택 (오늘/어제 빠른 버튼 + 날짜 선택기) */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs sm:text-[13px] font-black text-slate-700 whitespace-nowrap">
+                  입고처리 일자:
+                </span>
+                <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold">
                   <button
-                    key={tab.id}
                     type="button"
-                    onClick={() => setInboundStatusFilter(tab.id)}
-                    className={`px-3 py-1 rounded text-xs transition cursor-pointer whitespace-nowrap ${
-                      inboundStatusFilter === tab.id
-                        ? 'bg-blue-600 text-white font-black shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
+                    onClick={() => setInboundReceivingDate(addDaysYmd(kstToday(), -1))}
+                    className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                      inboundReceivingDate === addDaysYmd(kstToday(), -1)
+                        ? 'bg-amber-500 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
                     }`}
+                    title="어제 날짜로 소급 입고 처리"
                   >
-                    {tab.label}
+                    어제
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setInboundReceivingDate(kstToday())}
+                    className={`px-2 py-0.5 rounded transition cursor-pointer ${
+                      inboundReceivingDate === kstToday()
+                        ? 'bg-emerald-600 text-white font-black shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                    }`}
+                    title="오늘 날짜로 당일 입고 처리"
+                  >
+                    오늘
+                  </button>
+                </div>
+                <input
+                  type="date"
+                  value={inboundReceivingDate}
+                  onChange={(e) => {
+                    if (e.target.value) setInboundReceivingDate(e.target.value);
+                  }}
+                  className={`border rounded-lg px-2 py-0.5 text-xs font-mono font-bold focus:outline-none focus:ring-1 ${
+                    inboundReceivingDate !== kstToday()
+                      ? 'bg-amber-50 border-amber-400 text-amber-900 focus:ring-amber-500'
+                      : 'bg-slate-50 border-slate-300 text-slate-800 focus:ring-emerald-500'
+                  }`}
+                />
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-black border ${
+                    inboundReceivingDate !== kstToday()
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  {getWeekdayCharYmd(inboundReceivingDate) || '-'}요일
+                  {inboundReceivingDate !== kstToday() ? ' · 지정일' : ' · 당일'}
+                </span>
+              </div>
+
+              <span className="text-slate-300 hidden sm:inline">|</span>
+
+              {/* 실재고 가산 제외 옵션 (실사 재고조사표 반영 직후 중복 가산 방지) */}
+              <label
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer select-none transition ${
+                  inboundSkipStock
+                    ? 'bg-indigo-50 border-indigo-400 text-indigo-900'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+                title="체크 시 현재고(Inventory)에는 더하지 않고 입고 이력과 발주잔량(입고완료)만 확정합니다. 재고조사표 실사를 이미 업로드한 뒤 지난 입고를 마감할 때 사용하세요."
+              >
+                <input
+                  type="checkbox"
+                  checked={inboundSkipStock}
+                  onChange={(e) => setInboundSkipStock(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
+                />
+                <span>실재고 가산 제외 (이미 실사 반영됨)</span>
+              </label>
+
+              <span className="text-slate-300 hidden sm:inline">|</span>
+
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <span className="text-xs sm:text-[13px] font-black text-slate-700 whitespace-nowrap">검수 상태:</span>
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
+                  {[
+                    { id: '전체', label: '전체 보기' },
+                    { id: '미납', label: '⚠️ 미납/결품만' },
+                    { id: '정상', label: '✅ 정상입고만' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setInboundStatusFilter(tab.id)}
+                      className={`px-3 py-1 rounded text-xs transition cursor-pointer whitespace-nowrap ${
+                        inboundStatusFilter === tab.id
+                          ? 'bg-blue-600 text-white font-black shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-bold'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -2459,7 +2625,45 @@ export const MatOrderDayView: React.FC = () => {
               placeholder="품명 / 거래처 / 발주번호..."
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 발주일 필터 */}
+              <select
+                value={inboundOrderDateFilter}
+                onChange={(e) => setInboundOrderDateFilter(e.target.value)}
+                className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer ${
+                  inboundOrderDateFilter !== 'ALL'
+                    ? 'bg-blue-50 border-blue-400 text-blue-900'
+                    : 'bg-slate-50 border-slate-300 text-slate-800'
+                }`}
+                title="발주일 기준 필터"
+              >
+                <option value="ALL">발주일: 전체</option>
+                {inboundOrderDateOptions.map((opt) => (
+                  <option key={opt.date} value={opt.date}>
+                    발주 {opt.date.slice(5)}({getWeekdayCharYmd(opt.date)}) · {opt.count}
+                  </option>
+                ))}
+              </select>
+
+              {/* 입고예정일 필터 */}
+              <select
+                value={inboundExpectedDateFilter}
+                onChange={(e) => setInboundExpectedDateFilter(e.target.value)}
+                className={`border rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer ${
+                  inboundExpectedDateFilter !== 'ALL'
+                    ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
+                    : 'bg-slate-50 border-slate-300 text-slate-800'
+                }`}
+                title="입고예정일(리드타임 D+N 기준) 필터"
+              >
+                <option value="ALL">입고예정: 전체</option>
+                {inboundExpectedDateOptions.map((opt) => (
+                  <option key={opt.date} value={opt.date}>
+                    예정 {opt.date.slice(5)}({getWeekdayCharYmd(opt.date)}) · {opt.count}
+                  </option>
+                ))}
+              </select>
+
               {/* 거래처 필터 */}
               <select
                 value={supplierFilter}
@@ -2467,15 +2671,38 @@ export const MatOrderDayView: React.FC = () => {
                 className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 <option value="전체">전체 거래처</option>
-                {suppliers.map((s) => (
+                {inboundSuppliers.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
                 ))}
               </select>
 
+              {(inboundOrderDateFilter !== 'ALL' ||
+                inboundExpectedDateFilter !== 'ALL' ||
+                supplierFilter !== '전체' ||
+                keyword.trim() !== '' ||
+                inboundStatusFilter !== '전체') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInboundOrderDateFilter('ALL');
+                    setInboundExpectedDateFilter('ALL');
+                    setSupplierFilter('전체');
+                    setKeyword('');
+                    setInboundStatusFilter('전체');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[11px] font-bold text-slate-700 cursor-pointer"
+                  title="적용된 입고 필터 모두 초기화"
+                >
+                  필터 해제
+                </button>
+              )}
+
               <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded border border-slate-200 text-[11px]">
-                {filteredInboundItems.length}개 입고 대기
+                {filteredInboundItems.length === inboundItems.length
+                  ? `${filteredInboundItems.length}개 입고 대기`
+                  : `${filteredInboundItems.length} / ${inboundItems.length}개 표시`}
               </span>
             </div>
           </>
@@ -3186,15 +3413,16 @@ export const MatOrderDayView: React.FC = () => {
                 <colgroup>
                   <col className="w-[3%]" />
                   <col className="w-[2.5%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[25.5%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[7%]" />
                   <col className="w-[9.5%]" />
-                  <col className="w-[10%]" />
+                  <col className="w-[7.5%]" />
                   <col className="w-[8.5%]" />
-                  <col className="w-[10%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[4.5%]" />
+                  <col className="w-[6.5%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[9.5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[9.5%]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[12.5px] 2xl:text-[13.5px] font-black border-b border-slate-300 tracking-tight select-none">
                   <tr>
@@ -3208,7 +3436,14 @@ export const MatOrderDayView: React.FC = () => {
                       />
                     </th>
                     <th className="py-2.5 px-1 text-center">No</th>
-                    <th className="py-2.5 px-1.5 text-center">발주번호</th>
+                    <th className="py-2.5 px-1.5 text-center">
+                      발주번호
+                      <span className="block text-[10.5px] text-slate-500 font-bold leading-tight">발주일</span>
+                    </th>
+                    <th className="py-2.5 px-1 text-center">
+                      입고예정
+                      <span className="block text-[10.5px] text-slate-500 font-bold leading-tight">리드타임</span>
+                    </th>
                     <th className="py-2.5 px-1.5">거래처</th>
                     <th className="py-2.5 px-2">품목명</th>
                     <th className="py-2.5 px-1 text-center">창고</th>
@@ -3231,14 +3466,18 @@ export const MatOrderDayView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-[13.5px] 2xl:text-[14.5px]">
                   {filteredInboundItems.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-20 text-center">
+                      <td colSpan={12} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           <Truck className="w-12 h-12 text-slate-300" />
                           <div className="text-[15px] font-black text-slate-700">
-                            현재 입고 대기 중인 발주 물량이 없습니다.
+                            {inboundItems.length > 0
+                              ? '현재 필터 조건에 맞는 입고 대기 품목이 없습니다.'
+                              : '현재 입고 대기 중인 발주 물량이 없습니다.'}
                           </div>
                           <p className="text-[13px] text-slate-500">
-                            이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 상단 [오늘 발주 주문서] 탭에서 발주서를 먼저 생성해 주세요.
+                            {inboundItems.length > 0
+                              ? `전체 ${inboundItems.length}건의 입고 대기 품목 중 발주일/입고예정일/거래처/검색어 필터에 해당하는 건이 없습니다.`
+                              : '이미 모든 물량이 검수 완료되었거나, 아직 확정된 발주서가 없습니다. 상단 [오늘 발주 주문서] 탭에서 발주서를 먼저 생성해 주세요.'}
                           </p>
                         </div>
                       </td>
@@ -3278,14 +3517,43 @@ export const MatOrderDayView: React.FC = () => {
                             {idx + 1}
                           </td>
 
-                          {/* 발주번호 뱃지 */}
+                          {/* 발주번호 / 발주일 */}
                           <td className="py-2 px-1 text-center">
                             <span
                               className="inline-block max-w-full truncate px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11.5px] 2xl:text-[12px] font-bold border border-slate-200"
-                              title={item.orderNo}
+                              title={`${item.orderNo} (발주일: ${item.orderDate})`}
                             >
                               {item.orderNo}
                             </span>
+                            <div className="text-[10.5px] text-slate-500 font-mono mt-0.5">
+                              발주 {item.orderDate.slice(5)}({getWeekdayCharYmd(item.orderDate) || '-'})
+                            </div>
+                          </td>
+
+                          {/* 입고예정일 (D+N) */}
+                          <td className="py-2 px-1 text-center">
+                            {item.expectedDeliveryDate ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-black border ${
+                                    item.expectedDeliveryDate === inboundReceivingDate
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : item.expectedDeliveryDate < inboundReceivingDate
+                                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                                  }`}
+                                >
+                                  {item.expectedDeliveryDate.slice(5)}({getWeekdayCharYmd(item.expectedDeliveryDate) || '-'})
+                                </span>
+                                {(item.orderCycle || item.leadDays != null) && (
+                                  <span className="text-[10px] font-bold text-slate-500">
+                                    {item.orderCycle || `D+${item.leadDays}`}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">-</span>
+                            )}
                           </td>
 
                           {/* 거래처명 */}

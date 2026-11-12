@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
-import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
+import { calcExpectedDeliveryInfo, normalizeDateYmd } from '@/lib/gfs/orderCalc';
 import {
   normalizePackUnit,
   pickLatestValidPurchasePrice,
@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
             id: true,
             name: true,
             tel: true,
+            leadTime: true,
           },
         },
         details: {
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
                 spec: true,
                 warehouse: true,
                 boxQty: true,
+                orderCycle: true,
                 prices: {
                   orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
                   take: 10,
@@ -137,6 +139,13 @@ export async function GET(req: NextRequest) {
             ? Number(d.amount)
             : Math.round((Number(d.orderQty) || 0) * effectiveUnitPrice);
 
+        const deliveryInfo = calcExpectedDeliveryInfo({
+          orderDate: po.orderDate,
+          orderCycle: d.product?.orderCycle,
+          explicitDeliveryDate: po.deliveryDate,
+          partnerLeadTime: po.partner?.leadTime,
+        });
+
         const { prices: _prices, inventories: _inventories, ...productMeta } = (d.product || {}) as any;
         return {
           ...d,
@@ -147,14 +156,22 @@ export async function GET(req: NextRequest) {
           boxPrice,
           masterBagPrice,
           masterBoxPrice,
+          orderCycle: deliveryInfo.orderCycle,
+          leadDays: deliveryInfo.leadDays,
+          expectedDeliveryDate: deliveryInfo.expectedDate,
           product: d.product ? productMeta : null,
         };
       });
       const computedTotal = Math.round(
         enrichedDetails.reduce((s, d) => s + (Number(d.amount) || 0), 0)
       );
+      const expectedDates = enrichedDetails
+        .map((d) => d.expectedDeliveryDate)
+        .filter(Boolean)
+        .sort();
       return {
         ...po,
+        deliveryDate: po.deliveryDate || expectedDates[0] || '',
         totalAmount: Number(po.totalAmount) > 0 ? Number(po.totalAmount) : computedTotal,
         details: enrichedDetails,
       };

@@ -3,7 +3,13 @@ import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
 import { makeDocNo } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
-import { normalizeDateYmd } from '@/lib/gfs/orderCalc';
+import { calcExpectedDeliveryInfo, normalizeDateYmd } from '@/lib/gfs/orderCalc';
+
+const SKIP_STOCK_TAG = '[재고가산제외]';
+
+function hasSkipStockMarker(...remarks: (string | null | undefined)[]): boolean {
+  return remarks.some((r) => typeof r === 'string' && r.includes(SKIP_STOCK_TAG));
+}
 import {
   calcBagPriceFromBox,
   calcBoxPrice,
@@ -89,12 +95,23 @@ export async function GET(req: NextRequest) {
           rawUnitPrice > 0
             ? rawUnitPrice
             : unitPriceForOrderUnit(bagPrice, dt.unit, packUnit);
+        const orderDate = normalizeDateYmd(dt.purchaseOrder?.orderDate);
+        const deliveryInfo = calcExpectedDeliveryInfo({
+          orderDate,
+          orderCycle: dt.product?.orderCycle,
+          explicitDeliveryDate: dt.purchaseOrder?.deliveryDate,
+          partnerLeadTime: dt.purchaseOrder?.partner?.leadTime,
+        });
         return {
           ...dt,
           unitPrice: effectiveUnitPrice,
           packUnit,
           bagPrice,
           boxPrice,
+          orderDate,
+          orderCycle: deliveryInfo.orderCycle,
+          leadDays: deliveryInfo.leadDays,
+          expectedDeliveryDate: deliveryInfo.expectedDate,
         };
       });
 
@@ -202,12 +219,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { receivingDate: rawReceivingDate, partnerId, partnerName, items = [] } = body;
+    const skipInventoryUpdate = Boolean(body.skipInventoryUpdate);
     const createdBy = body.createdBy || auth.user.name || auth.user.loginId;
     const receivingDate = normalizeDateYmd(rawReceivingDate);
 
-    if (!receivingDate || items.length === 0) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(receivingDate) || items.length === 0) {
       return NextResponse.json(
-        { success: false, error: '입고일자(receivingDate)와 입고품목(items)이 필수입니다.' },
+        { success: false, error: '유효한 입고일자(YYYY-MM-DD)와 입고품목(items)이 필수입니다.' },
         { status: 400 }
       );
     }
@@ -346,6 +364,11 @@ export async function POST(req: NextRequest) {
         const grp = groupedDetails.get(groupKey)!;
         grp.totalAmount += amount;
 
+        const baseDetailRemark = item.remark || (item.carNo ? `차량:${item.carNo}` : '');
+        const detailRemark = skipInventoryUpdate
+          ? `${baseDetailRemark ? `${baseDetailRemark} · ` : ''}${SKIP_STOCK_TAG}`
+          : baseDetailRemark;
+
         // 2) 입고 상세(ReceivingDetail) 기록 준비 (발주/입고 상세는 box 수량 및 box 단가 유지)
         grp.detailRecords.push({
           productId: product.id,
@@ -360,98 +383,102 @@ export async function POST(req: NextRequest) {
           boxQty: packUnit,
           warehouse,
           inspectResult,
-          remark: item.remark || (item.carNo ? `차량:${item.carNo}` : ''),
+          remark: detailRemark,
         });
 
-        // 3) 현재고 (Inventory) 원자적 반영 (재고는 봉/낱개 수량 및 봉 단가 기준, 품목당 정본 Inventory 행 갱신)
+        // 3) 현재고 (Inventory) 원자적 반영 (skipInventoryUpdate 시 실사 반영된 재고 보존 위해 가산 생략)
         if (receivedQty > 0) {
-          if (bagUnitPrice > 0) {
-            const pPrices = await tx.productPrice.findMany({
-              where: { productId: product.id },
-              orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
-              take: 5,
-            });
-            const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
-            const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
-            if (!latestValid || (receivingDate >= latestDate && Math.abs(latestValid.purchasePrice - bagUnitPrice) > 0.5)) {
-              const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === receivingDate);
-              if (sameDay) {
-                await tx.productPrice.update({
-                  where: { id: sameDay.id },
-                  data: { purchasePrice: bagUnitPrice, remark: `입고단가 반영 (${receivingDate})` },
-                });
-              } else {
-                await tx.productPrice.create({
-                  data: {
-                    productId: product.id,
-                    purchasePrice: bagUnitPrice,
-                    effectiveDate: receivingDate,
-                    remark: `입고단가 반영 (${receivingDate})`,
-                  },
-                });
-              }
-            }
-          }
-
-          const existingInventory =
-            (await tx.inventory.findFirst({
-              where: { productId: product.id, warehouse },
-              orderBy: { id: 'asc' },
-            })) ||
-            (await tx.inventory.findFirst({
-              where: { productId: product.id },
-              orderBy: { id: 'asc' },
-            }));
-
-          if (existingInventory) {
-            const nextQty = (Number(existingInventory.currentQty) || 0) + bagReceivedQty;
-            const finalBag = bagUnitPrice > 0 ? bagUnitPrice : (Number(existingInventory.unitPrice) || 0);
-            const nextStockAmount = Math.round(nextQty * finalBag);
-            await tx.inventory.update({
-              where: { id: existingInventory.id },
-              data: {
-                currentQty: nextQty,
-                stockAmount: nextStockAmount,
-                ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
-                lastInDate: receivingDate,
-                expiryDate,
-                lotNo: cleanLotNo,
-              },
-            });
+          if (!skipInventoryUpdate) {
             if (bagUnitPrice > 0) {
-              const siblingLots = await tx.inventory.findMany({
-                where: { productId: product.id, id: { not: existingInventory.id } },
-                select: { id: true, currentQty: true },
+              const pPrices = await tx.productPrice.findMany({
+                where: { productId: product.id },
+                orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+                take: 5,
               });
-              for (const lot of siblingLots) {
-                await tx.inventory.update({
-                  where: { id: lot.id },
-                  data: {
-                    unitPrice: bagUnitPrice,
-                    stockAmount: Math.round((Number(lot.currentQty) || 0) * bagUnitPrice),
-                  },
-                });
+              const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
+              const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
+              if (!latestValid || (receivingDate >= latestDate && Math.abs(latestValid.purchasePrice - bagUnitPrice) > 0.5)) {
+                const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === receivingDate);
+                if (sameDay) {
+                  await tx.productPrice.update({
+                    where: { id: sameDay.id },
+                    data: { purchasePrice: bagUnitPrice, remark: `입고단가 반영 (${receivingDate})` },
+                  });
+                } else {
+                  await tx.productPrice.create({
+                    data: {
+                      productId: product.id,
+                      purchasePrice: bagUnitPrice,
+                      effectiveDate: receivingDate,
+                      remark: `입고단가 반영 (${receivingDate})`,
+                    },
+                  });
+                }
               }
             }
-          } else {
-            await tx.inventory.create({
-              data: {
-                productId: product.id,
-                productCode: product.productCode,
-                productName: product.name,
-                category: product.category || '원재료',
-                lotNo: cleanLotNo,
-                expiryDate,
-                warehouse: product.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(product.warehouse)
-                  ? product.warehouse
-                  : warehouse,
-                currentQty: bagReceivedQty,
-                unit: product.unit || '봉',
-                unitPrice: bagUnitPrice,
-                stockAmount: Math.round(bagReceivedQty * bagUnitPrice),
-                lastInDate: receivingDate,
-              },
-            });
+
+            const existingInventory =
+              (await tx.inventory.findFirst({
+                where: { productId: product.id, warehouse },
+                orderBy: { id: 'asc' },
+              })) ||
+              (await tx.inventory.findFirst({
+                where: { productId: product.id },
+                orderBy: { id: 'asc' },
+              }));
+
+            if (existingInventory) {
+              const nextQty = (Number(existingInventory.currentQty) || 0) + bagReceivedQty;
+              const finalBag = bagUnitPrice > 0 ? bagUnitPrice : (Number(existingInventory.unitPrice) || 0);
+              const nextStockAmount = Math.round(nextQty * finalBag);
+              const prevLastIn = normalizeDateYmd(existingInventory.lastInDate || '');
+              const nextLastIn = prevLastIn && prevLastIn > receivingDate ? prevLastIn : receivingDate;
+              await tx.inventory.update({
+                where: { id: existingInventory.id },
+                data: {
+                  currentQty: nextQty,
+                  stockAmount: nextStockAmount,
+                  ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
+                  lastInDate: nextLastIn,
+                  expiryDate,
+                  lotNo: cleanLotNo,
+                },
+              });
+              if (bagUnitPrice > 0) {
+                const siblingLots = await tx.inventory.findMany({
+                  where: { productId: product.id, id: { not: existingInventory.id } },
+                  select: { id: true, currentQty: true },
+                });
+                for (const lot of siblingLots) {
+                  await tx.inventory.update({
+                    where: { id: lot.id },
+                    data: {
+                      unitPrice: bagUnitPrice,
+                      stockAmount: Math.round((Number(lot.currentQty) || 0) * bagUnitPrice),
+                    },
+                  });
+                }
+              }
+            } else {
+              await tx.inventory.create({
+                data: {
+                  productId: product.id,
+                  productCode: product.productCode,
+                  productName: product.name,
+                  category: product.category || '원재료',
+                  lotNo: cleanLotNo,
+                  expiryDate,
+                  warehouse: product.warehouse && ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(product.warehouse)
+                    ? product.warehouse
+                    : warehouse,
+                  currentQty: bagReceivedQty,
+                  unit: product.unit || '봉',
+                  unitPrice: bagUnitPrice,
+                  stockAmount: Math.round(bagReceivedQty * bagUnitPrice),
+                  lastInDate: receivingDate,
+                },
+              });
+            }
           }
 
           // 4) 자재수불부 (MaterialLedger) 거래 생성 (봉 수량 및 봉 단가 기준)
@@ -459,7 +486,9 @@ export async function POST(req: NextRequest) {
             where: { productId: product.id },
             _sum: { currentQty: true },
           });
-          const ledgerCurrentQty = totalStock._sum.currentQty || bagReceivedQty;
+          const ledgerCurrentQty = skipInventoryUpdate
+            ? (totalStock._sum.currentQty ?? 0)
+            : (totalStock._sum.currentQty || bagReceivedQty);
 
           await tx.materialLedger.create({
             data: {
@@ -478,7 +507,7 @@ export async function POST(req: NextRequest) {
               stockAmount: Math.round(ledgerCurrentQty * bagUnitPrice),
               txnType: '정규입고',
               refNo: baseReceivingNo,
-              remark: `[GSR입고] ${itemPartnerName || ''} (LOT:${cleanLotNo},차량:${item.carNo || '-'},온도:${item.carTemp || '-'})`,
+              remark: `[GSR입고${skipInventoryUpdate ? ` · ${SKIP_STOCK_TAG}` : ''}] ${itemPartnerName || ''} (LOT:${cleanLotNo},차량:${item.carNo || '-'},온도:${item.carTemp || '-'})`,
             },
           });
         }
@@ -547,6 +576,7 @@ export async function POST(req: NextRequest) {
           groupedDetails.size > 1
             ? `${baseReceivingNo}-${String(grpSeq++).padStart(2, '0')}`
             : baseReceivingNo;
+        const baseHeaderRemark = `차량: ${grp.sampleItem?.carNo || '-'}, 판정: ${grp.sampleItem?.totalJudge || 'O'} (총 ${grp.detailRecords.length}품목)`;
         const createdReceiving = await tx.receiving.create({
           data: {
             receivingNo: rNo,
@@ -555,7 +585,7 @@ export async function POST(req: NextRequest) {
             partnerName: grp.partnerName || '',
             status: '입고',
             totalAmount: grp.totalAmount,
-            remark: `차량: ${grp.sampleItem?.carNo || '-'}, 판정: ${grp.sampleItem?.totalJudge || 'O'} (총 ${grp.detailRecords.length}품목)`,
+            remark: skipInventoryUpdate ? `${baseHeaderRemark} · ${SKIP_STOCK_TAG}` : baseHeaderRemark,
             createdBy,
             details: {
               create: grp.detailRecords,
@@ -574,7 +604,9 @@ export async function POST(req: NextRequest) {
     await touchDashboardSnapshot();
     return NextResponse.json({
       success: true,
-      message: '입고가 정상 등록되었으며 현재고, 자재수불부, 발주서 잔량 및 상태에 즉시 동기화되었습니다.',
+      message: skipInventoryUpdate
+        ? `${receivingDate} 기준 입고전표·자재수불부·발주서 상태가 기록되었습니다. (실재고 가산 제외)`
+        : `${receivingDate} 기준 입고가 정상 등록되었으며 현재고, 자재수불부, 발주서 잔량 및 상태에 즉시 동기화되었습니다.`,
       data: result,
     });
   } catch (error: any) {
@@ -636,7 +668,12 @@ export async function PUT(req: NextRequest) {
         const newWarehouse = item.warehouse ?? currentDetail.warehouse;
         const newLotNo = item.lotNo ?? currentDetail.lotNo;
         const newInspect = item.inspectResult ?? currentDetail.inspectResult;
-        const newRemark = item.remark ?? currentDetail.remark;
+        const wasStockSkipped = hasSkipStockMarker(currentDetail.remark, currentDetail.receiving?.remark);
+        const rawNewRemark = item.remark ?? currentDetail.remark;
+        const newRemark =
+          wasStockSkipped && !hasSkipStockMarker(rawNewRemark)
+            ? `${rawNewRemark ? `${rawNewRemark} · ` : ''}${SKIP_STOCK_TAG}`
+            : rawNewRemark;
 
         const deltaQty = newQty - oldQty;
         const deltaAmt = newAmt - oldAmt;
@@ -668,93 +705,95 @@ export async function PUT(req: NextRequest) {
 
         updatedReceivingIds.add(currentDetail.receivingId);
 
-        // 2) 현재고 (Inventory) 원자적 가감 (봉 수량 기준)
+        // 2) 현재고 (Inventory) 원자적 가감 (봉 수량 기준; 재고가산제외 전표는 실재고 변경 안 함)
         if (deltaQty !== 0 || deltaAmt !== 0 || newWarehouse !== currentDetail.warehouse || newExpiry !== currentDetail.expiryDate) {
-          const inv =
-            (await tx.inventory.findFirst({
-              where: {
-                productId: currentDetail.productId,
-                lotNo: currentDetail.lotNo,
-                warehouse: currentDetail.warehouse,
-              },
-            })) ||
-            (await tx.inventory.findFirst({
-              where: { productId: currentDetail.productId },
-              orderBy: { id: 'asc' },
-            }));
+          if (!wasStockSkipped) {
+            const inv =
+              (await tx.inventory.findFirst({
+                where: {
+                  productId: currentDetail.productId,
+                  lotNo: currentDetail.lotNo,
+                  warehouse: currentDetail.warehouse,
+                },
+              })) ||
+              (await tx.inventory.findFirst({
+                where: { productId: currentDetail.productId },
+                orderBy: { id: 'asc' },
+              }));
 
-          if (inv) {
-            const nextQty = (Number(inv.currentQty) || 0) + deltaBagQty;
-            const finalBag = newBagPrice > 0 ? newBagPrice : (Number(inv.unitPrice) || 0);
-            await tx.inventory.update({
-              where: { id: inv.id },
-              data: {
-                currentQty: nextQty,
-                stockAmount: Math.round(nextQty * finalBag),
-                ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
-                warehouse: newWarehouse,
-                expiryDate: newExpiry,
-                lotNo: newLotNo,
-              },
-            });
-          } else if (newQty > 0) {
-            await tx.inventory.create({
-              data: {
-                productId: currentDetail.productId,
-                productCode: currentDetail.productCode,
-                productName: currentDetail.productName,
-                category: currentDetail.product?.category || '원재료',
-                lotNo: newLotNo,
-                expiryDate: newExpiry,
-                warehouse: newWarehouse,
-                currentQty: newBagQty,
-                unit: currentDetail.product?.unit || '봉',
-                unitPrice: newBagPrice,
-                stockAmount: Math.round(newBagQty * newBagPrice),
-                lastInDate: normalizeDateYmd(currentDetail.receiving.receivingDate),
-              },
-            });
-          }
+            if (inv) {
+              const nextQty = (Number(inv.currentQty) || 0) + deltaBagQty;
+              const finalBag = newBagPrice > 0 ? newBagPrice : (Number(inv.unitPrice) || 0);
+              await tx.inventory.update({
+                where: { id: inv.id },
+                data: {
+                  currentQty: nextQty,
+                  stockAmount: Math.round(nextQty * finalBag),
+                  ...(finalBag > 0 ? { unitPrice: finalBag } : {}),
+                  warehouse: newWarehouse,
+                  expiryDate: newExpiry,
+                  lotNo: newLotNo,
+                },
+              });
+            } else if (newQty > 0) {
+              await tx.inventory.create({
+                data: {
+                  productId: currentDetail.productId,
+                  productCode: currentDetail.productCode,
+                  productName: currentDetail.productName,
+                  category: currentDetail.product?.category || '원재료',
+                  lotNo: newLotNo,
+                  expiryDate: newExpiry,
+                  warehouse: newWarehouse,
+                  currentQty: newBagQty,
+                  unit: currentDetail.product?.unit || '봉',
+                  unitPrice: newBagPrice,
+                  stockAmount: Math.round(newBagQty * newBagPrice),
+                  lastInDate: normalizeDateYmd(currentDetail.receiving.receivingDate),
+                },
+              });
+            }
 
-          if (newBagPrice > 0 && Math.abs(newPrice - oldPrice) > 0.01) {
-            const rDate = normalizeDateYmd(currentDetail.receiving.receivingDate);
-            const pPrices = await tx.productPrice.findMany({
-              where: { productId: currentDetail.productId },
-              orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
-              take: 5,
-            });
-            const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
-            const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
-            if (!latestValid || rDate >= latestDate) {
-              const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === rDate);
-              if (sameDay) {
-                await tx.productPrice.update({
-                  where: { id: sameDay.id },
-                  data: { purchasePrice: newBagPrice, remark: `입고수정 단가반영 (${rDate})` },
-                });
-              } else {
-                await tx.productPrice.create({
+            if (newBagPrice > 0 && Math.abs(newPrice - oldPrice) > 0.01) {
+              const rDate = normalizeDateYmd(currentDetail.receiving.receivingDate);
+              const pPrices = await tx.productPrice.findMany({
+                where: { productId: currentDetail.productId },
+                orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+                take: 5,
+              });
+              const latestValid = pPrices.find((pr) => pr.purchasePrice > 0);
+              const latestDate = latestValid ? normalizeDateYmd(latestValid.effectiveDate) : '';
+              if (!latestValid || rDate >= latestDate) {
+                const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === rDate);
+                if (sameDay) {
+                  await tx.productPrice.update({
+                    where: { id: sameDay.id },
+                    data: { purchasePrice: newBagPrice, remark: `입고수정 단가반영 (${rDate})` },
+                  });
+                } else {
+                  await tx.productPrice.create({
+                    data: {
+                      productId: currentDetail.productId,
+                      purchasePrice: newBagPrice,
+                      effectiveDate: rDate,
+                      remark: `입고수정 단가반영 (${rDate})`,
+                    },
+                  });
+                }
+              }
+              const siblingLots = await tx.inventory.findMany({
+                where: { productId: currentDetail.productId },
+                select: { id: true, currentQty: true },
+              });
+              for (const lot of siblingLots) {
+                await tx.inventory.update({
+                  where: { id: lot.id },
                   data: {
-                    productId: currentDetail.productId,
-                    purchasePrice: newBagPrice,
-                    effectiveDate: rDate,
-                    remark: `입고수정 단가반영 (${rDate})`,
+                    unitPrice: newBagPrice,
+                    stockAmount: Math.round((Number(lot.currentQty) || 0) * newBagPrice),
                   },
                 });
               }
-            }
-            const siblingLots = await tx.inventory.findMany({
-              where: { productId: currentDetail.productId },
-              select: { id: true, currentQty: true },
-            });
-            for (const lot of siblingLots) {
-              await tx.inventory.update({
-                where: { id: lot.id },
-                data: {
-                  unitPrice: newBagPrice,
-                  stockAmount: Math.round((Number(lot.currentQty) || 0) * newBagPrice),
-                },
-              });
             }
           }
 
@@ -902,29 +941,33 @@ export async function DELETE(req: NextRequest) {
               ? calcBagPriceFromBox(dt.unitPrice, packUnit)
               : dt.unitPrice;
 
-          // 재고 차감
-          const inv =
-            (await tx.inventory.findFirst({
-              where: {
-                productId: dt.productId,
-                lotNo: dt.lotNo,
-                warehouse: dt.warehouse,
-              },
-            })) ||
-            (await tx.inventory.findFirst({
-              where: { productId: dt.productId },
-              orderBy: { id: 'asc' },
-            }));
-          if (inv) {
-            const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
-            const unitP = Number(inv.unitPrice) || dtBagPrice || 0;
-            await tx.inventory.update({
-              where: { id: inv.id },
-              data: {
-                currentQty: nextQty,
-                stockAmount: Math.round(nextQty * unitP),
-              },
-            });
+          const wasStockSkipped = hasSkipStockMarker(dt.remark, receiving.remark);
+
+          // 재고 차감 (실재고 가산 제외 전표였던 경우 차감 생략)
+          if (!wasStockSkipped) {
+            const inv =
+              (await tx.inventory.findFirst({
+                where: {
+                  productId: dt.productId,
+                  lotNo: dt.lotNo,
+                  warehouse: dt.warehouse,
+                },
+              })) ||
+              (await tx.inventory.findFirst({
+                where: { productId: dt.productId },
+                orderBy: { id: 'asc' },
+              }));
+            if (inv) {
+              const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
+              const unitP = Number(inv.unitPrice) || dtBagPrice || 0;
+              await tx.inventory.update({
+                where: { id: inv.id },
+                data: {
+                  currentQty: nextQty,
+                  stockAmount: Math.round(nextQty * unitP),
+                },
+              });
+            }
           }
 
           // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)
@@ -1003,28 +1046,32 @@ export async function DELETE(req: NextRequest) {
           isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
         const dtBagQty = treatAsBox ? dt.receivedQty * packUnit : dt.receivedQty;
 
-        // 재고 차감
-        const inv =
-          (await tx.inventory.findFirst({
-            where: {
-              productId: dt.productId,
-              lotNo: dt.lotNo,
-              warehouse: dt.warehouse,
-            },
-          })) ||
-          (await tx.inventory.findFirst({
-            where: { productId: dt.productId },
-            orderBy: { id: 'asc' },
-          }));
-        if (inv) {
-          const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
-          await tx.inventory.update({
-            where: { id: inv.id },
-            data: {
-              currentQty: nextQty,
-              stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
-            },
-          });
+        const wasStockSkipped = hasSkipStockMarker(dt.remark, dt.receiving?.remark);
+
+        // 재고 차감 (실재고 가산 제외 전표였던 경우 차감 생략)
+        if (!wasStockSkipped) {
+          const inv =
+            (await tx.inventory.findFirst({
+              where: {
+                productId: dt.productId,
+                lotNo: dt.lotNo,
+                warehouse: dt.warehouse,
+              },
+            })) ||
+            (await tx.inventory.findFirst({
+              where: { productId: dt.productId },
+              orderBy: { id: 'asc' },
+            }));
+          if (inv) {
+            const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
+            await tx.inventory.update({
+              where: { id: inv.id },
+              data: {
+                currentQty: nextQty,
+                stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
+              },
+            });
+          }
         }
 
         // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)

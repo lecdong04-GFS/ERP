@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
-import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
+import { calcExpectedDeliveryInfo, isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
 import {
   normalizePackUnit,
@@ -108,13 +108,13 @@ export async function POST(req: NextRequest) {
     // 기본 거래처 확보 (미지정 품목용 안전장치)
     let resolvedDefaultPartner = await prisma.partner.findFirst({
       where: { isUsed: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, leadTime: true },
       orderBy: { id: 'asc' },
     });
     if (!resolvedDefaultPartner) {
       resolvedDefaultPartner = await prisma.partner.create({
         data: { id: 'P-DEFAULT', name: '일반거래처(미지정)', partnerType: 'P' },
-        select: { id: true, name: true },
+        select: { id: true, name: true, leadTime: true },
       });
     }
 
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     if (nameList.length > 0) partnerOr.push({ name: { in: nameList } });
     const foundPartners =
       partnerOr.length > 0
-        ? await prisma.partner.findMany({ where: { OR: partnerOr }, select: { id: true, name: true } })
+        ? await prisma.partner.findMany({ where: { OR: partnerOr }, select: { id: true, name: true, leadTime: true } })
         : [];
     const partnerById = new Map(foundPartners.map((p) => [p.id, p]));
     const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
@@ -195,6 +195,8 @@ export async function POST(req: NextRequest) {
         remainQty: number;
       }[] = [];
 
+      const expectedDates: string[] = [];
+
       for (const it of groupItems) {
         const product = resolveProduct(it);
         if (!product) continue; // 미등록 품목은 스킵
@@ -206,6 +208,12 @@ export async function POST(req: NextRequest) {
         }
         const qty = Number(it.orderQty) || 0;
         if (qty <= 0) continue;
+        const deliv = calcExpectedDeliveryInfo({
+          orderDate: today,
+          orderCycle: product.orderCycle,
+          partnerLeadTime: partner.leadTime,
+        });
+        if (deliv.expectedDate) expectedDates.push(deliv.expectedDate);
         const unit = it.unit || 'box';
         const pack = normalizePackUnit(product.boxQty);
         const invValidPrice = (product.inventories || []).reduce(
@@ -265,10 +273,13 @@ export async function POST(req: NextRequest) {
 
       const totalAmount = Math.round(detailData.reduce((a, d) => a + d.amount, 0));
 
+      const earliestDeliveryDate = expectedDates.sort()[0] || '';
+
       await prisma.purchaseOrder.create({
         data: {
           orderNo,
           orderDate: today,
+          deliveryDate: earliestDeliveryDate,
           partnerId: partner.id,
           partnerName: partner.name,
           orderType: '자재발주',
