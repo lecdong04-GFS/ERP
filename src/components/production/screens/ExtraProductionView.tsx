@@ -79,7 +79,7 @@ export const ExtraProductionView: React.FC = () => {
   const handleSave = async () => {
     try {
       for (const item of currentItems) {
-        await fetch('/api/production/extra', {
+        const res = await fetch('/api/production/extra', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -92,6 +92,12 @@ export const ExtraProductionView: React.FC = () => {
             reason: '긴급 추가생산',
           }),
         });
+        const raw = await res.text();
+        let json: any = null;
+        try { json = raw ? JSON.parse(raw) : null; } catch { json = null; }
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || `저장 실패 (HTTP ${res.status})`);
+        }
       }
       alert('추가생산 요청이 데이터베이스에 성공적으로 저장되었습니다.');
     } catch (err: any) {

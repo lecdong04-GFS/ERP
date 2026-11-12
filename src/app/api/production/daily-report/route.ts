@@ -414,7 +414,7 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     await touchDashboardSnapshot();
 

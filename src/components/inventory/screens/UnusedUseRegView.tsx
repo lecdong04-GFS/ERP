@@ -62,9 +62,10 @@ export const UnusedUseRegView: React.FC = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
+      let savedCount = 0;
       for (const item of items) {
         if (item.useQty > 0) {
-          await fetch('/api/inventory/unused-material', {
+          const res = await fetch('/api/inventory/unused-material', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -74,9 +75,20 @@ export const UnusedUseRegView: React.FC = () => {
               usePurpose: item.purpose,
             }),
           });
+          const raw = await res.text();
+          let json: any = null;
+          try { json = raw ? JSON.parse(raw) : null; } catch { json = null; }
+          if (!res.ok || !json?.success) {
+            throw new Error(json?.error || `저장 실패 (HTTP ${res.status})`);
+          }
+          savedCount++;
         }
       }
-      alert('불용자재 사용 등록이 저장되었습니다.');
+      if (savedCount === 0) {
+        alert('사용 수량이 0보다 큰 항목이 없습니다.');
+      } else {
+        alert(`불용자재 사용 등록 ${savedCount}건이 저장되었습니다.`);
+      }
     } catch (e: any) {
       alert('저장 실패: ' + e.message);
     } finally {

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
+import { kstToday } from '@/lib/kst';
 
 // GET /api/sales/trend?period=monthly&year=2026
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession({ categoryId: 'sales', action: 'read' });
+    if ('error' in auth) return auth.error;
+
     const { searchParams } = new URL(req.url);
-    const year = searchParams.get('year') || new Date().toISOString().slice(0, 4);
+    const year = searchParams.get('year') || kstToday().slice(0, 4);
 
     // 1. 전체 수주 내역 조회
     const orders = await prisma.salesOrder.findMany({

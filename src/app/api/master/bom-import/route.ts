@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { findRepoFiles, loadBomBundle, buildPreview, executeImport } from '@/lib/gfs/bomImport';
 import { kstToday } from '@/lib/kst';
 
@@ -9,11 +8,9 @@ import { kstToday } from '@/lib/kst';
 // body: { dryRun?: boolean }
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
-    const me = session.user as any;
+    const auth = await requireSession({ categoryId: 'master', action: 'write' });
+    if ('error' in auth) return auth.error;
+    const me = auth.user;
     const body = await req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false; // 기본 미리보기
     const today = kstToday();

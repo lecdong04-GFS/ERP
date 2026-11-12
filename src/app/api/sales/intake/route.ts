@@ -81,9 +81,6 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    if (existingOrders.length > 0 && replaceByDate) {
-      await prisma.salesOrder.deleteMany({ where: scope as any });
-    }
 
     let matched = 0;
     let createdProducts = 0;
@@ -186,22 +183,30 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    const order = await prisma.salesOrder.create({
-      data: {
-        orderNo,
-        orderDate,
-        centerCode,
-        shift: '전체',
-        orderType,
-        uploadMethod,
-        status: '접수',
-        totalAmount,
-        totalQty,
-        remark: docMarker ?? '',
-        createdBy: `${me.name || me.loginId || '담당자'}(${(me as any).loginId || ''})`,
-        details: { create: details },
+    const order = await prisma.$transaction(
+      async (tx) => {
+        if (existingOrders.length > 0 && replaceByDate) {
+          await tx.salesOrder.deleteMany({ where: scope as any });
+        }
+        return tx.salesOrder.create({
+          data: {
+            orderNo,
+            orderDate,
+            centerCode,
+            shift: '전체',
+            orderType,
+            uploadMethod,
+            status: '접수',
+            totalAmount,
+            totalQty,
+            remark: docMarker ?? '',
+            createdBy: `${me.name || me.loginId || '담당자'}(${(me as any).loginId || ''})`,
+            details: { create: details },
+          },
+        });
       },
-    });
+      { maxWait: 20000, timeout: 60000 }
+    );
 
     await prisma.systemLog
       .create({

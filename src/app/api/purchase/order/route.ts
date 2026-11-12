@@ -197,16 +197,41 @@ export async function POST(req: NextRequest) {
 
     // 1) 발주 취소 (상태만 발주취소로 변경)
     if (action === 'cancel' && (id || orderNo || (Array.isArray(ids) && ids.length > 0) || (Array.isArray(orderNos) && orderNos.length > 0))) {
-      const targetIds = Array.isArray(ids) ? ids.map(Number) : id ? [Number(id)] : [];
-      const targetOrderNos = Array.isArray(orderNos) ? orderNos : orderNo ? [orderNo] : [];
+      const targetIds = Array.isArray(ids) ? ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : id ? [Number(id)].filter((n) => Number.isInteger(n) && n > 0) : [];
+      const targetOrderNos = Array.isArray(orderNos) ? orderNos.map(String).filter(Boolean) : orderNo ? [String(orderNo)] : [];
 
-      await prisma.purchaseOrder.updateMany({
+      if (targetIds.length === 0 && targetOrderNos.length === 0) {
+        return NextResponse.json({ success: false, error: '유효한 발주 ID 또는 번호가 필요합니다.' }, { status: 400 });
+      }
+
+      const targets = await prisma.purchaseOrder.findMany({
         where: {
           OR: [
             ...(targetIds.length > 0 ? [{ id: { in: targetIds } }] : []),
             ...(targetOrderNos.length > 0 ? [{ orderNo: { in: targetOrderNos } }] : []),
           ],
         },
+        include: { details: { select: { receivedQty: true } } },
+      });
+
+      const blocked = targets.filter(
+        (po) =>
+          po.status === '입고완료' ||
+          po.status === '부분입고' ||
+          po.details.some((d) => Number(d.receivedQty || 0) > 0)
+      );
+      if (blocked.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `이미 입고된 품목이 포함된 발주는 취소할 수 없습니다. (${blocked.map((b) => b.orderNo).join(', ')})`,
+          },
+          { status: 400 }
+        );
+      }
+
+      await prisma.purchaseOrder.updateMany({
+        where: { id: { in: targets.map((t) => t.id) } },
         data: {
           status: '발주취소',
           cancelReason: cancelReason || '사용자 요청에 의한 발주 취소',
@@ -218,22 +243,33 @@ export async function POST(req: NextRequest) {
 
     // 2) 발주서 영구 삭제 (DB에서 PurchaseOrder 및 하위 Details 완전 삭제)
     if (action === 'delete') {
+      const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
+      if (delAuth.error) return delAuth.error;
       return await handleDeleteOrders(body);
     }
 
     // 3) 단일 발주 품목 삭제
     if (action === 'delete_detail' && (detailId || id)) {
+      const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
+      if (delAuth.error) return delAuth.error;
       return await handleDeleteDetail(Number(detailId || id));
     }
 
     // 3-2) 다중 발주 품목 일괄 삭제
     if (action === 'delete_details' && Array.isArray(body.detailIds) && body.detailIds.length > 0) {
+      const delAuth = await requireSession({ categoryId: 'purchase', action: 'delete' });
+      if (delAuth.error) return delAuth.error;
       return await handleDeleteDetails(body.detailIds.map(Number));
     }
 
     if (action === 'update_status' && id) {
+      const numId = Number(id);
+      const allowedStatuses = ['발주', '부분입고', '입고완료', '발주취소', '취소'];
+      if (!Number.isInteger(numId) || numId <= 0 || !allowedStatuses.includes(String(status || ''))) {
+        return NextResponse.json({ success: false, error: '유효하지 않은 발주 ID 또는 상태값입니다.' }, { status: 400 });
+      }
       const updated = await prisma.purchaseOrder.update({
-        where: { id: Number(id) },
+        where: { id: numId },
         data: { status },
       });
       return NextResponse.json({ success: true, data: updated });

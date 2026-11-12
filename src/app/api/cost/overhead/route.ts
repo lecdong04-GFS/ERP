@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const month = searchParams.get('month') || '2026-10';
+    const month = searchParams.get('month') || searchParams.get('yearMonth') || '2026-10';
 
     const fixed = await prisma.overheadFixed.findMany({
       where: { costMonth: month },
@@ -45,26 +45,48 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { costMonth = '2026-10', fixedCosts = [], variableCosts = [] } = body;
+    const { costMonth = '2026-10', fixedCosts = [], variableCosts } = body;
 
-    // 고정비 업데이트
-    for (const f of fixedCosts) {
-      await prisma.overheadFixed.upsert({
-        where: {
-          costMonth_costItem: {
-            costMonth,
-            costItem: f.costItem,
-          },
-        },
-        update: { totalCost: Number(f.totalCost || 0), remark: f.remark || '' },
-        create: {
-          costMonth,
-          costItem: f.costItem,
-          totalCost: Number(f.totalCost || 0),
-          remark: f.remark || '',
-        },
-      });
-    }
+    await prisma.$transaction(
+      async (tx) => {
+        // 고정비 업데이트
+        for (const f of fixedCosts) {
+          await tx.overheadFixed.upsert({
+            where: {
+              costMonth_costItem: {
+                costMonth,
+                costItem: String(f.costItem || '경비'),
+              },
+            },
+            update: { totalCost: Number(f.totalCost || 0), remark: String(f.remark || '') },
+            create: {
+              costMonth,
+              costItem: String(f.costItem || '경비'),
+              totalCost: Number(f.totalCost || 0),
+              remark: String(f.remark || ''),
+            },
+          });
+        }
+
+        // 변동비 일별 내역 업데이트 (전달된 경우 해당 월 내역 재기록)
+        if (Array.isArray(variableCosts)) {
+          await tx.overheadVariable.deleteMany({ where: { costMonth } });
+          const varRows = variableCosts
+            .filter((v: any) => v && v.costItem && v.costDate && Number(v.dailyCost) !== 0)
+            .map((v: any) => ({
+              costMonth,
+              costItem: String(v.costItem),
+              costDate: String(v.costDate),
+              dailyCost: Number(v.dailyCost || 0),
+              remark: String(v.remark || ''),
+            }));
+          if (varRows.length > 0) {
+            await tx.overheadVariable.createMany({ data: varRows });
+          }
+        }
+      },
+      { maxWait: 20000, timeout: 60000 }
+    );
 
     return NextResponse.json({ success: true, message: '간접비가 성공적으로 저장되었습니다.' });
   } catch (error: any) {

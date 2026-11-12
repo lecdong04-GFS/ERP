@@ -456,18 +456,28 @@ export const OrderUploadGsrView: React.FC = () => {
 
   const handleDeleteByDate = async () => {
     if (filteredData.length === 0) return;
+    if (keyword.trim() || filteredData.length !== data.length) {
+      alert('검색 필터가 적용된 상태에서는 해당 일자 전체 삭제를 실행할 수 없습니다. 검색어를 비운 뒤 다시 시도하세요.');
+      return;
+    }
     const totalAmt = filteredData.reduce((s, r) => s + (r.orderAmt || 0), 0);
     const totalQty = filteredData.reduce((s, r) => s + (r.orderQty || 0), 0);
     if (!window.confirm(`${filterDate} 수주 ${filteredData.length}건 (품목 ${totalQty.toLocaleString()}개, 합계 ₩${totalAmt.toLocaleString()})을\n완전 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
     try {
       const res = await fetch(`/api/sales/order?date=${filterDate}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json.success) {
+      const raw = await res.text();
+      let json: any = null;
+      try {
+        json = raw ? JSON.parse(raw) : null;
+      } catch {
+        json = null;
+      }
+      if (res.ok && json?.success) {
         setToast(`${filterDate} 수주 ${json.deleted}건이 삭제되었습니다.`);
         window.setTimeout(() => setToast(null), 2500);
         void loadOrders();
       } else {
-        alert(json.error || '삭제에 실패했습니다.');
+        alert(json?.error || `삭제에 실패했습니다. (HTTP ${res.status})`);
       }
     } catch (err) {
       console.error('Failed to delete orders by date:', err);

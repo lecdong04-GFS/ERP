@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
-import { makeDocNo } from '@/lib/kst';
+import { kstToday, makeDocNo } from '@/lib/kst';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import { calcExpectedDeliveryInfo, normalizeDateYmd } from '@/lib/gfs/orderCalc';
 
@@ -856,7 +856,7 @@ export async function PUT(req: NextRequest) {
         const packUnit = normalizePackUnit(currentDetail.product?.boxQty || currentDetail.boxQty);
         const treatAsBox =
           isBoxUnitLabel(currentDetail.unit) ||
-          (!isBagUnitLabel(currentDetail.unit) && packUnit > 1);
+          (!isBagUnitLabel(currentDetail.unit) && !currentDetail.unit && packUnit > 1);
         const deltaBagQty = treatAsBox ? deltaQty * packUnit : deltaQty;
         const newBagQty = treatAsBox ? newQty * packUnit : newQty;
         const newBagPrice =
@@ -1086,7 +1086,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json();
     const { receivingIds = [], detailIds = [], cancelReason = '사용자 입고취소 및 재고 롤백' } = body;
-    const cancelDate = new Date().toISOString().slice(0, 10);
+    const cancelDate = kstToday();
 
     if (receivingIds.length === 0 && detailIds.length === 0) {
       return NextResponse.json(
@@ -1110,7 +1110,7 @@ export async function DELETE(req: NextRequest) {
         for (const dt of receiving.details) {
           const packUnit = normalizePackUnit(dt.product?.boxQty || dt.boxQty);
           const treatAsBox =
-            isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
+            isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && !dt.unit && packUnit > 1);
           const dtBagQty = treatAsBox ? dt.receivedQty * packUnit : dt.receivedQty;
           const dtBagPrice =
             treatAsBox && packUnit > 1 && dt.unitPrice > 0
@@ -1118,6 +1118,8 @@ export async function DELETE(req: NextRequest) {
               : dt.unitPrice;
 
           const wasStockSkipped = hasSkipStockMarker(dt.remark, receiving.remark);
+          let afterInvQty = 0;
+          let afterUnitPrice = dtBagPrice;
 
           // 재고 차감 (실재고 가산 제외 전표였던 경우 차감 생략)
           if (!wasStockSkipped) {
@@ -1136,6 +1138,8 @@ export async function DELETE(req: NextRequest) {
             if (inv) {
               const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
               const unitP = Number(inv.unitPrice) || dtBagPrice || 0;
+              afterInvQty = nextQty;
+              afterUnitPrice = unitP;
               await tx.inventory.update({
                 where: { id: inv.id },
                 data: {
@@ -1146,18 +1150,31 @@ export async function DELETE(req: NextRequest) {
             }
           }
 
-          // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)
-          const poDetail = await tx.purchaseOrderDetail.findFirst({
-            where: {
-              receivedQty: { gt: 0 },
-              OR: [
-                { productId: dt.productId },
-                { productCode: dt.productCode },
-                { productName: dt.productName },
-              ],
-            },
-            orderBy: { id: 'desc' },
-          });
+          // 발주서 잔량 복원 (동일 거래처 우선, 실제 입고수량 기록이 있는 발주 상세 복원)
+          const poDetail =
+            (await tx.purchaseOrderDetail.findFirst({
+              where: {
+                receivedQty: { gt: 0 },
+                purchaseOrder: { partnerId: receiving.partnerId },
+                OR: [
+                  { productId: dt.productId },
+                  { productCode: dt.productCode },
+                  { productName: dt.productName },
+                ],
+              },
+              orderBy: { id: 'desc' },
+            })) ||
+            (await tx.purchaseOrderDetail.findFirst({
+              where: {
+                receivedQty: { gt: 0 },
+                OR: [
+                  { productId: dt.productId },
+                  { productCode: dt.productCode },
+                  { productName: dt.productName },
+                ],
+              },
+              orderBy: { id: 'desc' },
+            }));
 
           if (poDetail) {
             const newRecv = Math.max(0, (poDetail.receivedQty || 0) - dt.receivedQty);
@@ -1168,9 +1185,14 @@ export async function DELETE(req: NextRequest) {
                 remainQty: (poDetail.remainQty || 0) + dt.receivedQty,
               },
             });
+            const poDetails = await tx.purchaseOrderDetail.findMany({
+              where: { purchaseOrderId: poDetail.purchaseOrderId },
+            });
+            const anyRecv = poDetails.some((d) => (d.receivedQty || 0) > 0);
+            const allDone = poDetails.every((d) => (d.remainQty || 0) <= 0);
             await tx.purchaseOrder.update({
               where: { id: poDetail.purchaseOrderId },
-              data: { status: newRecv > 0 ? '부분입고' : '발주' },
+              data: { status: allDone ? '입고완료' : anyRecv ? '부분입고' : '발주' },
             });
           }
 
@@ -1187,9 +1209,9 @@ export async function DELETE(req: NextRequest) {
               inQty: 0,
               outQty: dtBagQty,
               adjustQty: -dtBagQty,
-              currentQty: 0,
-              unitPrice: dtBagPrice,
-              stockAmount: 0,
+              currentQty: afterInvQty,
+              unitPrice: afterUnitPrice,
+              stockAmount: Math.round(afterInvQty * afterUnitPrice),
               txnType: '입고취소',
               refNo: receiving.receivingNo,
               remark: `[입고취소] ${cancelReason}`,
@@ -1219,10 +1241,16 @@ export async function DELETE(req: NextRequest) {
 
         const packUnit = normalizePackUnit(dt.product?.boxQty || dt.boxQty);
         const treatAsBox =
-          isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && packUnit > 1);
+          isBoxUnitLabel(dt.unit) || (!isBagUnitLabel(dt.unit) && !dt.unit && packUnit > 1);
         const dtBagQty = treatAsBox ? dt.receivedQty * packUnit : dt.receivedQty;
+        const dtBagPrice =
+          treatAsBox && packUnit > 1 && dt.unitPrice > 0
+            ? calcBagPriceFromBox(dt.unitPrice, packUnit)
+            : dt.unitPrice;
 
         const wasStockSkipped = hasSkipStockMarker(dt.remark, dt.receiving?.remark);
+        let afterInvQty = 0;
+        let afterUnitPrice = dtBagPrice;
 
         // 재고 차감 (실재고 가산 제외 전표였던 경우 차감 생략)
         if (!wasStockSkipped) {
@@ -1240,28 +1268,44 @@ export async function DELETE(req: NextRequest) {
             }));
           if (inv) {
             const nextQty = (Number(inv.currentQty) || 0) - dtBagQty;
+            const unitP = Number(inv.unitPrice) || dtBagPrice || 0;
+            afterInvQty = nextQty;
+            afterUnitPrice = unitP;
             await tx.inventory.update({
               where: { id: inv.id },
               data: {
                 currentQty: nextQty,
-                stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
+                stockAmount: Math.round(nextQty * unitP),
               },
             });
           }
         }
 
-        // 발주서 잔량 복원 (실제 입고수량 기록이 있는 발주 상세만 복원)
-        const poDetail = await tx.purchaseOrderDetail.findFirst({
-          where: {
-            receivedQty: { gt: 0 },
-            OR: [
-              { productId: dt.productId },
-              { productCode: dt.productCode },
-              { productName: dt.productName },
-            ],
-          },
-          orderBy: { id: 'desc' },
-        });
+        // 발주서 잔량 복원 (동일 거래처 우선, 실제 입고수량 기록이 있는 발주 상세 복원)
+        const poDetail =
+          (await tx.purchaseOrderDetail.findFirst({
+            where: {
+              receivedQty: { gt: 0 },
+              ...(dt.receiving?.partnerId ? { purchaseOrder: { partnerId: dt.receiving.partnerId } } : {}),
+              OR: [
+                { productId: dt.productId },
+                { productCode: dt.productCode },
+                { productName: dt.productName },
+              ],
+            },
+            orderBy: { id: 'desc' },
+          })) ||
+          (await tx.purchaseOrderDetail.findFirst({
+            where: {
+              receivedQty: { gt: 0 },
+              OR: [
+                { productId: dt.productId },
+                { productCode: dt.productCode },
+                { productName: dt.productName },
+              ],
+            },
+            orderBy: { id: 'desc' },
+          }));
         if (poDetail) {
           const newRecv = Math.max(0, (poDetail.receivedQty || 0) - dt.receivedQty);
           await tx.purchaseOrderDetail.update({
@@ -1281,6 +1325,28 @@ export async function DELETE(req: NextRequest) {
             data: { status: allDone ? '입고완료' : anyRecv ? '부분입고' : '발주' },
           });
         }
+
+        // 수불부 개별 취소 감사 기록
+        await tx.materialLedger.create({
+          data: {
+            ledgerDate: normalizeDateYmd(dt.receiving?.receivingDate || cancelDate),
+            productId: dt.productId,
+            productCode: dt.productCode,
+            productName: dt.productName,
+            category: dt.product?.category || '원재료',
+            unit: dt.product?.unit || '봉',
+            carryOverQty: 0,
+            inQty: 0,
+            outQty: dtBagQty,
+            adjustQty: -dtBagQty,
+            currentQty: afterInvQty,
+            unitPrice: afterUnitPrice,
+            stockAmount: Math.round(afterInvQty * afterUnitPrice),
+            txnType: '입고취소',
+            refNo: dt.receiving?.receivingNo || `RC-DT-${dt.id}`,
+            remark: `[품목입고취소] ${cancelReason}`,
+          },
+        });
 
         await tx.receivingDetail.update({
           where: { id: dt.id },

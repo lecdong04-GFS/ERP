@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
+import { kstToday } from '@/lib/kst';
 import { MichulItem } from '@/lib/gfs/michulIntake';
 
 export const dynamic = 'force-dynamic';
@@ -10,20 +10,18 @@ export const dynamic = 'force-dynamic';
 // 미출(미납) 엑셀 파싱 데이터 DB 일괄 저장 및 확정매출 동기화
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
+    const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+    if ('error' in auth) return auth.error;
 
     const body = await req.json();
-    const tradeDate: string = body.tradeDate || new Date().toISOString().slice(0, 10);
+    const tradeDate: string = body.tradeDate || kstToday();
     const items: MichulItem[] = Array.isArray(body.items) ? body.items : [];
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, error: '저장할 미출 내역이 없습니다.' }, { status: 400 });
     }
 
-    const userName = (session.user as any)?.name || '관리자';
+    const userName = auth.user.name || auth.user.loginId || '관리자';
 
     // 1. 센터별로 그룹화
     const byCenter = new Map<

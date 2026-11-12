@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
       }
 
       return { count: createdList.length, stockDeductedCount };
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     // ERP 대시보드 스냅샷 캐시 무효화 (재고 자산 지표 갱신)
     await touchDashboardSnapshot();
@@ -248,6 +248,12 @@ export async function DELETE(req: NextRequest) {
     }
 
     const issueId = Number(id);
+    if (!Number.isInteger(issueId) || issueId <= 0) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 추가불출 ID입니다.' },
+        { status: 400 }
+      );
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.materialExtraIssue.findUnique({
@@ -258,11 +264,19 @@ export async function DELETE(req: NextRequest) {
         throw new Error('해당 추가불출 기록을 찾을 수 없습니다.');
       }
 
-      // 현재고 원복
+      // 현재고 원복 (remark에 기록된 창고가 있으면 동일 창고 우선 복원)
       if (record.productCode && record.issueQty > 0) {
-        const inv = await tx.inventory.findFirst({
-          where: { productCode: record.productCode },
-        });
+        const whMatch = String(record.remark || '').match(/\[창고:\s*([^\]]+)\]/);
+        const wh = whMatch ? whMatch[1].trim() : '';
+        const inv =
+          (wh
+            ? await tx.inventory.findFirst({
+                where: { productCode: record.productCode, warehouse: wh },
+              })
+            : null) ||
+          (await tx.inventory.findFirst({
+            where: { productCode: record.productCode },
+          }));
 
         if (inv) {
           const restoredQty = Math.round((inv.currentQty + record.issueQty) * 100) / 100;
@@ -283,7 +297,7 @@ export async function DELETE(req: NextRequest) {
       });
 
       return record;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     await touchDashboardSnapshot();
 

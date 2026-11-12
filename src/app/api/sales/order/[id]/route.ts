@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
 
 const STATUSES = ['접수', '확정', '취소'] as const;
@@ -9,13 +8,14 @@ const STATUSES = ['접수', '확정', '취소'] as const;
 // PUT /api/sales/order/[id] — 수주 상태 변경 (접수/확정/취소)
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
-    }
-    const me = session.user as any;
+    const auth = await requireSession({ categoryId: 'sales', action: 'write' });
+    if ('error' in auth) return auth.error;
+    const me = auth.user;
     const { id } = await context.params;
     const orderId = Number(id);
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return NextResponse.json({ success: false, error: '유효하지 않은 수주 ID입니다.' }, { status: 400 });
+    }
     const order = await prisma.salesOrder.findUnique({ where: { id: orderId } });
     if (!order) return NextResponse.json({ success: false, error: '수주를 찾을 수 없습니다.' }, { status: 404 });
 

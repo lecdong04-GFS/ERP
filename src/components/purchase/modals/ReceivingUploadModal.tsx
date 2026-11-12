@@ -337,12 +337,19 @@ export const ReceivingUploadModal: React.FC<ReceivingUploadModalProps> = ({
         }),
       });
 
-      const json = await res.json();
-      if (json.success) {
-        onSuccess(json.message);
+      const text = await res.text();
+      let json: { success?: boolean; message?: string; error?: string } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`서버 응답 형식 오류 (HTTP ${res.status})`);
+      }
+
+      if (res.ok && json.success) {
+        onSuccess(json.message || '입고 저장이 완료되었습니다.');
         onClose();
       } else {
-        alert('입고 저장 실패: ' + (json.error || '알 수 없는 오류'));
+        alert('입고 저장 실패: ' + (json.error || `HTTP ${res.status}`));
       }
     } catch (err: any) {
       alert('저장 통신 오류: ' + (err.message || err));

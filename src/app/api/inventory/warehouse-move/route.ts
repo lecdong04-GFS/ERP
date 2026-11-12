@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
+import { isBoxUnitLabel, normalizePackUnit } from '@/lib/gfs/pricing';
 
 // GET /api/inventory/warehouse-move?moveDate=2026-10-30
 export async function GET(req: NextRequest) {
@@ -70,21 +71,38 @@ export async function POST(req: NextRequest) {
         });
         moves.push(record);
 
-        // 대상 품목 조회
-        const product = await tx.product.findFirst({
-          where: { name: item.itemName },
-        });
+        // 대상 품목 조회 (productId / productCode 우선, name 보조)
+        const pId = Number(item.productId) || 0;
+        const pCode = String(item.productCode || '').trim();
+        const product =
+          (pId > 0 ? await tx.product.findUnique({ where: { id: pId } }) : null) ||
+          (pCode ? await tx.product.findUnique({ where: { productCode: pCode } }) : null) ||
+          (await tx.product.findFirst({
+            where: { name: item.itemName },
+            orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
+          }));
 
         if (product) {
+          const packUnit = normalizePackUnit(product.boxQty);
+          const moveBags = isBoxUnitLabel(item.unit) ? moveQty * packUnit : moveQty;
+          const baseUnit = product.unit || item.unit || 'ea';
+
           // 1. 출고 창고 재고 감소
           const fromInv = await tx.inventory.findFirst({
             where: { productId: product.id, warehouse: item.currentWarehouse },
           });
+          const effectiveMoved = fromInv
+            ? Math.min(Math.max(0, Number(fromInv.currentQty) || 0), moveBags)
+            : moveBags;
+
           if (fromInv) {
+            const nextFromQty = Math.max(0, (Number(fromInv.currentQty) || 0) - effectiveMoved);
+            const fromUnitP = Number(fromInv.unitPrice) || Number(item.unitPrice) || 0;
             await tx.inventory.update({
               where: { id: fromInv.id },
               data: {
-                currentQty: Math.max(0, fromInv.currentQty - moveQty),
+                currentQty: nextFromQty,
+                stockAmount: Math.round(nextFromQty * fromUnitP),
                 lastOutDate: moveDate,
               },
             });
@@ -94,11 +112,16 @@ export async function POST(req: NextRequest) {
           const toInv = await tx.inventory.findFirst({
             where: { productId: product.id, warehouse: item.targetWarehouse },
           });
+          let afterToQty = effectiveMoved;
+          let toUnitP = Number(item.unitPrice) || Number(fromInv?.unitPrice) || 0;
           if (toInv) {
+            afterToQty = (Number(toInv.currentQty) || 0) + effectiveMoved;
+            toUnitP = Number(toInv.unitPrice) || toUnitP;
             await tx.inventory.update({
               where: { id: toInv.id },
               data: {
-                currentQty: toInv.currentQty + moveQty,
+                currentQty: afterToQty,
+                stockAmount: Math.round(afterToQty * toUnitP),
                 lastInDate: moveDate,
               },
             });
@@ -107,13 +130,13 @@ export async function POST(req: NextRequest) {
               data: {
                 productId: product.id,
                 productCode: product.productCode,
-                productName: item.itemName,
-                category: item.category || '원재료',
+                productName: product.name,
+                category: product.category || item.category || '원재료',
                 warehouse: item.targetWarehouse,
-                currentQty: moveQty,
-                unit: item.unit || 'ea',
-                unitPrice: item.unitPrice || 0,
-                stockAmount: moveQty * (item.unitPrice || 0),
+                currentQty: effectiveMoved,
+                unit: baseUnit,
+                unitPrice: toUnitP,
+                stockAmount: Math.round(effectiveMoved * toUnitP),
                 lastInDate: moveDate,
               },
             });
@@ -125,16 +148,16 @@ export async function POST(req: NextRequest) {
               ledgerDate: moveDate,
               productId: product.id,
               productCode: product.productCode,
-              productName: item.itemName,
-              category: item.category || '원재료',
-              unit: item.unit || 'ea',
+              productName: product.name,
+              category: product.category || item.category || '원재료',
+              unit: baseUnit,
               carryOverQty: 0,
-              inQty: moveQty,
-              outQty: moveQty,
+              inQty: effectiveMoved,
+              outQty: effectiveMoved,
               adjustQty: 0,
-              currentQty: moveQty,
-              unitPrice: item.unitPrice || 0,
-              stockAmount: moveQty * (item.unitPrice || 0),
+              currentQty: afterToQty,
+              unitPrice: toUnitP,
+              stockAmount: Math.round(afterToQty * toUnitP),
               txnType: '창고이동',
               refNo: `MOVE-${moveDate.replace(/-/g, '')}`,
               remark: `${item.currentWarehouse} ➔ ${item.targetWarehouse} 이동`,
@@ -144,7 +167,7 @@ export async function POST(req: NextRequest) {
       }
 
       return moves;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({
       success: true,

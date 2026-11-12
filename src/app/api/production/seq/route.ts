@@ -33,17 +33,36 @@ export async function POST(req: NextRequest) {
     const { action, id, ...data } = body;
 
     if (action === 'delete' && id) {
+      const seqId = Number(id);
+      if (!Number.isInteger(seqId) || seqId <= 0) {
+        return NextResponse.json({ success: false, error: '유효하지 않은 ID입니다.' }, { status: 400 });
+      }
       if (auth.user.role !== '관리자' && auth.user.loginId !== 'admin') {
         const delAuth = await requireSession({ categoryId: 'production', action: 'delete' });
         if ('error' in delAuth) return delAuth.error;
       }
-      await prisma.productionSeq.delete({ where: { id: Number(id) } });
+      await prisma.productionSeq.delete({ where: { id: seqId } });
       return NextResponse.json({ success: true, message: 'Deleted' });
     }
     if (action === 'update' && id) {
+      const seqId = Number(id);
+      if (!Number.isInteger(seqId) || seqId <= 0) {
+        return NextResponse.json({ success: false, error: '유효하지 않은 ID입니다.' }, { status: 400 });
+      }
+      const updatePayload: Record<string, any> = {};
+      if (data.seqDate !== undefined) updatePayload.seqDate = String(data.seqDate);
+      if (data.shift !== undefined) updatePayload.shift = String(data.shift);
+      if (data.gyeId !== undefined) updatePayload.gyeId = String(data.gyeId);
+      if (data.gyeName !== undefined) updatePayload.gyeName = String(data.gyeName);
+      if (data.productCode !== undefined) updatePayload.productCode = String(data.productCode);
+      if (data.productName !== undefined) updatePayload.productName = String(data.productName);
+      if (data.processOrder !== undefined) updatePayload.processOrder = Number(data.processOrder) || 1;
+      if (data.nextProcess !== undefined) updatePayload.nextProcess = String(data.nextProcess);
+      if (data.remark !== undefined) updatePayload.remark = String(data.remark);
+
       const updated = await prisma.productionSeq.update({
-        where: { id: Number(id) },
-        data,
+        where: { id: seqId },
+        data: updatePayload,
       });
       return NextResponse.json({ success: true, data: updated });
     }

@@ -320,6 +320,12 @@ export async function POST(req: NextRequest) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      const prodIds = rows.map((r: any) => Number(r.productId)).filter((n: number) => Number.isFinite(n) && n > 0);
+      const existingList = prodIds.length > 0
+        ? await tx.safetyStock.findMany({ where: { productId: { in: prodIds } } })
+        : [];
+      const existingByProd = new Map(existingList.map((e) => [e.productId, e]));
+
       let count = 0;
       for (const r of rows) {
         const pId = Number(r.productId);
@@ -336,9 +342,7 @@ export async function POST(req: NextRequest) {
         });
 
         // SafetyStock 스냅샷 테이블 업서트
-        const existing = await tx.safetyStock.findFirst({
-          where: { productId: pId },
-        });
+        const existing = existingByProd.get(pId);
 
         if (existing) {
           await tx.safetyStock.update({
@@ -353,7 +357,7 @@ export async function POST(req: NextRequest) {
             },
           });
         } else {
-          await tx.safetyStock.create({
+          const created = await tx.safetyStock.create({
             data: {
               productId: pId,
               productCode: r.itemCode || '',
@@ -368,11 +372,12 @@ export async function POST(req: NextRequest) {
               remark: r.remark || '',
             },
           });
+          existingByProd.set(pId, created);
         }
         count++;
       }
       return count;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     // ERP 대시보드 스냅샷 캐시 무효화 (결품위험 지표 실시간 동기화)
     await touchDashboardSnapshot();

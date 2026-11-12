@@ -78,14 +78,20 @@ export const WarehouseMoveView: React.FC = () => {
           createdBy: 'admin',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (res.ok && data?.success) {
         alert(`창고간 재고 이동이 성공적으로 완료되었습니다!\n(${data.message || '현재고 및 자재수불부에 반영되었습니다.'})`);
       } else {
-        alert('창고이동 처리 결과: ' + (data.error || '처리되었습니다.'));
+        alert('창고이동 실패: ' + (data?.error || `HTTP ${res.status}`));
       }
     } catch (err: any) {
-      alert('창고간 재고 이동이 정상 처리되었습니다.');
+      alert('창고이동 처리 중 오류가 발생했습니다: ' + (err?.message || '네트워크 오류'));
     }
   };
 

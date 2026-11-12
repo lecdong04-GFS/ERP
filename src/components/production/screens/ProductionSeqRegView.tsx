@@ -102,7 +102,7 @@ export const ProductionSeqRegView: React.FC = () => {
   const handleSave = async () => {
     try {
       for (const item of currentItems) {
-        await fetch('/api/production/seq', {
+        const res = await fetch('/api/production/seq', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -113,6 +113,12 @@ export const ProductionSeqRegView: React.FC = () => {
             nextProcess: item.nextProcess,
           }),
         });
+        const raw = await res.text();
+        let json: any = null;
+        try { json = raw ? JSON.parse(raw) : null; } catch { json = null; }
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || `저장 실패 (HTTP ${res.status})`);
+        }
       }
       alert(`[${selectedGye.name}] 생산순서 변경사항이 데이터베이스에 안전하게 저장되었습니다.`);
     } catch (err: any) {

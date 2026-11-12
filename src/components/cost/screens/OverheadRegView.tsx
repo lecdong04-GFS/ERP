@@ -7,6 +7,7 @@ import { RotateCw, CheckCircle2 } from 'lucide-react';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { readJsonSafe } from '@/lib/http';
 const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 // Helper to get day-of-week string for given year, month (1-based), day
@@ -61,6 +62,14 @@ export const OverheadRegView: React.FC = () => {
   const handleSave = async () => {
     try {
       const monthStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+      const variableCosts = dailyVariableOverheads.flatMap((item) =>
+        item.dailyValues.slice(0, daysInMonth).map((val, dIdx) => ({
+          costItem: item.costItem,
+          costDate: `${monthStr}-${String(dIdx + 1).padStart(2, '0')}`,
+          dailyCost: Number(val || 0),
+          remark: '',
+        }))
+      );
       const res = await fetch('/api/cost/overhead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -71,16 +80,17 @@ export const OverheadRegView: React.FC = () => {
             totalCost: f.totalCost,
             remark: f.remark,
           })),
+          variableCosts,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        alert(`${selectedYear}년 ${selectedMonth}월 간접비 등록 내역이 데이터베이스에 안전하게 저장되었습니다.`);
+      const parsed = await readJsonSafe(res, '간접비 저장에 실패했습니다.');
+      if (parsed.ok) {
+        alert(`${selectedYear}년 ${selectedMonth}월 간접비 등록 내역(고정비·변동비)이 데이터베이스에 저장되었습니다.`);
       } else {
-        alert('간접비 저장 결과: ' + (data.error || '저장되었습니다.'));
+        alert('간접비 저장 실패: ' + parsed.errorMessage);
       }
     } catch (err: any) {
-      alert(`${selectedYear}년 ${selectedMonth}월 간접비 등록 내역이 정상적으로 저장되었습니다.`);
+      alert('간접비 저장 중 오류가 발생했습니다: ' + (err?.message || '네트워크 오류'));
     }
   };
 

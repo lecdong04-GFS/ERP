@@ -116,9 +116,19 @@ export const ReceivingRegGsrView: React.FC = () => {
       const res = await fetch(`/api/purchase/receiving?type=pending_orders&startDate=${startDate}&endDate=${endDate}`, {
         cache: 'no-store',
       });
-      const json = await res.json();
+      const text = await res.text();
+      let json: { success?: boolean; data?: any[]; error?: string } = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`서버 응답 형식 오류 (HTTP ${res.status})`);
+      }
 
-      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || `미입고 발주 조회 실패 (HTTP ${res.status})`);
+      }
+
+      if (Array.isArray(json.data)) {
         let idx = 1;
         const loaded = json.data.map((dt: any) => {
           const po = dt.purchaseOrder || {};
@@ -197,12 +207,12 @@ export const ReceivingRegGsrView: React.FC = () => {
 
         setRows(loaded);
       } else {
-        // Fallback to sample GSR data if no pending orders
-        setRows(INITIAL_RECEIVING_DATA);
+        setRows([]);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to load pending purchase orders in receiving view', e);
-      setRows(INITIAL_RECEIVING_DATA);
+      setRows([]);
+      alert(e?.message || '미입고 발주 목록을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -229,7 +239,8 @@ export const ReceivingRegGsrView: React.FC = () => {
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
-    setRows((prev) => prev.map((r) => ({ ...r, manualClose: checked })));
+    const visibleIds = new Set(filteredRows.map((r) => r.id));
+    setRows((prev) => prev.map((r) => (visibleIds.has(r.id) ? { ...r, manualClose: checked } : r)));
   };
 
   const handleRowChange = (id: any, key: string, val: any) => {

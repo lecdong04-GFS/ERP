@@ -45,73 +45,93 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const createdRecords = [];
-    for (const item of items) {
-      const returnQty = Number(item.returnQty || 0);
-      const unitPrice = Number(item.unitPrice || 0);
-      const amount = returnQty * unitPrice;
+    const baseStamp = Date.now().toString().slice(-6);
+    const createdRecords = await prisma.$transaction(
+      async (tx) => {
+        const recs = [];
+        for (let idx = 0; idx < items.length; idx++) {
+          const item = items[idx];
+          const returnQty = Number(item.returnQty || 0);
+          if (returnQty <= 0) continue;
+          const unitPrice = Number(item.unitPrice || 0);
+          const amount = Math.round(returnQty * unitPrice);
 
-      const record = await prisma.returnRecord.create({
-        data: {
-          returnDate,
-          returnNo: item.orderNo || `RET-${Date.now().toString().slice(-6)}`,
-          partnerName: partnerName || '',
-          productName: item.itemName,
-          returnQty,
-          unit: item.unit || 'ea',
-          unitPrice,
-          amount,
-          reason: item.returnReason || '품질 불량',
-          status: '처리완료',
-          remark: item.remark || '',
-          createdBy,
-        },
-      });
-      createdRecords.push(record);
-
-      // 대상 제품 조회
-      const product = await prisma.product.findFirst({
-        where: { name: item.itemName },
-      });
-
-      if (product) {
-        // 현재고 차감
-        const inv = await prisma.inventory.findFirst({
-          where: { productId: product.id },
-        });
-        if (inv) {
-          await prisma.inventory.update({
-            where: { id: inv.id },
+          const record = await tx.returnRecord.create({
             data: {
-              currentQty: Math.max(0, inv.currentQty - returnQty),
-              lastOutDate: returnDate,
+              returnDate,
+              returnNo: item.orderNo ? `${item.orderNo}-${idx + 1}` : `RET-${baseStamp}-${idx + 1}`,
+              partnerName: partnerName || '',
+              productName: item.itemName,
+              returnQty,
+              unit: item.unit || 'ea',
+              unitPrice,
+              amount,
+              reason: item.returnReason || '품질 불량',
+              status: '처리완료',
+              remark: item.remark || '',
+              createdBy,
             },
           });
-        }
+          recs.push(record);
 
-        // 자재수불부(MaterialLedger) 반품 기장
-        await prisma.materialLedger.create({
-          data: {
-            ledgerDate: returnDate,
-            productId: product.id,
-            productCode: product.productCode,
-            productName: item.itemName,
-            category: item.category || '원재료',
-            unit: item.unit || 'ea',
-            carryOverQty: 0,
-            inQty: 0,
-            outQty: returnQty,
-            adjustQty: 0,
-            currentQty: 0,
-            unitPrice,
-            stockAmount: amount,
-            txnType: '반품출고',
-            refNo: record.returnNo,
-            remark: `반품등록: ${item.returnReason || ''}`,
-          },
-        });
-      }
-    }
+          // 대상 제품 조회 (productId / productCode 우선, name 보조)
+          const pId = Number(item.productId) || 0;
+          const pCode = String(item.productCode || '').trim();
+          const product =
+            (pId > 0 ? await tx.product.findUnique({ where: { id: pId } }) : null) ||
+            (pCode ? await tx.product.findUnique({ where: { productCode: pCode } }) : null) ||
+            (await tx.product.findFirst({
+              where: { name: item.itemName },
+              orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
+            }));
+
+          if (product) {
+            let afterQty = 0;
+            let effPrice = unitPrice;
+            const inv = await tx.inventory.findFirst({
+              where: { productId: product.id },
+              orderBy: { id: 'asc' },
+            });
+            if (inv) {
+              afterQty = Math.max(0, (Number(inv.currentQty) || 0) - returnQty);
+              effPrice = unitPrice > 0 ? unitPrice : (Number(inv.unitPrice) || 0);
+              await tx.inventory.update({
+                where: { id: inv.id },
+                data: {
+                  currentQty: afterQty,
+                  stockAmount: Math.round(afterQty * effPrice),
+                  lastOutDate: returnDate,
+                },
+              });
+            }
+
+            // 자재수불부(MaterialLedger) 반품 기장
+            await tx.materialLedger.create({
+              data: {
+                ledgerDate: returnDate,
+                productId: product.id,
+                productCode: product.productCode,
+                productName: product.name,
+                category: product.category || item.category || '원재료',
+                unit: product.unit || item.unit || 'ea',
+                carryOverQty: 0,
+                inQty: 0,
+                outQty: returnQty,
+                adjustQty: 0,
+                currentQty: afterQty,
+                unitPrice: effPrice,
+                stockAmount: Math.round(afterQty * effPrice),
+                txnType: '반품출고',
+                refNo: record.returnNo,
+                remark: `반품등록: ${item.returnReason || ''}`,
+              },
+            });
+          }
+        }
+        return recs;
+      },
+      { maxWait: 20000, timeout: 60000 }
+    );
 
     return NextResponse.json({
       success: true,

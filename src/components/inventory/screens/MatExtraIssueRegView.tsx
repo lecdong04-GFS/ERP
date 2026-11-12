@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { InventoryActionBar } from '@/components/inventory/common/InventoryActionBar';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
+import { readJsonSafe } from '@/lib/http';
 import { INVENTORY_GYE_LIST } from '@/components/inventory/data/inventoryMasterData';
 import { exportGridToExcel } from '@/lib/excelExport';
 
@@ -286,20 +287,21 @@ export const MatExtraIssueRegView: React.FC = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) {
-      alert('삭제할 행을 선택해주세요.');
+    const visibleSelectedSet = new Set(filteredRows.filter((r) => selectedIds.includes(r.id)).map((r) => r.id));
+    if (visibleSelectedSet.size === 0) {
+      alert('현재 화면에서 삭제할 행을 선택해주세요.');
       return;
     }
-    if (!window.confirm(`선택한 ${selectedIds.length}개 품목을 목록에서 제외하시겠습니까?`)) return;
-    setRows((prev) => prev.filter((r) => !selectedIds.includes(r.id)));
-    setSelectedIds([]);
+    if (!window.confirm(`선택한 ${visibleSelectedSet.size}개 품목을 목록에서 제외하시겠습니까?`)) return;
+    setRows((prev) => prev.filter((r) => !visibleSelectedSet.has(r.id)));
+    setSelectedIds((prev) => prev.filter((id) => !visibleSelectedSet.has(id)));
   };
 
   // ── 6. 불출 확정(저장) 파이프라인 ──
   const handleSave = async () => {
-    const toSave = rows.filter((r) => r.issueQty > 0);
+    const toSave = filteredRows.filter((r) => r.issueQty > 0);
     if (toSave.length === 0) {
-      alert('불출수량이 0보다 큰 항목이 없습니다. 불출수량을 입력해주세요.');
+      alert('현재 화면에 불출수량이 0보다 큰 항목이 없습니다. 불출수량을 입력해주세요.');
       return;
     }
 
@@ -340,18 +342,19 @@ export const MatExtraIssueRegView: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      const parsed = await readJsonSafe(res, '추가불출 저장에 실패했습니다.');
+      if (parsed.ok) {
+        const savedIds = new Set(toSave.map((r) => r.id));
         setStatusMessage({
           type: 'success',
-          text: `✅ ${data.message || '자재 추가불출이 성공적으로 확정되었습니다.'}`,
+          text: `✅ ${parsed.data?.message || '자재 추가불출이 성공적으로 확정되었습니다.'}`,
         });
-        // 상태를 '완료'로 업데이트
+        // 저장 대상 행만 '완료'로 업데이트
         setRows((prev) =>
-          prev.map((r) => (r.issueQty > 0 ? { ...r, status: '완료' } : r))
+          prev.map((r) => (savedIds.has(r.id) ? { ...r, status: '완료' } : r))
         );
       } else {
-        setStatusMessage({ type: 'error', text: `저장 실패: ${data.error || '오류가 발생했습니다.'}` });
+        setStatusMessage({ type: 'error', text: `저장 실패: ${parsed.errorMessage}` });
       }
     } catch (e: any) {
       console.error('Save failed:', e);
@@ -734,10 +737,15 @@ export const MatExtraIssueRegView: React.FC = () => {
                   <th className="border border-[#cbd5e1] px-1.5 py-1 w-[32px] bg-[#e2e8f0]">
                     <input
                       type="checkbox"
-                      checked={selectedIds.length > 0 && selectedIds.length === filteredRows.length}
+                      checked={filteredRows.length > 0 && filteredRows.every((r) => selectedIds.includes(r.id))}
                       onChange={(e) => {
-                        if (e.target.checked) setSelectedIds(filteredRows.map((r) => r.id));
-                        else setSelectedIds([]);
+                        const visibleIds = filteredRows.map((r) => r.id);
+                        if (e.target.checked) {
+                          setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+                        } else {
+                          const visibleSet = new Set(visibleIds);
+                          setSelectedIds((prev) => prev.filter((id) => !visibleSet.has(id)));
+                        }
                       }}
                       className="cursor-pointer"
                     />

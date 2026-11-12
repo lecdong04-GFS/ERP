@@ -6,6 +6,7 @@ import { SalesFilterBar } from '../common/SalesFilterBar';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
+import { readJsonSafe } from '@/lib/http';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -187,7 +188,7 @@ export const OrderStatusCancelView: React.FC = () => {
 
   // ── 주문 취소 ──
   const handleCancelSelected = async () => {
-    const toCancel = headers.filter((h) => h.checked && h.status !== '취소');
+    const toCancel = visibleHeaders.filter((h) => h.checked && h.status !== '취소');
     if (toCancel.length === 0) {
       alert('취소할 주문을 선택하세요. (이미 취소된 건 제외)');
       return;
@@ -206,13 +207,15 @@ export const OrderStatusCancelView: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: '취소', cancelReason: '주문현황에서 취소' }),
         });
-        const json = await res.json();
-        if (!json.success) {
-          alert(`취소 실패 (${h.orderId}): ${json.error || '알 수 없는 오류'}`);
+        const parsed = await readJsonSafe(res, '수주 취소에 실패했습니다.');
+        if (!parsed.ok) {
+          alert(`취소 실패 (${h.orderId}): ${parsed.errorMessage}`);
           break;
         }
       }
       void loadData(startDate, endDate);
+    } catch (err: any) {
+      alert(`취소 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
       setActing(false);
     }
@@ -220,7 +223,7 @@ export const OrderStatusCancelView: React.FC = () => {
 
   // ── 주문 확정 ──
   const handleConfirmSelected = async () => {
-    const toConfirm = headers.filter((h) => h.checked && h.status !== '확정' && h.status !== '취소');
+    const toConfirm = visibleHeaders.filter((h) => h.checked && h.status !== '확정' && h.status !== '취소');
     if (toConfirm.length === 0) {
       alert('확정할 주문을 선택하세요. (이미 확정되었거나 취소된 건 제외)');
       return;
@@ -239,13 +242,15 @@ export const OrderStatusCancelView: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: '확정' }),
         });
-        const json = await res.json();
-        if (!json.success) {
-          alert(`확정 실패 (${h.orderId}): ${json.error || '알 수 없는 오류'}`);
+        const parsed = await readJsonSafe(res, '수주 확정에 실패했습니다.');
+        if (!parsed.ok) {
+          alert(`확정 실패 (${h.orderId}): ${parsed.errorMessage}`);
           break;
         }
       }
       void loadData(startDate, endDate);
+    } catch (err: any) {
+      alert(`확정 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
       setActing(false);
     }
@@ -253,7 +258,7 @@ export const OrderStatusCancelView: React.FC = () => {
 
   // ── 취소 주문 복구 ──
   const handleRestoreSelected = async () => {
-    const toRestore = headers.filter((h) => h.checked && h.status === '취소');
+    const toRestore = visibleHeaders.filter((h) => h.checked && h.status === '취소');
     if (toRestore.length === 0) {
       alert('복구할 취소 주문을 선택하세요. (상단 "주문취소포함"을 체크하여 취소 건을 선택하세요)');
       return;
@@ -272,13 +277,15 @@ export const OrderStatusCancelView: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: '접수', cancelReason: '' }),
         });
-        const json = await res.json();
-        if (!json.success) {
-          alert(`복구 실패 (${h.orderId}): ${json.error || '알 수 없는 오류'}`);
+        const parsed = await readJsonSafe(res, '수주 복구에 실패했습니다.');
+        if (!parsed.ok) {
+          alert(`복구 실패 (${h.orderId}): ${parsed.errorMessage}`);
           break;
         }
       }
       void loadData(startDate, endDate);
+    } catch (err: any) {
+      alert(`복구 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
       setActing(false);
     }

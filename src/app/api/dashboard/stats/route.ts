@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { EMPTY_STATS } from '@/components/dashboard/dashboardData';
+import { requireSession } from '@/lib/apiAuth';
 import {
   getDashboardStats,
   refreshSnapshot,
@@ -9,6 +10,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireSession({ verifyDb: true });
+  if ('error' in auth) return auth.error;
+
   const force = req.nextUrl.searchParams.get('fresh') === '1';
 
   try {

@@ -179,16 +179,16 @@ export const MatReqPrintView: React.FC = () => {
 
   // 날짜 이동 핸들러
   const handlePrevDay = () => {
-    const d = new Date(reqDate + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
+    const d = new Date(reqDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
     const newDate = d.toISOString().slice(0, 10);
     setReqDate(newDate);
     loadData(newDate);
   };
 
   const handleNextDay = () => {
-    const d = new Date(reqDate + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
+    const d = new Date(reqDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
     const newDate = d.toISOString().slice(0, 10);
     setReqDate(newDate);
     loadData(newDate);

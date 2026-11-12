@@ -346,7 +346,7 @@ export async function GET(req: NextRequest) {
         unit: effectiveUnit,
         supplier: confirmed?.partnerName || m.partner?.name || '미지정거래처',
         partnerId: m.partnerId || '',
-        orderUnit: isConfirmed ? effectiveUnit : (boxQty > 1 ? 'box' : m.unit || 'ea'),
+        orderUnit: effectiveUnit,
         minOrderQty: m.minOrderQty || 1,
         orderQty: finalOrderQty,
         unitPrice,
@@ -472,11 +472,12 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // 기존 해당 일자 & 거래처의 미입고 전표 정리
+        // 기존 해당 일자 & 거래처의 소요량확정 미입고 전표 정리 (스마트발주 '자재발주' 보존)
         await tx.purchaseOrder.deleteMany({
           where: {
             orderDate: today,
             partnerId: partner.id,
+            orderType: '소요량확정',
             status: '발주',
           },
         });
@@ -507,11 +508,13 @@ export async function POST(req: NextRequest) {
         for (const gi of groupItems) {
           let product = await tx.product.findFirst({
             where: {
+              category: { notIn: ['완성품', '반제품'] },
               OR: [
                 { productCode: gi.materialCode },
                 { name: gi.itemName || gi.materialName },
               ],
             },
+            orderBy: [{ isUsed: 'desc' }, { id: 'asc' }],
             include: {
               prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
               inventories: { select: { unitPrice: true } },
@@ -614,7 +617,7 @@ export async function POST(req: NextRequest) {
       if (mrList.length > 0) {
         await tx.materialRequirement.createMany({ data: mrList });
       }
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({
       success: true,

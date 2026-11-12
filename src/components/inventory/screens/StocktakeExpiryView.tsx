@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { SalesActionBar } from '@/components/sales/common/SalesActionBar';
 import { PurchaseDataGrid, PurchaseGridColumnDef } from '@/components/purchase/common/PurchaseDataGrid';
 import { Calendar } from 'lucide-react';
+import { readJsonSafe } from '@/lib/http';
 
 interface StocktakeExpiryRow {
   id: number;
   warehouse: string; // 창고
+  productCode?: string; // 품번
   itemName: string; // 품명
   spec: string; // 규격
   unit: string; // 단위
@@ -52,13 +54,14 @@ export const StocktakeExpiryView: React.FC = () => {
           const loaded: StocktakeExpiryRow[] = json.data.map((s: any, idx: number) => ({
             id: s.id || idx + 1,
             warehouse: s.warehouse || '상온',
+            productCode: s.productCode || '',
             itemName: s.productName || s.productCode,
             spec: '',
             unit: s.unit || 'box',
             expiryDate: s.expiryDate || '2027-10-25',
-            currentStock: s.bookQty || 10,
-            actualStock: s.actualQty || 10,
-            diffQty: s.diffQty || 0,
+            currentStock: Number(s.bookQty ?? 0),
+            actualStock: Number(s.actualQty ?? 0),
+            diffQty: Number(s.diffQty ?? 0),
           }));
           setRows(loaded);
         }
@@ -89,30 +92,38 @@ export const StocktakeExpiryView: React.FC = () => {
 
   const handleSave = async () => {
     try {
+      if (filteredRows.length === 0) {
+        alert('현재 화면에 저장할 재고실사 내역이 없습니다.');
+        return;
+      }
       const res = await fetch('/api/inventory/stocktake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'batch',
-          rows: rows.map((r) => ({
+          stocktakeDate: takeDate,
+          rows: filteredRows.map((r) => ({
             stocktakeDate: takeDate,
-            productCode: `MAT-${r.id}`,
+            itemCode: r.productCode || '',
+            productCode: r.productCode || '',
+            itemName: r.itemName,
             productName: r.itemName,
             warehouse: r.warehouse,
             expiryDate: r.expiryDate,
             bookQty: r.currentStock,
             actualQty: r.actualStock,
+            currentStock: r.actualStock,
             diffQty: r.diffQty,
             unit: r.unit,
             status: '확정',
           })),
         }),
       });
-      const json = await res.json();
-      if (json.success) {
+      const parsed = await readJsonSafe(res, '유통기한 재고실사 저장에 실패했습니다.');
+      if (parsed.ok) {
         alert('유통기한 적용 재고실사 내역이 데이터베이스에 정상 반영되었습니다.');
       } else {
-        alert('저장 실패: ' + json.error);
+        alert('저장 실패: ' + parsed.errorMessage);
       }
     } catch (err: any) {
       alert('저장 중 오류: ' + err.message);

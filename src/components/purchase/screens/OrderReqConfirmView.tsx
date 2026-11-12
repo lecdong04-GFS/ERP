@@ -133,16 +133,16 @@ export const OrderReqConfirmView: React.FC = () => {
 
   // 날짜 이동
   const handlePrevDay = () => {
-    const d = new Date(reqDate + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
+    const d = new Date(reqDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
     const newDate = d.toISOString().slice(0, 10);
     setReqDate(newDate);
     fetchOrderReqs(newDate);
   };
 
   const handleNextDay = () => {
-    const d = new Date(reqDate + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
+    const d = new Date(reqDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
     const newDate = d.toISOString().slice(0, 10);
     setReqDate(newDate);
     fetchOrderReqs(newDate);

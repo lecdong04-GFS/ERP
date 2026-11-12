@@ -15,6 +15,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
     const { id } = await context.params;
     const deliveryId = Number(id);
+    if (!Number.isInteger(deliveryId) || deliveryId <= 0) {
+      return NextResponse.json({ success: false, error: '유효하지 않은 납품 전표 ID입니다.' }, { status: 400 });
+    }
 
     const delivery = await prisma.delivery.findUnique({
       where: { id: deliveryId },
@@ -127,7 +130,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       });
 
       return updatedDelivery;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     // 시스템 변경 로그 기록
     await prisma.systemLog
@@ -171,6 +174,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
 
     const { id } = await context.params;
     const deliveryId = Number(id);
+    if (!Number.isInteger(deliveryId) || deliveryId <= 0) {
+      return NextResponse.json({ success: false, error: '유효하지 않은 납품 전표 ID입니다.' }, { status: 400 });
+    }
 
     const delivery = await prisma.delivery.findUnique({
       where: { id: deliveryId },
@@ -185,7 +191,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     await prisma.$transaction(async (tx) => {
       await tx.deliveryDetail.deleteMany({ where: { deliveryId } });
       await tx.delivery.delete({ where: { id: deliveryId } });
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     await prisma.systemLog
       .create({

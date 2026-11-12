@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
-import { makeDocNo } from '@/lib/kst';
+import { kstToday, makeDocNo } from '@/lib/kst';
 import { normName } from '@/lib/gfs/norm';
 import { touchDashboardSnapshot } from '@/lib/dashboard/touch';
 import {
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     for (const row of rows) {
       const pName = (row.partnerName || '공급사미지정').trim();
-      const rDate = normalizeDate(row.receivingDate) || new Date().toISOString().slice(0, 10);
+      const rDate = normalizeDate(row.receivingDate) || kstToday();
       row.receivingDate = rDate;
       if (row.orderDate) row.orderDate = normalizeDate(row.orderDate);
       const key = `${rDate}|${pName}`;
@@ -318,6 +318,7 @@ export async function POST(req: NextRequest) {
             const isBoxInput =
               isBoxUnitLabel(item.unit) ||
               (!isBagUnitLabel(item.unit) && packUnit > 1);
+            const savedUnit = isBoxInput ? 'box' : (String(item.unit || '').trim() || product.unit || '봉');
             const bagRecvQty = isBoxInput ? item.recvQty * packUnit : item.recvQty;
             const rawBuyPrice = Number(item.buyPrice) || 0;
             const bagBuyPrice =
@@ -401,7 +402,7 @@ export async function POST(req: NextRequest) {
                     productCode: product.productCode,
                     productName: product.name,
                     category: product.category,
-                    unit: 'box',
+                    unit: savedUnit,
                     orderQty,
                     unitPrice: orderPrice,
                     amount: detailAmount,
@@ -417,7 +418,7 @@ export async function POST(req: NextRequest) {
                 await tx.purchaseOrderDetail.update({
                   where: { id: poDetail.id },
                   data: {
-                    unit: 'box',
+                    unit: poDetail.unit || savedUnit,
                     receivedQty: newRecv,
                     remainQty: newRemain,
                   },
@@ -515,7 +516,7 @@ export async function POST(req: NextRequest) {
               lotNo,
               expiryDate,
               receivedQty: item.recvQty,
-              unit: 'box',
+              unit: savedUnit,
               unitPrice: item.buyPrice,
               amount: item.recvAmt,
               boxQty: packUnit,

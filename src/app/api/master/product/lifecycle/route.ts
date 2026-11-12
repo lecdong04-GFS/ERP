@@ -231,7 +231,7 @@ export async function PATCH(req: NextRequest) {
           ipAddress: clientIp,
         })),
       });
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     await touchDashboardSnapshot().catch(() => {});
 

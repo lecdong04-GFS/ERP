@@ -168,18 +168,39 @@ export const CostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .catch((err) => console.error('Fetch recipe cost rate failed:', err));
 
     // 3. Fetch Overheads
-    fetch(`/api/cost/overhead?yearMonth=${monthStr}`)
+    fetch(`/api/cost/overhead?month=${monthStr}`)
       .then((res) => res.json())
       .then((json) => {
         if (json.success && json.data) {
-          if (json.data.fixed && json.data.fixed.length > 0) {
+          if (Array.isArray(json.data.fixed) && json.data.fixed.length > 0) {
             const mappedFixed: FixedOverheadItem[] = json.data.fixed.map((f: any, idx: number) => ({
               id: f.id || idx + 1,
-              costItem: f.accountName || '경비',
-              totalCost: Number(f.totalAmount) || 0,
+              costItem: f.costItem || f.accountName || '경비',
+              totalCost: Number(f.totalCost ?? f.totalAmount) || 0,
               remark: f.remark || '',
             }));
             setFixedOverheads(mappedFixed);
+          }
+          if (Array.isArray(json.data.variable) && json.data.variable.length > 0) {
+            const byItem = new Map<string, number[]>();
+            for (const v of json.data.variable) {
+              const name = String(v.costItem || '변동비');
+              if (!byItem.has(name)) byItem.set(name, new Array(31).fill(0));
+              const dayMatch = String(v.costDate || '').match(/(\d{1,2})$/);
+              const dayIdx = dayMatch ? parseInt(dayMatch[1], 10) - 1 : -1;
+              if (dayIdx >= 0 && dayIdx < 31) {
+                byItem.get(name)![dayIdx] = Number(v.dailyCost) || 0;
+              }
+            }
+            const mappedVar: DailyVariableOverheadItem[] = Array.from(byItem.entries()).map(
+              ([costItem, dailyValues], idx) => ({
+                id: idx + 1,
+                costItem,
+                dailyValues,
+                total: dailyValues.reduce((s, x) => s + (x || 0), 0),
+              })
+            );
+            setDailyVariableOverheads(mappedVar);
           }
         }
       })

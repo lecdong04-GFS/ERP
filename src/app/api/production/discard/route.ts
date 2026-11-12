@@ -285,10 +285,12 @@ export async function POST(req: NextRequest) {
             });
 
             if (inv) {
+              const nextQty = Math.max(0, inv.currentQty - qty);
               await tx.inventory.update({
                 where: { id: inv.id },
                 data: {
-                  currentQty: Math.max(0, inv.currentQty - qty),
+                  currentQty: nextQty,
+                  stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
                 },
               });
             }
@@ -312,7 +314,7 @@ export async function POST(req: NextRequest) {
         });
 
         return savedList;
-      });
+      }, { maxWait: 20000, timeout: 60000 });
 
       return NextResponse.json({
         success: true,
@@ -354,17 +356,19 @@ export async function POST(req: NextRequest) {
         });
 
         if (inv) {
+          const nextQty = Math.max(0, inv.currentQty - qty);
           await tx.inventory.update({
             where: { id: inv.id },
             data: {
-              currentQty: Math.max(0, inv.currentQty - qty),
+              currentQty: nextQty,
+              stockAmount: Math.round(nextQty * (Number(inv.unitPrice) || 0)),
             },
           });
         }
       }
 
       return rec;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({ success: true, data: created, message: '폐기 등록이 완료되었습니다.' });
   } catch (error: any) {

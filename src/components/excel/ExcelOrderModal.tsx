@@ -177,7 +177,8 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
     setIsProcessing(true);
     try {
       let savedOk = false;
-      let orderDateLabel = parsedOrderDate || new Date().toISOString().slice(0, 10);
+      let orderDateLabel =
+        parsedOrderDate || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
       if (parsedSource === '본발주' && parsedOrderDate) {
         const postBon = async (replace: boolean) => {
@@ -203,7 +204,13 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
               })),
             }),
           });
-          return res.json();
+          const raw = await res.text();
+          let json: any = null;
+          try { json = raw ? JSON.parse(raw) : null; } catch { json = null; }
+          if (!json) {
+            return { success: false, error: `서버 오류 (HTTP ${res.status})` };
+          }
+          return json;
         };
 
         let json = await postBon(false);

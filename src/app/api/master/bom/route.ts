@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
         const name = d.childProductName || d.partName || d.itemName;
         childId = (code ? byCode.get(String(code)) : undefined) || (name ? byName.get(String(name)) : undefined) || 0;
       }
-      if (!childId) continue;
+      if (!childId || childId === Number(parentProductId)) continue;
 
       resolvedDetails.push({
         childProductId: childId,
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
       }
 
       return bomHeader;
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     return NextResponse.json({ success: true, message: 'BOM saved successfully', bomHeaderId: header.id });
   } catch (error: any) {
@@ -242,9 +242,15 @@ export async function DELETE(req: NextRequest) {
     }
 
     const bomHeaderId = Number(id);
+    if (!Number.isInteger(bomHeaderId) || bomHeaderId <= 0) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 BOM 헤더 ID입니다.' },
+        { status: 400 }
+      );
+    }
     await prisma.$transaction([
       prisma.bomDetail.deleteMany({ where: { bomHeaderId } }),
-      prisma.bomHeader.delete({ where: { id: bomHeaderId } }),
+      prisma.bomHeader.deleteMany({ where: { id: bomHeaderId } }),
     ]);
 
     return NextResponse.json({ success: true, message: 'BOM이 성공적으로 삭제되었습니다.' });

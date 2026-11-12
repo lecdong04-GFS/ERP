@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireSession } from '@/lib/apiAuth';
 import { getEstimatedDailyUsageWithDb, getRollingUsageWindowWithDb } from '@/lib/gfs/estimatedUsage';
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireSession({ verifyDb: true });
+    if ('error' in auth) return auth.error;
+
     const force = req.nextUrl.searchParams.get('refresh') === '1';
     const days = req.nextUrl.searchParams.get('days');
     const targetDate = req.nextUrl.searchParams.get('targetDate') || undefined;

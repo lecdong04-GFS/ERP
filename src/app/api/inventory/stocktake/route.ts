@@ -383,7 +383,7 @@ export async function POST(req: NextRequest) {
       }
 
       return { recordCount, invSyncCount };
-    });
+    }, { maxWait: 20000, timeout: 60000 });
 
     // ERP 대시보드 스냅샷 캐시 무효화 (KPI 즉각 반영)
     if (isConfirm) {

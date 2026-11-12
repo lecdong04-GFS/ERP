@@ -335,8 +335,8 @@ export const DiscardRegGsrView: React.FC = () => {
   // 선택 행 일괄 저장
   const handleBatchSave = async () => {
     const targetRows = selectedRowIds.size > 0
-      ? rows.filter((r) => selectedRowIds.has(r.id))
-      : rows;
+      ? filteredRows.filter((r) => selectedRowIds.has(r.id))
+      : filteredRows;
 
     if (targetRows.length === 0) {
       showToast('저장할 폐기 행이 없습니다.', 'warning');
@@ -366,13 +366,19 @@ export const DiscardRegGsrView: React.FC = () => {
         }),
       });
 
-      const json = await res.json();
-      if (json.success) {
+      const raw = await res.text();
+      let json: any = null;
+      try {
+        json = raw ? JSON.parse(raw) : null;
+      } catch {
+        json = null;
+      }
+      if (res.ok && json?.success) {
         showToast(json.message || `${json.count}건의 폐기 내역이 안전하게 저장되었습니다.`, 'success');
         void loadData(discardDate, selectedGyeId);
         setSelectedRowIds(new Set());
       } else {
-        showToast(json.error || '저장 중 오류가 발생했습니다.', 'error');
+        showToast(json?.error || `저장 중 오류가 발생했습니다. (HTTP ${res.status})`, 'error');
       }
     } catch (err: any) {
       console.error('Save error:', err);

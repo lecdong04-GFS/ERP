@@ -132,24 +132,24 @@ export const MatOrderNormalView: React.FC = () => {
 
   // 날짜 이동 핸들러
   const handlePrevDay = () => {
-    const d = new Date(orderDate + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
+    const d = new Date(orderDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
     setOrderDate(d.toISOString().slice(0, 10));
   };
 
   const handleNextDay = () => {
-    const d = new Date(orderDate + 'T00:00:00');
-    d.setDate(d.getDate() + 1);
+    const d = new Date(orderDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
     setOrderDate(d.toISOString().slice(0, 10));
   };
 
   // 요일 헤더 (발주일 기준 7일)
   const weekLabels = useMemo(() => {
-    const base = new Date(orderDate + 'T00:00:00');
+    const base = new Date(orderDate + 'T00:00:00Z');
     return DAY_CHARS.map((d, i) => {
       const dt = new Date(base);
-      dt.setDate(dt.getDate() + i);
-      return `${d}(${String(dt.getDate()).padStart(2, '0')})`;
+      dt.setUTCDate(dt.getUTCDate() + i);
+      return `${d}(${String(dt.getUTCDate()).padStart(2, '0')})`;
     });
   }, [orderDate]);
 

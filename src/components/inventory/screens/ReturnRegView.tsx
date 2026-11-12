@@ -73,20 +73,26 @@ export const ReturnRegView: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          returnDate: new Date().toISOString().slice(0, 10),
+          returnDate: new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10),
           partnerName: vendor,
           items,
           createdBy: 'admin',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (res.ok && data?.success) {
         alert(`반품등록이 완료되었습니다!\n(${data.message || '현재고 및 자재수불부에 반영되었습니다.'})`);
       } else {
-        alert('반품등록 저장 결과: ' + (data.error || '처리되었습니다.'));
+        alert('반품등록 실패: ' + (data?.error || `HTTP ${res.status}`));
       }
     } catch (err: any) {
-      alert(`반품등록 ${items.length}건이 성공적으로 저장되었습니다.`);
+      alert('반품등록 중 오류가 발생했습니다: ' + (err?.message || '네트워크 오류'));
     }
   };
 

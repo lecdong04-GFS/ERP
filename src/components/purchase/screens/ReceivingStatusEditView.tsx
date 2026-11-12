@@ -5,6 +5,7 @@ import { usePrintReport } from '@/context/PrintReportContext';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { readJsonSafe } from '@/lib/http';
 import {
   calcBagPriceFromBox,
   calcBoxPrice,
@@ -322,8 +323,8 @@ export const ReceivingStatusEditView: React.FC = () => {
     const shortageCount = filteredRows.filter((r) => r.diffQty < 0 || r.status === '부분입고').length;
     const passCount = filteredRows.filter((r) => r.totalJudge === 'O').length;
     const haccpPassRate = totalDetails > 0 ? Math.round((passCount / totalDetails) * 100) : 100;
-    const modifiedCount = rows.filter((r) => r.isModified).length;
-    const checkedCount = rows.filter((r) => r.checked).length;
+    const modifiedCount = filteredRows.filter((r) => r.isModified).length;
+    const checkedCount = filteredRows.filter((r) => r.checked).length;
 
     return {
       totalDetails,
@@ -434,9 +435,9 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   // ── 9. 변경사항 일괄 저장 (PUT /api/purchase/receiving) ──
   const handleBatchSave = async () => {
-    const modifiedRows = rows.filter((r) => r.isModified);
+    const modifiedRows = filteredRows.filter((r) => r.isModified);
     if (modifiedRows.length === 0) {
-      alert('수정된 입고 내역이 없습니다.');
+      alert('현재 화면에 수정된 입고 내역이 없습니다.');
       return;
     }
 
@@ -463,12 +464,12 @@ export const ReceivingStatusEditView: React.FC = () => {
         body: JSON.stringify({ updates }),
       });
 
-      const json = await res.json();
-      if (json.success) {
-        alert(json.message || '입고 수정사항이 안전하게 저장되고 재고에 동기화되었습니다.');
+      const parsed = await readJsonSafe(res, '입고 수정 저장에 실패했습니다.');
+      if (parsed.ok) {
+        alert(parsed.data?.message || '입고 수정사항이 안전하게 저장되고 재고에 동기화되었습니다.');
         loadReceivingData();
       } else {
-        alert('저장 실패: ' + json.error);
+        alert('저장 실패: ' + parsed.errorMessage);
       }
     } catch (err: any) {
       alert('오류 발생: ' + err.message);
@@ -496,12 +497,12 @@ export const ReceivingStatusEditView: React.FC = () => {
         }),
       });
 
-      const json = await res.json();
-      if (json.success) {
+      const parsed = await readJsonSafe(res, '입고 수정 저장에 실패했습니다.');
+      if (parsed.ok) {
         alert(`[${row.productName}] 수정사항이 정상 저장되었습니다.`);
         loadReceivingData();
       } else {
-        alert('저장 실패: ' + json.error);
+        alert('저장 실패: ' + parsed.errorMessage);
       }
     } catch (err: any) {
       alert('오류: ' + err.message);
@@ -512,7 +513,7 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   // ── 11. 선택 입고 취소 / 롤백 (DELETE /api/purchase/receiving) ──
   const handleCancelSelected = async () => {
-    const checkedRows = rows.filter((r) => r.checked);
+    const checkedRows = filteredRows.filter((r) => r.checked);
     if (checkedRows.length === 0) {
       alert('취소(롤백)할 입고 행을 체크박스로 선택해주세요.');
       return;
@@ -531,25 +532,36 @@ export const ReceivingStatusEditView: React.FC = () => {
     if (reason === null) return;
 
     setSaving(true);
+    let cancelledDone = 0;
     try {
-      const res = await fetch('/api/purchase/receiving', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          detailIds: checkedRows.map((r) => r.id),
-          cancelReason: reason || '사용자 입고취소',
-        }),
-      });
+      const CHUNK_SIZE = 20;
+      const allIds = checkedRows.map((r) => r.id);
+      for (let i = 0; i < allIds.length; i += CHUNK_SIZE) {
+        const chunkIds = allIds.slice(i, i + CHUNK_SIZE);
+        const res = await fetch('/api/purchase/receiving', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            detailIds: chunkIds,
+            cancelReason: reason || '사용자 입고취소',
+          }),
+        });
+        const parsed = await readJsonSafe(res, '입고 취소에 실패했습니다.');
+        if (!parsed.ok) {
+          throw new Error(parsed.errorMessage);
+        }
+        cancelledDone += chunkIds.length;
+      }
 
-      const json = await res.json();
-      if (json.success) {
-        alert(json.message || '선택한 입고 항목이 정상 취소되었습니다.');
+      alert(`선택한 ${cancelledDone}건의 입고 항목이 정상 취소(롤백)되었습니다.`);
+      loadReceivingData();
+    } catch (err: any) {
+      if (cancelledDone > 0) {
+        alert(`${cancelledDone}건은 취소되었으나 일부 실패했습니다: ${err?.message || '오류'}\n화면을 새로고침합니다.`);
         loadReceivingData();
       } else {
-        alert('취소 실패: ' + json.error);
+        alert('취소 실패: ' + (err?.message || '알 수 없는 오류'));
       }
-    } catch (err: any) {
-      alert('오류: ' + err.message);
     } finally {
       setSaving(false);
     }

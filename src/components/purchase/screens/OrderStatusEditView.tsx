@@ -525,9 +525,15 @@ export const OrderStatusEditView: React.FC = () => {
             })),
           }),
         });
-        const json = await res.json();
-        if (!json.success) {
-          throw new Error(json.error || `발주서(ID: ${orderId}) 저장 실패`);
+        const raw = await res.text();
+        let json: any = null;
+        try {
+          json = raw ? JSON.parse(raw) : null;
+        } catch {
+          json = null;
+        }
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || `발주서(ID: ${orderId}) 저장 실패 (HTTP ${res.status})`);
         }
       }
 

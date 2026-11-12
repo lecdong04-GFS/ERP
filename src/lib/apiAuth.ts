@@ -144,7 +144,7 @@ export async function requireSession(opts: RequireSessionOptions = {}): Promise<
     };
   }
 
-  const needsDbCheck = Boolean(opts.verifyDb || opts.categoryId || opts.menuId);
+  const needsDbCheck = Boolean(opts.verifyDb || opts.adminOnly || opts.categoryId || opts.menuId);
   if (needsDbCheck && loginId) {
     const dbRecord = await loadCachedUserRecord(loginId);
     if (!dbRecord || !dbRecord.isActive) {

@@ -354,14 +354,17 @@ export async function POST(req: NextRequest) {
           };
         });
 
-      await prisma.$transaction(async (tx) => {
-        await tx.materialRequirement.deleteMany({
-          where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
-        });
-        if (matReqData.length > 0) {
-          await tx.materialRequirement.createMany({ data: matReqData });
-        }
-      });
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.materialRequirement.deleteMany({
+            where: { reqDate: today, OR: [{ remark: { contains: '스마트발주' } }, { remark: { contains: '자재발주' } }] },
+          });
+          if (matReqData.length > 0) {
+            await tx.materialRequirement.createMany({ data: matReqData });
+          }
+        },
+        { maxWait: 20000, timeout: 60000 }
+      );
     } catch (mrErr) {
       console.warn('MaterialRequirement sync warning in order-result:', mrErr);
     }
