@@ -246,6 +246,8 @@ export const MatOrderDayView: React.FC = () => {
   });
 
   const [supplierFilter, setSupplierFilter] = useState<string>('전체');
+  const [warehouseFilter, setWarehouseFilter] = useState<string>('전체');
+  const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'critical' | 'warning' | 'pending'>('all');
   const [patternFilter, setPatternFilter] = useState<string>('전체');
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [rows, setRows] = useState<SheetRow[]>([]);
@@ -903,6 +905,24 @@ export const MatOrderDayView: React.FC = () => {
     }
   };
 
+  // 보관창고 고유 목록 추출 (자재 표준 순서 우선)
+  const warehouseOptions = useMemo(() => {
+    const order = ['냉장1', '냉장2', '냉동', '상온', '부자재'];
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      const wh = (r.warehouse || '').trim();
+      if (wh) set.add(wh);
+    });
+    return Array.from(set).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [rows]);
+
   // 요일 탭별 통계 (해당 요일 자동 분할량 기준)
   const dayStats = useMemo(() => {
     return DAY_CHARS.map((_, d) => {
@@ -912,6 +932,7 @@ export const MatOrderDayView: React.FC = () => {
       rows.forEach((r) => {
         if (!showDormant && r.isDormant && !keyword.trim()) return;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
+        if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return;
         if (patternFilter !== '전체' && classifyPattern(r.supplier, r.orderDay) !== patternFilter) return;
         if (
           keyword.trim() &&
@@ -929,7 +950,7 @@ export const MatOrderDayView: React.FC = () => {
       });
       return { items, boxes, amt };
     });
-  }, [rows, showDormant, supplierFilter, patternFilter, keyword, getRowMetrics]);
+  }, [rows, showDormant, supplierFilter, warehouseFilter, patternFilter, keyword, getRowMetrics]);
 
   // 타 요일 납품 등으로 오늘 배정이 0이지만 재고가 매우 부족(1.5일 미만)한 품목 감지 (비수주 휴면 품목 제외)
   const offScheduleUrgentItems = useMemo(() => {
@@ -953,6 +974,7 @@ export const MatOrderDayView: React.FC = () => {
       .map((r) => {
         if (!showDormant && r.isDormant && !keyword.trim()) return null;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
+        if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return null;
         const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
         if (
@@ -963,14 +985,17 @@ export const MatOrderDayView: React.FC = () => {
           return null;
         }
         const m = getRowMetrics(r, dayIdx);
+        if (urgencyFilter === 'critical' && m.auditStatus !== 'critical') return null;
+        if (urgencyFilter === 'warning' && m.auditStatus !== 'warning') return null;
+        if (urgencyFilter === 'pending' && !(Number(r.pendingBoxes || 0) > 0)) return null;
         if (showOnlyUrgentUnallocated) {
           if (!(m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0))) {
             return null;
           }
           return { r, m, pattern };
         }
-        // showOnlyOrderable 가 true 일 때는 dayQty > 0 인 품목만 표시 (단, 검색어 입력 시에는 재고/상태 확인을 위해 0건 품목도 표시)
-        if (showOnlyOrderable && !keyword.trim() && m.dayQty <= 0) return null;
+        // showOnlyOrderable 가 true 일 때는 dayQty > 0 인 품목만 표시 (단, 검색어/상태필터/긴급필터 선택 시 0건 품목도 표시)
+        if (showOnlyOrderable && urgencyFilter === 'all' && !keyword.trim() && m.dayQty <= 0) return null;
         return { r, m, pattern };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -989,6 +1014,8 @@ export const MatOrderDayView: React.FC = () => {
     rows,
     showDormant,
     supplierFilter,
+    warehouseFilter,
+    urgencyFilter,
     patternFilter,
     keyword,
     dayIdx,
@@ -2008,38 +2035,38 @@ export const MatOrderDayView: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-slate-100 text-slate-800 p-2 sm:p-3 overflow-hidden gap-2 select-none font-sans">
-      {/* ── 1. 상단 마스터 헤더 바 (한 줄 타이틀 & 모드 탭 & 메인 액션 버튼) ── */}
-      <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2.5">
+    <div className="flex flex-col h-full w-full bg-slate-100/80 text-slate-800 p-2 sm:p-3 overflow-hidden gap-2 select-none font-sans">
+      {/* ── 1. 프리미엄 상단 커맨드 헤더 ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl border border-slate-700/80 px-4 py-2.5 shadow-sm shrink-0 flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black whitespace-nowrap">
+            <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-400/30 text-[11px] font-black tracking-wide whitespace-nowrap">
               자재 관제탑
             </span>
-            <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-1.5 whitespace-nowrap">
-              요일별 자재발주 <span className="text-blue-600 font-extrabold">(스마트 발주)</span>
-              <span className="hidden sm:inline-flex items-center gap-1 ml-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                ⚡ 완제품 수주 × BOM 실시간 연동
+            <h1 className="text-base sm:text-[17px] font-black text-white tracking-tight flex items-center gap-1.5 whitespace-nowrap">
+              요일별 자재발주
+              <span className="hidden md:inline-flex items-center gap-1 ml-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/25 text-indigo-200 border border-indigo-400/30">
+                ⚡ 수주 × BOM 실시간
               </span>
             </h1>
           </div>
 
           {/* 2개 메인 모드 탭 (발주 vs 입고검수) */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-[13.5px]">
+          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/10 text-[13px]">
             <button
               type="button"
               onClick={() => setMainMode('order')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black transition cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-black transition cursor-pointer whitespace-nowrap ${
                 mainMode === 'order'
-                  ? 'bg-blue-600 text-white shadow-2xs'
-                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Package className="w-4 h-4" />
-              <span>① 오늘 발주 주문서</span>
+              <Package className="w-3.5 h-3.5" />
+              <span>① 오늘 발주</span>
               <span
-                className={`text-xs font-mono px-2 py-0.5 rounded-full font-bold ${
-                  mainMode === 'order' ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+                className={`text-[11px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
+                  mainMode === 'order' ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-300'
                 }`}
               >
                 {dayRows.length}
@@ -2049,17 +2076,17 @@ export const MatOrderDayView: React.FC = () => {
             <button
               type="button"
               onClick={() => setMainMode('inbound')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-black transition cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-black transition cursor-pointer whitespace-nowrap ${
                 mainMode === 'inbound'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Truck className="w-4 h-4" />
-              <span>② 오늘 입고 검수</span>
+              <Truck className="w-3.5 h-3.5" />
+              <span>② 입고 검수</span>
               <span
-                className={`text-xs font-mono px-2 py-0.5 rounded-full font-bold ${
-                  mainMode === 'inbound' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                className={`text-[11px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
+                  mainMode === 'inbound' ? 'bg-white/20 text-white' : 'bg-emerald-500/25 text-emerald-200'
                 }`}
               >
                 {inboundItems.length}
@@ -2068,13 +2095,13 @@ export const MatOrderDayView: React.FC = () => {
           </div>
 
           {confirmedPoList.length > 0 ? (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-300 whitespace-nowrap">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              {DAY_CHARS[dayIdx]}요일 발주확정 {confirmedPoList.length}건 ({poRangeSummary})
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-black bg-emerald-500/20 text-emerald-200 border border-emerald-400/35 whitespace-nowrap">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+              {DAY_CHARS[dayIdx]}요일 확정 {confirmedPoList.length}건 ({poRangeSummary})
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
-              <Clock className="w-3.5 h-3.5" />
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11.5px] font-bold bg-amber-500/20 text-amber-200 border border-amber-400/30 whitespace-nowrap">
+              <Clock className="w-3.5 h-3.5 text-amber-300" />
               {DAY_CHARS[dayIdx]}요일 미확정
             </span>
           )}
@@ -2088,10 +2115,10 @@ export const MatOrderDayView: React.FC = () => {
                 type="button"
                 onClick={handleSaveDay}
                 disabled={isSaving || (stagedTotals.count === 0 && dayRows.length === 0)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13.5px] font-black text-white shadow-xs transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[13px] font-black text-white shadow-sm transition cursor-pointer whitespace-nowrap ${
                   stagedTotals.count > 0 || dayRows.length > 0
-                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-98'
+                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
                 title={
                   stagedTotals.count > 0
@@ -2104,25 +2131,25 @@ export const MatOrderDayView: React.FC = () => {
                   {isSaving
                     ? '확정 저장 중...'
                     : stagedTotals.count > 0
-                    ? `[ 🛒 담은 발주 ${stagedTotals.count}건 (${stagedTotals.boxes.toLocaleString()}b) 확정 저장 ]`
-                    : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 ]`}
+                    ? `담은 발주 ${stagedTotals.count}건 (${stagedTotals.boxes.toLocaleString()}b) 확정`
+                    : `${DAY_CHARS[dayIdx]}요일 발주 확정`}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowBasketModal(true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition cursor-pointer whitespace-nowrap ${
                   stagedTotals.count > 0
-                    ? 'bg-blue-600 hover:bg-blue-500 border-blue-700 text-white shadow-xs'
-                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                    ? 'bg-blue-500 hover:bg-blue-400 border-blue-400 text-white shadow-xs'
+                    : 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200'
                 }`}
                 title="검색·거래처·요일별로 담아둔 발주 목록을 한눈에 확인하고 수량을 최종 검토합니다."
               >
                 <ShoppingCart className="w-3.5 h-3.5" />
-                <span>발주 바구니</span>
+                <span>바구니</span>
                 <span
                   className={`px-1.5 py-[1px] rounded-full text-[11px] font-mono font-bold ${
-                    stagedTotals.count > 0 ? 'bg-white text-blue-700' : 'bg-slate-200 text-slate-600'
+                    stagedTotals.count > 0 ? 'bg-white text-blue-700' : 'bg-white/15 text-slate-200'
                   }`}
                 >
                   {stagedTotals.count}
@@ -2130,39 +2157,21 @@ export const MatOrderDayView: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleResetDay}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap"
-                title="수량 초기화"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                <span>초기화</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleExportExcel}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap"
-                title="엑셀 다운로드"
-              >
-                <Download className="w-3.5 h-3.5 text-emerald-600" />
-                <span>엑셀</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => {
                   setDormantSelectedIds(new Set());
                   setShowDormantModal(true);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black transition cursor-pointer whitespace-nowrap ${
                   dormantRows.length > 0
-                    ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
-                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                    ? 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-400/40 text-amber-200'
+                    : 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200'
                 }`}
                 title={`최근 ${dormantDays}일간 수주 BOM 소요도 없고 재고조사표 수량 감소도 없는 휴면 품목을 확인하고 발주제외로 정리합니다.`}
               >
-                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <Clock className="w-3.5 h-3.5 text-amber-300" />
                 <span>비수주 휴면</span>
                 {dormantRows.length > 0 && (
-                  <span className="px-1.5 py-[1px] rounded-full bg-amber-600 text-white text-[11px] font-mono font-bold">
+                  <span className="px-1.5 py-[1px] rounded-full bg-amber-400 text-slate-950 text-[11px] font-mono font-black">
                     {dormantRows.length}
                   </span>
                 )}
@@ -2173,29 +2182,47 @@ export const MatOrderDayView: React.FC = () => {
                   setShowDeletedModal(true);
                   void loadDeletedProducts();
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black transition cursor-pointer whitespace-nowrap ${
                   deletedCount > 0
-                    ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700'
-                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                    ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/40 text-rose-200'
+                    : 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-200'
                 }`}
-                title="발주/재고조회에서 삭제된 품목 목록을 확인하고 복구합니다."
+                title="발주/재고조회에서 삭제·제외된 품목 목록을 확인하고 복구합니다."
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>삭제복구</span>
+                <span>복구함</span>
                 {deletedCount > 0 && (
-                  <span className="px-1.5 py-[1px] rounded-full bg-rose-600 text-white text-[11px] font-mono font-bold">
+                  <span className="px-1.5 py-[1px] rounded-full bg-rose-500 text-white text-[11px] font-mono font-bold">
                     {deletedCount}
                   </span>
                 )}
               </button>
               <button
                 type="button"
+                onClick={handleExportExcel}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-black transition cursor-pointer whitespace-nowrap"
+                title="엑셀 다운로드"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-300" />
+                <span>엑셀</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDay}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-200 text-xs font-black transition cursor-pointer whitespace-nowrap"
+                title="수기 수정/바구니 초기화"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-300" />
+                <span>초기화</span>
+              </button>
+              <button
+                type="button"
                 onClick={loadOrderSheet}
                 disabled={isLoading}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 title="새로고침"
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 text-blue-300 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
             </>
           ) : (
@@ -2204,12 +2231,12 @@ export const MatOrderDayView: React.FC = () => {
                 type="button"
                 onClick={handleConfirmInboundReceiving}
                 disabled={isReceivingSaving || filteredInboundItems.length === 0}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13.5px] font-black text-white shadow-xs transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[13px] font-black shadow-sm transition cursor-pointer whitespace-nowrap ${
                   filteredInboundItems.length > 0
                     ? inboundSkipStock
-                      ? 'bg-indigo-600 hover:bg-indigo-500 active:scale-98'
-                      : 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      ? 'bg-indigo-500 hover:bg-indigo-400 text-white active:scale-98'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-98'
+                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
                 title={
                   inboundSkipStock
@@ -2222,28 +2249,28 @@ export const MatOrderDayView: React.FC = () => {
                   {isReceivingSaving
                     ? '반영 중...'
                     : inboundSkipStock
-                      ? `[ 📦 ${inboundReceivingDate.slice(5)} 입고확정 (재고가산 제외) ]`
-                      : `[ 🚚 ${inboundReceivingDate.slice(5)} 검수완료 & 재고반영 ]`}
+                      ? `📦 ${inboundReceivingDate.slice(5)} 입고확정 (재고가산 제외)`
+                      : `🚚 ${inboundReceivingDate.slice(5)} 검수완료 & 재고반영`}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={handleFillAllOrderQty}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-black transition cursor-pointer whitespace-nowrap"
                 title="오기로 한 발주수량 그대로 전량 정상 채우기"
               >
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <Check className="w-3.5 h-3.5 text-emerald-300" />
                 <span>전량 정상</span>
               </button>
               <button
                 type="button"
                 onClick={loadInboundPending}
                 disabled={isLoadingInbound}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 title="새로고침"
               >
                 <RefreshCw
-                  className={`w-3.5 h-3.5 text-emerald-600 ${isLoadingInbound ? 'animate-spin' : ''}`}
+                  className={`w-3.5 h-3.5 text-emerald-300 ${isLoadingInbound ? 'animate-spin' : ''}`}
                 />
               </button>
             </>
@@ -2251,29 +2278,29 @@ export const MatOrderDayView: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 2단: 주간/요일 캘린더 네비게이션 + 전략 모드 컨트롤러 (슬림 단일 바) ── */}
-      <div className="bg-white rounded-xl border border-slate-200 px-3 py-1.5 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2">
+      {/* ── 2단: 주간/요일 카드 네비게이션 + 전략·수요 인사이트 ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2">
         {mainMode === 'order' ? (
           <>
-            {/* 좌측: 주간 이동 + 7개 요일 세그먼트 버튼 */}
+            {/* 좌측: 주간 이동 + 7개 요일 세그먼트 카드 */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs whitespace-nowrap">
+              <div className="flex items-center gap-0.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs whitespace-nowrap">
                 <button
                   type="button"
                   onClick={handlePrevWeek}
-                  className="p-1 hover:bg-white rounded text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                  className="p-1 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
                   title="이전 주차"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <div className="flex items-center gap-1.5 px-2 text-[13px] font-black text-slate-800 whitespace-nowrap">
+                <div className="flex items-center gap-1 px-2 text-[12.5px] font-black text-slate-800 whitespace-nowrap">
                   <Calendar className="w-3.5 h-3.5 text-blue-600" />
                   <span>{weekRangeText}</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleNextWeek}
-                  className="p-1 hover:bg-white rounded text-slate-600 hover:text-slate-900 transition cursor-pointer"
+                  className="p-1 hover:bg-white rounded-lg text-slate-600 hover:text-slate-900 transition cursor-pointer"
                   title="다음 주차"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -2281,13 +2308,13 @@ export const MatOrderDayView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleJumpToCurrentWeek}
-                  className="px-2.5 py-0.5 text-xs font-bold rounded bg-white text-blue-700 hover:bg-blue-50 border border-slate-200 transition cursor-pointer whitespace-nowrap"
+                  className="px-2 py-0.5 text-[11px] font-black rounded-lg bg-white text-blue-700 hover:bg-blue-50 border border-slate-200 transition cursor-pointer whitespace-nowrap ml-0.5"
                 >
                   이번주
                 </button>
               </div>
 
-              {/* 7개 요일 탭 버튼 */}
+              {/* 7개 요일 탭 버튼 (깔끔한 2줄 칩) */}
               <div className="flex flex-wrap items-center gap-1">
                 {DAY_CHARS.map((d, i) => {
                   const isActive = dayIdx === i;
@@ -2302,38 +2329,23 @@ export const MatOrderDayView: React.FC = () => {
                       key={d}
                       type="button"
                       onClick={() => setDayIdx(i)}
-                      title={`[${d}요일] 수요 가중치: ${factorInfo?.pctStr} (${factorInfo?.label})`}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] transition cursor-pointer border whitespace-nowrap ${
+                      title={`[${d}요일 ${dateStr}] 수요 가중치: ${factorInfo?.pctStr} (${factorInfo?.label})`}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[12.5px] transition cursor-pointer border whitespace-nowrap ${
                         isActive
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs font-black ring-1 ring-blue-400/40'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-black ring-2 ring-blue-500/25'
+                          : 'bg-slate-50/80 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
                       }`}
                     >
                       <span className="font-black">{d}</span>
-                      <span className={`text-[11px] font-medium whitespace-nowrap ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                      <span className={`text-[11px] font-medium ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
                         {mmdd}
                       </span>
-                      {factorInfo && (
-                        <span
-                          className={`text-[9.5px] font-mono px-1 py-0.2 rounded font-extrabold whitespace-nowrap ${
-                            isActive
-                              ? 'bg-white/25 text-white'
-                              : factorInfo.tone === 'peak'
-                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                              : factorInfo.tone === 'low'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {factorInfo.pctStr}
-                        </span>
-                      )}
                       <span
-                        className={`text-[11px] font-mono px-1.5 py-0.2 rounded font-bold whitespace-nowrap ${
+                        className={`text-[11px] font-mono px-1.5 py-0.2 rounded-md font-extrabold ${
                           isActive
                             ? 'bg-white/20 text-white'
                             : st.boxes > 0
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-blue-100/80 text-blue-800'
                             : 'bg-slate-200/70 text-slate-500'
                         }`}
                       >
@@ -2341,12 +2353,12 @@ export const MatOrderDayView: React.FC = () => {
                       </span>
                       {stagedInfo && stagedInfo.count > 0 && (
                         <span
-                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black whitespace-nowrap ${
-                            isActive ? 'bg-amber-300 text-slate-900' : 'bg-emerald-600 text-white'
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black ${
+                            isActive ? 'bg-amber-300 text-slate-950' : 'bg-emerald-600 text-white'
                           }`}
                           title={`${d}요일 바구니 담김: ${stagedInfo.count}품목 (${stagedInfo.boxes}박스)`}
                         >
-                          담김{stagedInfo.count}
+                          담{stagedInfo.count}
                         </span>
                       )}
                     </button>
@@ -2355,48 +2367,68 @@ export const MatOrderDayView: React.FC = () => {
               </div>
             </div>
 
-            {/* 우측: 3-tier 전략 모드 스위치 */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 whitespace-nowrap">
-              <span className="text-xs font-black text-slate-700 flex items-center gap-1 whitespace-nowrap">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
-                전략:
-              </span>
-              <button
-                type="button"
-                onClick={() => setStrategyMode('tight')}
-                className={`px-2.5 py-0.5 rounded text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  strategyMode === 'tight'
-                    ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50'
-                }`}
-                title="⚡ 타이트 모드: 리드타임(D+1/D+2) 결품 하한선 보호 + 전 품목 여유분 압축"
-              >
-                ⚡ 타이트
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategyMode('standard')}
-                className={`px-2.5 py-0.5 rounded text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  strategyMode === 'standard'
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50'
-                }`}
-                title="⚖️ 표준 모드: 품목 마스터(DB) 발주일수 100% 그대로 적용"
-              >
-                ⚖️ 표준
-              </button>
-              <button
-                type="button"
-                onClick={() => setStrategyMode('safety')}
-                className={`px-2.5 py-0.5 rounded text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  strategyMode === 'safety'
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50'
-                }`}
-                title="🛡️ 보수적 안전 모드: 결품 차단 (발주일수 +1일 및 감모 5% 가산)"
-              >
-                🛡️ 안전
-              </button>
+            {/* 우측: 수요 가중치 인사이트 칩 + 3-tier 전략 스위치 */}
+            <div className="flex flex-wrap items-center gap-2 whitespace-nowrap">
+              {WEEKDAY_DEMAND_FACTORS[dayIdx] && (
+                <div
+                  className={`hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11.5px] font-bold ${
+                    WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-blue-50 border-blue-200 text-blue-900'
+                  }`}
+                  title={`GS25 35일간 실데이터(188만 개) 전수 통계 기반: ${DAY_CHARS[dayIdx]}요일 수요 가중치 ${WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr} (${WEEKDAY_DEMAND_FACTORS[dayIdx].label}) 자동 적용`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span>{DAY_CHARS[dayIdx]} 수요</span>
+                  <span className="font-mono font-black">{WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr}</span>
+                  <span className="text-[11px] opacity-80">({WEEKDAY_DEMAND_FACTORS[dayIdx].label})</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 whitespace-nowrap">
+                <span className="text-[11.5px] font-black text-slate-600 px-1.5 flex items-center gap-1">
+                  <SlidersHorizontal className="w-3 h-3 text-blue-600" />
+                  전략
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setStrategyMode('tight')}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    strategyMode === 'tight'
+                      ? 'bg-amber-500 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                  title="⚡ 타이트 모드: 리드타임(D+1/D+2) 결품 하한선 보호 + 전 품목 여유분 압축"
+                >
+                  ⚡ 타이트
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStrategyMode('standard')}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    strategyMode === 'standard'
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                  title="⚖️ 표준 모드: 품목 마스터(DB) 발주일수 100% 그대로 적용"
+                >
+                  ⚖️ 표준
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStrategyMode('safety')}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    strategyMode === 'safety'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  }`}
+                  title="🛡️ 보수적 안전 모드: 결품 차단 (발주일수 +1일 및 감모 5% 가산)"
+                >
+                  🛡️ 안전
+                </button>
+              </div>
             </div>
           </>
         ) : (
@@ -2520,156 +2552,244 @@ export const MatOrderDayView: React.FC = () => {
         )}
       </div>
 
-      {/* ── 3단: 핵심 KPI 지표 칩 + 검색/필터 바 (슬림 단일 바) ── */}
-      <div className="bg-white rounded-xl border border-slate-200 px-3 py-1.5 shadow-2xs shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
+      {/* ── 3단: 핵심 KPI 카드 & 창고 칩 & 스마트 필터 바 ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 px-3 py-2 shadow-2xs shrink-0 flex flex-col gap-2 text-xs">
         {mainMode === 'order' ? (
           <>
-            {/* 좌측: 초슬림 KPI 뱃지 4종 */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 whitespace-nowrap">
-                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">예정총액:</span>
-                <span className="font-mono font-black text-[13.5px] text-indigo-700 whitespace-nowrap">
-                  ₩{Math.round(dayTotals.amt).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 whitespace-nowrap">
-                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">총발주:</span>
-                <span className="font-mono font-black text-[13.5px] text-blue-700 whitespace-nowrap">
-                  {dayTotals.boxes.toLocaleString()} box
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 whitespace-nowrap">
-                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">평균 Runway:</span>
-                <span className="font-mono font-black text-[13.5px] text-emerald-700 whitespace-nowrap">
-                  {dayTotals.avgRunway.toFixed(1)}일
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 whitespace-nowrap">
-                <span className="text-xs font-bold text-slate-500 whitespace-nowrap">주의품목:</span>
-                <span className="font-mono font-black text-[13.5px] text-rose-600 whitespace-nowrap">🚨 {dayTotals.criticalCount}</span>
-                <span className="text-slate-300">/</span>
-                <span className="font-mono font-black text-[13.5px] text-amber-600 whitespace-nowrap">⚠️ {dayTotals.warningCount}</span>
-              </div>
-            </div>
+            {/* 상단: KPI 지표 & 창고 빠른 필터 칩 */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50/70 border border-indigo-200/80 whitespace-nowrap">
+                  <span className="text-[11.5px] font-bold text-indigo-700">예정총액</span>
+                  <span className="font-mono font-black text-[14px] text-indigo-950">
+                    ₩{Math.round(dayTotals.amt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50/70 border border-blue-200/80 whitespace-nowrap">
+                  <span className="text-[11.5px] font-bold text-blue-700">발주박스</span>
+                  <span className="font-mono font-black text-[14px] text-blue-950">
+                    {dayTotals.boxes.toLocaleString()} box
+                  </span>
+                  <span className="text-[11px] font-bold text-blue-600">({dayRows.length}건)</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50/70 border border-emerald-200/80 whitespace-nowrap">
+                  <span className="text-[11.5px] font-bold text-emerald-700">평균 유지일</span>
+                  <span className="font-mono font-black text-[14px] text-emerald-950">
+                    {dayTotals.avgRunway.toFixed(1)}일
+                  </span>
+                </div>
 
-            {/* 중앙: 품명 / 거래처 검색창 */}
-            <CenteredKeywordSearch
-              value={keyword}
-              onChange={setKeyword}
-              placeholder="품명 / 거래처 검색..."
-            />
-
-            {/* 우측: 필터 및 발행 전표 드로어 */}
-            <div className="flex flex-wrap items-center gap-2">
-              {/* 거래처 필터 */}
-              <select
-                value={supplierFilter}
-                onChange={(e) => setSupplierFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-xs sm:text-[13px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
-              >
-                <option value="전체">전체 거래처</option>
-                {suppliers.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-
-              {/* 납품패턴 필터 */}
-              <div className="flex flex-wrap items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-bold whitespace-nowrap">
-                {['전체', '월수금', '화목토', '수금', '화금', '주5일', '매일', '기타'].map((pat) => (
+                {/* 클릭 가능한 긴급/안전미달/기발주 필터 칩 */}
+                <button
+                  type="button"
+                  onClick={() => setUrgencyFilter((prev) => (prev === 'critical' ? 'all' : 'critical'))}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-black transition cursor-pointer whitespace-nowrap ${
+                    urgencyFilter === 'critical'
+                      ? 'bg-rose-600 text-white border-rose-700 shadow-2xs'
+                      : 'bg-rose-50/80 hover:bg-rose-100 text-rose-700 border-rose-200'
+                  }`}
+                  title="클릭 시 결품초임박 품목만 모아봅니다"
+                >
+                  <span>🚨 임박</span>
+                  <span className="font-mono">{dayTotals.criticalCount}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUrgencyFilter((prev) => (prev === 'warning' ? 'all' : 'warning'))}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-black transition cursor-pointer whitespace-nowrap ${
+                    urgencyFilter === 'warning'
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                      : 'bg-amber-50/80 hover:bg-amber-100 text-amber-800 border-amber-200'
+                  }`}
+                  title="클릭 시 안전재고 미달 품목만 모아봅니다"
+                >
+                  <span>⚠️ 미달</span>
+                  <span className="font-mono">{dayTotals.warningCount}</span>
+                </button>
+                {urgencyFilter !== 'all' && (
                   <button
-                    key={pat}
                     type="button"
-                    onClick={() => setPatternFilter(pat)}
-                    className={`px-2.5 py-0.5 rounded text-xs transition cursor-pointer whitespace-nowrap ${
-                      patternFilter === pat
-                        ? 'bg-blue-600 text-white font-black shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    onClick={() => setUrgencyFilter('all')}
+                    className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold cursor-pointer"
+                  >
+                    전체해제
+                  </button>
+                )}
+
+                {offScheduleUrgentItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowOnlyUrgentUnallocated((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-xl border text-[11.5px] font-black cursor-pointer transition whitespace-nowrap ${
+                      showOnlyUrgentUnallocated
+                        ? 'bg-rose-600 text-white border-rose-700'
+                        : 'bg-rose-100/80 text-rose-800 border-rose-300 hover:bg-rose-200'
+                    }`}
+                    title="오늘 납품 요일이 아닌 품목(예: 화목토/주말) 중 재고 1.5일 미만 부족 품목을 확인합니다."
+                  >
+                    {showOnlyUrgentUnallocated
+                      ? `타요일 긴급 해제 (${offScheduleUrgentItems.length})`
+                      : `⚡ 타요일 긴급부족 ${offScheduleUrgentItems.length}`}
+                  </button>
+                )}
+                {dayTotals.zeroPriceCount > 0 && (
+                  <span className="px-2.5 py-1 rounded-xl border bg-amber-50 text-amber-800 border-amber-200 text-[11.5px] font-bold whitespace-nowrap">
+                    단가미등록 {dayTotals.zeroPriceCount}건
+                  </span>
+                )}
+              </div>
+
+              {/* 우측: 보관창고 빠른 칩 */}
+              <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                {['전체', ...warehouseOptions].map((wh) => (
+                  <button
+                    key={wh}
+                    type="button"
+                    onClick={() => setWarehouseFilter(wh)}
+                    className={`px-2.5 py-1 rounded-lg text-[11.5px] font-black transition cursor-pointer whitespace-nowrap ${
+                      warehouseFilter === wh
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
                     }`}
                   >
-                    {pat}
+                    {wh === '전체' ? '전체창고' : wh}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* 발주 대상만 보기 토글 */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowOnlyUrgentUnallocated(false);
-                  setShowOnlyOrderable((prev) => !prev);
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  showOnlyOrderable && !showOnlyUrgentUnallocated
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                }`}
-                title="발주량이 잡힌 품목만 보기 or 전체 품목 탐색하기"
-              >
-                <Package className="w-3.5 h-3.5" />
-                <span>{showOnlyOrderable && !showOnlyUrgentUnallocated ? '발주대상만' : '전체품목'}</span>
-                <span
-                  className={`text-[11px] font-mono px-1.5 rounded-full font-bold whitespace-nowrap ${
-                    showOnlyOrderable && !showOnlyUrgentUnallocated ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
-                  }`}
-                >
-                  {dayRows.length}
-                </span>
-              </button>
-
-              {/* 최근 N일 비수주·무변동(휴면) 자동 제외 컨트롤 */}
-              <div className="flex items-center bg-amber-50/80 border border-amber-200 rounded-lg p-0.5 gap-0.5 whitespace-nowrap">
-                <select
-                  value={dormantDays}
-                  onChange={(e) => setDormantDays(Number(e.target.value))}
-                  aria-label="비수주 휴면 판정 기준 일수"
-                  title="최근 N일 동안 수주 BOM 소요도 없고 재고 감소도 없으면 발주 대상에서 자동 제외합니다."
-                  className="bg-transparent px-1.5 py-0.5 text-[11.5px] font-black text-amber-900 focus:outline-none cursor-pointer"
-                >
-                  <option value={10}>비수주 10일</option>
-                  <option value={14}>비수주 14일</option>
-                  <option value={21}>비수주 21일</option>
-                  <option value={30}>비수주 30일</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setShowDormant((prev) => !prev)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11.5px] font-black transition cursor-pointer ${
-                    showDormant
-                      ? 'bg-amber-600 text-white shadow-2xs'
-                      : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-100'
-                  }`}
-                  title={
-                    showDormant
-                      ? `최근 ${dormantDays}일 비수주·무변동 품목(${dormantRows.length}건)을 함께 표시 중입니다. 클릭 시 다시 숨깁니다.`
-                      : `최근 ${dormantDays}일 비수주·무변동 품목 ${dormantRows.length}건을 발주 목록에서 자동 제외(일사용량 0 차단) 중입니다. 클릭 시 확인합니다.`
-                  }
-                >
-                  <span>{showDormant ? '휴면 포함' : '휴면 제외중'}</span>
-                  <span
-                    className={`font-mono text-[10.5px] px-1 rounded-full ${
-                      showDormant ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
-                    }`}
-                  >
-                    {dormantRows.length}
-                  </span>
-                </button>
+            {/* 하단: 검색 · 거래처 · 패턴 · 표시범위 · 비수주휴면 · 정렬 · 발행전표 */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+              <div className="flex-1 min-w-[200px] max-w-[300px]">
+                <div className="relative flex items-center w-full">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="품명 / 거래처 검색..."
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 focus:bg-white transition-colors"
+                  />
+                  {keyword && (
+                    <button
+                      type="button"
+                      onClick={() => setKeyword('')}
+                      title="검색어 지우기"
+                      aria-label="검색어 지우기"
+                      className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* 정렬 모드 전환 (긴급도순 vs 창고·품목순) */}
-              <button
-                type="button"
-                onClick={() => setSortMode((prev) => (prev === 'urgency' ? 'default' : 'urgency'))}
-                className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border whitespace-nowrap ${
-                  sortMode === 'urgency'
-                    ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-                }`}
-                title="긴급 품목(결품초임박/안전미달)을 테이블 맨 위에 우선 배치합니다."
-              >
-                {sortMode === 'urgency' ? '🚨 긴급순' : '창고·품목순'}
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* 거래처 필터 */}
+                <select
+                  value={supplierFilter}
+                  onChange={(e) => setSupplierFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
+                >
+                  <option value="전체">전체 거래처</option>
+                  {suppliers.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+
+                {/* 납품패턴 필터 */}
+                <select
+                  value={patternFilter}
+                  onChange={(e) => setPatternFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
+                  title="거래처 납품패턴별 필터"
+                >
+                  {['전체', '월수금', '화목토', '수금', '화금', '주5일', '매일', '기타'].map((pat) => (
+                    <option key={pat} value={pat}>
+                      {pat === '전체' ? '납품패턴: 전체' : `패턴: ${pat}`}
+                    </option>
+                  ))}
+                </select>
+
+                {/* 발주 대상만 보기 토글 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOnlyUrgentUnallocated(false);
+                    setShowOnlyOrderable((prev) => !prev);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border whitespace-nowrap ${
+                    showOnlyOrderable && !showOnlyUrgentUnallocated
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  }`}
+                  title="발주량이 잡힌 품목만 보기 or 전체 품목 탐색하기"
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>{showOnlyOrderable && !showOnlyUrgentUnallocated ? '발주대상만' : '전체품목'}</span>
+                  <span
+                    className={`text-[11px] font-mono px-1.5 rounded-full font-bold whitespace-nowrap ${
+                      showOnlyOrderable && !showOnlyUrgentUnallocated ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+                    }`}
+                  >
+                    {dayRows.length}
+                  </span>
+                </button>
+
+                {/* 최근 N일 비수주·무변동(휴면) 자동 제외 컨트롤 */}
+                <div className="flex items-center bg-amber-50/80 border border-amber-200 rounded-xl p-0.5 gap-0.5 whitespace-nowrap">
+                  <select
+                    value={dormantDays}
+                    onChange={(e) => setDormantDays(Number(e.target.value))}
+                    aria-label="비수주 휴면 판정 기준 일수"
+                    title="최근 N일 동안 수주 BOM 소요도 없고 재고 감소도 없으면 발주 대상에서 자동 제외합니다."
+                    className="bg-transparent px-1.5 py-1 text-[11.5px] font-black text-amber-900 focus:outline-none cursor-pointer"
+                  >
+                    <option value={10}>비수주 10일</option>
+                    <option value={14}>비수주 14일</option>
+                    <option value={21}>비수주 21일</option>
+                    <option value={30}>비수주 30일</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowDormant((prev) => !prev)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-black transition cursor-pointer ${
+                      showDormant
+                        ? 'bg-amber-600 text-white shadow-2xs'
+                        : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-100'
+                    }`}
+                    title={
+                      showDormant
+                        ? `최근 ${dormantDays}일 비수주·무변동 품목(${dormantRows.length}건)을 함께 표시 중입니다. 클릭 시 다시 숨깁니다.`
+                        : `최근 ${dormantDays}일 비수주·무변동 품목 ${dormantRows.length}건을 발주 목록에서 자동 제외(일사용량 0 차단) 중입니다. 클릭 시 확인합니다.`
+                    }
+                  >
+                    <span>{showDormant ? '휴면 포함' : '휴면 제외중'}</span>
+                    <span
+                      className={`font-mono text-[10.5px] px-1 rounded-full ${
+                        showDormant ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
+                      }`}
+                    >
+                      {dormantRows.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* 정렬 모드 전환 (긴급도순 vs 창고·품목순) */}
+                <button
+                  type="button"
+                  onClick={() => setSortMode((prev) => (prev === 'urgency' ? 'default' : 'urgency'))}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border whitespace-nowrap ${
+                    sortMode === 'urgency'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                      : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                  }`}
+                  title="긴급 품목(결품초임박/안전미달)을 테이블 맨 위에 우선 배치합니다."
+                >
+                  {sortMode === 'urgency' ? '🚨 긴급순' : '창고·품목순'}
+                </button>
 
               {/* 발행 전표 목록 드로어 버튼 */}
               {confirmedPoList.length > 0 && (
@@ -2780,6 +2900,7 @@ export const MatOrderDayView: React.FC = () => {
                   )}
                 </div>
               )}
+              </div>
             </div>
           </>
         ) : (
@@ -2944,90 +3065,8 @@ export const MatOrderDayView: React.FC = () => {
         </div>
       )}
 
-      {/* ── 3-1. 요일별 통계 기반 스마트 수요 가중치 안내 배너 ── */}
-      {mainMode === 'order' && WEEKDAY_DEMAND_FACTORS[dayIdx] && (
-        <div
-          className={`px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs border-b shrink-0 shadow-2xs ${
-            WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
-              ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 text-amber-950'
-              : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
-              ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 text-emerald-950'
-              : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 text-blue-950'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles
-              className={`w-4 h-4 shrink-0 ${
-                WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
-                  ? 'text-amber-600'
-                  : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
-                  ? 'text-emerald-600'
-                  : 'text-blue-600'
-              }`}
-            />
-            <span>
-              <strong>[실데이터 요일별 수요 가중치 연동]</strong>{' '}
-              <span className="font-extrabold text-blue-900 bg-white/70 px-1.5 py-0.5 rounded border border-blue-200">
-                {DAY_CHARS[dayIdx]}요일 ({weekDates[dayIdx]}) 납품분
-              </span>
-              은 GS25 35일간 실데이터(188만 개) 전수 통계에 따라{' '}
-              <strong
-                className={`px-1.5 py-0.5 rounded font-mono font-black ${
-                  WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
-                    ? 'bg-amber-200 text-amber-950'
-                    : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
-                    ? 'bg-emerald-200 text-emerald-950'
-                    : 'bg-blue-200 text-blue-950'
-                }`}
-              >
-                {WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr}
-              </strong>{' '}
-              <strong>{WEEKDAY_DEMAND_FACTORS[dayIdx].label}</strong>이 적용되어, 공급업체별 확정량이 요일 수요에 비례하여 자동 배분되었습니다.
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold shrink-0">
-            <span
-              className={`px-2 py-0.5 rounded border ${
-                strategyMode === 'tight'
-                  ? 'bg-amber-100 text-amber-900 border-amber-300'
-                  : strategyMode === 'safety'
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                  : 'bg-white/90 text-blue-900 border-blue-200'
-              }`}
-            >
-              {strategyMode === 'tight'
-                ? '⚡ 타이트: 리드타임 하한 보호 · 전품목 여유일 압축'
-                : strategyMode === 'safety'
-                ? '🛡️ 안전: 발주일수 +1일 · 감모 5% 가산'
-                : '⚖️ 표준: 품목 마스터 DB 발주일수 기준'}
-            </span>
-            {offScheduleUrgentItems.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowOnlyUrgentUnallocated((prev) => !prev)}
-                className={`px-2 py-0.5 rounded border font-black cursor-pointer transition ${
-                  showOnlyUrgentUnallocated
-                    ? 'bg-rose-600 text-white border-rose-700'
-                    : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
-                }`}
-                title="오늘 납품 요일이 아닌 품목(예: 화목토/주말) 중 재고 1.5일 미만 부족 품목을 확인합니다."
-              >
-                {showOnlyUrgentUnallocated
-                  ? `긴급미배정 필터 해제 (${offScheduleUrgentItems.length}건)`
-                  : `🚨 타요일·주말 긴급부족 ${offScheduleUrgentItems.length}건 확인`}
-              </button>
-            )}
-            {dayTotals.zeroPriceCount > 0 && (
-              <span className="px-2 py-0.5 rounded border bg-amber-100 text-amber-900 border-amber-300 font-black">
-                ⚠️ 단가 미등록 {dayTotals.zeroPriceCount}건
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── 4. 메인 데이터 테이블 (발주 테이블 or 입고 검수 테이블) ── */}
-      <div className="flex-1 min-h-[420px] min-w-0 bg-white rounded-xl border border-slate-300 overflow-hidden shadow-xs flex flex-col">
+      <div className="flex-1 min-h-[420px] min-w-0 bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col">
         {mainMode === 'order' ? (
           /* ──────── ① 오늘 발주할 양 테이블 ──────── */
           <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -3124,15 +3163,29 @@ export const MatOrderDayView: React.FC = () => {
                           <p className="text-[13px] text-slate-500">
                             거래처별 납품 요일 패턴상 오늘은 납품이 없거나, 다른 요일로 배정되어 있습니다. 상단의 다른 요일 탭을 확인하시거나 [전체 품목 보기]를 선택해 보세요.
                           </p>
-                          {showOnlyOrderable && (
-                            <button
-                              type="button"
-                              onClick={() => setShowOnlyOrderable(false)}
-                              className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
-                            >
-                              [전체 품목 ({rows.length}개) 재고 및 런웨이 보기]
-                            </button>
-                          )}
+                          <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                            {(warehouseFilter !== '전체' || urgencyFilter !== 'all') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWarehouseFilter('전체');
+                                  setUrgencyFilter('all');
+                                }}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
+                              >
+                                창고·긴급 필터 초기화
+                              </button>
+                            )}
+                            {showOnlyOrderable && (
+                              <button
+                                type="button"
+                                onClick={() => setShowOnlyOrderable(false)}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
+                              >
+                                전체 품목 ({rows.length}개) 재고·유지일 보기
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -3143,12 +3196,18 @@ export const MatOrderDayView: React.FC = () => {
                       return (
                         <tr
                           key={r.id}
-                          className={`transition-colors relative ${
+                          className={`transition-colors relative border-l-4 ${
                             isRowStaged
-                              ? 'bg-blue-50/75 hover:bg-blue-100/60'
+                              ? 'border-l-blue-500 bg-blue-50/70 hover:bg-blue-100/60'
+                              : m.stockDays < 1.5 && m.dailyUsage > 0
+                              ? 'border-l-rose-500 bg-rose-50/25 hover:bg-rose-50/50'
+                              : m.stockDays < 3 && m.dailyUsage > 0
+                              ? 'border-l-amber-400 bg-white hover:bg-amber-50/30'
+                              : (r.pendingBoxes || 0) > 0
+                              ? 'border-l-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/40'
                               : idx % 2 === 0
-                              ? 'bg-white hover:bg-blue-50/40'
-                              : 'bg-slate-50/40 hover:bg-blue-50/40'
+                              ? 'border-l-transparent bg-white hover:bg-blue-50/40'
+                              : 'border-l-transparent bg-slate-50/40 hover:bg-blue-50/40'
                           }`}
                         >
                           {/* 발주 담기 체크박스 */}
@@ -3470,7 +3529,17 @@ export const MatOrderDayView: React.FC = () => {
                                   추천 {m.week[dayIdx]}b
                                 </span>
                               ) : null}
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="inline-flex items-center justify-end bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={m.isPastScheduledDeletion || m.dayQty <= 0}
+                                  onClick={() => handleDayQtyChange(r, m, String(Math.max(0, m.dayQty - 1)))}
+                                  className="w-5 h-6 flex items-center justify-center rounded text-xs font-black text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                                  title="1박스 감소"
+                                  aria-label={`${r.name} 발주수량 1박스 감소`}
+                                >
+                                  -
+                                </button>
                                 <input
                                   type="number"
                                   min={0}
@@ -3478,7 +3547,7 @@ export const MatOrderDayView: React.FC = () => {
                                   disabled={m.isPastScheduledDeletion}
                                   onFocus={(e) => e.currentTarget.select()}
                                   onChange={(e) => handleDayQtyChange(r, m, e.target.value)}
-                                  className={`w-12 xl:w-14 2xl:w-16 text-right px-1.5 py-0.5 bg-white border rounded-md text-[14px] 2xl:text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
+                                  className={`w-10 xl:w-12 2xl:w-14 text-right px-1 py-0.5 bg-white border rounded text-[13.5px] 2xl:text-[14.5px] font-black font-mono focus:outline-none focus:ring-2 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
                                     isRowStaged
                                       ? 'border-blue-500 ring-1 ring-blue-300 text-blue-950 focus:ring-blue-500'
                                       : (r.pendingBoxes || 0) > 0
@@ -3486,7 +3555,17 @@ export const MatOrderDayView: React.FC = () => {
                                       : 'border-amber-300 text-amber-950 focus:ring-amber-500'
                                   }`}
                                 />
-                                <span className="text-[11.5px] font-black text-amber-950">b</span>
+                                <button
+                                  type="button"
+                                  disabled={m.isPastScheduledDeletion}
+                                  onClick={() => handleDayQtyChange(r, m, String(m.dayQty + 1))}
+                                  className="w-5 h-6 flex items-center justify-center rounded text-xs font-black text-slate-600 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                                  title="1박스 추가"
+                                  aria-label={`${r.name} 발주수량 1박스 증가`}
+                                >
+                                  +
+                                </button>
+                                <span className="text-[11px] font-black text-amber-950 pr-1">b</span>
                               </div>
                             </div>
                           </td>
@@ -3932,28 +4011,28 @@ export const MatOrderDayView: React.FC = () => {
         )}
 
         {/* ── 하단 총합계 고정 바 ── */}
-        <div className="bg-slate-100 border-t border-slate-300 px-5 py-3 flex flex-wrap items-center justify-between text-[13.5px] font-extrabold shrink-0 gap-3">
+        <div className="bg-slate-50/95 border-t border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between text-[13px] font-extrabold shrink-0 gap-3">
           {mainMode === 'order' ? (
             <>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-slate-600">
-                  납품일자:{' '}
+                  납품일{' '}
                   <strong className="text-slate-900">
-                    {currentDayDate} ({DAY_CHARS[dayIdx]}요일)
+                    {currentDayDate} ({DAY_CHARS[dayIdx]})
                   </strong>
                 </span>
                 <span className="text-slate-300">|</span>
                 <span className="text-slate-600">
-                  표시 품목:{' '}
+                  표시{' '}
                   <strong className="text-emerald-700 font-mono">{dayRows.length}</strong>건
                 </span>
                 <button
                   type="button"
                   onClick={handleToggleAllVisibleStage}
                   disabled={visibleStageableRows.length === 0}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`px-2.5 py-1 rounded-xl text-xs font-black border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                     isAllVisibleStaged
-                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-800 border-slate-400'
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-800 border-slate-300'
                       : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-700 shadow-2xs'
                   }`}
                   title="현재 화면에 필터·표시된 추천/발주가능 품목을 발주 바구니에 한꺼번에 담거나 뺍니다."
@@ -3966,67 +4045,53 @@ export const MatOrderDayView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowBasketModal(true)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 text-xs font-black transition cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-black transition cursor-pointer"
                     title="바구니에 담은 전체 품목 확인 및 수량 편집"
                   >
                     <ShoppingCart className="w-3.5 h-3.5 text-indigo-600" />
                     <span>
-                      바구니: {stagedTotals.count}건 · {stagedTotals.boxes.toLocaleString()}b · ₩
+                      바구니 {stagedTotals.count}건 · {stagedTotals.boxes.toLocaleString()}b · ₩
                       {Math.round(stagedTotals.amt).toLocaleString()}
                     </span>
                   </button>
                 )}
-                <span className="text-slate-300">|</span>
-                <span className="text-slate-600 flex items-center gap-1">
-                  전략:{' '}
-                  <strong
-                    className={`font-black ${
-                      strategyMode === 'tight'
-                        ? 'text-amber-700'
-                        : strategyMode === 'safety'
-                        ? 'text-emerald-700'
-                        : 'text-blue-700'
-                    }`}
-                  >
-                    {strategyMode === 'tight'
-                      ? '⚡타이트(리드타임보호 압축)'
-                      : strategyMode === 'safety'
-                      ? '🛡️보수적안전(+1일·+5%)'
-                      : '⚖️표준(발주일수)'}
-                  </strong>
-                  {dayTotals.manualOverrideCount > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[11px] font-bold">
-                      수동수정 {dayTotals.manualOverrideCount}건
-                    </span>
-                  )}
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-slate-600">
-                  평균 Runway:{' '}
-                  <strong className="text-indigo-700 font-mono">
-                    {dayTotals.avgRunway.toFixed(1)}일치
-                  </strong>
-                </span>
+                {dayTotals.manualOverrideCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold">
+                    수동수정 {dayTotals.manualOverrideCount}건
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center gap-6">
-                <div>
-                  <span className="text-slate-600 mr-2">
-                    {DAY_CHARS[dayIdx]}요일 발주 총 박스수:
-                  </span>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-slate-500 text-xs">{DAY_CHARS[dayIdx]}요일 총 박스</span>
                   <span className="font-mono font-black text-blue-700 text-base">
                     {dayTotals.boxes.toLocaleString()}{' '}
                     <span className="text-xs font-sans">box</span>
                   </span>
                 </div>
-                <div>
-                  <span className="text-slate-600 mr-2">
-                    {DAY_CHARS[dayIdx]}요일 발주 예정총액:
-                  </span>
-                  <span className="font-mono font-black text-slate-900 text-lg sm:text-xl text-emerald-800">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-slate-500 text-xs">예정총액</span>
+                  <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl">
                     ₩{Math.round(dayTotals.amt).toLocaleString()}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDay}
+                  disabled={isSaving || (stagedTotals.count === 0 && dayRows.length === 0)}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs sm:text-[13px] font-black shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
+                  title="담은 발주 또는 현재 요일 추천 발주를 ERP 정식 발주서(PO)로 확정 저장합니다."
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>
+                    {isSaving
+                      ? '저장 중...'
+                      : stagedTotals.count > 0
+                      ? `담은 발주 ${stagedTotals.count}건 확정 저장`
+                      : `${DAY_CHARS[dayIdx]}요일 발주 확정`}
+                  </span>
+                </button>
               </div>
             </>
           ) : (
