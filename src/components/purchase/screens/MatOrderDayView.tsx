@@ -36,6 +36,7 @@ import {
   Lock,
   Trash2,
   Undo2,
+  ShoppingCart,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -163,6 +164,29 @@ interface InboundInspectItem {
   checked: boolean;
 }
 
+/** 발주 담기 바구니 항목 (납품일자 × 품목 기준 누적) */
+interface StagedOrderEntry {
+  key: string;
+  orderDate: string;
+  dayChar: string;
+  rowId: number;
+  productId?: number;
+  name: string;
+  supplier: string;
+  warehouse: string;
+  packUnit: number;
+  bagPrice: number;
+  boxPrice: number;
+  qty: number;
+  recommendedQty: number;
+  pendingBoxes: number;
+  pendingOrderNos: string[];
+}
+
+function makeStagedKey(orderDate: string, rowId: number): string {
+  return `${orderDate}::${rowId}`;
+}
+
 interface DeletedProductItem {
   id: number;
   productCode: string;
@@ -225,6 +249,10 @@ export const MatOrderDayView: React.FC = () => {
 
   // 요일별 수동 수정값: dayIdx -> rowId -> 수량
   const [overrides, setOverrides] = useState<Record<number, Record<number, number>>>({});
+
+  // 발주 담기(장바구니) 상태: 여러 요일·검색·거래처에서 선택한 항목을 누적 후 한 번에 확정 저장
+  const [stagedOrders, setStagedOrders] = useState<Record<string, StagedOrderEntry>>({});
+  const [showBasketModal, setShowBasketModal] = useState<boolean>(false);
 
   // 해당 요일의 실제 생성된 ERP 발주서(PO) 전표 목록
   const [confirmedPoList, setConfirmedPoList] = useState<any[]>([]);
@@ -467,6 +495,18 @@ export const MatOrderDayView: React.FC = () => {
           }
         });
         return next;
+      });
+      setStagedOrders((prev) => {
+        const next: Record<string, StagedOrderEntry> = {};
+        let changed = false;
+        Object.entries(prev).forEach(([k, entry]) => {
+          if (entry.rowId === targetRow.id || entry.productId === productId) {
+            changed = true;
+          } else {
+            next[k] = entry;
+          }
+        });
+        return changed ? next : prev;
       });
       if (activeBriefingId === targetRow.id) setActiveBriefingId(null);
 
@@ -712,8 +752,15 @@ export const MatOrderDayView: React.FC = () => {
 
       // 요일 분할 (오늘 이후 실제 발주 가능 요일에 100% 배분)
       const week = splitWeek(r, suggestedBoxes, activeDayMask);
+      const stagedEntry = stagedOrders[makeStagedKey(targetDayDate, r.id)];
       const override = isPastScheduledDeletion ? 0 : overrides[targetDayIdx]?.[r.id];
-      const dayQty = override !== undefined ? override : week[targetDayIdx];
+      const dayQty = isPastScheduledDeletion
+        ? 0
+        : stagedEntry !== undefined
+        ? stagedEntry.qty
+        : override !== undefined
+        ? override
+        : week[targetDayIdx];
       const boxPrice = calcBoxPrice(r.bagPrice, pack);
       const amount = dayQty * boxPrice;
 
@@ -742,7 +789,7 @@ export const MatOrderDayView: React.FC = () => {
         amount,
       };
     },
-    [strategyMode, itemTargetDaysOverrides, overrides, weekDates, currentDayDate, activeDayMask]
+    [strategyMode, itemTargetDaysOverrides, overrides, stagedOrders, weekDates, currentDayDate, activeDayMask]
   );
 
   // 품목별 발주일수 미세조정 핸들러 (±0.5일, 0일 가능)
@@ -928,13 +975,251 @@ export const MatOrderDayView: React.FC = () => {
     return { boxes, amt, criticalCount, warningCount, zeroPriceCount, manualOverrideCount, avgRunway };
   }, [dayRows, overrides, dayIdx]);
 
-  // 수량 인라인 수정 (정수 박스 단위)
-  const handleDayQtyChange = (id: number, val: string) => {
+  // ── 발주 담기(장바구니) 요약·그룹 계산 ──
+  const stagedList = useMemo(() => {
+    return Object.values(stagedOrders).sort(
+      (a, b) =>
+        a.orderDate.localeCompare(b.orderDate) ||
+        a.supplier.localeCompare(b.supplier, 'ko') ||
+        a.name.localeCompare(b.name, 'ko')
+    );
+  }, [stagedOrders]);
+
+  const stagedGroupedByDate = useMemo(() => {
+    const map = new Map<
+      string,
+      { orderDate: string; dayChar: string; items: StagedOrderEntry[]; totalBoxes: number; totalAmount: number }
+    >();
+    stagedList.forEach((item) => {
+      if (!map.has(item.orderDate)) {
+        map.set(item.orderDate, {
+          orderDate: item.orderDate,
+          dayChar: item.dayChar,
+          items: [],
+          totalBoxes: 0,
+          totalAmount: 0,
+        });
+      }
+      const group = map.get(item.orderDate)!;
+      group.items.push(item);
+      group.totalBoxes += item.qty;
+      group.totalAmount += item.qty * (item.boxPrice || calcBoxPrice(item.bagPrice, item.packUnit));
+    });
+    return Array.from(map.values()).sort((a, b) => a.orderDate.localeCompare(b.orderDate));
+  }, [stagedList]);
+
+  const stagedCountByDate = useMemo(() => {
+    const map: Record<string, { count: number; boxes: number }> = {};
+    stagedList.forEach((item) => {
+      if (!map[item.orderDate]) map[item.orderDate] = { count: 0, boxes: 0 };
+      map[item.orderDate].count += 1;
+      map[item.orderDate].boxes += item.qty;
+    });
+    return map;
+  }, [stagedList]);
+
+  const stagedTotals = useMemo(() => {
+    let boxes = 0;
+    let amt = 0;
+    let zeroPriceCount = 0;
+    let duplicateCount = 0;
+    stagedList.forEach((item) => {
+      boxes += item.qty;
+      amt += item.qty * (item.boxPrice || calcBoxPrice(item.bagPrice, item.packUnit));
+      if ((item.bagPrice || 0) <= 0 && (item.boxPrice || 0) <= 0) zeroPriceCount += 1;
+      if ((item.pendingBoxes || 0) > 0) duplicateCount += 1;
+    });
+    return {
+      count: stagedList.length,
+      boxes,
+      amt,
+      dateCount: stagedGroupedByDate.length,
+      zeroPriceCount,
+      duplicateCount,
+    };
+  }, [stagedList, stagedGroupedByDate.length]);
+
+  const visibleStageableRows = useMemo(
+    () => dayRows.filter(({ m }) => !m.isPastScheduledDeletion && Number(m.dayQty) > 0),
+    [dayRows]
+  );
+
+  const isAllVisibleStaged = useMemo(
+    () =>
+      visibleStageableRows.length > 0 &&
+      visibleStageableRows.every(({ r }) => Boolean(stagedOrders[makeStagedKey(currentDayDate, r.id)])),
+    [visibleStageableRows, stagedOrders, currentDayDate]
+  );
+
+  const buildStagedEntry = useCallback(
+    (
+      r: SheetRow,
+      pack: number,
+      boxPrice: number,
+      recommendedQty: number,
+      targetDate: string,
+      targetDayIdx: number,
+      qty: number
+    ): StagedOrderEntry => ({
+      key: makeStagedKey(targetDate, r.id),
+      orderDate: targetDate,
+      dayChar: DAY_CHARS[targetDayIdx] || '',
+      rowId: r.id,
+      productId: r.productId,
+      name: r.name,
+      supplier: r.supplier,
+      warehouse: r.warehouse || '',
+      packUnit: pack,
+      bagPrice: r.bagPrice || 0,
+      boxPrice: boxPrice || calcBoxPrice(r.bagPrice, pack),
+      qty,
+      recommendedQty,
+      pendingBoxes: r.pendingBoxes || 0,
+      pendingOrderNos: r.pendingOrderNos || [],
+    }),
+    []
+  );
+
+  // 수량 인라인 수정 (정수 박스 단위, 0 초과 시 자동 발주 담기 / 0 입력 시 바구니 제외)
+  const handleDayQtyChange = (
+    r: SheetRow,
+    m: ReturnType<typeof getRowMetrics>,
+    val: string
+  ) => {
     const num = Math.max(0, Math.ceil(Number(val) || 0));
     setOverrides((prev) => ({
       ...prev,
-      [dayIdx]: { ...(prev[dayIdx] || {}), [id]: num },
+      [dayIdx]: { ...(prev[dayIdx] || {}), [r.id]: num },
     }));
+    if (m.isPastScheduledDeletion) return;
+
+    const key = makeStagedKey(currentDayDate, r.id);
+    setStagedOrders((prev) => {
+      if (num <= 0) {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return {
+        ...prev,
+        [key]: buildStagedEntry(
+          r,
+          m.pack || r.packUnit || 1,
+          m.boxPrice,
+          m.week[dayIdx] || 0,
+          currentDayDate,
+          dayIdx,
+          num
+        ),
+      };
+    });
+  };
+
+  // 개별 품목 발주 담기/해제 체크박스 토글
+  const handleToggleStageRow = (r: SheetRow, m: ReturnType<typeof getRowMetrics>) => {
+    if (m.isPastScheduledDeletion) return;
+    const key = makeStagedKey(currentDayDate, r.id);
+    const isStaged = Boolean(stagedOrders[key]);
+    if (isStaged) {
+      setStagedOrders((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    const initialQty = m.dayQty > 0 ? m.dayQty : m.week[dayIdx] > 0 ? m.week[dayIdx] : 1;
+    if (m.dayQty <= 0) {
+      setOverrides((prev) => ({
+        ...prev,
+        [dayIdx]: { ...(prev[dayIdx] || {}), [r.id]: initialQty },
+      }));
+    }
+    setStagedOrders((prev) => ({
+      ...prev,
+      [key]: buildStagedEntry(
+        r,
+        m.pack || r.packUnit || 1,
+        m.boxPrice,
+        m.week[dayIdx] || 0,
+        currentDayDate,
+        dayIdx,
+        initialQty
+      ),
+    }));
+  };
+
+  // 현재 화면에 표시된 발주 가능 품목 전체 담기/해제
+  const handleToggleAllVisibleStage = () => {
+    if (visibleStageableRows.length === 0) return;
+    if (isAllVisibleStaged) {
+      setStagedOrders((prev) => {
+        const next = { ...prev };
+        visibleStageableRows.forEach(({ r }) => {
+          delete next[makeStagedKey(currentDayDate, r.id)];
+        });
+        return next;
+      });
+      return;
+    }
+
+    setStagedOrders((prev) => {
+      const next = { ...prev };
+      visibleStageableRows.forEach(({ r, m }) => {
+        const qty = Number(m.dayQty) || 0;
+        if (qty <= 0) return;
+        const key = makeStagedKey(currentDayDate, r.id);
+        next[key] = buildStagedEntry(
+          r,
+          m.pack || r.packUnit || 1,
+          m.boxPrice,
+          m.week[dayIdx] || 0,
+          currentDayDate,
+          dayIdx,
+          qty
+        );
+      });
+      return next;
+    });
+  };
+
+  // 바구니 모달 내부 수량 수정
+  const handleUpdateStagedQty = (key: string, rawVal: string | number) => {
+    const nextQty = Math.max(1, Math.ceil(Number(rawVal) || 1));
+    const entry = stagedOrders[key];
+    if (!entry) return;
+    setStagedOrders((prev) => {
+      if (!prev[key]) return prev;
+      return { ...prev, [key]: { ...prev[key], qty: nextQty } };
+    });
+    const matchedDayIdx = weekDates.indexOf(entry.orderDate);
+    if (matchedDayIdx >= 0) {
+      setOverrides((prev) => ({
+        ...prev,
+        [matchedDayIdx]: { ...(prev[matchedDayIdx] || {}), [entry.rowId]: nextQty },
+      }));
+    }
+  };
+
+  // 바구니 단일 항목 제외
+  const handleRemoveStagedItem = (key: string) => {
+    setStagedOrders((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  // 바구니 전체 비우기
+  const handleClearBasket = () => {
+    if (stagedList.length === 0) return;
+    if (confirm(`발주 바구니에 담긴 ${stagedList.length}개 항목을 모두 비우시겠습니까?`)) {
+      setStagedOrders({});
+      setShowBasketModal(false);
+    }
   };
 
   // 수량 초기화
@@ -950,12 +1235,264 @@ export const MatOrderDayView: React.FC = () => {
     }
   };
 
-  // 해당 요일 발주 확정 및 ERP 발주서(PO) 전표 생성
+  // 단일 납품일자 분의 ERP 품목 매칭(/materialize) + PO 전표 생성(/order-result) 공통 실행기
+  const executeBatchOrderForDate = async (
+    targetDate: string,
+    memo: string,
+    items: {
+      productId?: number;
+      name: string;
+      boxes: number;
+      packUnit: number;
+      bagPrice: number;
+      boxPrice: number;
+      supplierHeader: string;
+    }[]
+  ): Promise<{
+    ok: boolean;
+    orderDate: string;
+    createdOrders: { orderNo: string; itemCount: number }[];
+    failedMat: any[];
+    error?: string;
+  }> => {
+    const matRes = await fetch('/api/gfs/materialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderDate: targetDate, items }),
+    });
+    const matJson = await matRes.json().catch(() => ({ success: false, error: `HTTP ${matRes.status}` }));
+    if (!matRes.ok || !matJson.success) {
+      return {
+        ok: false,
+        orderDate: targetDate,
+        createdOrders: [],
+        failedMat: [],
+        error: `ERP 품목 매칭 실패: ${matJson.error || `HTTP ${matRes.status}`}`,
+      };
+    }
+
+    const failedMat = (matJson.data?.failed || []) as any[];
+    const orderItems = (matJson.data?.matched || [])
+      .filter((m: any) => m.productCode && Number(m.orderQty) > 0)
+      .map((m: any) => ({
+        productId: m.productId,
+        productCode: m.productCode,
+        productName: m.productName || m.name,
+        orderQty: m.orderQty,
+        unit: 'box',
+        unitPrice: m.boxPrice || 0,
+        totalAmount: m.totalAmount || undefined,
+        partnerId: m.partnerId || undefined,
+        partnerName: m.partnerName || undefined,
+      }));
+
+    if (orderItems.length === 0) {
+      const reasons = failedMat
+        .slice(0, 5)
+        .map((f: any) => `• ${f.name}: ${f.reason}`)
+        .join('\n');
+      return {
+        ok: false,
+        orderDate: targetDate,
+        createdOrders: [],
+        failedMat,
+        error: 'ERP 품목 마스터와 매칭된 발주 품목이 없습니다.' + (reasons ? `\n${reasons}` : ''),
+      };
+    }
+
+    const res = await fetch('/api/gfs/order-result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderDate: targetDate, memo, items: orderItems }),
+    });
+    const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+    if (!res.ok || !json.success) {
+      return {
+        ok: false,
+        orderDate: targetDate,
+        createdOrders: [],
+        failedMat,
+        error: `발주 확정 실패: ${json.error || `HTTP ${res.status}`}`,
+      };
+    }
+
+    return {
+      ok: true,
+      orderDate: targetDate,
+      createdOrders: Array.isArray(json.data) ? json.data : [],
+      failedMat,
+    };
+  };
+
+  // 발주 확정 저장 (담은 바구니가 있으면 일괄 확정, 0건이면 실수 방지 확인 후 현재 화면 전체 일괄 저장)
   const handleSaveDay = async () => {
-    // 발주수량 0 품목은 전송 제외 (1box 단건도 정상 저장)
+    const useStagedBasket = stagedList.length > 0;
+
+    if (useStagedBasket) {
+      const duplicateItems = stagedList
+        .filter((it) => (it.pendingBoxes || 0) > 0)
+        .map(
+          (it) =>
+            `• [${it.orderDate}] ${it.name} (기발주: ${it.pendingBoxes}box 차감 후 추가: ${it.qty}box, 전표: ${(it.pendingOrderNos || []).slice(0, 2).join(', ')})`
+        );
+
+      if (duplicateItems.length > 0) {
+        const dupMsg =
+          `⚠️ [기발주 포함 추가 발주 확인]\n\n` +
+          `바구니에 담은 품목 중 ${duplicateItems.length}개 품목은 기존 미입고 발주분이 있습니다:\n\n` +
+          duplicateItems.slice(0, 5).join('\n') +
+          (duplicateItems.length > 5 ? `\n...외 ${duplicateItems.length - 5}건` : '') +
+          `\n\n추가 발주를 진행하시겠습니까?\n(취소를 누르면 저장이 중단됩니다.)`;
+        if (!confirm(dupMsg)) return;
+      }
+
+      const dateSummaryLines = stagedGroupedByDate
+        .map(
+          (g) =>
+            `• ${g.orderDate} (${g.dayChar}요일): ${g.items.length}품목 · ${g.totalBoxes.toLocaleString()}박스 · ₩${Math.round(g.totalAmount).toLocaleString()}원`
+        )
+        .join('\n');
+      const zeroPriceLine =
+        stagedTotals.zeroPriceCount > 0
+          ? `\n\n⚠️ 단가 미등록(₩0) 품목 ${stagedTotals.zeroPriceCount}건이 포함되어 있습니다.`
+          : '';
+
+      if (
+        !confirm(
+          `🛒 [발주 담기 일괄 확정 저장]\n\n` +
+            `총 ${stagedTotals.dateCount}개 납품일 · ${stagedTotals.count}개 품목 (${stagedTotals.boxes.toLocaleString()}박스 / ₩${Math.round(
+              stagedTotals.amt
+            ).toLocaleString()}원)\n\n` +
+            `${dateSummaryLines}${zeroPriceLine}\n\n` +
+            `위 담은 항목을 납품일·거래처별 ERP 정식 발주서(PO)로 한꺼번에 확정 생성하시겠습니까?`
+        )
+      ) {
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        const succeededDates = new Set<string>();
+        const allCreated: { orderDate: string; orderNo: string; itemCount: number }[] = [];
+        const allFailedMat: { orderDate: string; name: string; reason: string }[] = [];
+        const dateErrors: string[] = [];
+
+        for (const group of stagedGroupedByDate) {
+          const result = await executeBatchOrderForDate(
+            group.orderDate,
+            `자재발주(요일별 ${group.dayChar}요일 담기일괄, 전략:${strategyMode})`,
+            group.items.map((it) => ({
+              productId: it.productId,
+              name: it.name,
+              boxes: it.qty,
+              packUnit: it.packUnit || 1,
+              bagPrice: it.bagPrice || 0,
+              boxPrice: it.boxPrice || calcBoxPrice(it.bagPrice, it.packUnit || 1),
+              supplierHeader: it.supplier,
+            }))
+          );
+
+          result.failedMat.forEach((f: any) =>
+            allFailedMat.push({ orderDate: group.orderDate, name: f.name, reason: f.reason })
+          );
+
+          if (result.ok) {
+            succeededDates.add(group.orderDate);
+            result.createdOrders.forEach((o) =>
+              allCreated.push({ orderDate: group.orderDate, orderNo: o.orderNo, itemCount: o.itemCount })
+            );
+          } else {
+            dateErrors.push(`[${group.orderDate}] ${result.error}`);
+          }
+        }
+
+        if (succeededDates.size > 0) {
+          setStagedOrders((prev) => {
+            const next: Record<string, StagedOrderEntry> = {};
+            Object.entries(prev).forEach(([k, entry]) => {
+              if (!succeededDates.has(entry.orderDate)) {
+                next[k] = entry;
+              }
+            });
+            return next;
+          });
+          setOverrides((prev) => {
+            const next = { ...prev };
+            let changed = false;
+            weekDates.forEach((d, idx) => {
+              if (succeededDates.has(d) && next[idx]) {
+                delete next[idx];
+                changed = true;
+              }
+            });
+            return changed ? next : prev;
+          });
+          if (dateErrors.length === 0) {
+            setShowBasketModal(false);
+          }
+          await Promise.all([loadConfirmedPo(), loadInboundPending(), loadOrderSheet()]);
+        }
+
+        const failedWarn =
+          allFailedMat.length > 0
+            ? `\n\n⚠️ 제외/매칭실패 ${allFailedMat.length}건:\n` +
+              allFailedMat
+                .slice(0, 5)
+                .map((f) => `• [${f.orderDate}] ${f.name}: ${f.reason}`)
+                .join('\n')
+            : '';
+        const errSection = dateErrors.length > 0 ? `\n\n❌ 실패 내역:\n${dateErrors.join('\n')}` : '';
+
+        if (allCreated.length > 0) {
+          const orderPreview = allCreated
+            .slice(0, 6)
+            .map((o) => `• ${o.orderNo} (${o.orderDate}, ${o.itemCount}품목)`)
+            .join('\n');
+          alert(
+            `✅ 발주 담기 일괄 확정 완료!\n\n` +
+              `• 생성된 발주서: 총 ${allCreated.length}건 발행 완료\n` +
+              orderPreview +
+              (allCreated.length > 6 ? `\n...외 ${allCreated.length - 6}건` : '') +
+              failedWarn +
+              errSection
+          );
+        } else {
+          alert('발주 확정 실패:\n' + (dateErrors.join('\n') || '생성된 발주서가 없습니다.') + failedWarn);
+        }
+      } catch (err: any) {
+        alert('발주 일괄 저장 중 통신 오류: ' + err.message);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    // ── 바구니가 비어 있는(0건) 경우: 실수 방지를 위해 전체발주 여부 명확히 안내 ──
     const saveRows = dayRows.filter(({ m }) => Number(m.dayQty) > 0);
     if (saveRows.length === 0) {
-      alert(`[${DAY_CHARS[dayIdx]}요일]에 발주수량이 입력된 품목이 없습니다.`);
+      alert(
+        `발주 담기 바구니가 비어 있고, [${DAY_CHARS[dayIdx]}요일] 현재 화면에도 발주수량이 입력된 품목이 없습니다.\n\n` +
+          `테이블 왼쪽 체크박스로 발주할 품목을 담거나 수량을 입력해 주세요.`
+      );
+      return;
+    }
+
+    const zeroPriceLine =
+      dayTotals.zeroPriceCount > 0
+        ? `\n\n⚠️ 단가 미등록(₩0) 품목 ${dayTotals.zeroPriceCount}건이 포함되어 있습니다.`
+        : '';
+
+    if (
+      !confirm(
+        `💡 현재 '발주 담기' 바구니에 선택한 항목이 없습니다 (0건).\n\n` +
+          `현재 화면 [${currentDayDate} (${DAY_CHARS[dayIdx]}요일)]에 표시된 ${
+            saveRows.length
+          }개 품목 전체 (${dayTotals.boxes.toLocaleString()}박스 / ₩${Math.round(
+            dayTotals.amt
+          ).toLocaleString()}원)를 그대로 일괄 발주 확정하시겠습니까?${zeroPriceLine}\n\n` +
+          `(원하는 품목만 골라서 발주하려면 [취소]를 누른 뒤 왼쪽 체크박스나 수량 수정으로 먼저 담아 주세요.)`
+      )
+    ) {
       return;
     }
 
@@ -979,94 +1516,32 @@ export const MatOrderDayView: React.FC = () => {
       }
     }
 
-    const zeroPriceLine =
-      dayTotals.zeroPriceCount > 0
-        ? `\n\n⚠️ 단가 미등록(₩0) 품목 ${dayTotals.zeroPriceCount}건이 포함되어 있습니다.`
-        : '';
-
-    if (
-      !confirm(
-        `[${currentDayDate} (${DAY_CHARS[dayIdx]}요일)] 납품분으로 총 ${
-          saveRows.length
-        }개 품목 (${dayTotals.boxes.toLocaleString()}박스 / ₩${Math.round(
-          dayTotals.amt
-        ).toLocaleString()}원)을 ERP 정식 발주서(PO)로 확정 생성하시겠습니까?${zeroPriceLine}\n\n생성된 발주서는 [발주현황/수정] 및 [입고등록] 화면에 실시간 연동됩니다.`
-      )
-    ) {
-      return;
-    }
-
     setIsSaving(true);
     try {
-      // Step 1: /api/gfs/materialize 호출하여 ERP 품목 코드 매칭
-      const matRes = await fetch('/api/gfs/materialize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderDate: currentDayDate,
-          items: saveRows.map(({ r, m }) => {
-            const pack = m.pack || r.packUnit || 1;
-            const boxPrice = m.boxPrice || calcBoxPrice(r.bagPrice, pack);
-            return {
-              productId: r.productId,
-              name: r.name,
-              boxes: m.dayQty,
-              packUnit: pack,
-              bagPrice: r.bagPrice,
-              boxPrice,
-              supplierHeader: r.supplier,
-            };
-          }),
-        }),
-      });
-      const matJson = await matRes.json().catch(() => ({ success: false, error: `HTTP ${matRes.status}` }));
-      if (!matRes.ok || !matJson.success) {
-        alert('ERP 품목 매칭 실패: ' + (matJson.error || `HTTP ${matRes.status}`));
-        return;
-      }
+      const result = await executeBatchOrderForDate(
+        currentDayDate,
+        `자재발주(요일별 ${DAY_CHARS[dayIdx]}요일 납품, 전략:${strategyMode})`,
+        saveRows.map(({ r, m }) => {
+          const pack = m.pack || r.packUnit || 1;
+          const boxPrice = m.boxPrice || calcBoxPrice(r.bagPrice, pack);
+          return {
+            productId: r.productId,
+            name: r.name,
+            boxes: m.dayQty,
+            packUnit: pack,
+            bagPrice: r.bagPrice,
+            boxPrice,
+            supplierHeader: r.supplier,
+          };
+        })
+      );
 
-      const failedMat = (matJson.data?.failed || []) as any[];
-      const orderItems = (matJson.data?.matched || [])
-        .filter((m: any) => m.productCode && Number(m.orderQty) > 0)
-        .map((m: any) => ({
-          productId: m.productId,
-          productCode: m.productCode,
-          productName: m.productName || m.name,
-          orderQty: m.orderQty,
-          unit: 'box',
-          unitPrice: m.boxPrice || 0,
-          totalAmount: m.totalAmount || undefined,
-          partnerId: m.partnerId || undefined,
-          partnerName: m.partnerName || undefined,
-        }));
-
-      if (orderItems.length === 0) {
-        const reasons = failedMat
-          .slice(0, 5)
-          .map((f: any) => `• ${f.name}: ${f.reason}`)
-          .join('\n');
-        alert('ERP 품목 마스터와 매칭된 발주 품목이 없습니다.' + (reasons ? `\n\n${reasons}` : ''));
-        return;
-      }
-
-      // Step 2: /api/gfs/order-result 호출하여 실제 PurchaseOrder 및 MaterialRequirement 생성
-      const res = await fetch('/api/gfs/order-result', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderDate: currentDayDate,
-          memo: `자재발주(요일별 ${DAY_CHARS[dayIdx]}요일 납품, 전략:${strategyMode})`,
-          items: orderItems,
-        }),
-      });
-      const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
-
-      if (res.ok && json.success) {
-        const orderCount = (json.data || []).length;
+      if (result.ok) {
+        const orderCount = result.createdOrders.length;
         const failedWarn =
-          failedMat.length > 0
-            ? `\n\n⚠️ 제외/매칭실패 ${failedMat.length}건:\n` +
-              failedMat
+          result.failedMat.length > 0
+            ? `\n\n⚠️ 제외/매칭실패 ${result.failedMat.length}건:\n` +
+              result.failedMat
                 .slice(0, 5)
                 .map((f: any) => `• ${f.name}: ${f.reason}`)
                 .join('\n')
@@ -1077,11 +1552,15 @@ export const MatOrderDayView: React.FC = () => {
             `• 상단의 [발주서 ${orderCount}건 발행] 버튼을 누르면 거래처별 전표 내역을 바로 확인하실 수 있습니다.` +
             failedWarn
         );
-        loadConfirmedPo();
-        loadInboundPending();
-        loadOrderSheet();
+        setOverrides((prev) => {
+          if (!prev[dayIdx]) return prev;
+          const next = { ...prev };
+          delete next[dayIdx];
+          return next;
+        });
+        await Promise.all([loadConfirmedPo(), loadInboundPending(), loadOrderSheet()]);
       } else {
-        alert('발주 확정 실패: ' + json.error);
+        alert(result.error || '발주 확정 실패');
       }
     } catch (err: any) {
       alert('발주 저장 중 통신 오류: ' + err.message);
@@ -1393,16 +1872,46 @@ export const MatOrderDayView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSaveDay}
-                disabled={isSaving || dayRows.length === 0}
+                disabled={isSaving || (stagedTotals.count === 0 && dayRows.length === 0)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13.5px] font-black text-white shadow-xs transition cursor-pointer whitespace-nowrap ${
-                  dayRows.length > 0
-                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98 animate-pulse'
+                  stagedTotals.count > 0 || dayRows.length > 0
+                    ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-98'
                     : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                 }`}
-                title="선택한 요일의 발주분을 ERP 정식 발주서(PO) 전표로 확정 생성합니다."
+                title={
+                  stagedTotals.count > 0
+                    ? '발주 바구니에 담아둔 모든 품목을 납품일·거래처별 ERP 정식 발주서(PO)로 일괄 생성합니다.'
+                    : '담긴 품목이 없으면 확인 후 현재 요일 추천 품목을 일괄 발주 생성합니다.'
+                }
               >
                 <Save className="w-4 h-4 stroke-[2.5]" />
-                <span>{isSaving ? '생성 중...' : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 ]`}</span>
+                <span>
+                  {isSaving
+                    ? '확정 저장 중...'
+                    : stagedTotals.count > 0
+                    ? `[ 🛒 담은 발주 ${stagedTotals.count}건 (${stagedTotals.boxes.toLocaleString()}b) 확정 저장 ]`
+                    : `[ ${DAY_CHARS[dayIdx]}요일 ERP 발주 확정 저장 ]`}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBasketModal(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
+                  stagedTotals.count > 0
+                    ? 'bg-blue-600 hover:bg-blue-500 border-blue-700 text-white shadow-xs'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
+                }`}
+                title="검색·거래처·요일별로 담아둔 발주 목록을 한눈에 확인하고 수량을 최종 검토합니다."
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>발주 바구니</span>
+                <span
+                  className={`px-1.5 py-[1px] rounded-full text-[11px] font-mono font-bold ${
+                    stagedTotals.count > 0 ? 'bg-white text-blue-700' : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {stagedTotals.count}
+                </span>
               </button>
               <button
                 type="button"
@@ -1538,6 +2047,7 @@ export const MatOrderDayView: React.FC = () => {
                   const dateStr = weekDates[i];
                   const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
                   const factorInfo = WEEKDAY_DEMAND_FACTORS[i];
+                  const stagedInfo = dateStr ? stagedCountByDate[dateStr] : undefined;
 
                   return (
                     <button
@@ -1581,6 +2091,16 @@ export const MatOrderDayView: React.FC = () => {
                       >
                         {st.boxes > 0 ? `${st.boxes}b` : '0'}
                       </span>
+                      {stagedInfo && stagedInfo.count > 0 && (
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black whitespace-nowrap ${
+                            isActive ? 'bg-amber-300 text-slate-900' : 'bg-emerald-600 text-white'
+                          }`}
+                          title={`${d}요일 바구니 담김: ${stagedInfo.count}품목 (${stagedInfo.boxes}박스)`}
+                        >
+                          담김{stagedInfo.count}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -2094,9 +2614,10 @@ export const MatOrderDayView: React.FC = () => {
             ) : (
               <table className="w-full table-fixed text-left border-collapse">
                 <colgroup>
+                  <col className="w-[2.7%]" />
                   <col className="w-[2.5%]" />
                   <col className="w-[8%]" />
-                  <col className="w-[24.2%]" />
+                  <col className="w-[21.5%]" />
                   <col className="w-[5.5%]" />
                   <col className="w-[8%]" />
                   <col className="w-[6%]" />
@@ -2109,6 +2630,23 @@ export const MatOrderDayView: React.FC = () => {
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[12.5px] 2xl:text-[13.5px] font-black border-b border-slate-300 tracking-tight select-none">
                   <tr>
+                    <th className="py-2.5 px-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllVisibleStaged}
+                        disabled={visibleStageableRows.length === 0}
+                        onChange={handleToggleAllVisibleStage}
+                        className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={
+                          visibleStageableRows.length === 0
+                            ? '현재 화면에 담을 수 있는 발주 수량 품목이 없습니다.'
+                            : isAllVisibleStaged
+                            ? `현재 화면 발주가능 품목 (${visibleStageableRows.length}건) 바구니에서 모두 빼기`
+                            : `현재 화면 발주가능 품목 (${visibleStageableRows.length}건) 모두 바구니에 담기`
+                        }
+                        aria-label="현재 화면 품목 전체 발주 담기"
+                      />
+                    </th>
                     <th className="py-2.5 px-1 text-center">No</th>
                     <th className="py-2.5 px-1.5">거래처</th>
                     <th className="py-2.5 px-2">품목명</th>
@@ -2150,7 +2688,7 @@ export const MatOrderDayView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-[13.5px] 2xl:text-[14.5px]">
                   {dayRows.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-20 text-center">
+                      <td colSpan={13} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           <Package className="w-12 h-12 text-slate-300" />
                           <div className="text-[15px] font-black text-slate-700">
@@ -2174,13 +2712,37 @@ export const MatOrderDayView: React.FC = () => {
                   ) : (
                     dayRows.map(({ r, m, pattern }, idx) => {
                       const isBriefingOpen = activeBriefingId === r.id;
+                      const isRowStaged = Boolean(stagedOrders[makeStagedKey(currentDayDate, r.id)]);
                       return (
                         <tr
                           key={r.id}
-                          className={`hover:bg-blue-50/40 transition-colors relative ${
-                            idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                          className={`transition-colors relative ${
+                            isRowStaged
+                              ? 'bg-blue-50/75 hover:bg-blue-100/60'
+                              : idx % 2 === 0
+                              ? 'bg-white hover:bg-blue-50/40'
+                              : 'bg-slate-50/40 hover:bg-blue-50/40'
                           }`}
                         >
+                          {/* 발주 담기 체크박스 */}
+                          <td className="py-2 px-1 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isRowStaged}
+                              disabled={m.isPastScheduledDeletion}
+                              onChange={() => handleToggleStageRow(r, m)}
+                              className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                              title={
+                                m.isPastScheduledDeletion
+                                  ? '삭제예정일 도래 품목은 발주 담기에서 제외됩니다.'
+                                  : isRowStaged
+                                  ? '발주 바구니에서 제외'
+                                  : '발주 바구니에 담기'
+                              }
+                              aria-label={`${r.name} 발주 담기`}
+                            />
+                          </td>
+
                           {/* No */}
                           <td className="py-2 px-1 text-center text-slate-400 font-mono text-[12.5px] 2xl:text-[13px]">
                             {idx + 1}
@@ -2461,9 +3023,12 @@ export const MatOrderDayView: React.FC = () => {
                                   min={0}
                                   value={m.dayQty}
                                   disabled={m.isPastScheduledDeletion}
-                                  onChange={(e) => handleDayQtyChange(r.id, e.target.value)}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) => handleDayQtyChange(r, m, e.target.value)}
                                   className={`w-12 xl:w-14 2xl:w-16 text-right px-1.5 py-0.5 bg-white border rounded-md text-[14px] 2xl:text-[15px] font-black font-mono focus:outline-none focus:ring-2 shadow-2xs disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${
-                                    (r.pendingBoxes || 0) > 0
+                                    isRowStaged
+                                      ? 'border-blue-500 ring-1 ring-blue-300 text-blue-950 focus:ring-blue-500'
+                                      : (r.pendingBoxes || 0) > 0
                                       ? 'border-emerald-300 text-emerald-950 focus:ring-emerald-500'
                                       : 'border-amber-300 text-amber-950 focus:ring-amber-500'
                                   }`}
@@ -2888,6 +3453,35 @@ export const MatOrderDayView: React.FC = () => {
                   표시 품목:{' '}
                   <strong className="text-emerald-700 font-mono">{dayRows.length}</strong>건
                 </span>
+                <button
+                  type="button"
+                  onClick={handleToggleAllVisibleStage}
+                  disabled={visibleStageableRows.length === 0}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black border transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    isAllVisibleStaged
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-800 border-slate-400'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-700 shadow-2xs'
+                  }`}
+                  title="현재 화면에 필터·표시된 추천/발주가능 품목을 발주 바구니에 한꺼번에 담거나 뺍니다."
+                >
+                  {isAllVisibleStaged
+                    ? `✓ 현재목록 담기해제 (${visibleStageableRows.length})`
+                    : `+ 현재목록 전체담기 (${visibleStageableRows.length})`}
+                </button>
+                {stagedTotals.count > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBasketModal(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 text-xs font-black transition cursor-pointer"
+                    title="바구니에 담은 전체 품목 확인 및 수량 편집"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>
+                      바구니: {stagedTotals.count}건 · {stagedTotals.boxes.toLocaleString()}b · ₩
+                      {Math.round(stagedTotals.amt).toLocaleString()}
+                    </span>
+                  </button>
+                )}
                 <span className="text-slate-300">|</span>
                 <span className="text-slate-600 flex items-center gap-1">
                   전략:{' '}
@@ -3245,6 +3839,244 @@ export const MatOrderDayView: React.FC = () => {
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 발주 담기 바구니 확인 및 일괄 확정 모달 ── */}
+      {showBasketModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => {
+            if (!isSaving) setShowBasketModal(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden select-text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <ShoppingCart className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>발주 담기 바구니</span>
+                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                      {stagedTotals.count}품목 · {stagedTotals.boxes.toLocaleString()}박스 · ₩
+                      {Math.round(stagedTotals.amt).toLocaleString()}원
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    검색·거래처·요일을 오가며 담아둔 모든 품목입니다. 최종 확인 후 한꺼번에 ERP 발주서(PO)로 확정 생성합니다.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {stagedList.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleClearBasket}
+                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black transition cursor-pointer disabled:opacity-50"
+                  >
+                    바구니 비우기
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setShowBasketModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/70 transition cursor-pointer disabled:opacity-50"
+                  aria-label="바구니 닫기"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 모달 본문 */}
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4">
+              {stagedList.length === 0 ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3 text-center">
+                  <ShoppingCart className="w-12 h-12 text-slate-300" />
+                  <div className="text-sm font-black text-slate-700">발주 바구니가 비어 있습니다.</div>
+                  <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                    테이블 왼쪽 체크박스를 선택하거나 발주 수량(박스)을 입력·수정하면 자동으로 바구니에 담깁니다. 검색어나 거래처, 다른 요일 탭으로 이동해도 담은 항목은 그대로 유지됩니다.
+                  </p>
+                </div>
+              ) : (
+                stagedGroupedByDate.map((group) => (
+                  <div
+                    key={group.orderDate}
+                    className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs"
+                  >
+                    <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 font-black text-slate-800">
+                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                        <span>
+                          {group.orderDate} ({group.dayChar}요일) 납품분
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 font-mono font-bold text-slate-700">
+                        <span>{group.items.length}품목</span>
+                        <span className="text-blue-700">{group.totalBoxes.toLocaleString()}박스</span>
+                        <span className="text-emerald-800">
+                          ₩{Math.round(group.totalAmount).toLocaleString()}원
+                        </span>
+                      </div>
+                    </div>
+
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead className="bg-slate-50 text-slate-600 font-black border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 w-[16%]">거래처</th>
+                          <th className="py-2 px-2.5">품목명</th>
+                          <th className="py-2 px-2 text-center w-[9%]">추천</th>
+                          <th className="py-2 px-2 text-center w-[19%]">확정 발주량</th>
+                          <th className="py-2 px-2 text-right w-[12%]">박스단가</th>
+                          <th className="py-2 px-3 text-right w-[13%]">발주금액</th>
+                          <th className="py-2 px-2 text-center w-[7%]">제외</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {group.items.map((item) => {
+                          const unitBoxPrice =
+                            item.boxPrice || calcBoxPrice(item.bagPrice, item.packUnit || 1);
+                          const lineAmount = Math.round(item.qty * unitBoxPrice);
+                          return (
+                            <tr key={item.key} className="hover:bg-blue-50/40 transition">
+                              <td className="py-2 px-3 font-bold text-slate-700 truncate max-w-[130px]" title={item.supplier}>
+                                {item.supplier || '-'}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                <div className="font-black text-slate-900 leading-snug">{item.name}</div>
+                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                  {item.warehouse && (
+                                    <span className="px-1.5 py-[1px] rounded bg-slate-100 text-slate-600 font-bold text-[10.5px] border border-slate-200">
+                                      {item.warehouse}
+                                    </span>
+                                  )}
+                                  {(item.pendingBoxes || 0) > 0 && (
+                                    <span className="px-1.5 py-[1px] rounded bg-emerald-50 text-emerald-700 font-bold text-[10.5px] border border-emerald-200">
+                                      기발주 {item.pendingBoxes}b
+                                    </span>
+                                  )}
+                                  {unitBoxPrice <= 0 && (
+                                    <span className="px-1.5 py-[1px] rounded bg-amber-50 text-amber-700 font-bold text-[10.5px] border border-amber-200">
+                                      단가 미등록
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-center font-mono text-slate-500 font-bold">
+                                {item.recommendedQty > 0 ? `${item.recommendedQty}b` : '-'}
+                              </td>
+                              <td className="py-2 px-2">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={isSaving || item.qty <= 1}
+                                    onClick={() => handleUpdateStagedQty(item.key, item.qty - 1)}
+                                    className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title="1박스 줄이기"
+                                  >
+                                    <Minus size={11} />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    disabled={isSaving}
+                                    value={item.qty}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => handleUpdateStagedQty(item.key, e.target.value)}
+                                    className="w-14 text-right px-1.5 py-0.5 border border-blue-300 rounded font-mono font-black text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => handleUpdateStagedQty(item.key, item.qty + 1)}
+                                    className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold cursor-pointer disabled:opacity-40"
+                                    title="1박스 늘리기"
+                                  >
+                                    <Plus size={11} />
+                                  </button>
+                                  <span className="text-[11px] font-bold text-slate-500">b</span>
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-slate-700 font-bold">
+                                {unitBoxPrice > 0 ? `₩${unitBoxPrice.toLocaleString()}` : '-'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
+                                ₩{lineAmount.toLocaleString()}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <button
+                                  type="button"
+                                  disabled={isSaving}
+                                  onClick={() => handleRemoveStagedItem(item.key)}
+                                  className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-40"
+                                  title="바구니에서 빼기"
+                                  aria-label={`${item.name} 바구니에서 빼기`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="px-5 py-3.5 border-t border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="text-xs font-extrabold text-slate-700">
+                {stagedList.length > 0 ? (
+                  <>
+                    총 <strong className="text-blue-700 font-mono">{stagedTotals.dateCount}개</strong> 납품일 ·{' '}
+                    <strong className="text-slate-900 font-mono">{stagedTotals.count}개</strong> 품목 ·{' '}
+                    <strong className="text-blue-700 font-mono">
+                      {stagedTotals.boxes.toLocaleString()}박스
+                    </strong>{' '}
+                    ·{' '}
+                    <strong className="text-emerald-800 font-mono text-sm">
+                      ₩{Math.round(stagedTotals.amt).toLocaleString()}원
+                    </strong>
+                  </>
+                ) : (
+                  <span>발주할 품목을 체크해 담아주세요.</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setShowBasketModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-black transition cursor-pointer disabled:opacity-50"
+                >
+                  계속 담기 (닫기)
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving || stagedList.length === 0}
+                  onClick={() => void handleSaveDay()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 disabled:text-slate-500 text-white text-xs sm:text-[13px] font-black shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {isSaving
+                      ? '확정 저장 중...'
+                      : `한꺼번에 ERP 발주 확정 저장 (${stagedTotals.count}건)`}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
