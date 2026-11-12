@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: [{ orderDate: 'desc' }, { id: 'desc' }],
-      take: 200,
+      take: startDate || endDate ? 500 : 200,
     });
 
     const enrichedOrders = orders.map((po) => {

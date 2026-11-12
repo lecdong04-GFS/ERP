@@ -262,8 +262,8 @@ export const MatOrderDayView: React.FC = () => {
   const [stagedOrders, setStagedOrders] = useState<Record<string, StagedOrderEntry>>({});
   const [showBasketModal, setShowBasketModal] = useState<boolean>(false);
 
-  // 해당 요일의 실제 생성된 ERP 발주서(PO) 전표 목록
-  const [confirmedPoList, setConfirmedPoList] = useState<any[]>([]);
+  // 해당 주차의 실제 생성된 ERP 발주서(PO) 전표 목록 (요일별 확정완료 판정 + 드로어 공용)
+  const [weekConfirmedPoList, setWeekConfirmedPoList] = useState<any[]>([]);
   const [isLoadingPo, setIsLoadingPo] = useState<boolean>(false);
   const [showPoDrawer, setShowPoDrawer] = useState<boolean>(false);
   const poDrawerRef = useRef<HTMLDivElement>(null);
@@ -361,6 +361,75 @@ export const MatOrderDayView: React.FC = () => {
     const end = weekDates[6];
     return `${start} ~ ${end}`;
   }, [weekDates]);
+
+  // 현재 선택된 요일의 확정 PO 목록 (주차 전체 조회분에서 즉시 필터)
+  const confirmedPoList = useMemo(
+    () =>
+      weekConfirmedPoList.filter(
+        (po) => String(po.orderDate || '').slice(0, 10) === currentDayDate
+      ),
+    [weekConfirmedPoList, currentDayDate]
+  );
+
+  // 요일(YYYY-MM-DD)별 발행 전표 건수
+  const weekPoCountByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    weekConfirmedPoList.forEach((po) => {
+      const d = String(po.orderDate || '').slice(0, 10);
+      if (d) map.set(d, (map.get(d) || 0) + 1);
+    });
+    return map;
+  }, [weekConfirmedPoList]);
+
+  // 요일(YYYY-MM-DD) × 품목별 기확정 수량·전표번호 맵 (당일 확정 품목은 추가 추천 0b 고정)
+  const confirmedProductMapByDate = useMemo(() => {
+    type DayConfirmEntry = { boxes: number; orderNos: string[] };
+    const map = new Map<
+      string,
+      { byProductId: Map<number, DayConfirmEntry>; byName: Map<string, DayConfirmEntry> }
+    >();
+    const addEntry = (bucket: Map<any, DayConfirmEntry>, key: any, boxes: number, orderNo: string) => {
+      const prev = bucket.get(key) || { boxes: 0, orderNos: [] };
+      prev.boxes += boxes;
+      if (orderNo && !prev.orderNos.includes(orderNo)) prev.orderNos.push(orderNo);
+      bucket.set(key, prev);
+    };
+    weekConfirmedPoList.forEach((po) => {
+      const dStr = String(po.orderDate || '').slice(0, 10);
+      if (!dStr) return;
+      let dayMap = map.get(dStr);
+      if (!dayMap) {
+        dayMap = { byProductId: new Map(), byName: new Map() };
+        map.set(dStr, dayMap);
+      }
+      const orderNo = po.orderNo || '';
+      (po.details || []).forEach((d: any) => {
+        const qty = Number(d.orderQty) || 0;
+        const pid = Number(d.productId) || 0;
+        if (pid > 0) addEntry(dayMap!.byProductId, pid, qty, orderNo);
+        const nm = String(d.productName || d.product?.name || '')
+          .trim()
+          .toLowerCase();
+        if (nm) addEntry(dayMap!.byName, nm, qty, orderNo);
+      });
+    });
+    return map;
+  }, [weekConfirmedPoList]);
+
+  const getRowDayConfirmStatus = useCallback(
+    (dateStr: string | undefined, r: SheetRow) => {
+      if (!dateStr) return null;
+      const entry = confirmedProductMapByDate.get(dateStr);
+      if (!entry) return null;
+      const pid = Number(r.productId ?? r.id) || 0;
+      if (pid > 0 && entry.byProductId.has(pid)) {
+        return entry.byProductId.get(pid) || null;
+      }
+      const normNameKey = (r.name || '').trim().toLowerCase();
+      return normNameKey ? entry.byName.get(normNameKey) || null : null;
+    },
+    [confirmedProductMapByDate]
+  );
 
   // 전표 번호 요약 텍스트 (예: #001 ~ #024)
   const poRangeSummary = useMemo(() => {
@@ -616,27 +685,29 @@ export const MatOrderDayView: React.FC = () => {
     );
   }, [deletedItems, deletedKeyword]);
 
-  // 2. 현재 선택된 요일 날짜의 ERP 발주서(PO) 전표 조회
+  // 2. 현재 주차(월~일)의 ERP 발주서(PO) 전표 일괄 조회 (요일별 발주완료 판정 + 당일 드로어 공용)
   const loadConfirmedPo = useCallback(async () => {
-    if (!currentDayDate) return;
+    const start = weekDates[0];
+    const end = weekDates[6];
+    if (!start || !end) return;
     setIsLoadingPo(true);
     try {
-      const res = await fetch(`/api/purchase/order?orderDate=${currentDayDate}`, {
+      const res = await fetch(`/api/purchase/order?startDate=${start}&endDate=${end}`, {
         cache: 'no-store',
       });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         const valid = json.data.filter((po: any) => po.status !== '발주취소');
-        setConfirmedPoList(valid);
+        setWeekConfirmedPoList(valid);
       } else {
-        setConfirmedPoList([]);
+        setWeekConfirmedPoList([]);
       }
     } catch {
-      setConfirmedPoList([]);
+      setWeekConfirmedPoList([]);
     } finally {
       setIsLoadingPo(false);
     }
-  }, [currentDayDate]);
+  }, [weekDates]);
 
   useEffect(() => {
     loadConfirmedPo();
@@ -798,8 +869,13 @@ export const MatOrderDayView: React.FC = () => {
           ? Math.ceil(shortageBags / pack)
           : 0;
 
-      // 요일 분할 (오늘 이후 실제 발주 가능 요일에 100% 배분)
-      const week = splitWeek(r, suggestedBoxes, activeDayMask);
+      // 요일 분할 (오늘 이후 실제 발주 가능 요일 중 '이미 발주 확정된 날짜'는 제외하고 남은 요일에만 배분)
+      const baseMask = activeDayMask || weekDates.map(() => true);
+      const itemDayMask = weekDates.map(
+        (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
+      );
+      const week = splitWeek(r, suggestedBoxes, itemDayMask);
+      const targetDayConfirm = getRowDayConfirmStatus(targetDayDate, r);
       const stagedEntry = stagedOrders[makeStagedKey(targetDayDate, r.id)];
       const override = isPastScheduledDeletion ? 0 : overrides[targetDayIdx]?.[r.id];
       const dayQty = isPastScheduledDeletion
@@ -833,11 +909,23 @@ export const MatOrderDayView: React.FC = () => {
         scheduledDate,
         suggestedBoxes,
         week,
+        isConfirmedOnTargetDay: Boolean(targetDayConfirm),
+        confirmedTodayBoxes: targetDayConfirm?.boxes || 0,
+        confirmedTodayOrderNos: targetDayConfirm?.orderNos || [],
         dayQty,
         amount,
       };
     },
-    [strategyMode, itemTargetDaysOverrides, overrides, stagedOrders, weekDates, currentDayDate, activeDayMask]
+    [
+      strategyMode,
+      itemTargetDaysOverrides,
+      overrides,
+      stagedOrders,
+      weekDates,
+      currentDayDate,
+      activeDayMask,
+      getRowDayConfirmStatus,
+    ]
   );
 
   // 품목별 발주일수 미세조정 핸들러 (±0.5일, 0일 가능)
@@ -959,7 +1047,12 @@ export const MatOrderDayView: React.FC = () => {
         if (r.isDormant) return null;
         const pattern = classifyPattern(r.supplier, r.orderDay);
         const m = getRowMetrics(r, dayIdx);
-        if (m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0)) {
+        if (
+          !m.isConfirmedOnTargetDay &&
+          m.suggestedBoxes > 0 &&
+          m.dayQty === 0 &&
+          (m.stockDays < 1.5 || r.currentStock <= 0)
+        ) {
           return { r, m, pattern };
         }
         return null;
@@ -989,7 +1082,10 @@ export const MatOrderDayView: React.FC = () => {
         if (urgencyFilter === 'warning' && m.auditStatus !== 'warning') return null;
         if (urgencyFilter === 'pending' && !(Number(r.pendingBoxes || 0) > 0)) return null;
         if (showOnlyUrgentUnallocated) {
-          if (!(m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0))) {
+          if (
+            m.isConfirmedOnTargetDay ||
+            !(m.suggestedBoxes > 0 && m.dayQty === 0 && (m.stockDays < 1.5 || r.currentStock <= 0))
+          ) {
             return null;
           }
           return { r, m, pattern };
@@ -2114,25 +2210,39 @@ export const MatOrderDayView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSaveDay}
-                disabled={isSaving || (stagedTotals.count === 0 && dayRows.length === 0)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[13px] font-black text-white shadow-sm transition cursor-pointer whitespace-nowrap ${
-                  stagedTotals.count > 0 || dayRows.length > 0
+                disabled={isSaving || (stagedTotals.count === 0 && dayTotals.boxes <= 0)}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[13px] font-black shadow-sm transition cursor-pointer whitespace-nowrap ${
+                  stagedTotals.count > 0 || dayTotals.boxes > 0
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-98'
+                    : confirmedPoList.length > 0
+                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40 cursor-not-allowed'
                     : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
                 title={
                   stagedTotals.count > 0
                     ? '발주 바구니에 담아둔 모든 품목을 납품일·거래처별 ERP 정식 발주서(PO)로 일괄 생성합니다.'
-                    : '담긴 품목이 없으면 확인 후 현재 요일 추천 품목을 일괄 발주 생성합니다.'
+                    : dayTotals.boxes > 0
+                    ? '담긴 품목이 없으면 확인 후 현재 요일 추천 품목을 일괄 발주 생성합니다.'
+                    : confirmedPoList.length > 0
+                    ? `${DAY_CHARS[dayIdx]}요일 추천 발주가 모두 확정 완료되었습니다. 추가 발주가 필요하면 '+ ' 버튼으로 수동 입력하세요.`
+                    : '발주할 수량이 없습니다.'
                 }
               >
-                <Save className="w-4 h-4 stroke-[2.5]" />
+                {stagedTotals.count === 0 && dayTotals.boxes <= 0 && confirmedPoList.length > 0 ? (
+                  <CheckCircle2 className="w-4 h-4 stroke-[2.5] text-emerald-300" />
+                ) : (
+                  <Save className="w-4 h-4 stroke-[2.5]" />
+                )}
                 <span>
                   {isSaving
                     ? '확정 저장 중...'
                     : stagedTotals.count > 0
                     ? `담은 발주 ${stagedTotals.count}건 (${stagedTotals.boxes.toLocaleString()}b) 확정`
-                    : `${DAY_CHARS[dayIdx]}요일 발주 확정`}
+                    : dayTotals.boxes > 0
+                    ? `${DAY_CHARS[dayIdx]}요일 발주 확정`
+                    : confirmedPoList.length > 0
+                    ? `${DAY_CHARS[dayIdx]}요일 발주 완료`
+                    : `${DAY_CHARS[dayIdx]}요일 발주 0건`}
                 </span>
               </button>
               <button
@@ -2321,36 +2431,44 @@ export const MatOrderDayView: React.FC = () => {
                   const st = dayStats[i];
                   const dateStr = weekDates[i];
                   const mmdd = dateStr ? dateStr.slice(5).replace('-', '/') : '';
-                  const factorInfo = WEEKDAY_DEMAND_FACTORS[i];
-                  const stagedInfo = dateStr ? stagedCountByDate[dateStr] : undefined;
+                      const factorInfo = WEEKDAY_DEMAND_FACTORS[i];
+                      const stagedInfo = dateStr ? stagedCountByDate[dateStr] : undefined;
+                      const dayConfirmedCount = dateStr ? weekPoCountByDate.get(dateStr) || 0 : 0;
+                      const isDayCompleted = st.boxes === 0 && dayConfirmedCount > 0;
 
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDayIdx(i)}
-                      title={`[${d}요일 ${dateStr}] 수요 가중치: ${factorInfo?.pctStr} (${factorInfo?.label})`}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[12.5px] transition cursor-pointer border whitespace-nowrap ${
-                        isActive
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-black ring-2 ring-blue-500/25'
-                          : 'bg-slate-50/80 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
-                      }`}
-                    >
-                      <span className="font-black">{d}</span>
-                      <span className={`text-[11px] font-medium ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
-                        {mmdd}
-                      </span>
-                      <span
-                        className={`text-[11px] font-mono px-1.5 py-0.2 rounded-md font-extrabold ${
-                          isActive
-                            ? 'bg-white/20 text-white'
-                            : st.boxes > 0
-                            ? 'bg-blue-100/80 text-blue-800'
-                            : 'bg-slate-200/70 text-slate-500'
-                        }`}
-                      >
-                        {st.boxes > 0 ? `${st.boxes}b` : '0'}
-                      </span>
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setDayIdx(i)}
+                          title={`[${d}요일 ${dateStr}] 수요 가중치: ${factorInfo?.pctStr} (${factorInfo?.label})${
+                            dayConfirmedCount > 0 ? ` · 확정전표 ${dayConfirmedCount}건` : ''
+                          }`}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[12.5px] transition cursor-pointer border whitespace-nowrap ${
+                            isActive
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-black ring-2 ring-blue-500/25'
+                              : isDayCompleted
+                              ? 'bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-900 border-emerald-200 font-bold'
+                              : 'bg-slate-50/80 hover:bg-slate-100 text-slate-700 border-slate-200 font-bold'
+                          }`}
+                        >
+                          <span className="font-black">{d}</span>
+                          <span className={`text-[11px] font-medium ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                            {mmdd}
+                          </span>
+                          <span
+                            className={`text-[11px] font-mono px-1.5 py-0.2 rounded-md font-extrabold ${
+                              isActive
+                                ? 'bg-white/20 text-white'
+                                : isDayCompleted
+                                ? 'bg-emerald-600 text-white font-sans'
+                                : st.boxes > 0
+                                ? 'bg-blue-100/80 text-blue-800'
+                                : 'bg-slate-200/70 text-slate-500'
+                            }`}
+                          >
+                            {isDayCompleted ? '✓ 완료' : st.boxes > 0 ? `${st.boxes}b` : '0'}
+                          </span>
                       {stagedInfo && stagedInfo.count > 0 && (
                         <span
                           className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black ${
@@ -3156,14 +3274,44 @@ export const MatOrderDayView: React.FC = () => {
                     <tr>
                       <td colSpan={13} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
-                          <Package className="w-12 h-12 text-slate-300" />
-                          <div className="text-[15px] font-black text-slate-700">
-                            {DAY_CHARS[dayIdx]}요일({currentDayDate})에 예정된 발주 품목이 없습니다.
-                          </div>
-                          <p className="text-[13px] text-slate-500">
-                            거래처별 납품 요일 패턴상 오늘은 납품이 없거나, 다른 요일로 배정되어 있습니다. 상단의 다른 요일 탭을 확인하시거나 [전체 품목 보기]를 선택해 보세요.
-                          </p>
+                          {confirmedPoList.length > 0 &&
+                          warehouseFilter === '전체' &&
+                          urgencyFilter === 'all' &&
+                          !keyword.trim() ? (
+                            <>
+                              <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+                              <div className="text-[16px] font-black text-emerald-900">
+                                {DAY_CHARS[dayIdx]}요일({currentDayDate}) 발주 확정 완료!
+                              </div>
+                              <p className="text-[13px] text-slate-600 leading-relaxed">
+                                오늘 발행된 발주서 <strong className="text-emerald-700">{confirmedPoList.length}건</strong> (총{' '}
+                                <strong className="font-mono text-slate-900">
+                                  ₩{Math.round(totalConfirmedPoAmount).toLocaleString()}
+                                </strong>
+                                원) 처리가 끝났습니다. 추가 필요 잔량은 내일 이후 요일에 자동 배분됩니다.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <Package className="w-12 h-12 text-slate-300" />
+                              <div className="text-[15px] font-black text-slate-700">
+                                {DAY_CHARS[dayIdx]}요일({currentDayDate})에 예정된 발주 품목이 없습니다.
+                              </div>
+                              <p className="text-[13px] text-slate-500">
+                                거래처별 납품 요일 패턴상 오늘은 납품이 없거나, 다른 요일로 배정되어 있습니다. 상단의 다른 요일 탭을 확인하시거나 [전체 품목 보기]를 선택해 보세요.
+                              </p>
+                            </>
+                          )}
                           <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                            {confirmedPoList.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowPoDrawer(true)}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
+                              >
+                                발행 전표 {confirmedPoList.length}건 확인
+                              </button>
+                            )}
                             {(warehouseFilter !== '전체' || urgencyFilter !== 'all') && (
                               <button
                                 type="button"
@@ -3517,7 +3665,14 @@ export const MatOrderDayView: React.FC = () => {
                           {/* 요일 발주수량 (추천치 대비 확정) */}
                           <td className="py-1.5 px-1.5 text-right bg-amber-50/40 border-x border-amber-200">
                             <div className="flex flex-col items-end gap-0.5">
-                              {(r.pendingBoxes || 0) > 0 ? (
+                              {m.isConfirmedOnTargetDay ? (
+                                <span
+                                  className="text-[11px] 2xl:text-[11.5px] font-black text-emerald-900 bg-emerald-100 border border-emerald-300 px-1.5 py-[1px] rounded-full font-sans leading-tight truncate max-w-full"
+                                  title={`당일 확정 전표: ${m.confirmedTodayOrderNos.join(', ') || '전표발행완료'} (추가 필요 시 '+' 버튼으로 수동 입력)`}
+                                >
+                                  ✅ 금일확정 {m.confirmedTodayBoxes}b
+                                </span>
+                              ) : (r.pendingBoxes || 0) > 0 ? (
                                 <span
                                   className="text-[11px] 2xl:text-[11.5px] font-black text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-[1px] rounded-full font-sans leading-tight truncate max-w-full"
                                   title={`발주번호: ${(r.pendingOrderNos || []).join(', ') || '전표발행완료'}`}
@@ -4079,17 +4234,31 @@ export const MatOrderDayView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSaveDay}
-                  disabled={isSaving || (stagedTotals.count === 0 && dayRows.length === 0)}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs sm:text-[13px] font-black shadow-xs transition cursor-pointer disabled:cursor-not-allowed"
+                  disabled={isSaving || (stagedTotals.count === 0 && dayTotals.boxes <= 0)}
+                  className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs sm:text-[13px] font-black shadow-xs transition cursor-pointer disabled:cursor-not-allowed ${
+                    stagedTotals.count > 0 || dayTotals.boxes > 0
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      : confirmedPoList.length > 0
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-slate-200 text-slate-400'
+                  }`}
                   title="담은 발주 또는 현재 요일 추천 발주를 ERP 정식 발주서(PO)로 확정 저장합니다."
                 >
-                  <Save className="w-3.5 h-3.5" />
+                  {stagedTotals.count === 0 && dayTotals.boxes <= 0 && confirmedPoList.length > 0 ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
                   <span>
                     {isSaving
                       ? '저장 중...'
                       : stagedTotals.count > 0
                       ? `담은 발주 ${stagedTotals.count}건 확정 저장`
-                      : `${DAY_CHARS[dayIdx]}요일 발주 확정`}
+                      : dayTotals.boxes > 0
+                      ? `${DAY_CHARS[dayIdx]}요일 발주 확정`
+                      : confirmedPoList.length > 0
+                      ? `${DAY_CHARS[dayIdx]}요일 발주 완료`
+                      : `${DAY_CHARS[dayIdx]}요일 발주 0건`}
                   </span>
                 </button>
               </div>
