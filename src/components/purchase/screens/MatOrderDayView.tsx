@@ -67,6 +67,18 @@ function formatOrderDays(days: number): string {
   return `${Number(days.toFixed(2))}일`;
 }
 
+function formatCompactWon(amt: number): string {
+  const rounded = Math.round(amt);
+  if (rounded <= 0) return '₩0';
+  if (rounded >= 100000000) {
+    return `₩${(rounded / 100000000).toFixed(1).replace(/\.0$/, '')}억`;
+  }
+  if (rounded >= 10000) {
+    return `₩${Math.round(rounded / 10000).toLocaleString()}만`;
+  }
+  return `₩${rounded.toLocaleString()}`;
+}
+
 /** Date 객체를 YYYY-MM-DD 문자열로 변환 (로컬 기준) */
 function toLocalISODate(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -1219,6 +1231,89 @@ export const MatOrderDayView: React.FC = () => {
     return { boxes, amt, criticalCount, warningCount, zeroPriceCount, manualOverrideCount, avgRunway };
   }, [dayRows, overrides, dayIdx]);
 
+  // 3대 전략(타이트/표준/안전)별 순수 자동 계산 예상 금액 비교 (바구니·수동수정 제외한 요일 기준 금액)
+  const strategyPreview = useMemo(() => {
+    const calcMode = (mode: StrategyMode) => {
+      let boxes = 0;
+      let amt = 0;
+      const baseMask = activeDayMask || weekDates.map(() => true);
+      const kw = keyword.trim().toLowerCase();
+      rows.forEach((r) => {
+        if (!showDormant && r.isDormant && !kw) return;
+        if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return;
+        if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return;
+        const pattern = classifyPattern(r.supplier, r.orderDay);
+        if (patternFilter !== '전체' && pattern !== patternFilter) return;
+        if (kw && !r.name.toLowerCase().includes(kw) && !r.supplier.toLowerCase().includes(kw)) return;
+
+        const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 1;
+        const totalStock = (r.incoming || 0) + (r.currentStock || 0);
+        const dailyUsage = r.dailyUsage || 0;
+        const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : totalStock > 0 ? 99 : 0;
+        if (stockDays >= 60 || dailyUsage <= 0) return;
+
+        const isReplacedItem = r.name.includes('스팸(340g*20캔)') || (r as any).isReplaced;
+        if (isReplacedItem) return;
+
+        const targetDayDate = weekDates[dayIdx] || currentDayDate || kstToday();
+        const scheduledExcl = getScheduledExclusion(r.name);
+        const scheduledDate = r.discontinuedDate || scheduledExcl?.effectiveDate || '';
+        const lifecycle = getProductLifecycleInfo(
+          { status: r.status, discontinuedDate: scheduledDate, name: r.name },
+          targetDayDate
+        );
+        if ((scheduledDate && targetDayDate >= scheduledDate) || lifecycle?.isBlocked) return;
+
+        const masterOrderDays = Number(r.targetOrderDays ?? r.days) || 0;
+        const strategyCalc = calcStrategyOrderDays({
+          masterOrderDays,
+          pattern,
+          orderCycle: r.orderCycle,
+          strategyMode: mode,
+        });
+        const baseTargetDays =
+          itemTargetDaysOverrides[r.id] !== undefined
+            ? itemTargetDaysOverrides[r.id]
+            : strategyCalc.effectiveDays;
+        const lossRate = baseTargetDays > 0 && mode === 'safety' ? 1.05 : 1.0;
+        const targetStock = Math.round(dailyUsage * baseTargetDays * lossRate);
+        const shortageBags = Math.max(0, targetStock - totalStock);
+        const suggestedBoxes = pack > 0 && shortageBags > 0 ? Math.ceil(shortageBags / pack) : 0;
+        if (suggestedBoxes <= 0) return;
+
+        const itemDayMask = weekDates.map(
+          (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
+        );
+        const week = splitWeek(r, suggestedBoxes, itemDayMask);
+        const qty = week[dayIdx] || 0;
+        if (qty > 0) {
+          boxes += qty;
+          amt += qty * calcBoxPrice(r.bagPrice, pack);
+        }
+      });
+      return { boxes, amt: Math.round(amt) };
+    };
+
+    return {
+      tight: calcMode('tight'),
+      standard: calcMode('standard'),
+      safety: calcMode('safety'),
+    };
+  }, [
+    rows,
+    showDormant,
+    supplierFilter,
+    warehouseFilter,
+    patternFilter,
+    keyword,
+    dayIdx,
+    activeDayMask,
+    weekDates,
+    currentDayDate,
+    itemTargetDaysOverrides,
+    getRowDayConfirmStatus,
+  ]);
+
   // ── 발주 담기(장바구니) 요약·그룹 계산 ──
   const stagedList = useMemo(() => {
     return Object.values(stagedOrders).sort(
@@ -1371,6 +1466,13 @@ export const MatOrderDayView: React.FC = () => {
         delete next[key];
         return next;
       });
+      // 선택 해지 시 해당 품목에 걸려 있던 수동 고정(overrides)도 함께 풀어 전략 변경이 즉시 반영되도록 함
+      setOverrides((prev) => {
+        if (!prev[dayIdx] || prev[dayIdx][r.id] === undefined) return prev;
+        const copy = { ...prev[dayIdx] };
+        delete copy[r.id];
+        return { ...prev, [dayIdx]: copy };
+      });
       return;
     }
 
@@ -1405,6 +1507,18 @@ export const MatOrderDayView: React.FC = () => {
           delete next[makeStagedKey(currentDayDate, r.id)];
         });
         return next;
+      });
+      setOverrides((prev) => {
+        if (!prev[dayIdx]) return prev;
+        const copy = { ...prev[dayIdx] };
+        let changed = false;
+        visibleStageableRows.forEach(({ r }) => {
+          if (copy[r.id] !== undefined) {
+            delete copy[r.id];
+            changed = true;
+          }
+        });
+        return changed ? { ...prev, [dayIdx]: copy } : prev;
       });
       return;
     }
@@ -1449,18 +1563,43 @@ export const MatOrderDayView: React.FC = () => {
 
   // 바구니 단일 항목 제외
   const handleRemoveStagedItem = (key: string) => {
+    const entry = stagedOrders[key];
     setStagedOrders((prev) => {
       if (!prev[key]) return prev;
       const next = { ...prev };
       delete next[key];
       return next;
     });
+    if (entry) {
+      const matchedDayIdx = weekDates.indexOf(entry.orderDate);
+      if (matchedDayIdx >= 0) {
+        setOverrides((prev) => {
+          if (!prev[matchedDayIdx] || prev[matchedDayIdx][entry.rowId] === undefined) return prev;
+          const copy = { ...prev[matchedDayIdx] };
+          delete copy[entry.rowId];
+          return { ...prev, [matchedDayIdx]: copy };
+        });
+      }
+    }
   };
 
   // 바구니 전체 비우기
   const handleClearBasket = () => {
     if (stagedList.length === 0) return;
     if (confirm(`발주 바구니에 담긴 ${stagedList.length}개 항목을 모두 비우시겠습니까?`)) {
+      setOverrides((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        stagedList.forEach((entry) => {
+          const matchedDayIdx = weekDates.indexOf(entry.orderDate);
+          if (matchedDayIdx >= 0 && next[matchedDayIdx]?.[entry.rowId] !== undefined) {
+            next[matchedDayIdx] = { ...next[matchedDayIdx] };
+            delete next[matchedDayIdx][entry.rowId];
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
       setStagedOrders({});
       setShowBasketModal(false);
     }
@@ -1468,11 +1607,23 @@ export const MatOrderDayView: React.FC = () => {
 
   // 수량 초기화
   const handleResetDay = () => {
-    if (confirm(`[${DAY_CHARS[dayIdx]}요일]의 수동 수정 수량을 원래 자동 분할값으로 복원하시겠습니까?`)) {
+    if (confirm(`[${DAY_CHARS[dayIdx]}요일]의 수동 수정·바구니 선택을 모두 해제하고 현재 전략 계산값으로 복원하시겠습니까?`)) {
       setOverrides((prev) => {
         const next = { ...prev };
         delete next[dayIdx];
         return next;
+      });
+      setStagedOrders((prev) => {
+        const next: Record<string, StagedOrderEntry> = {};
+        let changed = false;
+        Object.entries(prev).forEach(([k, entry]) => {
+          if (entry.orderDate === currentDayDate) {
+            changed = true;
+          } else {
+            next[k] = entry;
+          }
+        });
+        return changed ? next : prev;
       });
       setItemTargetDaysOverrides({});
       setShowOnlyUrgentUnallocated(false);
@@ -2505,47 +2656,83 @@ export const MatOrderDayView: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 whitespace-nowrap">
-                <span className="text-[11.5px] font-black text-slate-600 px-1.5 flex items-center gap-1">
-                  <SlidersHorizontal className="w-3 h-3 text-blue-600" />
-                  전략
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setStrategyMode('tight')}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                    strategyMode === 'tight'
-                      ? 'bg-amber-500 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                  }`}
-                  title="⚡ 타이트 모드: 리드타임(D+1/D+2) 결품 하한선 보호 + 전 품목 여유분 압축"
-                >
-                  ⚡ 타이트
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStrategyMode('standard')}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                    strategyMode === 'standard'
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                  }`}
-                  title="⚖️ 표준 모드: 품목 마스터(DB) 발주일수 100% 그대로 적용"
-                >
-                  ⚖️ 표준
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStrategyMode('safety')}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                    strategyMode === 'safety'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                  }`}
-                  title="🛡️ 보수적 안전 모드: 결품 차단 (발주일수 +1일 및 감모 5% 가산)"
-                >
-                  🛡️ 안전
-                </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 whitespace-nowrap">
+                  <span className="text-[11.5px] font-black text-slate-600 px-1.5 flex items-center gap-1">
+                    <SlidersHorizontal className="w-3 h-3 text-blue-600" />
+                    전략
+                  </span>
+                  {(
+                    [
+                      {
+                        mode: 'tight' as const,
+                        label: '⚡ 타이트',
+                        activeClass: 'bg-amber-500 text-white shadow-2xs',
+                        subActiveClass: 'text-amber-100',
+                        title: `⚡ 타이트 모드 (${DAY_CHARS[dayIdx]}요일 자동기준: ${strategyPreview.tight.boxes.toLocaleString()}b / ₩${strategyPreview.tight.amt.toLocaleString()})`,
+                        info: strategyPreview.tight,
+                      },
+                      {
+                        mode: 'standard' as const,
+                        label: '⚖️ 표준',
+                        activeClass: 'bg-blue-600 text-white shadow-2xs',
+                        subActiveClass: 'text-blue-100',
+                        title: `⚖️ 표준 모드 (${DAY_CHARS[dayIdx]}요일 자동기준: ${strategyPreview.standard.boxes.toLocaleString()}b / ₩${strategyPreview.standard.amt.toLocaleString()})`,
+                        info: strategyPreview.standard,
+                      },
+                      {
+                        mode: 'safety' as const,
+                        label: '🛡️ 안전',
+                        activeClass: 'bg-emerald-600 text-white shadow-2xs',
+                        subActiveClass: 'text-emerald-100',
+                        title: `🛡️ 보수적 안전 모드 (${DAY_CHARS[dayIdx]}요일 자동기준: ${strategyPreview.safety.boxes.toLocaleString()}b / ₩${strategyPreview.safety.amt.toLocaleString()})`,
+                        info: strategyPreview.safety,
+                      },
+                    ] as const
+                  ).map((item) => {
+                    const active = strategyMode === item.mode;
+                    return (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        onClick={() => setStrategyMode(item.mode)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                          active ? item.activeClass : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                        }`}
+                        title={item.title}
+                      >
+                        <span>{item.label}</span>
+                        <span
+                          className={`text-[10.5px] font-mono font-bold ${
+                            active ? item.subActiveClass : 'text-slate-400'
+                          }`}
+                        >
+                          {formatCompactWon(item.info.amt)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(dayTotals.manualOverrideCount > 0 || (stagedCountByDate[currentDayDate]?.count || 0) > 0) ? (
+                  <button
+                    type="button"
+                    onClick={handleResetDay}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-black transition cursor-pointer"
+                    title="바구니 담기나 수동 수정(+/-)이 걸린 품목은 전략 변경 시에도 고정됩니다. 클릭 시 해제하고 현재 전략 수량으로 돌아갑니다."
+                  >
+                    <span>
+                      고정 {Math.max(dayTotals.manualOverrideCount, stagedCountByDate[currentDayDate]?.count || 0)}건 · 해제
+                    </span>
+                  </button>
+                ) : confirmedPoList.length > 0 && strategyPreview.standard.boxes === 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold"
+                    title="오늘 요일은 이미 발주 확정되어 모든 전략이 ₩0입니다. 위 요일 탭에서 미확정 요일(금·토)을 선택하면 전략별 차이를 비교할 수 있습니다."
+                  >
+                    당일확정 완료 · 금/토 탭 비교
+                  </span>
+                ) : null}
               </div>
             </div>
           </>
