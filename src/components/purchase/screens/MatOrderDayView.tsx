@@ -81,6 +81,43 @@ function getMondayOfWeek(dateStr: string): Date {
 
 export type { StrategyMode };
 
+/** 3단 KPI/필터 바 중앙에 배치되는 품명/거래처 검색 상자 */
+function CenteredKeywordSearch({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="flex-1 min-w-[200px] flex items-center justify-center px-1">
+      <div className="relative flex items-center w-full max-w-[280px]">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full pl-8 pr-7 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs sm:text-[13px] font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 focus:bg-white transition-colors"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            title="검색어 지우기"
+            aria-label="검색어 지우기"
+            className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 단종 및 대체 완료 완제품의 전용 원부자재 불용 방지 경보 맵
 const DISCONTINUED_CAUTION_MAP: Record<string, string> = {
   '[상온] 스팸(340g*20캔)': '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)',
@@ -1668,7 +1705,14 @@ export const MatOrderDayView: React.FC = () => {
               </div>
             </div>
 
-            {/* 우측: 필터 및 검색 및 발행 전표 드로어 */}
+            {/* 중앙: 품명 / 거래처 검색창 */}
+            <CenteredKeywordSearch
+              value={keyword}
+              onChange={setKeyword}
+              placeholder="품명 / 거래처 검색..."
+            />
+
+            {/* 우측: 필터 및 발행 전표 드로어 */}
             <div className="flex flex-wrap items-center gap-2">
               {/* 거래처 필터 */}
               <select
@@ -1740,18 +1784,6 @@ export const MatOrderDayView: React.FC = () => {
               >
                 {sortMode === 'urgency' ? '🚨 긴급순' : '창고·품목순'}
               </button>
-
-              {/* 검색창 */}
-              <div className="relative flex items-center">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="품명 / 거래처 검색..."
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  className="pl-7 pr-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs sm:text-[13px] font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-40 sm:w-52"
-                />
-              </div>
 
               {/* 발행 전표 목록 드로어 버튼 */}
               {confirmedPoList.length > 0 && (
@@ -1900,6 +1932,13 @@ export const MatOrderDayView: React.FC = () => {
               </div>
             </div>
 
+            {/* 중앙: 품명 / 거래처 / 발주번호 검색창 */}
+            <CenteredKeywordSearch
+              value={keyword}
+              onChange={setKeyword}
+              placeholder="품명 / 거래처 / 발주번호..."
+            />
+
             <div className="flex items-center gap-2">
               {/* 거래처 필터 */}
               <select
@@ -1914,18 +1953,6 @@ export const MatOrderDayView: React.FC = () => {
                   </option>
                 ))}
               </select>
-
-              {/* 검색창 */}
-              <div className="relative flex items-center">
-                <Search className="w-3 h-3 text-slate-400 absolute left-2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="품명 / 거래처 / 발주번호..."
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  className="pl-7 pr-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-44 sm:w-56"
-                />
-              </div>
 
               <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded border border-slate-200 text-[11px]">
                 {filteredInboundItems.length}개 입고 대기
