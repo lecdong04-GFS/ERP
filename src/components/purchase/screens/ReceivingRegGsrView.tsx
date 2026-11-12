@@ -340,29 +340,63 @@ export const ReceivingRegGsrView: React.FC = () => {
       if (!confirm(confirmMsg)) return;
 
       setSaving(true);
-      const res = await fetch('/api/purchase/receiving', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receivingDate: recvDate,
-          partnerId: supplierFilter !== 'ALL' ? (targetItems[0]?.partnerId || 'V001') : 'V001',
-          partnerName: supplierFilter !== 'ALL' ? supplierFilter : '공급사',
-          items: targetItems,
-          createdBy: 'admin',
-        }),
-      });
+      let completedBatches = 0;
+      try {
+        const byPartner = new Map<string, any[]>();
+        targetItems.forEach((it) => {
+          const pk = it.partnerId || it.supplier || 'DEFAULT';
+          if (!byPartner.has(pk)) byPartner.set(pk, []);
+          byPartner.get(pk)!.push(it);
+        });
 
-      const data = await res.json();
-      if (data.success) {
+        const batches: any[][] = [];
+        let cur: any[] = [];
+        for (const group of byPartner.values()) {
+          if (cur.length > 0 && cur.length + group.length > 20) {
+            batches.push(cur);
+            cur = [];
+          }
+          cur.push(...group);
+        }
+        if (cur.length > 0) batches.push(cur);
+
+        for (const batchItems of batches) {
+          const res = await fetch('/api/purchase/receiving', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              receivingDate: recvDate,
+              partnerId: supplierFilter !== 'ALL' ? (batchItems[0]?.partnerId || 'V001') : 'V001',
+              partnerName: supplierFilter !== 'ALL' ? supplierFilter : '공급사',
+              items: batchItems,
+              createdBy: 'admin',
+            }),
+          });
+          const rawText = await res.text();
+          let data: any = null;
+          try {
+            data = rawText ? JSON.parse(rawText) : null;
+          } catch {
+            throw new Error(`서버 응답 오류 (HTTP ${res.status}): ${rawText.slice(0, 120)}`);
+          }
+          if (!res.ok || !data?.success) {
+            throw new Error(data?.error || `입고 등록 실패 (HTTP ${res.status})`);
+          }
+          completedBatches += 1;
+        }
+
         alert(
           `[입고등록 성공]\n총 ${targetItems.length}건이 입고 완료되었습니다.\n` +
-          `• 현재고(Inventory) 실시간 가산 반영 완료\n` +
-          `• 자재수불부(MaterialLedger) 입고 기록 완료\n` +
-          `• 발주서(PurchaseOrder) 미입고 잔량 차감 및 입고상태 갱신 완료`
+            `• 현재고(Inventory) 실시간 가산 반영 완료\n` +
+            `• 자재수불부(MaterialLedger) 입고 기록 완료\n` +
+            `• 발주서(PurchaseOrder) 미입고 잔량 차감 및 입고상태 갱신 완료`
         );
         loadPendingOrders();
-      } else {
-        alert(`입고 등록 실패: ${data.error || '알 수 없는 오류'}`);
+      } catch (batchErr: any) {
+        if (completedBatches > 0) {
+          loadPendingOrders();
+        }
+        alert(`입고 등록 실패: ${batchErr?.message || '알 수 없는 오류'}`);
       }
     } catch (err: any) {
       console.error(err);

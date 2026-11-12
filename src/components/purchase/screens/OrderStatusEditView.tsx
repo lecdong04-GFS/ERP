@@ -547,7 +547,7 @@ export const OrderStatusEditView: React.FC = () => {
     if (useItemMode) {
       const checkedDetails = Array.isArray(overrideItemIds)
         ? flatItems.filter((x) => overrideItemIds.includes(x.id))
-        : flatItems.filter((x) => x.checked);
+        : filteredItems.filter((x) => x.checked);
       if (checkedDetails.length === 0) {
         alert('삭제할 발주 품목을 먼저 체크박스로 선택해주세요.');
         return;
@@ -598,11 +598,17 @@ export const OrderStatusEditView: React.FC = () => {
             detailIds: detailIdsToDelete,
           }),
         });
-        const json = await res.json().catch(() => null);
-        if (json?.success) {
+        const rawText = await res.text();
+        let json: any = null;
+        try {
+          json = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          json = null;
+        }
+        if (res.ok && json?.success) {
           alert(`✅ ${json.message || '선택한 품목이 성공적으로 삭제되었습니다.'}`);
         } else {
-          alert('삭제 실패: ' + (json?.error || '오류 발생'));
+          alert('삭제 실패: ' + (json?.error || `HTTP ${res.status} 오류 발생`));
           loadData(startDate, endDate, true);
         }
       } catch (err: any) {
@@ -611,7 +617,7 @@ export const OrderStatusEditView: React.FC = () => {
       }
     } else {
       // 발주서(마스터) 단위 삭제
-      const checkedMasters = masterList.filter((m) => m.checked);
+      const checkedMasters = filteredMasters.filter((m) => m.checked);
       if (checkedMasters.length === 0) {
         alert('삭제할 발주서를 먼저 체크박스로 선택해주세요.');
         return;
@@ -647,11 +653,17 @@ export const OrderStatusEditView: React.FC = () => {
             ids: masterIdsToDelete,
           }),
         });
-        const json = await res.json().catch(() => null);
-        if (json?.success) {
+        const rawText = await res.text();
+        let json: any = null;
+        try {
+          json = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          json = null;
+        }
+        if (res.ok && json?.success) {
           alert(`✅ ${json.message || '선택한 발주서가 성공적으로 삭제되었습니다.'}`);
         } else {
-          alert('발주서 삭제 실패: ' + (json?.error || '오류'));
+          alert('발주서 삭제 실패: ' + (json?.error || `HTTP ${res.status} 오류`));
           loadData(startDate, endDate, true);
         }
       } catch (err: any) {

@@ -155,6 +155,7 @@ interface InboundInspectItem {
   expectedDeliveryDate: string;
   partnerId: string;
   partnerName: string;
+  productId?: number;
   productCode: string;
   productName: string;
   spec: string;
@@ -630,6 +631,7 @@ export const MatOrderDayView: React.FC = () => {
             expectedDeliveryDate: item.expectedDeliveryDate || po.deliveryDate || '',
             partnerId: po.partnerId || '',
             partnerName: po.partnerName || po.partner?.name || '일반거래처',
+            productId: Number(item.productId || prod.id || 0) || undefined,
             productCode: item.productCode || prod.productCode || '',
             productName: item.productName || prod.name || '',
             spec: prod.spec || item.spec || '',
@@ -1804,8 +1806,9 @@ export const MatOrderDayView: React.FC = () => {
     if (!ok) return;
 
     setIsReceivingSaving(true);
+    let completedBatches = 0;
     try {
-      // 거래처별 그룹화하여 각각 전표 생성
+      // 거래처 단위를 유지하되 20품목 단위 배치로 묶어 서버리스 HTTP 타임아웃 및 다중 요청 부하 방지
       const byPartner = new Map<string, InboundInspectItem[]>();
       selected.forEach((it) => {
         const pid = it.partnerId || 'DEFAULT';
@@ -1813,19 +1816,39 @@ export const MatOrderDayView: React.FC = () => {
         byPartner.get(pid)!.push(it);
       });
 
-      for (const [pid, pItems] of byPartner.entries()) {
-        const pName = pItems[0]?.partnerName || '';
+      const batches: InboundInspectItem[][] = [];
+      let currentBatch: InboundInspectItem[] = [];
+      for (const pItems of byPartner.values()) {
+        if (currentBatch.length > 0 && currentBatch.length + pItems.length > 20) {
+          batches.push(currentBatch);
+          currentBatch = [];
+        }
+        currentBatch.push(...pItems);
+      }
+      if (currentBatch.length > 0) batches.push(currentBatch);
+
+      for (const batchItems of batches) {
+        const first = batchItems[0];
+        const distinctPartners = new Set(batchItems.map((it) => it.partnerId || it.partnerName));
         const payload = {
           receivingDate: inboundReceivingDate,
           skipInventoryUpdate: inboundSkipStock,
-          partnerId: pid === 'DEFAULT' ? undefined : pid,
-          partnerName: pName,
+          partnerId:
+            distinctPartners.size === 1 && first?.partnerId
+              ? first.partnerId
+              : undefined,
+          partnerName:
+            distinctPartners.size === 1 ? first?.partnerName || '' : '일괄입고검수',
           createdBy: '창고검수자',
-          items: pItems.map((it) => ({
+          items: batchItems.map((it) => ({
             orderDetailId: it.detailId,
             orderNo: it.orderNo,
+            partnerId: it.partnerId || undefined,
+            partnerName: it.partnerName,
+            productId: it.productId,
             name: it.productName,
             productCode: it.productCode,
+            unit: it.unit,
             receivedQty: it.actualRecvQty,
             orderQty: it.orderQty,
             unitPrice: it.unitPrice,
@@ -1843,10 +1866,17 @@ export const MatOrderDayView: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const json = await res.json();
-        if (!json.success) {
-          throw new Error(json.error || `${pName} 입고 반영 실패`);
+        const rawText = await res.text();
+        let json: any = null;
+        try {
+          json = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          throw new Error(`서버 응답 오류 (HTTP ${res.status}): ${rawText.slice(0, 120)}`);
         }
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || `입고 반영 실패 (HTTP ${res.status})`);
+        }
+        completedBatches += 1;
       }
 
       alert(
@@ -1861,7 +1891,10 @@ export const MatOrderDayView: React.FC = () => {
 
       await Promise.all([loadInboundPending(), loadConfirmedPo()]);
     } catch (err: any) {
-      alert('입고 처리 중 오류: ' + err.message);
+      if (completedBatches > 0) {
+        await Promise.all([loadInboundPending(), loadConfirmedPo()]);
+      }
+      alert('입고 처리 중 오류: ' + (err?.message || err));
     } finally {
       setIsReceivingSaving(false);
     }

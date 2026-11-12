@@ -293,7 +293,7 @@ export async function POST(req: NextRequest) {
             ...(deliveryDate !== undefined ? { deliveryDate: normalizeDateYmd(deliveryDate) } : {}),
           },
         });
-      });
+      }, { maxWait: 20000, timeout: 60000 });
 
       const refreshed = await prisma.purchaseOrder.findUnique({
         where: { id: po.id },
@@ -414,17 +414,20 @@ async function handleDeleteOrders(params: {
 
   // 3. 트랜잭션으로 상세 품목 및 헤더 삭제
   const orderIdsToDelete = targetOrders.map((o) => o.id);
-  const deletedCount = await prisma.$transaction(async (tx) => {
-    // 상세 품목 삭제
-    await tx.purchaseOrderDetail.deleteMany({
-      where: { purchaseOrderId: { in: orderIdsToDelete } },
-    });
-    // 헤더 삭제
-    const res = await tx.purchaseOrder.deleteMany({
-      where: { id: { in: orderIdsToDelete } },
-    });
-    return res.count;
-  });
+  const deletedCount = await prisma.$transaction(
+    async (tx) => {
+      // 상세 품목 삭제
+      await tx.purchaseOrderDetail.deleteMany({
+        where: { purchaseOrderId: { in: orderIdsToDelete } },
+      });
+      // 헤더 삭제
+      const res = await tx.purchaseOrder.deleteMany({
+        where: { id: { in: orderIdsToDelete } },
+      });
+      return res.count;
+    },
+    { maxWait: 20000, timeout: 60000 }
+  );
 
   return NextResponse.json({
     success: true,
@@ -468,27 +471,30 @@ async function handleDeleteDetail(detailId: number) {
 
   const parentOrder = detail.purchaseOrder;
 
-  await prisma.$transaction(async (tx) => {
-    // 해당 품목 삭제
-    await tx.purchaseOrderDetail.delete({
-      where: { id: detailId },
-    });
+  await prisma.$transaction(
+    async (tx) => {
+      // 해당 품목 삭제
+      await tx.purchaseOrderDetail.delete({
+        where: { id: detailId },
+      });
 
-    // 남은 품목들의 합계금액 계산
-    const remaining = parentOrder.details.filter((d) => d.id !== detailId);
-    if (remaining.length === 0) {
-      // 발주 품목이 0개가 되면 발주서 헤더도 함께 삭제
-      await tx.purchaseOrder.delete({
-        where: { id: parentOrder.id },
-      });
-    } else {
-      const newTotal = remaining.reduce((sum, d) => sum + (d.amount || 0), 0);
-      await tx.purchaseOrder.update({
-        where: { id: parentOrder.id },
-        data: { totalAmount: newTotal },
-      });
-    }
-  });
+      // 남은 품목들의 합계금액 계산
+      const remaining = parentOrder.details.filter((d) => d.id !== detailId);
+      if (remaining.length === 0) {
+        // 발주 품목이 0개가 되면 발주서 헤더도 함께 삭제
+        await tx.purchaseOrder.delete({
+          where: { id: parentOrder.id },
+        });
+      } else {
+        const newTotal = remaining.reduce((sum, d) => sum + (d.amount || 0), 0);
+        await tx.purchaseOrder.update({
+          where: { id: parentOrder.id },
+          data: { totalAmount: newTotal },
+        });
+      }
+    },
+    { maxWait: 20000, timeout: 60000 }
+  );
 
   return NextResponse.json({
     success: true,
@@ -521,30 +527,43 @@ async function handleDeleteDetails(detailIds: number[]) {
 
   const parentOrderIds = [...new Set(details.map((d) => d.purchaseOrderId))];
 
-  await prisma.$transaction(async (tx) => {
-    // 1. 해당 품목들 일괄 삭제
-    await tx.purchaseOrderDetail.deleteMany({
-      where: { id: { in: detailIds } },
-    });
-
-    // 2. 각 부모 발주서의 남은 품목 재확인 및 합계금액 갱신 또는 헤더 삭제
-    for (const pId of parentOrderIds) {
-      const remaining = await tx.purchaseOrderDetail.findMany({
-        where: { purchaseOrderId: pId },
-        select: { amount: true },
+  await prisma.$transaction(
+    async (tx) => {
+      // 1. 해당 품목들 일괄 삭제
+      await tx.purchaseOrderDetail.deleteMany({
+        where: { id: { in: detailIds } },
       });
 
-      if (remaining.length === 0) {
-        await tx.purchaseOrder.delete({ where: { id: pId } });
-      } else {
-        const newTotal = remaining.reduce((sum, d) => sum + (d.amount || 0), 0);
-        await tx.purchaseOrder.update({
-          where: { id: pId },
-          data: { totalAmount: newTotal },
+      // 2. 잔여 품목 일괄 조회 후 빈 발주서 일괄 삭제 / 부분 잔존 발주서 합계 재계산 (N+1 쿼리 제거)
+      const remainingAll = await tx.purchaseOrderDetail.findMany({
+        where: { purchaseOrderId: { in: parentOrderIds } },
+        select: { purchaseOrderId: true, amount: true },
+      });
+
+      const sumByOrderId = new Map<number, number>();
+      for (const row of remainingAll) {
+        sumByOrderId.set(
+          row.purchaseOrderId,
+          (sumByOrderId.get(row.purchaseOrderId) || 0) + (Number(row.amount) || 0)
+        );
+      }
+
+      const emptyOrderIds = parentOrderIds.filter((pId) => !sumByOrderId.has(pId));
+      if (emptyOrderIds.length > 0) {
+        await tx.purchaseOrder.deleteMany({
+          where: { id: { in: emptyOrderIds } },
         });
       }
-    }
-  });
+
+      for (const [pId, newTotal] of sumByOrderId.entries()) {
+        await tx.purchaseOrder.update({
+          where: { id: pId },
+          data: { totalAmount: Math.round(newTotal) },
+        });
+      }
+    },
+    { maxWait: 20000, timeout: 60000 }
+  );
 
   return NextResponse.json({
     success: true,
