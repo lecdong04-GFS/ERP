@@ -38,12 +38,17 @@ import {
   Undo2,
   ShoppingCart,
   Heart,
+  BarChart3,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
+import {
+  ItemOrderInsightDrawer,
+  type ItemOrderInsightTarget,
+} from '@/components/purchase/modals/ItemOrderInsightDrawer';
 import {
   DAY_CHARS,
   WEEKDAY_DEMAND_FACTORS,
@@ -264,6 +269,9 @@ export const MatOrderDayView: React.FC = () => {
 
   // 계산 근거 팝오버 활성 품목 ID
   const [activeBriefingId, setActiveBriefingId] = useState<number | null>(null);
+
+  // 품목 클릭 시 현 재고상태 + 7일 재고추이 드로어 대상 ID
+  const [insightRowId, setInsightRowId] = useState<number | null>(null);
 
   // 발주 필요 품목만 보기 (기본 true) vs 전체 품목 보기 / 정렬 모드 / 타요일 긴급미배정 필터
   const [showOnlyOrderable, setShowOnlyOrderable] = useState<boolean>(true);
@@ -3788,15 +3796,20 @@ export const MatOrderDayView: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* 품목명 */}
+                          {/* 품목명 (클릭 시 현 재고상태 & 7일 재고추이 드로어 오픈) */}
                           <td className="py-2 px-1.5 font-bold text-slate-900 min-w-0 overflow-hidden">
                             <div className="flex items-center gap-1 min-w-0 w-full">
-                              <span
-                                className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-tight truncate min-w-0"
-                                title={r.name}
+                              <button
+                                type="button"
+                                onClick={() => setInsightRowId(r.id)}
+                                className="group flex items-center gap-1 min-w-0 text-left cursor-pointer hover:text-blue-700 transition-colors"
+                                title={`${r.name} — 클릭하여 현 재고상태 및 지난 7일 재고 변화·향후 발주 시뮬레이션 보기`}
                               >
-                                {r.name}
-                              </span>
+                                <span className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-tight truncate min-w-0 group-hover:underline">
+                                  {r.name}
+                                </span>
+                                <BarChart3 className="w-3.5 h-3.5 shrink-0 text-slate-300 group-hover:text-blue-600 transition-colors" />
+                              </button>
                               <span className="shrink-0 flex items-center gap-0.5">
                                 <ProductLifecycleBadge
                                   status={r.status}
@@ -5495,6 +5508,62 @@ export const MatOrderDayView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 품목 클릭 시 현 재고상태 & 7일 재고 변화 + 발주 시뮬레이션 드로어 */}
+      {(() => {
+        if (insightRowId === null) return null;
+        const targetRow = rows.find((x) => x.id === insightRowId);
+        if (!targetRow) return null;
+        const m = getRowMetrics(targetRow, dayIdx);
+        const stagedEntry = stagedOrders[makeStagedKey(currentDayDate, targetRow.id)];
+        const insightItem: ItemOrderInsightTarget = {
+          rowId: targetRow.id,
+          productId: targetRow.productId,
+          name: targetRow.name,
+          supplier: targetRow.supplier,
+          warehouse: targetRow.warehouse || '',
+          pattern: m.pattern,
+          pack: m.pack,
+          boxPrice: m.boxPrice,
+          currentStock: targetRow.currentStock,
+          incoming: targetRow.incoming,
+          totalStock: m.totalStock,
+          dailyUsage: m.dailyUsage,
+          stockDays: m.stockDays,
+          targetDays: m.targetDays,
+          targetStock: m.targetStock,
+          shortageBags: m.shortageBags,
+          suggestedBoxes: m.suggestedBoxes,
+          autoDayQty: m.autoDayQty,
+          dayQty: m.dayQty,
+          pendingBoxes: targetRow.pendingBoxes || 0,
+          pendingOrderNos: targetRow.pendingOrderNos || [],
+          isConfirmedOnTargetDay: m.isConfirmedOnTargetDay,
+          confirmedTodayBoxes: m.confirmedTodayBoxes,
+          isStaged: Boolean(stagedEntry && stagedEntry.qty > 0),
+          targetDayDate: m.targetDayDate,
+          targetDayIdx: dayIdx,
+          auditStatus: m.auditStatus,
+          auditLabel: m.auditLabel,
+        };
+        return (
+          <ItemOrderInsightDrawer
+            item={insightItem}
+            refDate={currentDayDate || orderDate}
+            onClose={() => setInsightRowId(null)}
+            onAdjustQty={(_rowId, nextQty) => handleDayQtyChange(targetRow, m, String(nextQty))}
+            onResetToAuto={(_rowId) => {
+              setOverrides((prev) => {
+                if (!prev[currentDayDate] || prev[currentDayDate][targetRow.id] === undefined) return prev;
+                const copy = { ...prev[currentDayDate] };
+                delete copy[targetRow.id];
+                return { ...prev, [currentDayDate]: copy };
+              });
+            }}
+            onToggleStage={() => handleToggleStageRow(targetRow, m)}
+          />
+        );
+      })()}
     </div>
   );
 };
