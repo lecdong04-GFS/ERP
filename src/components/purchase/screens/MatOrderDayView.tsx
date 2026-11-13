@@ -3652,7 +3652,7 @@ export const MatOrderDayView: React.FC = () => {
                     </th>
                     <th className="py-2.5 px-1 text-center">
                       발주일수
-                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">기준·필요</span>
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">기준일수·목표재고</span>
                     </th>
                     <th className="py-2.5 px-1.5 text-right bg-amber-50/70 text-amber-950 border-x border-amber-200">
                       {DAY_CHARS[dayIdx]}요일 발주(✏️)
@@ -4075,15 +4075,22 @@ export const MatOrderDayView: React.FC = () => {
                               </button>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-0.5 mt-0.5 leading-tight">
-                              <span className="text-[11px] 2xl:text-[11.5px] text-slate-500 font-mono font-bold">
-                                {m.targetDays > 0 ? `목${m.targetStock.toLocaleString()}봉` : '미설정'}
+                              <span
+                                className="text-[11px] 2xl:text-[11.5px] text-slate-600 font-mono font-bold"
+                                title={
+                                  m.targetDays > 0
+                                    ? `발주일수 ${formatOrderDays(m.targetDays)} 기준 목표재고 (일소진 × 발주일수 × 로스율 = ${m.targetStock.toLocaleString()}봉)`
+                                    : '발주일수 미설정'
+                                }
+                              >
+                                {m.targetDays > 0 ? `목표 ${m.targetStock.toLocaleString()}봉` : '미설정'}
                               </span>
                               {m.targetDays !== m.masterOrderDays && (
                                 <span
                                   className="text-[10.5px] text-indigo-600 font-mono font-bold"
-                                  title="품목 마스터(DB) 기준 발주일수"
+                                  title="품목 마스터(DB) 기본 발주일수"
                                 >
-                                  (기{formatOrderDays(m.masterOrderDays)})
+                                  (기본 {formatOrderDays(m.masterOrderDays)})
                                 </span>
                               )}
                               {itemTargetDaysOverrides[r.id] !== undefined &&
