@@ -41,6 +41,7 @@ import {
 } from '@/lib/production/workOrderTimetable';
 import { GanttTimelineView } from '@/components/production/GanttTimelineView';
 import { SpeedSimulatorView } from '@/components/production/SpeedSimulatorView';
+import { ProductionConfigModal } from '@/components/production/modals/ProductionConfigModal';
 
 const SEONGHYEONG_LINES = [
   { id: 'ALL_SEONGHYEONG', name: '전체 성형장 (9개 라인 종합)', icon: '🌟', count: 9 },
@@ -177,6 +178,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [isLargeModalOpen, setIsLargeModalOpen] = useState(false);
   const [modalFontSize, setModalFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [modalActiveTab, setModalActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('TIMETABLE');
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   const openLargeModal = (tab?: 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR') => {
     setModalActiveTab(tab || activeTab);
@@ -2003,6 +2005,15 @@ export const WorkOrderStatusView: React.FC = () => {
                 <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
                 <span>수주 동기화</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setIsConfigModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 shadow-2xs transition-all cursor-pointer"
+                title="과장님 확인 요청서 기준값(UPH 속도, 09:25 선가동, 취반/전처리 역산 시간)을 화면에서 보고 언제든 수정합니다."
+              >
+                <Gauge size={13} className="text-amber-400" />
+                <span>현장 기준정보 설정</span>
+              </button>
             </div>
 
             {/* 시프트 필터 */}
@@ -2481,6 +2492,17 @@ export const WorkOrderStatusView: React.FC = () => {
                   ))}
                 </div>
 
+                {/* 현장 기준정보 설정 바로가기 */}
+                <button
+                  type="button"
+                  onClick={() => setIsConfigModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-black transition cursor-pointer"
+                  title="과장님 확인 요청서 기준값(UPH 속도, 09:25 선가동, 취반/전처리 역산 시간)을 화면에서 보고 언제든 수정합니다."
+                >
+                  <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                  <span>현장 기준정보 설정</span>
+                </button>
+
                 {/* 수주 동기화 바로가기 */}
                 <button
                   type="button"
@@ -2662,6 +2684,15 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 현장 기준정보 설정 모달 (과장님 설문지 기반) */}
+      <ProductionConfigModal
+        isOpen={isConfigModalOpen}
+        onClose={() => setIsConfigModalOpen(false)}
+        onApply={() => {
+          fetchServerWorkOrders(workDate, shift, selectedLine, true);
+        }}
+      />
     </div>
   );
 };
