@@ -2144,83 +2144,199 @@ export const WorkOrderStatusView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. 상단 라인 핵심 KPI 카드 바 (생산계획, 가동시간, UPH속도, 투입인원, 공정책임자) */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2.5 shrink-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* KPI 1: 일일 총 생산계획 및 수주금액 연동 */}
-          <div className="bg-blue-50/70 border border-blue-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <PackageCheck size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-blue-700 truncate flex items-center gap-1.5">
-                <span>일일 총 생산계획</span>
+      {/* 3. 라인 핵심 KPI 5분할 카드 바 렌더링 함수 */}
+      {(() => {
+        const shift2Qty = realOrderMeta?.shift2Qty || 0;
+        const shift1Qty = realOrderMeta?.shift1Qty || 0;
+        const totalQty = realOrderMeta?.totalDayQty || (shift2Qty + shift1Qty);
+        const s2Pct = totalQty > 0 ? Math.round((shift2Qty / totalQty) * 100) : 55;
+        const s1Pct = 100 - s2Pct;
+
+        const startTime = scheduleTasks[0]?.time?.split('~')[0]?.trim() || currentLine.totalTime.split('~')[0]?.trim() || '09:25';
+        const endTime = scheduleTasks[scheduleTasks.length - 1]?.time?.split('~')[1]?.trim() || currentLine.totalTime.split('~')[1]?.trim() || '20:23';
+        const progressPct = stats.totalCount > 0 ? Math.round((stats.completedCount / stats.totalCount) * 100) : 0;
+
+        const personnelParts = currentLine.personnel.split('(');
+        const headcountMain = personnelParts[0].trim();
+        const headcountSub = personnelParts[1] ? personnelParts[1].replace(')', '').trim() : '공정 편성';
+
+        const speedMain = currentLine.speed.split('(')[0].trim();
+        const speedSub = currentLine.speed.includes('(') ? currentLine.speed.match(/\((.*?)\)/)?.[1] : '정규 UPH 목표 속도';
+
+        return (
+          <div className="bg-white border-b border-slate-200 px-6 py-3 shrink-0">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {/* KPI 1: 일일 총 생산계획 및 수주금액 연동 */}
+              <div
+                onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+                title="클릭 시 최신 수주 데이터를 즉시 다시 동기화합니다."
+                className="group relative bg-gradient-to-br from-blue-50/95 via-white to-blue-50/40 border border-blue-200/90 hover:border-blue-400 rounded-2xl p-3 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <PackageCheck size={17} />
+                    </div>
+                    <div className="text-[11px] font-black text-blue-900 tracking-tight truncate">일일 총 생산계획</div>
+                  </div>
+                  {realOrderMeta?.totalDayAmount ? (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-black animate-pulse shrink-0">
+                      수주 100%
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-black shrink-0">
+                      표준 계획
+                    </span>
+                  )}
+                </div>
+                
+                <div className="text-base sm:text-lg font-black tracking-tight text-blue-950 font-mono truncate my-0.5">
+                  {realOrderMeta?.lineTotalPlan || currentLine.totalPlan}
+                </div>
+
+                {realOrderMeta?.hasRealOrders && (shift2Qty > 0 || shift1Qty > 0) ? (
+                  <div className="mt-1">
+                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden flex" title={`2편: ${shift2Qty.toLocaleString()} ea (${s2Pct}%) | 1편: ${shift1Qty.toLocaleString()} ea (${s1Pct}%)`}>
+                      <div style={{ width: `${s2Pct}%` }} className="bg-blue-600 h-full" />
+                      <div style={{ width: `${s1Pct}%` }} className="bg-indigo-500 h-full" />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mt-1">
+                      <span className="text-blue-700 font-extrabold">2편 {shift2Qty.toLocaleString()}</span>
+                      <span className="text-indigo-700 font-extrabold">1편 {shift1Qty.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : null}
+
                 {realOrderMeta?.totalDayAmount ? (
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">
-                    수주 연동 100%
-                  </span>
+                  <div className="text-[10px] font-extrabold text-emerald-700 truncate mt-0.5">
+                    수주금액: {realOrderMeta.totalDayAmount.toLocaleString()}원 (BOM 연동)
+                  </div>
                 ) : null}
               </div>
-              <div className="text-sm font-black text-blue-950 truncate">
-                {realOrderMeta?.lineTotalPlan || currentLine.totalPlan}
-              </div>
-              {realOrderMeta?.totalDayAmount ? (
-                <div className="text-[11px] font-bold text-emerald-700 truncate">
-                  수주금액: {realOrderMeta.totalDayAmount.toLocaleString()}원 (BOM 연동)
+
+              {/* KPI 2: 가동 시간대 & 실시간 진척도 */}
+              <div className="group bg-gradient-to-br from-slate-50/95 via-white to-slate-100/60 border border-slate-200 hover:border-slate-400 rounded-2xl p-3 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <Clock size={17} />
+                    </div>
+                    <div className="text-[11px] font-black text-slate-800 tracking-tight truncate">라인 가동 시간대</div>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black shrink-0 ${
+                    progressPct > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    진행률 {progressPct}%
+                  </span>
                 </div>
-              ) : null}
-            </div>
-          </div>
 
-          {/* KPI 2: 가동 시간대 */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Clock size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-600 truncate">라인 가동 시간대</div>
-              <div className="text-sm font-black text-slate-900 truncate">
-                {scheduleTasks.length > 0 && scheduleTasks[0].time && scheduleTasks[scheduleTasks.length - 1].time
-                  ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}`
-                  : currentLine.totalTime}
+                <div className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono truncate my-0.5">
+                  {startTime} ~ {endTime}
+                </div>
+
+                <div className="mt-1">
+                  <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden" title={`완료 ${stats.completedCount}건 / 전체 ${stats.totalCount}건`}>
+                    <div style={{ width: `${progressPct}%` }} className="bg-emerald-500 h-full transition-all duration-500" />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mt-1">
+                    <span className="text-emerald-700 font-black">● 완료 {stats.completedCount}</span>
+                    <span className="text-amber-700 font-black">● 진행 {stats.inProgressCount}</span>
+                    <span className="text-slate-500 font-black">○ 대기 {stats.pendingCount}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI 3: 라인 생산속도 (UPH) & 실측 설정 연결 */}
+              <div
+                onClick={() => setIsConfigModalOpen(true)}
+                title="클릭 시 과장님 실측 UPH 및 교체 시간을 바로 수정합니다."
+                className="group bg-gradient-to-br from-emerald-50/95 via-white to-teal-50/40 border border-emerald-200/90 hover:border-emerald-400 rounded-2xl p-3 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <Gauge size={17} />
+                    </div>
+                    <div className="text-[11px] font-black text-emerald-900 tracking-tight truncate">라인 속도 (UPH)</div>
+                  </div>
+                  <span className="text-[10px] bg-emerald-100 group-hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-black px-2 py-0.5 rounded-full transition shrink-0 flex items-center gap-0.5">
+                    설정 ⚙️
+                  </span>
+                </div>
+
+                <div className="text-base sm:text-lg font-black tracking-tight text-emerald-950 font-mono truncate my-0.5">
+                  {speedMain}
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[11px] font-bold text-slate-600 truncate">
+                    {speedSub}
+                  </div>
+                  <div className="text-[10px] font-medium text-emerald-700 flex items-center gap-1 mt-0.5">
+                    <span>⚡ 클릭 시 과장님 기준값 바로 수정</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI 4: 소인화 투입인원 */}
+              <div className="group bg-gradient-to-br from-amber-50/95 via-white to-orange-50/40 border border-amber-200/90 hover:border-amber-400 rounded-2xl p-3 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <Users size={17} />
+                    </div>
+                    <div className="text-[11px] font-black text-amber-900 tracking-tight truncate">소인화 투입인원</div>
+                  </div>
+                  <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full font-black shrink-0">
+                    표준 편성
+                  </span>
+                </div>
+
+                <div className="text-base sm:text-lg font-black tracking-tight text-amber-950 truncate my-0.5">
+                  {headcountMain}
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[11px] font-bold text-amber-900/80 truncate">
+                    {headcountSub}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                    성형 및 포장 교대 인력 최적화
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI 5: 공정 책임자 & 품질/CCP */}
+              <div className="group bg-gradient-to-br from-indigo-50/95 via-white to-purple-50/40 border border-indigo-200/90 hover:border-indigo-400 rounded-2xl p-3 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between col-span-2 sm:col-span-1">
+                <div className="flex items-center justify-between gap-1.5 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                      <ShieldCheck size={17} />
+                    </div>
+                    <div className="text-[11px] font-black text-indigo-900 tracking-tight truncate">공정 관리 & CCP</div>
+                  </div>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-900 border border-indigo-300 px-2 py-0.5 rounded-full font-black shrink-0">
+                    HACCP 안전
+                  </span>
+                </div>
+
+                <div className="text-base sm:text-lg font-black tracking-tight text-indigo-950 truncate my-0.5">
+                  {currentLine.leadWorker}
+                </div>
+
+                <div className="mt-1">
+                  <div className="text-[11px] font-bold text-indigo-900/80 truncate">
+                    품온 10℃↓ • 가열육 ≥75℃
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                    금속검출기 30분 주기 점검 엄수
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-
-          {/* KPI 3: 생산속도 (UPH / 분당) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Gauge size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-emerald-800 truncate">라인 생산속도 (UPH)</div>
-              <div className="text-xs font-black text-slate-900 truncate">{currentLine.speed}</div>
-            </div>
-          </div>
-
-          {/* KPI 4: 소인화 투입인원 */}
-          <div className="bg-amber-50/70 border border-amber-200 rounded-xl px-3.5 py-2 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Users size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-amber-800 truncate">소인화 투입인원</div>
-              <div className="text-xs font-black text-amber-950 truncate">{currentLine.personnel}</div>
-            </div>
-          </div>
-
-          {/* KPI 5: 공정 책임자 */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 flex items-center gap-3 col-span-2 sm:col-span-1">
-            <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <ShieldCheck size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-indigo-700 truncate">공정 책임자</div>
-              <div className="text-sm font-black text-slate-900 truncate">{currentLine.leadWorker}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* 3. 4대 멀티 탭 네비게이션 (타임테이블 간트 vs 작업지시서 vs 소요 원부자재 vs 속도 시뮬레이터) */}
       <div className="px-6 pt-3 shrink-0 flex flex-wrap items-center justify-between gap-2">
@@ -2538,6 +2654,99 @@ export const WorkOrderStatusView: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* 팝업 내부 KPI 요약 바 (5대 핵심 지표 컴팩트 버전) */}
+            {(() => {
+              const startTime = scheduleTasks[0]?.time?.split('~')[0]?.trim() || currentLine.totalTime.split('~')[0]?.trim() || '09:25';
+              const endTime = scheduleTasks[scheduleTasks.length - 1]?.time?.split('~')[1]?.trim() || currentLine.totalTime.split('~')[1]?.trim() || '20:23';
+              const progressPct = stats.totalCount > 0 ? Math.round((stats.completedCount / stats.totalCount) * 100) : 0;
+              const personnelParts = currentLine.personnel.split('(');
+              const headcountMain = personnelParts[0].trim();
+              const speedMain = currentLine.speed.split('(')[0].trim();
+
+              return (
+                <div className="bg-slate-50 border-b border-slate-300 px-5 py-2 shrink-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                    {/* 카드 1 */}
+                    <div className="bg-white border border-blue-200 rounded-xl px-3 py-1.5 flex items-center gap-2.5 shadow-2xs">
+                      <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                        <PackageCheck size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-blue-700 truncate">일일 총 생산계획</div>
+                        <div className="text-xs font-black text-blue-950 font-mono truncate">
+                          {realOrderMeta?.lineTotalPlan || currentLine.totalPlan}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 카드 2 */}
+                    <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 flex items-center gap-2.5 shadow-2xs">
+                      <div className="w-7 h-7 rounded-lg bg-slate-800 text-white flex items-center justify-center shrink-0">
+                        <Clock size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-slate-600 truncate flex items-center gap-1">
+                          <span>가동시간</span>
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 rounded font-black">
+                            {progressPct}%
+                          </span>
+                        </div>
+                        <div className="text-xs font-black text-slate-900 font-mono truncate">
+                          {startTime} ~ {endTime}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 카드 3 */}
+                    <div
+                      onClick={() => setIsConfigModalOpen(true)}
+                      className="bg-white border border-emerald-200 hover:border-emerald-400 rounded-xl px-3 py-1.5 flex items-center gap-2.5 shadow-2xs cursor-pointer transition"
+                      title="클릭 시 과장님 기준정보 설정 창이 열립니다."
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <Gauge size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-emerald-700 truncate flex items-center gap-1">
+                          <span>라인 속도</span>
+                          <span className="text-[9px] text-emerald-600 font-black">⚙️</span>
+                        </div>
+                        <div className="text-xs font-black text-emerald-950 font-mono truncate">
+                          {speedMain}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 카드 4 */}
+                    <div className="bg-white border border-amber-200 rounded-xl px-3 py-1.5 flex items-center gap-2.5 shadow-2xs">
+                      <div className="w-7 h-7 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0">
+                        <Users size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-amber-700 truncate">소인화 인원</div>
+                        <div className="text-xs font-black text-amber-950 truncate">
+                          {headcountMain}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 카드 5 */}
+                    <div className="bg-white border border-indigo-200 rounded-xl px-3 py-1.5 flex items-center gap-2.5 shadow-2xs col-span-2 sm:col-span-1">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                        <ShieldCheck size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-bold text-indigo-700 truncate">책임자 (HACCP)</div>
+                        <div className="text-xs font-black text-indigo-950 truncate">
+                          {currentLine.leadWorker}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 팝업 내부 탭 바 */}
             <div className="px-5 pt-2.5 pb-0 bg-slate-100 border-b border-slate-300 flex flex-wrap items-center justify-between gap-3 shrink-0">
