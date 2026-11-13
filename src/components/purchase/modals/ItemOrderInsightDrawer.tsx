@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   TrendingUp,
@@ -110,15 +110,59 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+
+  const isOpen = Boolean(item);
+
+  // 마운트 직후 다음 페인트 프레임에서 translate-x-0으로 전환해 오른쪽 끝에서 스르륵 슬라이드-인
+  useEffect(() => {
+    if (!isOpen) {
+      setIsVisible(false);
+      return;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setIsVisible(false);
+    let raf2 = 0;
+    const raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    if (closeTimerRef.current !== null) return;
+    setIsVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, 260);
+  }, [onClose]);
 
   useEffect(() => {
     if (!item) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [item, onClose]);
+  }, [item, handleClose]);
 
   useEffect(() => {
     if (!item) return;
@@ -295,12 +339,20 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
   const novRef = useMemo(() => findNovLedgerRef(item?.name || ''), [item?.name]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px] animate-in fade-in duration-150">
+    <div
+      className={`fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-300 ease-out ${
+        isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+    >
       {/* 바깥 영역 클릭 시 닫기 */}
-      <div className="flex-1" onClick={onClose} />
+      <div className="flex-1" onClick={handleClose} />
 
       {/* 우측 슬라이드 드로어 */}
-      <div className="w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+      <div
+        className={`w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden transform transition-transform duration-300 ease-out will-change-transform ${
+          isVisible ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
         {/* ── 상단 헤더 ── */}
         <div className="px-5 py-3.5 bg-slate-900 text-white flex items-start justify-between gap-3 shrink-0">
           <div className="min-w-0">
@@ -328,7 +380,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
             title="닫기 (ESC)"
           >
