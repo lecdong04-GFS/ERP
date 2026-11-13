@@ -1019,7 +1019,10 @@ export const StockLookupView: React.FC = () => {
           );
         }
       })
-      .catch((err) => console.error('Failed to load stock data', err));
+      .catch((err) => {
+        console.error('Failed to load stock data', err);
+        setMergeInfo('⚠️ 재고 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
+      });
   };
 
   // 날짜별 로드: 해당 날짜 스냅샷이 있으면 확정분, 없으면 현재고 LIVE

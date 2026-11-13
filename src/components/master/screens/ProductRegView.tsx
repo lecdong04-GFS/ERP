@@ -6,6 +6,7 @@ import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
 import { exportGridToExcel, downloadExcelTemplate } from '@/lib/excelExport';
 import { Plus, Trash2, Copy, Save, ChevronDown, ChevronUp, Search, X, Check, Layers, AlertCircle, RefreshCw } from 'lucide-react';
 import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
+import { kstToday } from '@/lib/kst';
 import {
   calcBagPriceFromBox,
   calcBomEffectiveUnitPrice,
@@ -404,7 +405,7 @@ export const ProductRegView: React.FC = () => {
                 body: JSON.stringify({
                   parentProductId: savedId,
                   version: '1.0',
-                  effectiveDate: new Date().toISOString().slice(0, 10),
+                  effectiveDate: kstToday(),
                   details: [],
                   remark: '신메뉴 자동생성',
                 }),

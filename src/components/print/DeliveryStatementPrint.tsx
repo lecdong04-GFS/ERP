@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { DeliveryStatementPayload } from '@/context/PrintReportContext';
+import { kstToday } from '@/lib/kst';
 
 interface DeliveryStatementPrintProps {
   payload?: DeliveryStatementPayload | null;
@@ -9,7 +10,7 @@ interface DeliveryStatementPrintProps {
 
 export const DeliveryStatementPrint: React.FC<DeliveryStatementPrintProps> = ({ payload }) => {
   const deliveryNo = payload?.deliveryNo || 'DELIV-20261106-0001';
-  const deliveryDate = payload?.deliveryDate || new Date().toISOString().slice(0, 10);
+  const deliveryDate = payload?.deliveryDate || kstToday();
   const centerCode = payload?.centerCode || 'GS리테일 물류센터';
   const shift = payload?.shift || '1편';
   const items = payload?.items || [];

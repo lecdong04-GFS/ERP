@@ -143,12 +143,16 @@ export const MatOrderNormalView: React.FC = () => {
     setOrderDate(d.toISOString().slice(0, 10));
   };
 
-  // 요일 헤더 (발주일 기준 7일)
+  // 요일 헤더 (발주일이 속한 주의 월~일 7일: splitWeek 인덱스 0..6과 일치)
   const weekLabels = useMemo(() => {
     const base = new Date(orderDate + 'T00:00:00Z');
+    const utcDay = base.getUTCDay();
+    const mondayOffset = utcDay === 0 ? -6 : 1 - utcDay;
+    const monday = new Date(base);
+    monday.setUTCDate(monday.getUTCDate() + mondayOffset);
     return DAY_CHARS.map((d, i) => {
-      const dt = new Date(base);
-      dt.setUTCDate(dt.getUTCDate() + i);
+      const dt = new Date(monday);
+      dt.setUTCDate(monday.getUTCDate() + i);
       return `${d}(${String(dt.getUTCDate()).padStart(2, '0')})`;
     });
   }, [orderDate]);

@@ -5,13 +5,13 @@ import prisma from '@/lib/prisma';
 import { kstToday } from '@/lib/kst';
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
 function weekday(dateStr: string): number {
-  return new Date(dateStr + 'T00:00:00').getDay();
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
 }
 
 // GET /api/sales/forecast?from=2026-10-01&to=2026-10-30&targets=2026-11-03,2026-11-04

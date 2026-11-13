@@ -485,7 +485,7 @@ export async function POST(req: NextRequest) {
           const cleanLotNo = item.lotNo
             ? String(item.lotNo).replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, receivingDate.replace(/-/g, '').slice(2))
             : `LOT-${receivingDate.replace(/-/g, '')}-${product.productCode.slice(-4)}`;
-          const expiryDate = normalizeDateYmd(item.expiryDate) || '2026-11-30';
+          const expiryDate = normalizeDateYmd(item.expiryDate) || '';
           const rawWh = item.warehouse || product.warehouse || '상온';
           const warehouse = ['냉장1', '냉장2', '냉동', '상온', '부자재'].includes(rawWh)
             ? rawWh

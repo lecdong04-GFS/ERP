@@ -182,16 +182,22 @@ export interface CalcResult {
 
 export function calcRow(r: SheetRowInput): CalcResult {
   const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 0;
-  const totalStock = r.incoming + r.currentStock;
-  const required = r.dailyUsage * r.days;
+  const incoming = Number(r.incoming) || 0;
+  const currentStock = Number(r.currentStock) || 0;
+  const dailyUsage = Math.max(0, Number(r.dailyUsage) || 0);
+  const days = Math.max(0, Number(r.days) || 0);
+  const bagPrice = Math.max(0, Number(r.bagPrice) || 0);
+
+  const totalStock = incoming + currentStock;
+  const required = dailyUsage * days;
   const diff = totalStock - required;
-  const stockDays = r.dailyUsage > 0 ? totalStock / r.dailyUsage : NaN;
+  const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : NaN;
   const shortageBags = required - totalStock;
   const boxesStd = pack > 0 ? shortageBags / pack : NaN;
   const suggest = pack > 0 ? Math.ceil(Math.max(0, shortageBags) / pack) : 0;
-  const finalBoxes = r.manual ? r.finalBoxes : suggest;
-  const amount = finalBoxes * pack * r.bagPrice;
-  const dailyBox = r.dailyUsage > 0 && pack > 0 ? (r.dailyUsage * 7.5) / pack / 7 : NaN;
+  const finalBoxes = Math.max(0, Number(r.manual ? r.finalBoxes : suggest) || 0);
+  const amount = finalBoxes * pack * bagPrice;
+  const dailyBox = dailyUsage > 0 && pack > 0 ? (dailyUsage * 7.5) / pack / 7 : NaN;
   return { pack, totalStock, required, diff, stockDays, shortageBags, boxesStd, suggest, finalBoxes, amount, dailyBox };
 }
 

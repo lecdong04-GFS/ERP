@@ -6,6 +6,8 @@
 //  3) 천 단위 쉼표(,) 및 통화기호(₩, \) 포함 숫자 자동 정규화
 //  4) 컬럼 위치 밀림(No, 센터명 등 추가) 자동 헤더 감지 매핑
 
+import { kstToday } from '@/lib/kst';
+
 export interface MichulItem {
   storeCode: string;
   storeName: string;
@@ -164,7 +166,7 @@ export function parseMichulRows(rows: any[][], fileName?: string): MichulParseRe
   if (!isMichulSheet(rows, fileName)) return null;
 
   const headerDate = extractDateFromHeaderOrFileName(rows, fileName);
-  const defaultDate = headerDate || new Date().toISOString().slice(0, 10);
+  const defaultDate = headerDate || kstToday();
 
   // 1. 헤더 행 및 2단 헤더 여부 탐색
   let headerRowIdx = -1;

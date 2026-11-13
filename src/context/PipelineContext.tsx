@@ -13,6 +13,7 @@ import {
   SAMPLE_STORE_ORDERS,
 } from '@/services/pipeline/ProductionCostPipeline';
 import { useCost } from '@/components/cost/context/CostContext';
+import { kstToday } from '@/lib/kst';
 
 interface PipelineContextType {
   isPipelineModalOpen: boolean;
@@ -123,7 +124,7 @@ export const PipelineProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            orderDate: new Date().toISOString().slice(0, 10),
+            orderDate: kstToday(),
             shift: '1편',
           }),
         }).catch((err) => console.error('Failed to sync pipeline to DB:', err));

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { kstToday } from '@/lib/kst';
 
 export interface ExcelColumnDef {
   key: string;
@@ -69,7 +70,7 @@ export function exportGridToExcel({
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
   // 5. 파일 다운로드 실행
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const dateStr = kstToday().replace(/-/g, '');
   const finalFilename = filename.endsWith('.xlsx')
     ? filename
     : `${filename}_${dateStr}.xlsx`;

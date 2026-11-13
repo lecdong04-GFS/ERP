@@ -87,13 +87,17 @@ export async function POST(req: NextRequest) {
           const moveBags = isBoxUnitLabel(item.unit) ? moveQty * packUnit : moveQty;
           const baseUnit = product.unit || item.unit || 'ea';
 
-          // 1. 출고 창고 재고 감소
+          // 1. 출고 창고 재고 감소 (출발 창고에 재고가 없으면 이동 불가 → 가상 재고 생성 차단)
           const fromInv = await tx.inventory.findFirst({
             where: { productId: product.id, warehouse: item.currentWarehouse },
           });
           const effectiveMoved = fromInv
             ? Math.min(Math.max(0, Number(fromInv.currentQty) || 0), moveBags)
-            : moveBags;
+            : 0;
+
+          if (effectiveMoved <= 0) {
+            continue;
+          }
 
           if (fromInv) {
             const nextFromQty = Math.max(0, (Number(fromInv.currentQty) || 0) - effectiveMoved);

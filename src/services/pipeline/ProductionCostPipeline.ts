@@ -7,6 +7,7 @@ import {
   CostAnalysisResultItem,
   PipelineExecutionSummary,
 } from './types';
+import { kstToday } from '@/lib/kst';
 
 // ==========================================
 // 1. 대표제품 매핑 테이블 (N:1 Canonical Mapping)
@@ -948,7 +949,7 @@ export class ProductionCostPipelineEngine {
 
     const now = new Date();
     const summary: PipelineExecutionSummary = {
-      executionDate: now.toISOString().slice(0, 10),
+      executionDate: kstToday(),
       executionTime: now.toTimeString().slice(0, 8),
       totalOrdersCount: orders.length,
       totalOrdersQty: totalOrderQty,
