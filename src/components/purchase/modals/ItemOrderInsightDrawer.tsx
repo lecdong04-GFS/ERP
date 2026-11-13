@@ -235,6 +235,11 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
   const pack = item.pack > 0 ? item.pack : 1;
   const currentBoxes = item.currentStock / pack;
   const incomingBoxes = item.incoming / pack;
+  const afterOrderDays =
+    item.dailyUsage > 0
+      ? (item.totalStock + Math.max(0, item.dayQty) * pack) / item.dailyUsage
+      : item.stockDays;
+  const addedDays = Math.max(0, afterOrderDays - item.stockDays);
 
   // SVG 차트 좌표 계산 상수
   const W = 560;
@@ -378,19 +383,35 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                 <span>버팀일수 (Runway)</span>
                 {item.stockDays < 1.5 && <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />}
               </div>
-              <div
-                className={`text-base font-black font-mono mt-1 ${
-                  item.stockDays < 1.5
-                    ? 'text-rose-700'
-                    : item.stockDays < item.targetDays
-                    ? 'text-amber-700'
-                    : 'text-slate-900'
-                }`}
-              >
-                {Number.isFinite(item.stockDays) ? `${item.stockDays.toFixed(1)}일` : '-'}
+              <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+                <span
+                  className={`text-base font-black font-mono ${
+                    item.stockDays < 1.5
+                      ? 'text-rose-700'
+                      : item.stockDays < item.targetDays
+                      ? 'text-amber-700'
+                      : 'text-slate-900'
+                  }`}
+                >
+                  {Number.isFinite(item.stockDays) ? `${item.stockDays.toFixed(1)}일` : '-'}
+                </span>
+                {item.dayQty > 0 && item.dailyUsage > 0 && (
+                  <span
+                    className={`text-xs font-mono font-black ${
+                      afterOrderDays >= item.targetDays ? 'text-blue-700' : 'text-amber-700'
+                    }`}
+                  >
+                    ➔ {afterOrderDays.toFixed(1)}일
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-slate-600 mt-0.5">
                 목표 {Number(item.targetDays.toFixed(1))}일 ({item.targetStock.toLocaleString()}봉)
+                {item.dayQty > 0 && item.dailyUsage > 0 && (
+                  <span className="ml-1 font-mono font-bold text-blue-600">
+                    (+{addedDays.toFixed(1)}일)
+                  </span>
+                )}
               </div>
             </div>
 
@@ -912,8 +933,20 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
         {/* ── 하단 원스톱 발주 수량 제어 액션 바 ── */}
         <div className="px-5 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
           <div>
-            <div className="text-[11px] font-bold text-slate-500">
-              {DAY_CHARS[item.targetDayIdx]}요일({item.targetDayDate}) 발주 수량 즉시 조절
+            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-2 flex-wrap">
+              <span>{DAY_CHARS[item.targetDayIdx]}요일({item.targetDayDate}) 발주 수량 즉시 조절</span>
+              {item.dailyUsage > 0 && Number.isFinite(item.stockDays) && (
+                <span
+                  className={`px-1.5 py-0.5 rounded font-mono font-black text-[10.5px] border ${
+                    afterOrderDays >= item.targetDays
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  유지일: {item.stockDays.toFixed(1)}일 ➔ {afterOrderDays.toFixed(1)}일
+                  {addedDays > 0 ? ` (+${addedDays.toFixed(1)}일)` : ''}
+                </span>
+              )}
             </div>
             <div className="text-xs font-mono font-black text-slate-900 mt-0.5 flex items-center gap-2">
               <span>추천: {item.autoDayQty}박스</span>

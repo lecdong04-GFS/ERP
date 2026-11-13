@@ -3971,6 +3971,36 @@ export const MatOrderDayView: React.FC = () => {
                                 <span className="text-[10.5px] font-bold">적정</span>
                               </div>
                             )}
+                            {!m.isPastScheduledDeletion &&
+                              m.dayQty > 0 &&
+                              m.dailyUsage > 0 &&
+                              m.pack > 0 &&
+                              (() => {
+                                const afterOrderDays =
+                                  (m.totalStock + m.dayQty * m.pack) / m.dailyUsage;
+                                const addedDays = Math.max(0, afterOrderDays - m.stockDays);
+                                const reachesTarget =
+                                  m.targetDays > 0 && afterOrderDays >= m.targetDays;
+                                return (
+                                  <div
+                                    className={`mt-0.5 inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10.5px] font-mono font-black border leading-tight ${
+                                      reachesTarget
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}
+                                    title={`오늘 ${m.dayQty}박스(${(
+                                      m.dayQty * m.pack
+                                    ).toLocaleString()}봉) 발주 반영 시 예상 유지일: ${afterOrderDays.toFixed(
+                                      1
+                                    )}일 (+${addedDays.toFixed(1)}일)`}
+                                  >
+                                    <span>➔ {afterOrderDays.toFixed(1)}일</span>
+                                    <span className="text-[9.5px] opacity-80">
+                                      (+{addedDays.toFixed(1)})
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                           </td>
 
                           {/* 발주일수 (마스터 기준 · ±0.5일 / 직접입력 / DB저장) */}
