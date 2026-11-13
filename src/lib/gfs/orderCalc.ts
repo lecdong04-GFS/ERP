@@ -211,11 +211,25 @@ export function parseDeliveryDays(header: string, orderDay?: string): boolean[] 
   return [true, true, true, true, true, false, false];
 }
 
+export interface SplitWeekOptions {
+  /**
+   * 토요 입고배려 (기본 true: 토요일 입고 부담을 ~20% 완화하고 평일로 부드럽게 분산)
+   * 예: 화목토 패턴 시 1:1:1 대신 1.1 : 1.1 : 0.8 비율 적용
+   */
+  weekendRelief?: boolean;
+}
+
 /**
  * 확정량을 납품요일별 수요 가중치(화:1.09, 월:1.08 ... 금:0.88)에 따라 비례 분할 (해밀턴 최대잔여법)
  * activeDayMask 전달 시 해당 주에서 실제 발주/납품 가능한 요일(예: 오늘 이후)에만 100% 배분
+ * options.weekendRelief: 토요일 입고 현장 작업자의 노동강도를 낮추기 위해 토요일 비중을 20% 경감(0.8x)하고 주중으로 분산
  */
-export function splitWeek(r: SheetRowInput, finalBoxes: number, activeDayMask?: boolean[]): number[] {
+export function splitWeek(
+  r: SheetRowInput,
+  finalBoxes: number,
+  activeDayMask?: boolean[],
+  options?: SplitWeekOptions
+): number[] {
   const days = parseDeliveryDays(r.supplier || '', r.orderDay);
   const eligible = activeDayMask ? days.map((on, i) => Boolean(on && activeDayMask[i])) : days;
   const idx = eligible.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
@@ -227,8 +241,46 @@ export function splitWeek(r: SheetRowInput, finalBoxes: number, activeDayMask?: 
     return out;
   }
 
-  // 1. 활성 납품 요일들의 가중치 합산
-  const totalWeight = idx.reduce((acc, i) => acc + (WEEKDAY_DEMAND_FACTORS[i]?.factor || 1.0), 0);
+  const applyWeekendRelief = options?.weekendRelief !== false;
+
+  // 1. 활성 납품 요일들의 가중치 맵 구성
+  const weights: Record<number, number> = {};
+  idx.forEach((i) => {
+    weights[i] = WEEKDAY_DEMAND_FACTORS[i]?.factor || 1.0;
+  });
+
+  // 토요 입고배려: 토요일(5) 납품일이 포함되어 있고, 함께 배분받을 주중 납품일(0~4)이 존재하는 경우
+  if (applyWeekendRelief && idx.includes(5)) {
+    const weekdayIndices = idx.filter((i) => i < 5);
+    if (weekdayIndices.length > 0) {
+      const pat = classifyPattern(r.supplier || '', r.orderDay);
+      const isTueThuSat =
+        pat === '화목토' ||
+        (idx.includes(1) && idx.includes(3) && idx.includes(5)) ||
+        (idx.length === 2 && (idx.includes(1) || idx.includes(3)) && idx.includes(5));
+
+      if (isTueThuSat) {
+        // 화목토 패턴: 화 1.1 : 목 1.1 : 토 0.8 (합 3.0) 완벽 적용
+        if (weights[1] !== undefined) weights[1] = 1.1;
+        if (weights[3] !== undefined) weights[3] = 1.1;
+        weights[5] = 0.8;
+      } else {
+        // 기타 토요일 포함 패턴(매일, 수토 등):
+        // 토요일 가중치를 20% 경감(x 0.8)하고, 절감분(20%)을 주중 활성 납품일에 균등 가산
+        const origSatWeight = weights[5];
+        const reliefSatWeight = origSatWeight * 0.8;
+        const savedWeight = origSatWeight - reliefSatWeight;
+        weights[5] = reliefSatWeight;
+        const addPerWeekday = savedWeight / weekdayIndices.length;
+        weekdayIndices.forEach((wIdx) => {
+          weights[wIdx] = weights[wIdx] + addPerWeekday;
+        });
+      }
+    }
+  }
+
+  // 2. 활성 납품 요일들의 가중치 합산
+  const totalWeight = idx.reduce((acc, i) => acc + (weights[i] || 1.0), 0);
   if (totalWeight <= 0) {
     const base = Math.floor(finalBoxes / idx.length);
     let rem = finalBoxes - base * idx.length;
@@ -239,12 +291,12 @@ export function splitWeek(r: SheetRowInput, finalBoxes: number, activeDayMask?: 
     return out;
   }
 
-  // 2. 가중치 비례 실수 배분 및 기초 정수 할당
+  // 3. 가중치 비례 실수 배분 및 기초 정수 할당
   let allocatedSum = 0;
   const fractions: { index: number; remainder: number; weight: number }[] = [];
 
   idx.forEach((i) => {
-    const w = WEEKDAY_DEMAND_FACTORS[i]?.factor || 1.0;
+    const w = weights[i] || 1.0;
     const exact = (finalBoxes * w) / totalWeight;
     const floor = Math.floor(exact);
     out[i] = floor;
@@ -252,7 +304,7 @@ export function splitWeek(r: SheetRowInput, finalBoxes: number, activeDayMask?: 
     fractions.push({ index: i, remainder: exact - floor, weight: w });
   });
 
-  // 3. 남은 잔여 박스를 잔여 소수점이 가장 큰 요일(동률 시 가중치 우선)부터 1박스씩 배정
+  // 4. 남은 잔여 박스를 잔여 소수점이 가장 큰 요일(동률 시 가중치 우선)부터 1박스씩 배정
   let remainder = finalBoxes - allocatedSum;
   fractions.sort((a, b) => b.remainder - a.remainder || b.weight - a.weight);
 

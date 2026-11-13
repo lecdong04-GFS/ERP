@@ -37,6 +37,7 @@ import {
   Trash2,
   Undo2,
   ShoppingCart,
+  Heart,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -236,6 +237,25 @@ export const MatOrderDayView: React.FC = () => {
   // ── 발주 제어 전략 모드 (⚡타이트 / ⚖️표준 / 🛡️보수적 안전) ──
   // 기본값은 항상 'standard'로 두어 품목 마스터(DB)의 발주일수를 그대로 반영
   const [strategyMode, setStrategyMode] = useState<StrategyMode>('standard');
+
+  // ── 토요 입고배려 모드 (토요일 입고 근로자 노동강도 경감: 화목토 1.1:1.1:0.8, 매일 등 토요 -20%) ──
+  const [weekendRelief, setWeekendRelief] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('GFS_WEEKEND_RELIEF_ENABLED');
+      if (saved !== null) return saved === 'true';
+    }
+    return true; // 기본 활성화 (직원 노동강도 완화 및 안전 배려)
+  });
+
+  const handleToggleWeekendRelief = useCallback(() => {
+    setWeekendRelief((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('GFS_WEEKEND_RELIEF_ENABLED', String(next));
+      }
+      return next;
+    });
+  }, []);
 
   // 품목별 발주일수 커스텀 오버라이드: rowId -> 발주일수
   const [itemTargetDaysOverrides, setItemTargetDaysOverrides] = useState<Record<number, number>>({});
@@ -887,7 +907,7 @@ export const MatOrderDayView: React.FC = () => {
       const itemDayMask = weekDates.map(
         (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
       );
-      const week = splitWeek(r, suggestedBoxes, itemDayMask);
+      const week = splitWeek(r, suggestedBoxes, itemDayMask, { weekendRelief });
       const targetDayConfirm = getRowDayConfirmStatus(targetDayDate, r);
       const boxPrice = calcBoxPrice(r.bagPrice, pack);
 
@@ -925,6 +945,7 @@ export const MatOrderDayView: React.FC = () => {
       currentDayDate,
       activeDayMask,
       getRowDayConfirmStatus,
+      weekendRelief,
     ]
   );
 
@@ -2728,27 +2749,74 @@ export const MatOrderDayView: React.FC = () => {
               </div>
             </div>
 
-            {/* 우측: 수요 가중치 인사이트 칩 + 3-tier 전략 스위치 */}
+            {/* 우측: 수요 가중치 인사이트 칩 + 3-tier 전략 스위치 + 토요 입고배려 토글 */}
             <div className="flex flex-wrap items-center gap-2 whitespace-nowrap">
               {WEEKDAY_DEMAND_FACTORS[dayIdx] && (
                 <div
                   className={`hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11.5px] font-bold ${
-                    WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
+                    dayIdx === 5 && weekendRelief
+                      ? 'bg-rose-50 border-rose-200 text-rose-900 shadow-2xs'
+                      : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'peak'
                       ? 'bg-amber-50 border-amber-200 text-amber-900'
                       : WEEKDAY_DEMAND_FACTORS[dayIdx].tone === 'low'
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                       : 'bg-blue-50 border-blue-200 text-blue-900'
                   }`}
-                  title={`GS25 35일간 실데이터(188만 개) 전수 통계 기반: ${DAY_CHARS[dayIdx]}요일 수요 가중치 ${WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr} (${WEEKDAY_DEMAND_FACTORS[dayIdx].label}) 자동 적용`}
+                  title={
+                    dayIdx === 5 && weekendRelief
+                      ? '토요 입고배려 모드 가동 중: 토요일 현장 하차·검수 인력의 노동강도 완화를 위해 토요일 물량을 -20%(0.8x) 감량하고 주중(화·목 등)으로 자연 분산'
+                      : `GS25 35일간 실데이터(188만 개) 전수 통계 기반: ${DAY_CHARS[dayIdx]}요일 수요 가중치 ${WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr} (${WEEKDAY_DEMAND_FACTORS[dayIdx].label}) 자동 적용`
+                  }
                 >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span>{DAY_CHARS[dayIdx]} 수요</span>
-                  <span className="font-mono font-black">{WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr}</span>
-                  <span className="text-[11px] opacity-80">({WEEKDAY_DEMAND_FACTORS[dayIdx].label})</span>
+                  {dayIdx === 5 && weekendRelief ? (
+                    <>
+                      <Heart className="w-3.5 h-3.5 shrink-0 text-rose-500 fill-rose-500 animate-pulse" />
+                      <span>토요 입고배려</span>
+                      <span className="font-mono font-black text-rose-700">-20% (0.8x)</span>
+                      <span className="text-[11px] opacity-80">(화·목 주중 완충)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span>{DAY_CHARS[dayIdx]} 수요</span>
+                      <span className="font-mono font-black">{WEEKDAY_DEMAND_FACTORS[dayIdx].pctStr}</span>
+                      <span className="text-[11px] opacity-80">({WEEKDAY_DEMAND_FACTORS[dayIdx].label})</span>
+                    </>
+                  )}
                 </div>
               )}
 
               <div className="flex flex-wrap items-center gap-1.5">
+                {/* 토요 입고배려 토글 버튼 */}
+                <button
+                  type="button"
+                  onClick={handleToggleWeekendRelief}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black transition cursor-pointer border ${
+                    weekendRelief
+                      ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-200'
+                  }`}
+                  title={
+                    weekendRelief
+                      ? '❤️ 토요 입고배려 ON: 토요일 현장 입고인력의 노동강도 경감을 위해 토요일 입고량을 ~20% 완화하고 화·목 등 주중 납품일로 분산합니다. (화·목 1.1 : 토 0.8)'
+                      : '🤍 토요 입고배려 OFF: 요일별 표준 가중치로 균등 배분합니다. 클릭하여 켜기'
+                  }
+                >
+                  <Heart
+                    className={`w-3.5 h-3.5 transition-transform ${
+                      weekendRelief ? 'text-rose-500 fill-rose-500 scale-110' : 'text-slate-400'
+                    }`}
+                  />
+                  <span>토요배려</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                      weekendRelief ? 'bg-rose-200/80 text-rose-900' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {weekendRelief ? '1.1:0.8' : 'OFF'}
+                  </span>
+                </button>
+
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 whitespace-nowrap">
                   <span className="text-[11.5px] font-black text-slate-600 px-1.5 flex items-center gap-1">
                     <SlidersHorizontal className="w-3 h-3 text-blue-600" />
@@ -4182,6 +4250,12 @@ export const MatOrderDayView: React.FC = () => {
                                       <span className="block text-[11px] text-slate-500 font-sans mt-0.5">
                                         오늘({DAY_CHARS[dayIdx]}요일) 남은 납품일 가중 배정: <strong>{m.week[dayIdx]}박스</strong>
                                       </span>
+                                      {weekendRelief && (pattern === '화목토' || pattern === '매일' || (r.orderDay && r.orderDay.includes('토'))) && (
+                                        <span className="block text-[10.5px] text-rose-600 font-sans mt-1 font-bold flex items-center gap-1">
+                                          <Heart className="w-3 h-3 text-rose-500 fill-rose-500 inline shrink-0" />
+                                          <span>토요 입고배려 적용 {pattern === '화목토' ? '(화·목 1.1 : 토 0.8)' : '(-20% 완화)'}</span>
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
