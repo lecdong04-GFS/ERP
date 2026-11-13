@@ -24,6 +24,9 @@ import {
   Gauge,
   ShieldCheck,
   Sparkles,
+  Maximize2,
+  Minimize2,
+  X,
 } from 'lucide-react';
 import { usePrintReport } from '@/context/PrintReportContext';
 import { escapeHtml } from '@/lib/sanitize';
@@ -169,6 +172,34 @@ export const WorkOrderStatusView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('GANTT');
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
+
+  // 큰 팝업 모달 상태
+  const [isLargeModalOpen, setIsLargeModalOpen] = useState(false);
+  const [modalFontSize, setModalFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
+  const [modalActiveTab, setModalActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('TIMETABLE');
+
+  const openLargeModal = (tab?: 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR') => {
+    setModalActiveTab(tab || activeTab);
+    setIsLargeModalOpen(true);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isLargeModalOpen) {
+        setIsLargeModalOpen(false);
+      }
+    };
+    if (isLargeModalOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [isLargeModalOpen]);
 
   // 작업시간 연쇄 자동 계산 활성화 플래그
   const [autoCascadeTime, setAutoCascadeTime] = useState(true);
@@ -1361,6 +1392,502 @@ export const WorkOrderStatusView: React.FC = () => {
     return { totalCount, completedCount, inProgressCount, pendingCount, matTotal, matChecked };
   }, [scheduleTasks, materials]);
 
+  // ── 글자 크기 유틸 ──
+  const getFontClass = (type: 'th' | 'td' | 'input' | 'badge' | 'sub', isModal: boolean) => {
+    if (!isModal) {
+      if (type === 'th') return 'py-3 px-2 text-sm sm:text-base';
+      if (type === 'td') return 'py-2.5 px-2 text-xs sm:text-sm';
+      if (type === 'input') return 'text-xs sm:text-sm';
+      if (type === 'badge') return 'text-xs sm:text-sm';
+      return 'text-xs';
+    }
+    if (modalFontSize === 'xlarge') {
+      if (type === 'th') return 'py-4 px-3 text-base sm:text-lg';
+      if (type === 'td') return 'py-3.5 px-2.5 text-base sm:text-lg';
+      if (type === 'input') return 'text-base sm:text-lg';
+      if (type === 'badge') return 'text-sm sm:text-base px-3 py-1';
+      return 'text-sm sm:text-base';
+    }
+    if (modalFontSize === 'large') {
+      if (type === 'th') return 'py-3.5 px-2.5 text-sm sm:text-base';
+      if (type === 'td') return 'py-3 px-2 text-sm sm:text-base';
+      if (type === 'input') return 'text-sm sm:text-base';
+      if (type === 'badge') return 'text-xs sm:text-sm px-2.5 py-0.5';
+      return 'text-xs sm:text-sm';
+    }
+    // normal
+    if (type === 'th') return 'py-2.5 px-2 text-xs sm:text-sm';
+    if (type === 'td') return 'py-2.5 px-2 text-xs sm:text-sm';
+    if (type === 'input') return 'text-xs sm:text-sm';
+    if (type === 'badge') return 'text-xs sm:text-sm px-2 py-0.5';
+    return 'text-xs';
+  };
+
+  // ── 일일 작업지시서 세로 상세표 렌더러 (기본 뷰 & 큰 팝업 공용) ──
+  const renderTimetableContent = (isModal: boolean = false) => {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* 스마트 편집 상단 액션 바 */}
+        <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div className="flex items-center gap-3 flex-wrap text-xs">
+            <div className="flex items-center gap-1.5 font-black text-slate-800">
+              <Sparkles size={16} className="text-blue-600" />
+              <span>스마트 지시서 편집</span>
+            </div>
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+              <input
+                type="checkbox"
+                checked={autoCascadeTime}
+                onChange={(e) => setAutoCascadeTime(e.target.checked)}
+                className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+              />
+              <span>⏱️ 시간 연쇄 자동 계산</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+              <input
+                type="checkbox"
+                checked={autoCascadeOnReorder}
+                onChange={(e) => setAutoCascadeOnReorder(e.target.checked)}
+                className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+              />
+              <span>🔄 순서 이동 시 시간 자동 연동</span>
+            </label>
+            <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
+              💡 작업시간·소요시간 변경 시 다음 순서 시간들이 연속 자동 계산됩니다.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleNudgeAll(-10)}
+              className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+              title="전체 스케줄 시간을 10분 앞당깁니다"
+            >
+              -10분
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNudgeAll(10)}
+              className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+              title="전체 스케줄 시간을 10분 늦춥니다"
+            >
+              +10분
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRecalculateAll()}
+              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              title="시작 시각부터 모든 작업을 5분 갭으로 순차 자동 정렬합니다"
+            >
+              <Clock size={13} />
+              <span>전체 순차 자동 정렬</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveOrders}
+              disabled={saving}
+              className="px-3.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <Save size={13} />
+              <span>{saving ? '저장중...' : '지시 확정 저장'}</span>
+            </button>
+            {!isModal && (
+              <button
+                type="button"
+                onClick={() => openLargeModal('TIMETABLE')}
+                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                title="작업지시서를 큰 팝업창으로 확대하여 편하게 편집합니다"
+              >
+                <Maximize2 size={13} />
+                <span>큰 팝업으로 보기</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 스케줄 테이블 */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className={`bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center ${getFontClass('th', isModal)}`}>
+              <tr>
+                <th className={`w-24 text-center font-black ${getFontClass('th', isModal)}`}>순서</th>
+                <th className={`w-28 text-center font-black ${getFontClass('th', isModal)}`}>구분</th>
+                <th className={`w-44 text-center font-black ${getFontClass('th', isModal)}`}>작업시간</th>
+                <th className={`w-24 text-center font-black ${getFontClass('th', isModal)}`}>유형</th>
+                <th className={`min-w-[220px] text-left font-black ${getFontClass('th', isModal)}`}>지시 제품명</th>
+                <th className={`w-36 text-right font-black ${getFontClass('th', isModal)}`}>지시수량</th>
+                <th className={`w-24 text-center font-black ${getFontClass('th', isModal)}`}>소요시간</th>
+                <th className={`w-20 text-center font-black ${getFontClass('th', isModal)}`}>인원</th>
+                <th className={`min-w-[200px] text-left font-black ${getFontClass('th', isModal)}`}>주요 원부자재 배합 기준 (BOM)</th>
+                <th className={`min-w-[200px] text-left font-black ${getFontClass('th', isModal)}`}>HACCP & CCP 핵심 관리기준</th>
+                <th className={`w-28 text-center font-black ${getFontClass('th', isModal)}`}>진행상태</th>
+                <th className={`w-28 text-center font-black ${getFontClass('th', isModal)}`}>담당자</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {filteredSchedule.map((task, idx) => {
+                const isDone = task.status === '완료';
+                const isProgress = task.status === '진행중';
+                const isClean = task.type === '청소';
+                const isMeal = task.type === '휴게';
+                const isSupport = task.type === '지원';
+
+                let shiftBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-black';
+                else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-black';
+                else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-black';
+                else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
+
+                const { start, end } = parseTimeStr(task.time);
+
+                return (
+                  <tr
+                    key={task.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    className={`transition-all select-none ${
+                      draggedIndex === idx
+                        ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
+                        : dragOverIndex === idx
+                        ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
+                        : isClean
+                        ? 'bg-amber-50/60'
+                        : isMeal
+                        ? 'bg-slate-100/70'
+                        : isSupport
+                        ? 'bg-indigo-50/50'
+                        : isDone
+                        ? 'bg-slate-50 opacity-80'
+                        : 'hover:bg-blue-50/40'
+                    }`}
+                  >
+                    {/* 1. 순서 핸들러 & 순번 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span
+                          className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-slate-200/60"
+                          title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
+                        >
+                          <GripVertical size={16} />
+                        </span>
+                        <span className={`font-mono font-black text-slate-900 w-6 ${getFontClass('sub', isModal)}`}>
+                          {task.seq}
+                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => moveTask(idx, 'UP')}
+                            disabled={idx === 0}
+                            title="위로 순서 올리기"
+                            className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                          >
+                            <ArrowUp size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveTask(idx, 'DOWN')}
+                            disabled={idx === filteredSchedule.length - 1}
+                            title="아래로 순서 내리기"
+                            className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
+                          >
+                            <ArrowDown size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 2. 구분 (시프트 클릭 토글) */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const shifts: ScheduleTask['shift'][] = ['2편', '1편', '지원', '청소', '휴게'];
+                          const curIdx = shifts.findIndex((s) => s === task.shift);
+                          const nextShift = shifts[(curIdx + 1) % shifts.length];
+                          updateTaskShift(task.id, nextShift);
+                        }}
+                        className={`inline-block font-black border cursor-pointer hover:opacity-80 transition-all rounded-lg ${getFontClass('badge', isModal)} ${shiftBadgeClass}`}
+                        title="클릭하여 시프트 전환"
+                      >
+                        {task.shift}
+                      </button>
+                    </td>
+
+                    {/* 3. 작업시간 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <div className="flex items-center justify-center gap-1 font-mono">
+                        <input
+                          type="text"
+                          value={start}
+                          onChange={(e) => updateTaskStartTime(task.id, e.target.value)}
+                          className={`w-14 text-center font-black bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all ${getFontClass('input', isModal)}`}
+                          title="시작 시각 (수정 시 이후 작업시간이 자동으로 순차 재계산됩니다)"
+                        />
+                        <span className="text-slate-400 font-bold text-xs">~</span>
+                        <input
+                          type="text"
+                          value={end}
+                          onChange={(e) => updateTaskEndTime(task.id, e.target.value)}
+                          className={`w-14 text-center font-black bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all ${getFontClass('input', isModal)}`}
+                          title="종료 시각 (수정 시 소요시간 및 이후 작업시간이 연쇄 재계산됩니다)"
+                        />
+                      </div>
+                    </td>
+
+                    {/* 4. 유형 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <span
+                        className={`inline-block rounded-md font-black ${getFontClass('badge', isModal)} ${
+                          task.type === '생산'
+                            ? 'bg-blue-100 text-blue-900 font-black'
+                            : task.type === '청소'
+                            ? 'bg-amber-100 text-amber-900 font-black'
+                            : task.type === '준비'
+                            ? 'bg-teal-100 text-teal-900 font-black'
+                            : task.type === '지원'
+                            ? 'bg-indigo-100 text-indigo-900 font-black'
+                            : 'bg-slate-200 text-slate-700 font-bold'
+                        }`}
+                      >
+                        {task.type}
+                      </span>
+                    </td>
+
+                    {/* 5. 지시 제품명 */}
+                    <td className={`px-3 ${getFontClass('td', isModal)}`}>
+                      <div className="flex items-center gap-1.5 min-w-[200px]">
+                        {(() => {
+                          const rBadge = getRiceColorBadge(task.item);
+                          if (!rBadge || task.type !== '생산') return null;
+                          return (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-black border shrink-0 ${rBadge.bg}`}>
+                              {rBadge.label === '빨간밥' ? '🌶️' : rBadge.label.includes('흑미') ? '🌾' : '🍚'} {rBadge.label}
+                            </span>
+                          );
+                        })()}
+                        <input
+                          type="text"
+                          value={task.item}
+                          onChange={(e) => updateTaskItem(task.id, e.target.value)}
+                          placeholder="지시 제품명 입력"
+                          className={`w-full font-black text-slate-950 bg-white border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded-lg px-2 py-1 transition-all ${getFontClass('input', isModal)}`}
+                          title="지시 제품명 (직접 수정 가능)"
+                        />
+                      </div>
+                    </td>
+
+                    {/* 6. 지시수량 */}
+                    <td className={`px-3 text-right whitespace-nowrap ${getFontClass('td', isModal)}`}>
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          value={typeof task.qty === 'number' ? task.qty : ''}
+                          onChange={(e) => updateTaskQty(task.id, e.target.value)}
+                          placeholder="0"
+                          className={`w-24 text-right font-mono font-black text-indigo-950 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1 ${getFontClass('input', isModal)}`}
+                          title="지시수량 (직접 수정 가능)"
+                        />
+                        <span className="text-xs text-slate-500 font-bold shrink-0">ea</span>
+                      </div>
+                    </td>
+
+                    {/* 7. 소요시간 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <input
+                        type="text"
+                        value={task.duration}
+                        onChange={(e) => updateTaskDuration(task.id, e.target.value)}
+                        placeholder="30분"
+                        className={`w-16 text-center font-mono font-bold text-slate-800 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 ${getFontClass('input', isModal)}`}
+                        title="소요시간 (변경 시 종료시각 및 이후 작업시간이 자동 연쇄 갱신됩니다)"
+                      />
+                    </td>
+
+                    {/* 8. 인원 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <input
+                        type="text"
+                        value={task.workers}
+                        onChange={(e) => updateTaskWorkers(task.id, e.target.value)}
+                        placeholder="인원"
+                        className={`w-16 text-center font-black text-slate-900 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-1 py-1 ${getFontClass('input', isModal)}`}
+                      />
+                    </td>
+
+                    {/* 9. BOM */}
+                    <td className={`px-3 ${getFontClass('td', isModal)}`}>
+                      <input
+                        type="text"
+                        value={task.bom}
+                        onChange={(e) => updateTaskBom(task.id, e.target.value)}
+                        placeholder="BOM 배합 기준"
+                        className={`w-full text-slate-800 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1 font-medium ${getFontClass('input', isModal)}`}
+                        title="주요 원부자재 배합 기준 (BOM)"
+                      />
+                    </td>
+
+                    {/* 10. CCP */}
+                    <td className={`px-3 ${getFontClass('td', isModal)}`}>
+                      <input
+                        type="text"
+                        value={task.ccp}
+                        onChange={(e) => updateTaskCcp(task.id, e.target.value)}
+                        placeholder="CCP 핵심 관리기준"
+                        className={`w-full font-black text-red-700 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1 ${getFontClass('input', isModal)}`}
+                        title="HACCP & CCP 핵심 관리기준"
+                      />
+                    </td>
+
+                    {/* 11. 상태 버튼 토글 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleStatus(task.id)}
+                        className={`px-3 py-1.5 rounded-xl font-black shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${getFontClass('badge', isModal)} ${
+                          isDone
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : isProgress
+                            ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300'
+                            : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                        }`}
+                      >
+                        {isDone ? (
+                          <>
+                            <CheckCircle2 size={14} />
+                            <span>완료</span>
+                          </>
+                        ) : isProgress ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                            <span>진행중</span>
+                          </>
+                        ) : (
+                          <span>대기</span>
+                        )}
+                      </button>
+                    </td>
+
+                    {/* 12. 담당자 인풋 */}
+                    <td className={`text-center ${getFontClass('td', isModal)}`}>
+                      <input
+                        type="text"
+                        value={task.assignee}
+                        onChange={(e) => updateAssignee(task.id, e.target.value)}
+                        placeholder="담당자"
+                        className={`w-20 text-center font-black bg-white border border-slate-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none ${getFontClass('input', isModal)}`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // ── 소요 원부자재 불출·계량표 렌더러 (기본 뷰 & 큰 팝업 공용) ──
+  const renderMaterialsContent = (isModal: boolean = false) => {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <table className="w-full text-left border-collapse">
+          <thead className={`bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center ${getFontClass('th', isModal)}`}>
+            <tr>
+              <th className={`w-20 text-center ${getFontClass('th', isModal)}`}>불출확인</th>
+              <th className={`text-left ${getFontClass('th', isModal)}`}>원부자재 품명</th>
+              <th className={`w-40 text-center ${getFontClass('th', isModal)}`}>규격/포장단위</th>
+              <th className={`w-40 text-right ${getFontClass('th', isModal)}`}>소요 요구량</th>
+              <th className={`w-28 text-center ${getFontClass('th', isModal)}`}>단위</th>
+              <th className={`w-36 text-center ${getFontClass('th', isModal)}`}>보관창고</th>
+              <th className={`w-40 text-right ${getFontClass('th', isModal)}`}>현재 창고재고</th>
+              <th className={`w-32 text-center ${getFontClass('th', isModal)}`}>재고상태</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {filteredMaterials.map((m) => {
+              let whBadge = 'bg-amber-100 text-amber-900 border-amber-300';
+              if (m.warehouse === '냉장1') whBadge = 'bg-sky-100 text-sky-900 border-sky-300';
+              else if (m.warehouse === '냉장2') whBadge = 'bg-blue-100 text-blue-900 border-blue-300';
+              else if (m.warehouse === '냉동') whBadge = 'bg-cyan-100 text-cyan-900 border-cyan-300';
+              else if (m.warehouse === '부자재') whBadge = 'bg-purple-100 text-purple-900 border-purple-300';
+
+              const isSufficient = m.currentStock >= m.requiredQty;
+
+              return (
+                <tr
+                  key={m.id}
+                  onClick={() => toggleMaterialCheck(m.id)}
+                  className={`cursor-pointer transition-colors ${
+                    m.checked ? 'bg-emerald-50/70' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <td className={`text-center ${getFontClass('td', isModal)}`}>
+                    <input
+                      type="checkbox"
+                      checked={m.checked}
+                      onChange={() => toggleMaterialCheck(m.id)}
+                      className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </td>
+
+                  <td className={`px-4 font-black text-slate-900 flex items-center gap-2 ${getFontClass('td', isModal)}`}>
+                    <span>{m.name}</span>
+                    {m.checked && (
+                      <span className="text-xs bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded">
+                        계량완료
+                      </span>
+                    )}
+                  </td>
+
+                  <td className={`text-center text-slate-700 font-mono font-bold ${getFontClass('td', isModal)}`}>
+                    {m.spec}
+                  </td>
+
+                  <td className={`px-4 text-right font-mono font-black text-indigo-950 ${getFontClass('td', isModal)}`}>
+                    {m.requiredQty.toLocaleString()}
+                  </td>
+
+                  <td className={`text-center font-black text-slate-800 ${getFontClass('td', isModal)}`}>
+                    {m.unit}
+                  </td>
+
+                  <td className={`text-center ${getFontClass('td', isModal)}`}>
+                    <span className={`inline-block rounded-lg font-black border ${whBadge} ${getFontClass('badge', isModal)}`}>
+                      {m.warehouse}
+                    </span>
+                  </td>
+
+                  <td className={`px-4 text-right font-mono font-black text-slate-900 ${getFontClass('td', isModal)}`}>
+                    {m.currentStock.toLocaleString()} {m.unit}
+                  </td>
+
+                  <td className={`text-center ${getFontClass('td', isModal)}`}>
+                    {isSufficient ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-black text-xs sm:text-sm">
+                        <CheckCircle2 size={16} />
+                        <span>충분</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-red-600 font-black text-xs sm:text-sm">
+                        <AlertCircle size={16} />
+                        <span>부족</span>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f1f5f9] select-none text-slate-800 font-sans">
       {/* 알림 토스트 */}
@@ -1756,41 +2283,54 @@ export const WorkOrderStatusView: React.FC = () => {
           </button>
         </div>
 
-        {/* 탭 3일 때 창고별 필터 버튼 */}
-        {activeTab === 'MATERIALS' && (
-          <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-slate-300 text-xs font-bold">
-            <span className="text-slate-500">창고:</span>
-            {['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'].map((wh) => (
-              <button
-                key={wh}
-                onClick={() => setMaterialWhFilter(wh)}
-                className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
-                  materialWhFilter === wh ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {wh}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {/* 탭 3일 때 창고별 필터 버튼 */}
+          {activeTab === 'MATERIALS' && (
+            <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-slate-300 text-xs font-bold">
+              <span className="text-slate-500">창고:</span>
+              {['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'].map((wh) => (
+                <button
+                  key={wh}
+                  onClick={() => setMaterialWhFilter(wh)}
+                  className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
+                    materialWhFilter === wh ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {wh}
+                </button>
+              ))}
+            </div>
+          )}
 
-        {/* 탭 2일 때 완료 카운트 표시 */}
-        {activeTab === 'TIMETABLE' && (
-          <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              <span>완료: <strong className="text-emerald-700 font-mono">{stats.completedCount}</strong>건</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
-              <span>진행중: <strong className="text-blue-700 font-mono">{stats.inProgressCount}</strong>건</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
-              <span>대기: <strong className="text-slate-700 font-mono">{stats.pendingCount}</strong>건</span>
-            </span>
-          </div>
-        )}
+          {/* 탭 2일 때 완료 카운트 표시 */}
+          {activeTab === 'TIMETABLE' && (
+            <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>완료: <strong className="text-emerald-700 font-mono">{stats.completedCount}</strong>건</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                <span>진행중: <strong className="text-blue-700 font-mono">{stats.inProgressCount}</strong>건</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                <span>대기: <strong className="text-slate-700 font-mono">{stats.pendingCount}</strong>건</span>
+              </span>
+            </div>
+          )}
+
+          {/* 큰 팝업으로 보기 버튼 */}
+          <button
+            type="button"
+            onClick={() => openLargeModal()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-xs transition cursor-pointer shrink-0"
+            title="이 상자를 큰 팝업창으로 확대해 보고 편집합니다."
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>큰 팝업으로 보기</span>
+          </button>
+        </div>
       </div>
 
       {/* 4. 메인 콘텐츠 영역 (선택된 탭에 따라 렌더링) */}
@@ -1821,465 +2361,11 @@ export const WorkOrderStatusView: React.FC = () => {
               <SpeedSimulatorView />
             </div>
           )}
-          {/* TAB 1: 타임테이블 스케줄 테이블 (일일 작업지시서 - 스마트 편집 모드) */}
-          {activeTab === 'TIMETABLE' && (
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              {/* 스마트 편집 상단 액션 바 */}
-              <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex items-center justify-between gap-3 flex-wrap shrink-0">
-                <div className="flex items-center gap-3 flex-wrap text-xs">
-                  <div className="flex items-center gap-1.5 font-black text-slate-800">
-                    <Sparkles size={16} className="text-blue-600" />
-                    <span>스마트 지시서 편집</span>
-                  </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={autoCascadeTime}
-                      onChange={(e) => setAutoCascadeTime(e.target.checked)}
-                      className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
-                    />
-                    <span>⏱️ 시간 연쇄 자동 계산</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
-                    <input
-                      type="checkbox"
-                      checked={autoCascadeOnReorder}
-                      onChange={(e) => setAutoCascadeOnReorder(e.target.checked)}
-                      className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
-                    />
-                    <span>🔄 순서 이동 시 시간 자동 연동</span>
-                  </label>
-                  <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
-                    💡 작업시간·소요시간 변경 시 다음 순서 시간들이 연속 자동 계산됩니다.
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleNudgeAll(-10)}
-                    className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
-                    title="전체 스케줄 시간을 10분 앞당깁니다"
-                  >
-                    -10분
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNudgeAll(10)}
-                    className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
-                    title="전체 스케줄 시간을 10분 늦춥니다"
-                  >
-                    +10분
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRecalculateAll()}
-                    className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                    title="시작 시각부터 모든 작업을 5분 갭으로 순차 자동 정렬합니다"
-                  >
-                    <Clock size={13} />
-                    <span>전체 순차 자동 정렬</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveOrders}
-                    disabled={saving}
-                    className="px-3.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-                  >
-                    <Save size={13} />
-                    <span>{saving ? '저장중...' : '지시 확정 저장'}</span>
-                  </button>
-                </div>
-              </div>
+          {/* TAB 2: 타임테이블 스케줄 테이블 (일일 작업지시서 - 스마트 편집 모드) */}
+          {activeTab === 'TIMETABLE' && renderTimetableContent(false)}
 
-              {/* 스케줄 테이블 */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <table className="w-full text-left border-collapse text-sm sm:text-base">
-                  <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
-                    <tr>
-                      <th className="py-3 px-2 w-24 text-center font-black">순서</th>
-                      <th className="py-3 px-2 w-28 text-center font-black">구분</th>
-                      <th className="py-3 px-2 w-44 text-center font-black">작업시간</th>
-                      <th className="py-3 px-2 w-24 text-center font-black">유형</th>
-                      <th className="py-3 px-3 min-w-[220px] text-left font-black">지시 제품명</th>
-                      <th className="py-3 px-3 w-36 text-right font-black">지시수량</th>
-                      <th className="py-3 px-2 w-24 text-center font-black">소요시간</th>
-                      <th className="py-3 px-2 w-20 text-center font-black">인원</th>
-                      <th className="py-3 px-3 min-w-[200px] text-left font-black">주요 원부자재 배합 기준 (BOM)</th>
-                      <th className="py-3 px-3 min-w-[200px] text-left font-black">HACCP & CCP 핵심 관리기준</th>
-                      <th className="py-3 px-2 w-28 text-center font-black">진행상태</th>
-                      <th className="py-3 px-2 w-28 text-center font-black">담당자</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {filteredSchedule.map((task, idx) => {
-                      const isDone = task.status === '완료';
-                      const isProgress = task.status === '진행중';
-                      const isClean = task.type === '청소';
-                      const isMeal = task.type === '휴게';
-                      const isSupport = task.type === '지원';
-
-                      // 시프트 뱃지 색상
-                      let shiftBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
-                      if (task.shift.includes('2편')) shiftBadgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-black';
-                      else if (task.shift.includes('1편')) shiftBadgeClass = 'bg-pink-100 text-pink-900 border-pink-300 font-black';
-                      else if (task.shift.includes('지원')) shiftBadgeClass = 'bg-indigo-100 text-indigo-900 border-indigo-300 font-black';
-                      else shiftBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-black';
-
-                      const { start, end } = parseTimeStr(task.time);
-
-                      return (
-                        <tr
-                          key={task.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, idx)}
-                          onDragOver={(e) => handleDragOver(e, idx)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, idx)}
-                          onDragEnd={handleDragEnd}
-                          className={`transition-all select-none ${
-                            draggedIndex === idx
-                              ? 'opacity-40 bg-blue-100 border-2 border-dashed border-blue-400'
-                              : dragOverIndex === idx
-                              ? 'border-t-4 border-t-blue-600 bg-blue-50/80 shadow-md'
-                              : isClean
-                              ? 'bg-amber-50/60'
-                              : isMeal
-                              ? 'bg-slate-100/70'
-                              : isSupport
-                              ? 'bg-indigo-50/50'
-                              : isDone
-                              ? 'bg-slate-50 opacity-80'
-                              : 'hover:bg-blue-50/40'
-                          }`}
-                        >
-                          {/* 1. 순서 핸들러 & 순번 */}
-                          <td className="py-2.5 px-2 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <span
-                                className="text-slate-400 hover:text-blue-600 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-slate-200/60"
-                                title="마우스로 끌어서 순서 이동 (드래그 앤 드롭)"
-                              >
-                                <GripVertical size={16} />
-                              </span>
-                              <span className="font-mono font-black text-slate-900 text-base w-6">
-                                {task.seq}
-                              </span>
-                              <div className="flex flex-col gap-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => moveTask(idx, 'UP')}
-                                  disabled={idx === 0}
-                                  title="위로 순서 올리기"
-                                  className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
-                                >
-                                  <ArrowUp size={13} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => moveTask(idx, 'DOWN')}
-                                  disabled={idx === filteredSchedule.length - 1}
-                                  title="아래로 순서 내리기"
-                                  className="p-0.5 hover:bg-blue-100 text-slate-600 hover:text-blue-700 disabled:opacity-20 cursor-pointer rounded"
-                                >
-                                  <ArrowDown size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* 2. 구분 (시프트 클릭 토글) */}
-                          <td className="py-2.5 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const shifts: ScheduleTask['shift'][] = ['2편', '1편', '지원', '청소', '휴게'];
-                                const curIdx = shifts.findIndex((s) => s === task.shift);
-                                const nextShift = shifts[(curIdx + 1) % shifts.length];
-                                updateTaskShift(task.id, nextShift);
-                              }}
-                              className={`inline-block px-2.5 py-1 rounded-lg text-xs sm:text-sm font-black border cursor-pointer hover:opacity-80 transition-all ${shiftBadgeClass}`}
-                              title="클릭하여 시프트 전환"
-                            >
-                              {task.shift}
-                            </button>
-                          </td>
-
-                          {/* 3. 작업시간 (시작/종료 직접 편집 + 연쇄 자동 계산) */}
-                          <td className="py-2.5 px-2 text-center">
-                            <div className="flex items-center justify-center gap-1 font-mono">
-                              <input
-                                type="text"
-                                value={start}
-                                onChange={(e) => updateTaskStartTime(task.id, e.target.value)}
-                                className="w-14 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all"
-                                title="시작 시각 (수정 시 이후 작업시간이 자동으로 순차 재계산됩니다)"
-                              />
-                              <span className="text-slate-400 font-bold text-xs">~</span>
-                              <input
-                                type="text"
-                                value={end}
-                                onChange={(e) => updateTaskEndTime(task.id, e.target.value)}
-                                className="w-14 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 transition-all"
-                                title="종료 시각 (수정 시 소요시간 및 이후 작업시간이 연쇄 재계산됩니다)"
-                              />
-                            </div>
-                          </td>
-
-                          {/* 4. 유형 */}
-                          <td className="py-2.5 px-2 text-center">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded-md text-xs sm:text-sm font-black ${
-                                task.type === '생산'
-                                  ? 'bg-blue-100 text-blue-900 font-black'
-                                  : task.type === '청소'
-                                  ? 'bg-amber-100 text-amber-900 font-black'
-                                  : task.type === '준비'
-                                  ? 'bg-teal-100 text-teal-900 font-black'
-                                  : task.type === '지원'
-                                  ? 'bg-indigo-100 text-indigo-900 font-black'
-                                  : 'bg-slate-200 text-slate-700 font-bold'
-                              }`}
-                            >
-                              {task.type}
-                            </span>
-                          </td>
-
-                          {/* 5. 지시 제품명 (직접 수정 가능 + 실시간 밥색상 뱃지) */}
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5 min-w-[200px]">
-                              {(() => {
-                                const rBadge = getRiceColorBadge(task.item);
-                                if (!rBadge || task.type !== '생산') return null;
-                                return (
-                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-black border shrink-0 ${rBadge.bg}`}>
-                                    {rBadge.label === '빨간밥' ? '🌶️' : rBadge.label.includes('흑미') ? '🌾' : '🍚'} {rBadge.label}
-                                  </span>
-                                );
-                              })()}
-                              <input
-                                type="text"
-                                value={task.item}
-                                onChange={(e) => updateTaskItem(task.id, e.target.value)}
-                                placeholder="지시 제품명 입력"
-                                className="w-full font-black text-slate-950 text-sm sm:text-base bg-white border border-slate-200 hover:border-blue-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded-lg px-2 py-1 transition-all"
-                                title="지시 제품명 (직접 수정 가능)"
-                              />
-                            </div>
-                          </td>
-
-                          {/* 6. 지시수량 (직접 수정 가능) */}
-                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1">
-                              <input
-                                type="number"
-                                value={typeof task.qty === 'number' ? task.qty : ''}
-                                onChange={(e) => updateTaskQty(task.id, e.target.value)}
-                                placeholder="0"
-                                className="w-24 text-right font-mono font-black text-indigo-950 text-sm sm:text-base bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1"
-                                title="지시수량 (직접 수정 가능)"
-                              />
-                              <span className="text-xs text-slate-500 font-bold shrink-0">ea</span>
-                            </div>
-                          </td>
-
-                          {/* 7. 소요시간 (수정 시 연쇄 재계산) */}
-                          <td className="py-2.5 px-2 text-center">
-                            <input
-                              type="text"
-                              value={task.duration}
-                              onChange={(e) => updateTaskDuration(task.id, e.target.value)}
-                              placeholder="30분"
-                              className="w-16 text-center font-mono font-bold text-slate-800 text-xs sm:text-sm bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded px-1 py-1"
-                              title="소요시간 (변경 시 종료시각 및 이후 작업시간이 자동 연쇄 갱신됩니다)"
-                            />
-                          </td>
-
-                          {/* 8. 인원 */}
-                          <td className="py-2.5 px-2 text-center">
-                            <input
-                              type="text"
-                              value={task.workers}
-                              onChange={(e) => updateTaskWorkers(task.id, e.target.value)}
-                              placeholder="인원"
-                              className="w-16 text-center font-black text-slate-900 text-xs sm:text-sm bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-1 py-1"
-                            />
-                          </td>
-
-                          {/* 9. 주요 원부자재 배합 기준 (BOM) */}
-                          <td className="py-2.5 px-3">
-                            <input
-                              type="text"
-                              value={task.bom}
-                              onChange={(e) => updateTaskBom(task.id, e.target.value)}
-                              placeholder="BOM 배합 기준"
-                              className="w-full text-xs sm:text-sm text-slate-800 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1 font-medium"
-                              title="주요 원부자재 배합 기준 (BOM)"
-                            />
-                          </td>
-
-                          {/* 10. HACCP & CCP 핵심 관리기준 */}
-                          <td className="py-2.5 px-3">
-                            <input
-                              type="text"
-                              value={task.ccp}
-                              onChange={(e) => updateTaskCcp(task.id, e.target.value)}
-                              placeholder="CCP 핵심 관리기준"
-                              className="w-full text-xs sm:text-sm font-black text-red-700 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded px-2 py-1"
-                              title="HACCP & CCP 핵심 관리기준"
-                            />
-                          </td>
-
-                          {/* 11. 진행상태 버튼 토글 */}
-                          <td className="py-2.5 px-2 text-center">
-                            <button
-                              type="button"
-                              onClick={() => toggleStatus(task.id)}
-                              className={`px-3 py-1.5 rounded-xl font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 mx-auto ${
-                                isDone
-                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                  : isProgress
-                                  ? 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300'
-                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                              }`}
-                            >
-                              {isDone ? (
-                                <>
-                                  <CheckCircle2 size={14} />
-                                  <span>완료</span>
-                                </>
-                              ) : isProgress ? (
-                                <>
-                                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                                  <span>진행중</span>
-                                </>
-                              ) : (
-                                <span>대기</span>
-                              )}
-                            </button>
-                          </td>
-
-                          {/* 12. 담당자 인풋 */}
-                          <td className="py-2.5 px-2 text-center">
-                            <input
-                              type="text"
-                              value={task.assignee}
-                              onChange={(e) => updateAssignee(task.id, e.target.value)}
-                              placeholder="담당자"
-                              className="w-20 text-center font-black text-xs sm:text-sm bg-white border border-slate-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: 소요 원부자재 불출·계량표 */}
-          {activeTab === 'MATERIALS' && (
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <table className="w-full text-left border-collapse text-sm sm:text-base">
-                <thead className="bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center text-sm sm:text-base">
-                  <tr>
-                    <th className="py-3.5 px-3 w-20 text-center">불출확인</th>
-                    <th className="py-3.5 px-4 text-left">원부자재 품명</th>
-                    <th className="py-3.5 px-3 w-40 text-center">규격/포장단위</th>
-                    <th className="py-3.5 px-4 w-40 text-right">소요 요구량</th>
-                    <th className="py-3.5 px-3 w-28 text-center">단위</th>
-                    <th className="py-3.5 px-3 w-36 text-center">보관창고</th>
-                    <th className="py-3.5 px-4 w-40 text-right">현재 창고재고</th>
-                    <th className="py-3.5 px-3 w-32 text-center">재고상태</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredMaterials.map((m) => {
-                    // 창고 뱃지 색상
-                    let whBadge = 'bg-amber-100 text-amber-900 border-amber-300';
-                    if (m.warehouse === '냉장1') whBadge = 'bg-sky-100 text-sky-900 border-sky-300';
-                    else if (m.warehouse === '냉장2') whBadge = 'bg-blue-100 text-blue-900 border-blue-300';
-                    else if (m.warehouse === '냉동') whBadge = 'bg-cyan-100 text-cyan-900 border-cyan-300';
-                    else if (m.warehouse === '부자재') whBadge = 'bg-purple-100 text-purple-900 border-purple-300';
-
-                    const isSufficient = m.currentStock >= m.requiredQty;
-
-                    return (
-                      <tr
-                        key={m.id}
-                        onClick={() => toggleMaterialCheck(m.id)}
-                        className={`cursor-pointer transition-colors ${
-                          m.checked ? 'bg-emerald-50/70' : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        {/* 1. 체크박스 */}
-                        <td className="py-3.5 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={m.checked}
-                            onChange={() => toggleMaterialCheck(m.id)}
-                            className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                          />
-                        </td>
-
-                        {/* 2. 품명 */}
-                        <td className="py-3.5 px-4 font-black text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                          <span>{m.name}</span>
-                          {m.checked && (
-                            <span className="text-xs bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded">
-                              계량완료
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 3. 규격 */}
-                        <td className="py-3.5 px-3 text-center text-slate-700 font-mono text-sm sm:text-base font-bold">
-                          {m.spec}
-                        </td>
-
-                        {/* 4. 소요량 */}
-                        <td className="py-3.5 px-4 text-right font-mono font-black text-indigo-950 text-base sm:text-lg">
-                          {m.requiredQty.toLocaleString()}
-                        </td>
-
-                        {/* 5. 단위 */}
-                        <td className="py-3.5 px-3 text-center font-black text-slate-800 text-sm sm:text-base">
-                          {m.unit}
-                        </td>
-
-                        {/* 6. 창고 뱃지 */}
-                        <td className="py-3.5 px-3 text-center">
-                          <span className={`inline-block px-3 py-1 rounded-lg text-xs sm:text-sm font-black border ${whBadge}`}>
-                            {m.warehouse}
-                          </span>
-                        </td>
-
-                        {/* 7. 현재고 */}
-                        <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 text-sm sm:text-base">
-                          {m.currentStock.toLocaleString()} {m.unit}
-                        </td>
-
-                        {/* 8. 재고 상태 */}
-                        <td className="py-3.5 px-3 text-center">
-                          {isSufficient ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-black text-xs sm:text-sm">
-                              <CheckCircle2 size={16} />
-                              <span>충분</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-red-600 font-black text-xs sm:text-sm">
-                              <AlertCircle size={16} />
-                              <span>부족</span>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* TAB 3: 소요 원부자재 불출·계량표 */}
+          {activeTab === 'MATERIALS' && renderMaterialsContent(false)}
 
           {/* 테이블 하단 푸터 바 (현장 필수 준수사항 및 발행 정보) */}
           <div className="bg-slate-50 px-6 py-2.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs text-slate-600 font-medium">
@@ -2295,6 +2381,259 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 5. 큰 팝업 모달 (다른 페이지의 [큰 팝업으로 보기] 패턴 100% 계승) */}
+      {isLargeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
+          onClick={() => setIsLargeModalOpen(false)}
+        >
+          <div
+            className="w-[98vw] h-[95vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 팝업 상단 헤더 바 */}
+            <div className="px-5 py-3 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-black shrink-0">
+                  📋 일일 작업지시서 상세 (확대 팝업)
+                </span>
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <h2 className="text-lg sm:text-xl font-black tracking-tight text-white truncate">
+                    [{currentLine.name}] {department === 'SEONGHYEONG' ? '성형·포장 라인' : '전처리·취반 설비'}
+                  </h2>
+                  <span className="text-xs font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded">
+                    작업일 {workDate} • 총 {filteredSchedule.length}건 지시 • 문서 {currentLine.docNo}
+                  </span>
+                </div>
+              </div>
+
+              {/* 우측 도구함: 공정 토글 + 라인 빠른 전환 + 글자 크기 + 인쇄/저장 + 닫기 */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 성형장 / 전처리 토글 */}
+                <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-xl p-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleDepartmentChange('SEONGHYEONG')}
+                    className={`px-2.5 py-1 rounded-lg font-black text-xs cursor-pointer transition ${
+                      department === 'SEONGHYEONG' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🍱 성형장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDepartmentChange('JEONCHEORI')}
+                    className={`px-2.5 py-1 rounded-lg font-black text-xs cursor-pointer transition ${
+                      department === 'JEONCHEORI' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🍳 전처리실
+                  </button>
+                </div>
+
+                {/* 라인/설비 빠른 전환 셀렉트 */}
+                <select
+                  value={selectedLine}
+                  onChange={(e) => setSelectedLine(e.target.value)}
+                  className="bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 rounded-xl px-3 py-1.5 text-xs font-bold outline-none cursor-pointer max-w-[200px]"
+                  title="다른 라인/설비로 바로 전환"
+                >
+                  {activeLineList.map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.icon} {line.name} ({line.count}건)
+                    </option>
+                  ))}
+                </select>
+
+                {/* 글자 크기 조절 (보통 / 크게 / 특대) */}
+                <div className="flex items-center gap-1 bg-slate-700/80 p-1 rounded-xl border border-slate-600 text-xs">
+                  <span className="text-slate-300 font-bold px-1.5">글자:</span>
+                  {(['normal', 'large', 'xlarge'] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setModalFontSize(sz)}
+                      className={`px-2.5 py-1 rounded-lg font-black transition cursor-pointer ${
+                        modalFontSize === sz
+                          ? 'bg-blue-500 text-white shadow-2xs'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                      }`}
+                    >
+                      {sz === 'normal' ? '보통' : sz === 'large' ? '크게' : '특대'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 인쇄 바로가기 */}
+                <button
+                  type="button"
+                  onClick={handlePrintLiveWorkOrder}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-black transition cursor-pointer"
+                  title="현재 지시서 인쇄 미리보기"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>인쇄</span>
+                </button>
+
+                {/* 닫기 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => setIsLargeModalOpen(false)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/15 hover:bg-rose-500 text-white text-xs font-black transition cursor-pointer"
+                  title="팝업 닫기 (ESC)"
+                >
+                  <X className="w-4 h-4" />
+                  <span>닫기</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 팝업 내부 탭 바 */}
+            <div className="px-5 pt-2.5 pb-0 bg-slate-100 border-b border-slate-300 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('TIMETABLE')}
+                  className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+                    modalActiveTab === 'TIMETABLE'
+                      ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
+                      : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+                  }`}
+                >
+                  <FileText size={16} className={modalActiveTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
+                  <span>📋 일일 작업지시서 (세로 상세표 & 드래그)</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-black ${
+                    modalActiveTab === 'TIMETABLE' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
+                  }`}>
+                    {filteredSchedule.length}건
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('MATERIALS')}
+                  className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+                    modalActiveTab === 'MATERIALS'
+                      ? 'bg-white text-indigo-900 border-indigo-600 shadow-xs'
+                      : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+                  }`}
+                >
+                  <Layers size={16} className={modalActiveTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
+                  <span>📦 소요 원부자재 (BOM 배합·불출)</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-black ${
+                    modalActiveTab === 'MATERIALS' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-300 text-slate-700'
+                  }`}>
+                    {materials.length}종
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('GANTT')}
+                  className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+                    modalActiveTab === 'GANTT'
+                      ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
+                      : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+                  }`}
+                >
+                  <Clock size={16} className={modalActiveTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
+                  <span>🕒 타임테이블 간트 (10분 그리드)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModalActiveTab('SIMULATOR')}
+                  className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+                    modalActiveTab === 'SIMULATOR'
+                      ? 'bg-white text-purple-900 border-purple-600 shadow-xs'
+                      : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+                  }`}
+                >
+                  <Gauge size={16} className={modalActiveTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
+                  <span>⚡ 생산속도 시뮬레이터</span>
+                </button>
+              </div>
+
+              {/* 탭 우측 추가 필터 / 카운트 */}
+              {modalActiveTab === 'MATERIALS' && (
+                <div className="flex items-center gap-1.5 bg-white px-3 py-1 rounded-xl border border-slate-300 text-xs font-bold mb-1.5">
+                  <span className="text-slate-500">창고:</span>
+                  {['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'].map((wh) => (
+                    <button
+                      key={wh}
+                      onClick={() => setMaterialWhFilter(wh)}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer ${
+                        materialWhFilter === wh ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {wh}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {modalActiveTab === 'TIMETABLE' && (
+                <div className="flex items-center gap-4 text-xs font-bold text-slate-600 mb-1.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>완료: <strong className="text-emerald-700 font-mono">{stats.completedCount}</strong>건</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                    <span>진행중: <strong className="text-blue-700 font-mono">{stats.inProgressCount}</strong>건</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                    <span>대기: <strong className="text-slate-700 font-mono">{stats.pendingCount}</strong>건</span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 팝업 콘텐츠 본체 */}
+            <div className="flex-1 min-h-0 bg-white overflow-hidden flex flex-col">
+              {modalActiveTab === 'TIMETABLE' && renderTimetableContent(true)}
+              {modalActiveTab === 'MATERIALS' && renderMaterialsContent(true)}
+              {modalActiveTab === 'GANTT' && (
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
+                  <GanttTimelineView
+                    category={department}
+                    selectedLine={selectedLine}
+                    onSelectCategory={(cat) => {
+                      if (cat === 'SEONGHYEONG' || cat === 'JEONCHEORI') {
+                        handleDepartmentChange(cat);
+                      }
+                    }}
+                    onSelectLine={(lineName) => {
+                      setSelectedLine(lineName);
+                      setModalActiveTab('TIMETABLE');
+                    }}
+                  />
+                </div>
+              )}
+              {modalActiveTab === 'SIMULATOR' && (
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
+                  <SpeedSimulatorView />
+                </div>
+              )}
+            </div>
+
+            {/* 팝업 하단 푸터 바 */}
+            <div className="bg-slate-50 px-6 py-2.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs text-slate-600 font-medium shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800 bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                  현장 필수 준수
+                </span>
+                <span>1. 알레르기 교차오염 방지 알코올 70% 세척 &nbsp;|&nbsp; 2. 금속검출기 30분 주기 점검 &nbsp;|&nbsp; 3. 품온 기준 10℃ 이하 엄수 (가열육 ≥75℃)</span>
+              </div>
+              <div className="font-mono text-slate-500">
+                문서번호: <strong>{currentLine.docNo}</strong> &nbsp;|&nbsp; 시스템 자동 연동 완료
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
