@@ -20,7 +20,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     }
     const { id } = await context.params;
-    const item = await loadSchedule(Number(id));
+    const scheduleId = Number(id);
+    if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 일정 ID입니다.' }, { status: 400 });
+    }
+    const item = await loadSchedule(scheduleId);
     if (!item) return NextResponse.json({ success: false, error: '일정을 찾을 수 없습니다.' }, { status: 404 });
     return NextResponse.json({ success: true, data: item });
   } catch (error: any) {
@@ -37,6 +41,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const me = session.user as any;
     const { id } = await context.params;
     const scheduleId = Number(id);
+    if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 일정 ID입니다.' }, { status: 400 });
+    }
     const schedule = await loadSchedule(scheduleId);
     if (!schedule) return NextResponse.json({ success: false, error: '일정을 찾을 수 없습니다.' }, { status: 404 });
 
@@ -92,6 +99,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const me = session.user as any;
     const { id } = await context.params;
     const scheduleId = Number(id);
+    if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 일정 ID입니다.' }, { status: 400 });
+    }
     const schedule = await loadSchedule(scheduleId);
     if (!schedule) return NextResponse.json({ success: false, error: '일정을 찾을 수 없습니다.' }, { status: 404 });
 

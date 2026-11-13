@@ -30,60 +30,63 @@ export async function POST(req: NextRequest) {
     const { rows } = body;
 
     if (Array.isArray(rows)) {
-      const results = [];
-      for (const r of rows) {
-        if (!r.productId) continue;
-        const upserted = await prisma.productPnL.upsert({
-          where: {
-            pnlMonth_productId: {
+      const results = await prisma.$transaction(async (tx) => {
+        const list = [];
+        for (const r of rows) {
+          if (!r.productId) continue;
+          const upserted = await tx.productPnL.upsert({
+            where: {
+              pnlMonth_productId: {
+                pnlMonth: r.pnlMonth || '2026-10',
+                productId: Number(r.productId),
+              },
+            },
+            update: {
+              salesAmount: Number(r.salesAmount) || 0,
+              salesRatio: Number(r.salesRatio) || 0,
+              indirectCostAlloc: Number(r.indirectCostAlloc) || 0,
+              logisticsRate: Number(r.logisticsRate) || 0,
+              logisticsCost: Number(r.logisticsCost) || 0,
+              directMaterialTotal: Number(r.directMaterialTotal) || 0,
+              productionQty: Number(r.productionQty) || 0,
+              directMaterialCost: Number(r.directMaterialCost) || 0,
+              totalCost: Number(r.totalCost) || 0,
+              salesProfit: Number(r.salesProfit) || 0,
+              profitRate: Number(r.profitRate) || 0,
+              costRatio: Number(r.costRatio) || 0,
+              salesQty: Number(r.salesQty) || 0,
+              unitPrice: Number(r.unitPrice) || 0,
+              unitCost: Number(r.unitCost) || 0,
+              unitProfit: Number(r.unitProfit) || 0,
+              remark: r.remark || '',
+            },
+            create: {
               pnlMonth: r.pnlMonth || '2026-10',
               productId: Number(r.productId),
+              productName: r.productName || '',
+              salesAmount: Number(r.salesAmount) || 0,
+              salesRatio: Number(r.salesRatio) || 0,
+              indirectCostAlloc: Number(r.indirectCostAlloc) || 0,
+              logisticsRate: Number(r.logisticsRate) || 0,
+              logisticsCost: Number(r.logisticsCost) || 0,
+              directMaterialTotal: Number(r.directMaterialTotal) || 0,
+              productionQty: Number(r.productionQty) || 0,
+              directMaterialCost: Number(r.directMaterialCost) || 0,
+              totalCost: Number(r.totalCost) || 0,
+              salesProfit: Number(r.salesProfit) || 0,
+              profitRate: Number(r.profitRate) || 0,
+              costRatio: Number(r.costRatio) || 0,
+              salesQty: Number(r.salesQty) || 0,
+              unitPrice: Number(r.unitPrice) || 0,
+              unitCost: Number(r.unitCost) || 0,
+              unitProfit: Number(r.unitProfit) || 0,
+              remark: r.remark || '',
             },
-          },
-          update: {
-            salesAmount: Number(r.salesAmount) || 0,
-            salesRatio: Number(r.salesRatio) || 0,
-            indirectCostAlloc: Number(r.indirectCostAlloc) || 0,
-            logisticsRate: Number(r.logisticsRate) || 0,
-            logisticsCost: Number(r.logisticsCost) || 0,
-            directMaterialTotal: Number(r.directMaterialTotal) || 0,
-            productionQty: Number(r.productionQty) || 0,
-            directMaterialCost: Number(r.directMaterialCost) || 0,
-            totalCost: Number(r.totalCost) || 0,
-            salesProfit: Number(r.salesProfit) || 0,
-            profitRate: Number(r.profitRate) || 0,
-            costRatio: Number(r.costRatio) || 0,
-            salesQty: Number(r.salesQty) || 0,
-            unitPrice: Number(r.unitPrice) || 0,
-            unitCost: Number(r.unitCost) || 0,
-            unitProfit: Number(r.unitProfit) || 0,
-            remark: r.remark || '',
-          },
-          create: {
-            pnlMonth: r.pnlMonth || '2026-10',
-            productId: Number(r.productId),
-            productName: r.productName || '',
-            salesAmount: Number(r.salesAmount) || 0,
-            salesRatio: Number(r.salesRatio) || 0,
-            indirectCostAlloc: Number(r.indirectCostAlloc) || 0,
-            logisticsRate: Number(r.logisticsRate) || 0,
-            logisticsCost: Number(r.logisticsCost) || 0,
-            directMaterialTotal: Number(r.directMaterialTotal) || 0,
-            productionQty: Number(r.productionQty) || 0,
-            directMaterialCost: Number(r.directMaterialCost) || 0,
-            totalCost: Number(r.totalCost) || 0,
-            salesProfit: Number(r.salesProfit) || 0,
-            profitRate: Number(r.profitRate) || 0,
-            costRatio: Number(r.costRatio) || 0,
-            salesQty: Number(r.salesQty) || 0,
-            unitPrice: Number(r.unitPrice) || 0,
-            unitCost: Number(r.unitCost) || 0,
-            unitProfit: Number(r.unitProfit) || 0,
-            remark: r.remark || '',
-          },
-        });
-        results.push(upserted);
-      }
+          });
+          list.push(upserted);
+        }
+        return list;
+      });
       return NextResponse.json({ success: true, data: results });
     }
 

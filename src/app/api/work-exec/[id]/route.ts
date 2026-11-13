@@ -20,7 +20,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     }
     const { id } = await context.params;
-    const item = await loadExec(Number(id));
+    const execId = Number(id);
+    if (!Number.isInteger(execId) || execId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
+    const item = await loadExec(execId);
     if (!item) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
     return NextResponse.json({ success: true, data: item });
   } catch (error: any) {
@@ -37,6 +41,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const me = session.user as any;
     const { id } = await context.params;
     const execId = Number(id);
+    if (!Number.isInteger(execId) || execId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const exec = await loadExec(execId);
     if (!exec) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 
@@ -90,6 +97,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const me = session.user as any;
     const { id } = await context.params;
     const execId = Number(id);
+    if (!Number.isInteger(execId) || execId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const exec = await loadExec(execId);
     if (!exec) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 

@@ -29,31 +29,34 @@ export async function POST(req: NextRequest) {
     const { rows } = body;
 
     if (Array.isArray(rows)) {
-      const results = [];
-      for (const r of rows) {
-        if (!r.costItem) continue;
-        const upserted = await prisma.monthlyPnL.upsert({
-          where: {
-            pnlMonth_costItem: {
+      const results = await prisma.$transaction(async (tx) => {
+        const list = [];
+        for (const r of rows) {
+          if (!r.costItem) continue;
+          const upserted = await tx.monthlyPnL.upsert({
+            where: {
+              pnlMonth_costItem: {
+                pnlMonth: r.pnlMonth || '2026-10',
+                costItem: r.costItem,
+              },
+            },
+            update: {
+              costToSalesRatio: r.costToSalesRatio || '',
+              totalAmount: Number(r.totalAmount) || 0,
+              remark: r.remark || '',
+            },
+            create: {
               pnlMonth: r.pnlMonth || '2026-10',
               costItem: r.costItem,
+              costToSalesRatio: r.costToSalesRatio || '',
+              totalAmount: Number(r.totalAmount) || 0,
+              remark: r.remark || '',
             },
-          },
-          update: {
-            costToSalesRatio: r.costToSalesRatio || '',
-            totalAmount: Number(r.totalAmount) || 0,
-            remark: r.remark || '',
-          },
-          create: {
-            pnlMonth: r.pnlMonth || '2026-10',
-            costItem: r.costItem,
-            costToSalesRatio: r.costToSalesRatio || '',
-            totalAmount: Number(r.totalAmount) || 0,
-            remark: r.remark || '',
-          },
-        });
-        results.push(upserted);
-      }
+          });
+          list.push(upserted);
+        }
+        return list;
+      });
       return NextResponse.json({ success: true, data: results });
     }
 

@@ -240,7 +240,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (id) {
-      await prisma.user.delete({ where: { id: Number(id) } });
+      const numId = Number(id);
+      if (!Number.isInteger(numId) || numId <= 0) {
+        return NextResponse.json({ success: false, error: '유효하지 않은 사용자 ID입니다.' }, { status: 400 });
+      }
+      await prisma.user.delete({ where: { id: numId } });
     } else if (loginId) {
       await prisma.user.delete({ where: { loginId } });
     }

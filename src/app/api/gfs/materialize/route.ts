@@ -237,126 +237,128 @@ export async function POST(req: NextRequest) {
         return true;
       });
 
-      if (toCreate.length > 0) {
-        // ── Phase B-1: 거래처 일괄 확보 (조회 1회 + 생성 1회) ──
-        const vendorNames = [...new Set(toCreate.map((p) => p.cleanVendor).filter(Boolean))];
-        const foundPartners = vendorNames.length
-          ? await prisma.partner.findMany({ where: { name: { in: vendorNames } } })
-          : [];
-        const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
-        const missingVendors = vendorNames.filter((v) => !partnerByName.has(v));
-        if (missingVendors.length > 0) {
-          const stamp = Date.now().toString().slice(-6);
-          const newIds = missingVendors.map((_, i) => `VG-${stamp}-${String(i).padStart(2, '0')}`);
-          const takenIds = new Set(
-            (await prisma.partner.findMany({ where: { id: { in: newIds } }, select: { id: true } })).map((p) => p.id)
-          );
-          const finalIds = newIds.map((id, i) => (takenIds.has(id) ? `${id}-X${i}` : id));
-          await prisma.partner.createMany({
-            data: missingVendors.map((v, i) => ({ id: finalIds[i], name: v, partnerType: 'P', remark: 'GFS 자동생성(재고조사표 정본)' })),
-          });
-          (await prisma.partner.findMany({ where: { id: { in: finalIds } } })).forEach((p) => {
-            partnerByName.set(p.name, p);
-            created.push({ type: 'partner', id: p.id, name: p.name });
-          });
-        }
-
-        // ── Phase B-2: 품번 일괄 확정 (메모리 중복/기존 코드 전수 확인) ──
-        let seq = 0;
-        const codeByNorm = new Map<string, string>();
-        for (const p of toCreate) {
-          seq += 1;
-          const base =
-            p.ref?.itemId && String(p.ref.itemId).trim()
-              ? String(p.ref.itemId).trim()
-              : `GFS-${today}-${String(seq).padStart(3, '0')}`;
-          codeByNorm.set(p.norm, base);
-        }
-        const taken = new Set<string>();
-        for (const [normKey, base] of codeByNorm) {
-          let code = base;
-          if (taken.has(code) || allProductCodes.has(code)) {
-            let n = 1;
-            code = `${base}-${n}`;
-            while ((taken.has(code) || allProductCodes.has(code)) && n < 100) {
-              n += 1;
-              code = `${base}-${n}`;
-            }
-          }
-          taken.add(code);
-          codeByNorm.set(normKey, code);
-        }
-
-        // ── Phase B-3: 품목 일괄 생성 (1회) → ID 회수 (1회) ──
-        const createData = toCreate.map((p) => ({
-          productCode: codeByNorm.get(p.norm)!,
-          name: p.rawName,
-          spec: '',
-          unit: 'box',
-          category: p.category,
-          kind: '',
-          boxQty: p.packUnit,
-          warehouse: p.warehouse,
-          safetyStockQty: p.safetyStock,
-          orderCycle: p.ref?.orderCycle || '',
-          partnerId: p.cleanVendor ? (partnerByName.get(p.cleanVendor)?.id as string) ?? null : null,
-          remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
-        }));
-        await prisma.product.createMany({ data: createData });
-        const createdProducts = await prisma.product.findMany({
-          where: { productCode: { in: createData.map((d) => d.productCode) } },
-          include: { partner: true },
-        });
-        const createdByCode = new Map(createdProducts.map((p) => [p.productCode, p]));
-        for (const p of toCreate) {
-          const prod = createdByCode.get(codeByNorm.get(p.norm)!);
-          if (prod) {
-            createdByNorm.set(p.norm, prod);
-            created.push({
-              type: 'product',
-              productCode: prod.productCode,
-              name: prod.name,
-              warehouse: p.warehouse,
-              partner: p.cleanVendor ? partnerByName.get(p.cleanVendor)?.name || '' : '',
+      await prisma.$transaction(async (tx) => {
+        if (toCreate.length > 0) {
+          // ── Phase B-1: 거래처 일괄 확보 (조회 1회 + 생성 1회) ──
+          const vendorNames = [...new Set(toCreate.map((p) => p.cleanVendor).filter(Boolean))];
+          const foundPartners = vendorNames.length
+            ? await tx.partner.findMany({ where: { name: { in: vendorNames } } })
+            : [];
+          const partnerByName = new Map(foundPartners.map((p) => [p.name, p]));
+          const missingVendors = vendorNames.filter((v) => !partnerByName.has(v));
+          if (missingVendors.length > 0) {
+            const stamp = Date.now().toString().slice(-6);
+            const newIds = missingVendors.map((_, i) => `VG-${stamp}-${String(i).padStart(2, '0')}`);
+            const takenIds = new Set(
+              (await tx.partner.findMany({ where: { id: { in: newIds } }, select: { id: true } })).map((p) => p.id)
+            );
+            const finalIds = newIds.map((id, i) => (takenIds.has(id) ? `${id}-X${i}` : id));
+            await tx.partner.createMany({
+              data: missingVendors.map((v, i) => ({ id: finalIds[i], name: v, partnerType: 'P', remark: 'GFS 자동생성(재고조사표 정본)' })),
+            });
+            (await tx.partner.findMany({ where: { id: { in: finalIds } } })).forEach((p) => {
+              partnerByName.set(p.name, p);
+              created.push({ type: 'partner', id: p.id, name: p.name });
             });
           }
-        }
 
-        // ── Phase B-4: 단가 일괄 생성 (1회, 있는 것만) ──
-        const priceRows = toCreate
-          .filter((p) => p.bagPrice > 0 && createdByNorm.has(p.norm))
-          .map((p) => ({
-            productId: (createdByNorm.get(p.norm) as any).id as number,
-            purchasePrice: p.bagPrice,
-            deliveryPrice: 0,
-            effectiveDate: checkOrderDate,
-            remark: 'GFS 자동생성 단가(봉단가)',
+          // ── Phase B-2: 품번 일괄 확정 (메모리 중복/기존 코드 전수 확인) ──
+          let seq = 0;
+          const codeByNorm = new Map<string, string>();
+          for (const p of toCreate) {
+            seq += 1;
+            const base =
+              p.ref?.itemId && String(p.ref.itemId).trim()
+                ? String(p.ref.itemId).trim()
+                : `GFS-${today}-${String(seq).padStart(3, '0')}`;
+            codeByNorm.set(p.norm, base);
+          }
+          const taken = new Set<string>();
+          for (const [normKey, base] of codeByNorm) {
+            let code = base;
+            if (taken.has(code) || allProductCodes.has(code)) {
+              let n = 1;
+              code = `${base}-${n}`;
+              while ((taken.has(code) || allProductCodes.has(code)) && n < 100) {
+                n += 1;
+                code = `${base}-${n}`;
+              }
+            }
+            taken.add(code);
+            codeByNorm.set(normKey, code);
+          }
+
+          // ── Phase B-3: 품목 일괄 생성 (1회) → ID 회수 (1회) ──
+          const createData = toCreate.map((p) => ({
+            productCode: codeByNorm.get(p.norm)!,
+            name: p.rawName,
+            spec: '',
+            unit: 'box',
+            category: p.category,
+            kind: '',
+            boxQty: p.packUnit,
+            warehouse: p.warehouse,
+            safetyStockQty: p.safetyStock,
+            orderCycle: p.ref?.orderCycle || '',
+            partnerId: p.cleanVendor ? (partnerByName.get(p.cleanVendor)?.id as string) ?? null : null,
+            remark: 'GFS 자동생성(재고조사표 정본, 확인필요)',
           }));
-        if (priceRows.length > 0) {
-          await prisma.productPrice.createMany({ data: priceRows });
-        }
+          await tx.product.createMany({ data: createData });
+          const createdProducts = await tx.product.findMany({
+            where: { productCode: { in: createData.map((d) => d.productCode) } },
+            include: { partner: true },
+          });
+          const createdByCode = new Map(createdProducts.map((p) => [p.productCode, p]));
+          for (const p of toCreate) {
+            const prod = createdByCode.get(codeByNorm.get(p.norm)!);
+            if (prod) {
+              createdByNorm.set(p.norm, prod);
+              created.push({
+                type: 'product',
+                productCode: prod.productCode,
+                name: prod.name,
+                warehouse: p.warehouse,
+                partner: p.cleanVendor ? partnerByName.get(p.cleanVendor)?.name || '' : '',
+              });
+            }
+          }
 
-        // 같은 norm 중복 항목도 생성된 품목에 매칭
-        for (const p of prepared) {
-          if (!p.existing && createdByNorm.has(p.norm)) {
-            (p as any).existing = createdByNorm.get(p.norm);
+          // ── Phase B-4: 단가 일괄 생성 (1회, 있는 것만) ──
+          const priceRows = toCreate
+            .filter((p) => p.bagPrice > 0 && createdByNorm.has(p.norm))
+            .map((p) => ({
+              productId: (createdByNorm.get(p.norm) as any).id as number,
+              purchasePrice: p.bagPrice,
+              deliveryPrice: 0,
+              effectiveDate: checkOrderDate,
+              remark: 'GFS 자동생성 단가(봉단가)',
+            }));
+          if (priceRows.length > 0) {
+            await tx.productPrice.createMany({ data: priceRows });
+          }
+
+          // 같은 norm 중복 항목도 생성된 품목에 매칭
+          for (const p of prepared) {
+            if (!p.existing && createdByNorm.has(p.norm)) {
+              (p as any).existing = createdByNorm.get(p.norm);
+            }
           }
         }
-      }
 
-      // ── Phase B-5: 기존 품목 안전재고 일괄 보충 (값별 updateMany, 수기값 유지) ──
-      const safetyGroups = new Map<number, number[]>();
-      for (const p of prepared) {
-        const prod = p.existing as any;
-        if (!prod?.id || createdByNorm.has(p.norm)) continue; // 신규 생성분은 이미 반영됨
-        if (p.safetyStock > 0 && !(Number(prod.safetyStockQty) > 0)) {
-          if (!safetyGroups.has(p.safetyStock)) safetyGroups.set(p.safetyStock, []);
-          safetyGroups.get(p.safetyStock)!.push(prod.id);
+        // ── Phase B-5: 기존 품목 안전재고 일괄 보충 (값별 updateMany, 수기값 유지) ──
+        const safetyGroups = new Map<number, number[]>();
+        for (const p of prepared) {
+          const prod = p.existing as any;
+          if (!prod?.id || createdByNorm.has(p.norm)) continue; // 신규 생성분은 이미 반영됨
+          if (p.safetyStock > 0 && !(Number(prod.safetyStockQty) > 0)) {
+            if (!safetyGroups.has(p.safetyStock)) safetyGroups.set(p.safetyStock, []);
+            safetyGroups.get(p.safetyStock)!.push(prod.id);
+          }
         }
-      }
-      for (const [val, ids] of safetyGroups) {
-        await prisma.product.updateMany({ where: { id: { in: ids }, safetyStockQty: { lte: 0 } }, data: { safetyStockQty: val } });
-      }
+        for (const [val, ids] of safetyGroups) {
+          await tx.product.updateMany({ where: { id: { in: ids }, safetyStockQty: { lte: 0 } }, data: { safetyStockQty: val } });
+        }
+      }, { timeout: 30000 });
     }
     // ── Phase C: 응답용 matched 조립 (원본 순서 유지) ──
     for (const p of prepared) {

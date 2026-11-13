@@ -59,6 +59,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const me = session.user as any;
     const { id } = await context.params;
     const noticeId = Number(id);
+    if (!Number.isInteger(noticeId) || noticeId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 공지 ID입니다.' }, { status: 400 });
+    }
     const notice = await loadNotice(noticeId);
     if (!notice) {
       return NextResponse.json({ success: false, error: '공지를 찾을 수 없습니다.' }, { status: 404 });
@@ -128,6 +131,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const me = session.user as any;
     const { id } = await context.params;
     const noticeId = Number(id);
+    if (!Number.isInteger(noticeId) || noticeId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 공지 ID입니다.' }, { status: 400 });
+    }
     const notice = await loadNotice(noticeId);
     if (!notice) {
       return NextResponse.json({ success: false, error: '공지를 찾을 수 없습니다.' }, { status: 404 });

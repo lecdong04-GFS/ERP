@@ -34,26 +34,29 @@ export async function POST(req: NextRequest) {
     const { action, id, rows, ...data } = body;
 
     if (action === 'batch' && Array.isArray(rows)) {
-      const createdList = [];
-      for (const r of rows) {
-        const item = await prisma.expiryDiscardMgmt.create({
-          data: {
-            checkDate: r.checkDate || kstToday(),
-            productCode: r.productCode || '',
-            productName: r.productName || '',
-            lotNo: r.lotNo || '',
-            expiryDate: r.expiryDate || '',
-            daysRemaining: Number(r.daysRemaining) || 0,
-            warehouse: r.warehouse || '',
-            currentQty: Number(r.currentQty) || 0,
-            unit: r.unit || 'ea',
-            action: r.action || '폐기',
-            status: r.status || '처리완료',
-            remark: r.remark || '',
-          },
-        });
-        createdList.push(item);
-      }
+      const createdList = await prisma.$transaction(async (tx) => {
+        const list = [];
+        for (const r of rows) {
+          const item = await tx.expiryDiscardMgmt.create({
+            data: {
+              checkDate: r.checkDate || kstToday(),
+              productCode: r.productCode || '',
+              productName: r.productName || '',
+              lotNo: r.lotNo || '',
+              expiryDate: r.expiryDate || '',
+              daysRemaining: Number(r.daysRemaining) || 0,
+              warehouse: r.warehouse || '',
+              currentQty: Number(r.currentQty) || 0,
+              unit: r.unit || 'ea',
+              action: r.action || '폐기',
+              status: r.status || '처리완료',
+              remark: r.remark || '',
+            },
+          });
+          list.push(item);
+        }
+        return list;
+      });
       await touchDashboardSnapshot();
       return NextResponse.json({ success: true, count: createdList.length, data: createdList });
     }

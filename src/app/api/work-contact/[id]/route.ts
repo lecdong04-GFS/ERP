@@ -21,7 +21,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     }
     const { id } = await context.params;
-    const contact = await loadContact(Number(id));
+    const contactId = Number(id);
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 업무연락 ID입니다.' }, { status: 400 });
+    }
+    const contact = await loadContact(contactId);
     if (!contact) {
       return NextResponse.json({ success: false, error: '업무연락을 찾을 수 없습니다.' }, { status: 404 });
     }
@@ -45,6 +49,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const admin = isAdmin(session);
     const { id } = await context.params;
     const contactId = Number(id);
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 업무연락 ID입니다.' }, { status: 400 });
+    }
     const contact = await loadContact(contactId);
     if (!contact) {
       return NextResponse.json({ success: false, error: '업무연락을 찾을 수 없습니다.' }, { status: 404 });
@@ -128,6 +135,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const admin = isAdmin(session);
     const { id } = await context.params;
     const contactId = Number(id);
+    if (!Number.isInteger(contactId) || contactId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 업무연락 ID입니다.' }, { status: 400 });
+    }
     const contact = await loadContact(contactId);
     if (!contact) {
       return NextResponse.json({ success: false, error: '업무연락을 찾을 수 없습니다.' }, { status: 404 });

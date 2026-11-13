@@ -212,68 +212,71 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const rows = Array.isArray(body) ? body : body.rows || [body];
 
-    const results = [];
-    for (const r of rows) {
-      if (!r.productId) continue;
-      const upserted = await prisma.recipeCostRate.upsert({
-        where: {
-          calcMonth_productId: {
+    const results = await prisma.$transaction(async (tx) => {
+      const list = [];
+      for (const r of rows) {
+        if (!r.productId) continue;
+        const upserted = await tx.recipeCostRate.upsert({
+          where: {
+            calcMonth_productId: {
+              calcMonth: r.calcMonth || kstToday().slice(0, 7),
+              productId: Number(r.productId),
+            },
+          },
+          update: {
+            recipeCost: Number(r.recipeCost) || 0,
+            deliveryPrice: Number(r.deliveryPrice) || 0,
+            diff: Number(r.diff) || 0,
+            costRate: Number(r.costRate) || 0,
+            remark: r.remark || '',
+          },
+          create: {
             calcMonth: r.calcMonth || kstToday().slice(0, 7),
             productId: Number(r.productId),
+            productCode: r.productCode || '',
+            productName: r.productName || '',
+            category: r.category || '완성품',
+            kind: r.kind || '',
+            spec: r.spec || '',
+            unit: r.unit || 'ea',
+            packType: r.packType || '',
+            gyeName: r.gyeName || '',
+            recipeCost: Number(r.recipeCost) || 0,
+            deliveryPrice: Number(r.deliveryPrice) || 0,
+            diff: Number(r.diff) || 0,
+            costRate: Number(r.costRate) || 0,
+            remark: r.remark || '',
           },
-        },
-        update: {
-          recipeCost: Number(r.recipeCost) || 0,
-          deliveryPrice: Number(r.deliveryPrice) || 0,
-          diff: Number(r.diff) || 0,
-          costRate: Number(r.costRate) || 0,
-          remark: r.remark || '',
-        },
-        create: {
-          calcMonth: r.calcMonth || kstToday().slice(0, 7),
-          productId: Number(r.productId),
-          productCode: r.productCode || '',
-          productName: r.productName || '',
-          category: r.category || '완성품',
-          kind: r.kind || '',
-          spec: r.spec || '',
-          unit: r.unit || 'ea',
-          packType: r.packType || '',
-          gyeName: r.gyeName || '',
-          recipeCost: Number(r.recipeCost) || 0,
-          deliveryPrice: Number(r.deliveryPrice) || 0,
-          diff: Number(r.diff) || 0,
-          costRate: Number(r.costRate) || 0,
-          remark: r.remark || '',
-        },
-      });
-
-      // 만약 납품단가가 수정되었으면 ProductPrice 테이블도 동기화
-      if (r.deliveryPrice && Number(r.deliveryPrice) > 0) {
-        const existingPrice = await prisma.productPrice.findFirst({
-          where: { productId: Number(r.productId) },
-          orderBy: { effectiveDate: 'desc' },
         });
 
-        if (existingPrice) {
-          await prisma.productPrice.update({
-            where: { id: existingPrice.id },
-            data: { deliveryPrice: Number(r.deliveryPrice) },
+        // 만약 납품단가가 수정되었으면 ProductPrice 테이블도 동기화
+        if (r.deliveryPrice && Number(r.deliveryPrice) > 0) {
+          const existingPrice = await tx.productPrice.findFirst({
+            where: { productId: Number(r.productId) },
+            orderBy: { effectiveDate: 'desc' },
           });
-        } else {
-          await prisma.productPrice.create({
-            data: {
-              productId: Number(r.productId),
-              deliveryPrice: Number(r.deliveryPrice),
-              effectiveDate: kstToday(),
-              remark: '원가율 화면에서 납품단가 등록',
-            },
-          });
-        }
-      }
 
-      results.push(upserted);
-    }
+          if (existingPrice) {
+            await tx.productPrice.update({
+              where: { id: existingPrice.id },
+              data: { deliveryPrice: Number(r.deliveryPrice) },
+            });
+          } else {
+            await tx.productPrice.create({
+              data: {
+                productId: Number(r.productId),
+                deliveryPrice: Number(r.deliveryPrice),
+                effectiveDate: kstToday(),
+                remark: '원가율 화면에서 납품단가 등록',
+              },
+            });
+          }
+        }
+
+        list.push(upserted);
+      }
+      return list;
+    }, { timeout: 20000 });
 
     return NextResponse.json({
       success: true,

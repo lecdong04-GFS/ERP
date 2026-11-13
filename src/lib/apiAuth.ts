@@ -144,7 +144,8 @@ export async function requireSession(opts: RequireSessionOptions = {}): Promise<
     };
   }
 
-  const needsDbCheck = Boolean(opts.verifyDb || opts.adminOnly || opts.categoryId || opts.menuId);
+  // 모든 인증된 API 요청에 대해 캐시된 DB 계정 활성 상태(isActive)를 검증 (30초 TTL)
+  const needsDbCheck = true;
   if (needsDbCheck && loginId) {
     const dbRecord = await loadCachedUserRecord(loginId);
     if (!dbRecord || !dbRecord.isActive) {

@@ -23,6 +23,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const me = session.user as any;
     const { id } = await context.params;
     const roleId = Number(id);
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const role = await loadRole(roleId);
     if (!role) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 
@@ -65,6 +68,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const me = session.user as any;
     const { id } = await context.params;
     const roleId = Number(id);
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const role = await loadRole(roleId);
     if (!role) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 

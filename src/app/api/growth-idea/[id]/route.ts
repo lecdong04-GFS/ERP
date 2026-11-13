@@ -23,6 +23,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const me = session.user as any;
     const { id } = await context.params;
     const ideaId = Number(id);
+    if (!Number.isInteger(ideaId) || ideaId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const idea = await loadIdea(ideaId);
     if (!idea) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 
@@ -63,6 +66,9 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
     const me = session.user as any;
     const { id } = await context.params;
     const ideaId = Number(id);
+    if (!Number.isInteger(ideaId) || ideaId <= 0) {
+      return NextResponse.json({ success: false, error: '잘못된 ID입니다.' }, { status: 400 });
+    }
     const idea = await loadIdea(ideaId);
     if (!idea) return NextResponse.json({ success: false, error: '찾을 수 없습니다.' }, { status: 404 });
 
