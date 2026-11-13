@@ -617,6 +617,7 @@ export async function GET(req: NextRequest) {
     const line = searchParams.get('line') || '커팅실';
     const gyeId = searchParams.get('gyeId');
     const status = searchParams.get('status');
+    const refresh = searchParams.get('refresh') === 'true';
 
     // 1) 대상 일자 파악
     let targetDate = workDateParam;
@@ -682,22 +683,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 3) DB에 이미 저장된 WorkOrder가 있는지 확인
-    const savedOrders = await prisma.workOrder.findMany({
-      where: {
-        workDate: targetDate,
-        ...(shift && shift !== '전체' ? { shift } : {}),
-        ...(line && line !== 'ALL' ? { gyeName: { contains: line } } : {}),
-        ...(status ? { status } : {}),
-      },
-      include: {
-        gye: true,
-        product: {
-          include: { inventories: true },
-        },
-      },
-      orderBy: { workSeq: 'asc' },
-    });
+    // 3) DB에 이미 저장된 WorkOrder가 있는지 확인 (refresh 요청 시 저장본을 우회하고 최신 수주 기반 재계산)
+    const savedOrders = refresh
+      ? []
+      : await prisma.workOrder.findMany({
+          where: {
+            workDate: targetDate,
+            ...(shift && shift !== '전체' ? { shift } : {}),
+            ...(line && line !== 'ALL' ? { gyeName: { contains: line } } : {}),
+            ...(status ? { status } : {}),
+          },
+          include: {
+            gye: true,
+            product: {
+              include: { inventories: true },
+            },
+          },
+          orderBy: { workSeq: 'asc' },
+        });
 
     // 4) 활성 정본 BOM 전체 로드 (공통 캐시 인덱싱 및 정밀 룩업 구축)
     const bomHeaders = await prisma.bomHeader.findMany({

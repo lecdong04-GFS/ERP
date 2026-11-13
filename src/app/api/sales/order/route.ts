@@ -188,7 +188,7 @@ export async function DELETE(req: NextRequest) {
           detail: `${me.name || me.loginId} ${date} 수주 삭제: ${existing.length}건 (품목 ${totalQty}건, ₩${totalAmount.toLocaleString()})`,
         },
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return NextResponse.json({
       success: true,

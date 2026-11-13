@@ -264,11 +264,12 @@ export const WorkOrderStatusView: React.FC = () => {
   }, [isLineDropdownOpen]);
 
   // 서버 DB 작업지시 저장 데이터 병합 로드
-  const fetchServerWorkOrders = useCallback(async (date: string, sft: string, line: string) => {
+  const fetchServerWorkOrders = useCallback(async (date: string, sft: string, line: string, forceRefresh = false) => {
     setLoading(true);
     try {
+      const refreshParam = forceRefresh ? '&refresh=true' : '';
       const res = await fetch(
-        `/api/production/work-order?workDate=${date}&shift=${sft}&line=${encodeURIComponent(line)}`
+        `/api/production/work-order?workDate=${date}&shift=${sft}&line=${encodeURIComponent(line)}${refreshParam}`
       );
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -286,10 +287,18 @@ export const WorkOrderStatusView: React.FC = () => {
           distinctItemCount: json.distinctItemCount || json.data.length,
           lineTotalPlan: json.lineTotalPlan,
         });
+        if (forceRefresh) {
+          setSaveToast('🔄 최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산했습니다!');
+          setTimeout(() => setSaveToast(null), 3500);
+        }
       } else {
         setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
         setMaterials(currentLine.materials.map((m) => ({ ...m })));
         setRealOrderMeta(null);
+        if (forceRefresh) {
+          setSaveToast('ℹ️ 해당 일자의 등록된 수주 데이터가 없습니다.');
+          setTimeout(() => setSaveToast(null), 3000);
+        }
       }
     } catch (err) {
       console.error('Failed to load work orders:', err);
@@ -1984,6 +1993,16 @@ export const WorkOrderStatusView: React.FC = () => {
                   표준 템플릿
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+                disabled={loading}
+                title="수주 물량이 입력/변경되었을 때 최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산합니다."
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
+                <span>수주 동기화</span>
+              </button>
             </div>
 
             {/* 시프트 필터 */}
@@ -2065,15 +2084,12 @@ export const WorkOrderStatusView: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
-                  setMaterials(currentLine.materials.map((m) => ({ ...m })));
-                  void fetchServerWorkOrders(workDate, shift, selectedLine);
-                }}
-                title="새로고침"
-                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors"
+                onClick={() => void fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+                disabled={loading}
+                title="최신 수주 데이터를 불러와 작업지시서를 새로고침합니다."
+                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors disabled:opacity-50"
               >
-                <RotateCcw size={15} />
+                <RotateCcw size={15} className={loading ? 'animate-spin' : ''} />
               </button>
             </div>
           </div>
@@ -2464,6 +2480,18 @@ export const WorkOrderStatusView: React.FC = () => {
                     </button>
                   ))}
                 </div>
+
+                {/* 수주 동기화 바로가기 */}
+                <button
+                  type="button"
+                  onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-black transition cursor-pointer disabled:opacity-50"
+                  title="최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산합니다."
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>수주 동기화</span>
+                </button>
 
                 {/* 인쇄 바로가기 */}
                 <button

@@ -534,7 +534,7 @@ export function buildAuditMap(wb: XLSX.WorkBook): Map<string, AuditEntry> {
     availSheets.length > 0
       ? availSheets.map((s) => ({ sheet: s, defaultWh: s }))
       : wb.SheetNames.filter((sn) => wb.Sheets[sn] && !/불용|폐기|수식|코드|참고|기준/i.test(sn.trim()))
-          .map((s) => ({ sheet: s, defaultWh: '' }));
+        .map((s) => ({ sheet: s, defaultWh: '' }));
 
   if (targetSheets.length === 0 && wb.SheetNames.length > 0) {
     targetSheets.push({ sheet: wb.SheetNames[0], defaultWh: '' });
