@@ -469,7 +469,7 @@ export const ProductRegView: React.FC = () => {
         body: JSON.stringify({
           parentProductId: selectedProduct.id,
           version: '1.0',
-          effectiveDate: new Date().toISOString().slice(0, 10),
+          effectiveDate: kstToday(),
           details: bomDetails.map((d, idx) => ({
             childProductId: d.childProductId,
             childProductCode: d.partCode,

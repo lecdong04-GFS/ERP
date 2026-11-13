@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { AdminActionBar } from '../common/AdminActionBar';
 import { useAdmin } from '../context/AdminContext';
 import { ChevronLeft, ChevronRight, RotateCw, Activity, History } from 'lucide-react';
+import { kstToday } from '@/lib/kst';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
@@ -63,7 +64,7 @@ export const SystemUsageView: React.FC = () => {
   };
 
   const handleReset = () => {
-    setSelectedDate(new Date().toISOString().slice(0, 10));
+    setSelectedDate(kstToday());
     setSelectedSummaryPageCode('Uc_BOM');
     setSelectedActionName('조회');
     setSelectedSummaryRowId(2);

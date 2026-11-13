@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { kstToday } from '@/lib/kst';
 import {
   AdminUserItem,
   PagePermItem,
@@ -292,7 +293,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   // 4. System Usage
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState<string>(() => kstToday());
   const [usageSummary, setUsageSummary] = useState<SystemUsageSummaryItem[]>(INITIAL_SYSTEM_USAGE_SUMMARY);
   const [usageLogs, setUsageLogs] = useState<SystemUsageDetailItem[]>(INITIAL_SYSTEM_USAGE_LOGS);
   const [selectedSummaryPageCode, setSelectedSummaryPageCode] = useState<string | null>('Uc_BOM');

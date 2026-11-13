@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   WorkOrderDispatchItem,
   MaterialLedgerDepletionItem,
@@ -41,10 +41,15 @@ export const PipelineProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isExecuting, setIsExecuting] = useState(false);
   const [pipelineRunCount, setPipelineRunCount] = useState(1);
 
-  // Initial execution results generated on boot
-  const initialResult = ProductionCostPipelineEngine.executePipeline(
-    SAMPLE_STORE_ORDERS,
-    totalOverhead > 0 ? totalOverhead : 85000000
+  // Initial execution results generated once on boot (avoid re-running on every render)
+  const initialResult = useMemo(
+    () =>
+      ProductionCostPipelineEngine.executePipeline(
+        SAMPLE_STORE_ORDERS,
+        totalOverhead > 0 ? totalOverhead : 85000000
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const [latestSummary, setLatestSummary] = useState<PipelineExecutionSummary | null>(
@@ -199,7 +204,7 @@ export const PipelineProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setIsExecuting(false);
       return result.summary;
     },
-    [totalOverhead, setProductPlList, setMonthlyPlRows]
+    [currentOrders, totalOverhead, setProductPlList, setMonthlyPlRows]
   );
 
   return (

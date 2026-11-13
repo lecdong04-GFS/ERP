@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { TabProvider, useTabs, DASHBOARD_TAB_ID } from '@/context/TabContext';
 import { TopHeader } from '@/components/layout/TopHeader';
 import { TopMenuBar } from '@/components/layout/TopMenuBar';
@@ -9,25 +10,26 @@ import { SideNav } from '@/components/layout/SideNav';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { ErpWorkspace } from '@/components/common/ErpWorkspace';
-import { SalesScreenRouter } from '@/components/sales/SalesScreenRouter';
-import { PurchaseScreenRouter } from '@/components/purchase/PurchaseScreenRouter';
-import { ProductionScreenRouter } from '@/components/production/ProductionScreenRouter';
-import { InventoryScreenRouter } from '@/components/inventory/InventoryScreenRouter';
-import { MasterScreenRouter } from '@/components/master/MasterScreenRouter';
-import { CostScreenRouter } from '@/components/cost/CostScreenRouter';
 import { CostProvider } from '@/components/cost/context/CostContext';
-import { ManagementScreenRouter } from '@/components/management/ManagementScreenRouter';
-import { AdminScreenRouter } from '@/components/admin/AdminScreenRouter';
-import { WorkScreenRouter } from '@/components/work/WorkScreenRouter';
-import { HelpView } from '@/components/help/HelpView';
 import { AdminProvider } from '@/components/admin/context/AdminContext';
 import { PipelineProvider, usePipeline } from '@/context/PipelineContext';
-import { PipelineModal } from '@/components/pipeline/PipelineModal';
-import { ExcelOrderModal } from '@/components/excel/ExcelOrderModal';
 import { PrintReportProvider, usePrintReport } from '@/context/PrintReportContext';
-import { PrintReportModal } from '@/components/print/PrintReportModal';
 import { FileSpreadsheet, Printer } from 'lucide-react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+
+const SalesScreenRouter = dynamic(() => import('@/components/sales/SalesScreenRouter').then((m) => m.SalesScreenRouter), { ssr: false });
+const PurchaseScreenRouter = dynamic(() => import('@/components/purchase/PurchaseScreenRouter').then((m) => m.PurchaseScreenRouter), { ssr: false });
+const ProductionScreenRouter = dynamic(() => import('@/components/production/ProductionScreenRouter').then((m) => m.ProductionScreenRouter), { ssr: false });
+const InventoryScreenRouter = dynamic(() => import('@/components/inventory/InventoryScreenRouter').then((m) => m.InventoryScreenRouter), { ssr: false });
+const MasterScreenRouter = dynamic(() => import('@/components/master/MasterScreenRouter').then((m) => m.MasterScreenRouter), { ssr: false });
+const CostScreenRouter = dynamic(() => import('@/components/cost/CostScreenRouter').then((m) => m.CostScreenRouter), { ssr: false });
+const ManagementScreenRouter = dynamic(() => import('@/components/management/ManagementScreenRouter').then((m) => m.ManagementScreenRouter), { ssr: false });
+const AdminScreenRouter = dynamic(() => import('@/components/admin/AdminScreenRouter').then((m) => m.AdminScreenRouter), { ssr: false });
+const WorkScreenRouter = dynamic(() => import('@/components/work/WorkScreenRouter').then((m) => m.WorkScreenRouter), { ssr: false });
+const HelpView = dynamic(() => import('@/components/help/HelpView').then((m) => m.HelpView), { ssr: false });
+const PipelineModal = dynamic(() => import('@/components/pipeline/PipelineModal').then((m) => m.PipelineModal), { ssr: false });
+const ExcelOrderModal = dynamic(() => import('@/components/excel/ExcelOrderModal').then((m) => m.ExcelOrderModal), { ssr: false });
+const PrintReportModal = dynamic(() => import('@/components/print/PrintReportModal').then((m) => m.PrintReportModal), { ssr: false });
 
 interface TickerItem {
   type: 'danger' | 'warning' | 'info' | 'success' | 'primary';

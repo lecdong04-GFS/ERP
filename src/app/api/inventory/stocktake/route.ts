@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 
       const status = rec ? (rec.status || '미확정') : '대기';
       const adjustReason = rec?.adjustReason || (diffQty !== 0 ? '실사 차이발생' : '정상');
-      const expiryDate = rec?.expiryDate || inv.expiryDate || '2026-11-30';
+      const expiryDate = rec?.expiryDate || inv.expiryDate || '';
       const lotNo = rec?.lotNo || inv.lotNo || (inv.productCode ? `LOT-${stocktakeDate.replace(/-/g, '')}-${inv.productCode}` : '');
 
       return {
@@ -292,7 +292,7 @@ export async function POST(req: NextRequest) {
         const amount = Math.round(actualQty * unitPrice);
         const itemCode = String(r.itemCode || '');
         const warehouse = String(r.warehouse || '');
-        const expiryDate = r.expiryDate || '2026-11-30';
+        const expiryDate = r.expiryDate || '';
         const lotNo = r.lotNo || `LOT-${stocktakeDate.replace(/-/g, '')}-${itemCode}`;
         const adjustReason = r.adjustReason || (diffQty !== 0 ? (diffQty < 0 ? '자연감모/손실' : '재고잉여') : '정기실사일치');
         const status = isConfirm ? '확정' : '미확정';

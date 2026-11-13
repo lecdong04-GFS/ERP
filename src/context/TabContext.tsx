@@ -39,6 +39,10 @@ export const TabProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [activeTabId, setActiveTabId] = useState<string>(DASHBOARD_TAB_ID);
   const [startupMenuIds, setStartupMenuIds] = useState<string[]>([]);
   const hasInitializedRef = useRef(false);
+  const tabsRef = useRef<TabItem[]>(tabs);
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   const loginId = (session?.user as any)?.loginId || 'admin';
   const storageKey = `gfs_startup_tabs_${loginId}`;
@@ -115,46 +119,46 @@ export const TabProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [storageKey]);
 
   const openTab = useCallback((menu: MenuItem) => {
-    setTabs((prevTabs) => {
-      const existingTab = prevTabs.find((t) => t.menuId === menu.id);
-      if (existingTab) {
-        setActiveTabId(existingTab.id);
-        return prevTabs;
-      }
+    const prevTabs = tabsRef.current;
+    const existingTab = prevTabs.find((t) => t.menuId === menu.id);
+    if (existingTab) {
+      setActiveTabId(existingTab.id);
+      return;
+    }
 
-      const newTab: TabItem = {
-        id: `tab-${menu.id}`,
-        title: menu.title,
-        menuId: menu.id,
-        categoryId: menu.categoryId,
-        categoryName: menu.categoryName,
-        isClosable: true,
-        openedAt: Date.now(),
-      };
+    const newTab: TabItem = {
+      id: `tab-${menu.id}`,
+      title: menu.title,
+      menuId: menu.id,
+      categoryId: menu.categoryId,
+      categoryName: menu.categoryName,
+      isClosable: true,
+      openedAt: Date.now(),
+    };
 
-      setActiveTabId(newTab.id);
-      return [...prevTabs, newTab];
-    });
+    const nextTabs = [...prevTabs, newTab];
+    tabsRef.current = nextTabs;
+    setTabs(nextTabs);
+    setActiveTabId(newTab.id);
   }, []);
 
   const closeTab = useCallback((tabId: string) => {
-    setTabs((prevTabs) => {
-      const targetTab = prevTabs.find((t) => t.id === tabId);
-      if (!targetTab || !targetTab.isClosable) {
-        return prevTabs;
-      }
+    const prevTabs = tabsRef.current;
+    const targetTab = prevTabs.find((t) => t.id === tabId);
+    if (!targetTab || !targetTab.isClosable) {
+      return;
+    }
 
-      const newTabs = prevTabs.filter((t) => t.id !== tabId);
+    const newTabs = prevTabs.filter((t) => t.id !== tabId);
+    tabsRef.current = newTabs;
+    setTabs(newTabs);
 
-      // If active tab was closed, switch to adjacent tab
-      if (tabId === activeTabId) {
-        const closedIndex = prevTabs.findIndex((t) => t.id === tabId);
-        const nextActiveTab = newTabs[closedIndex] || newTabs[closedIndex - 1] || INITIAL_DASHBOARD_TAB;
-        setActiveTabId(nextActiveTab.id);
-      }
-
-      return newTabs;
-    });
+    // If active tab was closed, switch to adjacent tab
+    if (tabId === activeTabId) {
+      const closedIndex = prevTabs.findIndex((t) => t.id === tabId);
+      const nextActiveTab = newTabs[closedIndex] || newTabs[closedIndex - 1] || INITIAL_DASHBOARD_TAB;
+      setActiveTabId(nextActiveTab.id);
+    }
   }, [activeTabId]);
 
   const closeAllTabs = useCallback(() => {

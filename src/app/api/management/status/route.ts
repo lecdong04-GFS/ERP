@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
       const created = await prisma.salesPurchaseStatus.create({
         data: {
           statusDate: data.statusDate || kstToday(),
-          statusMonth: data.statusMonth || new Date().toISOString().slice(0, 7),
+          statusMonth: data.statusMonth || kstToday().slice(0, 7),
           salesAmount: sales,
           purchaseAmount: purchase,
           grossProfit: profit,

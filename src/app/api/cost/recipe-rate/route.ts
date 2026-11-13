@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
       const upserted = await prisma.recipeCostRate.upsert({
         where: {
           calcMonth_productId: {
-            calcMonth: r.calcMonth || new Date().toISOString().slice(0, 7),
+            calcMonth: r.calcMonth || kstToday().slice(0, 7),
             productId: Number(r.productId),
           },
         },
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
           remark: r.remark || '',
         },
         create: {
-          calcMonth: r.calcMonth || new Date().toISOString().slice(0, 7),
+          calcMonth: r.calcMonth || kstToday().slice(0, 7),
           productId: Number(r.productId),
           productCode: r.productCode || '',
           productName: r.productName || '',

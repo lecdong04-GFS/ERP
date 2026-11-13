@@ -7,6 +7,7 @@ import { ChangeRequestItem } from '../data/adminData';
 import { RotateCw, Search, Image as ImageIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { erpConfirm } from '@/context/ConfirmContext';
 import { isSafeImageSrc } from '@/lib/sanitize';
+import { kstToday } from '@/lib/kst';
 
 import { useInlineEdit } from '@/components/common/EditableCell';
 import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
@@ -106,7 +107,7 @@ export const ChangeRequestView: React.FC = () => {
     const newReq: ChangeRequestItem = {
       id: Date.now(),
       reqId: maxReqId + 1,
-      reqDate: new Date().toISOString().slice(0, 10),
+      reqDate: kstToday(),
       title: '신규 프로그램 수정/개발 요청건',
       priority: 1,
       result: '접수대기',

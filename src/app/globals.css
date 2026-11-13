@@ -206,4 +206,55 @@ input, select, textarea {
   .skeleton::after { animation: none; }
 }
 
+/* ── Tailwind v3 호환 모달·토스트 진입 애니메이션 및 블러/그림자 보완 ── */
+@keyframes gfs-enter {
+  from {
+    opacity: var(--gfs-enter-opacity, 1);
+    transform: translate3d(var(--gfs-enter-tx, 0), var(--gfs-enter-ty, 0), 0) scale(var(--gfs-enter-scale, 1));
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation-name: gfs-enter;
+    animation-duration: 180ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-fill-mode: both;
+  }
+  .fade-in { --gfs-enter-opacity: 0; }
+  .fade-in-50 { --gfs-enter-opacity: 0.5; }
+  .zoom-in-95 { --gfs-enter-scale: 0.95; }
+  .slide-in-from-top-1 { --gfs-enter-ty: -0.25rem; }
+  .slide-in-from-top-2 { --gfs-enter-ty: -0.5rem; }
+  .slide-in-from-right { --gfs-enter-tx: 100%; }
+
+  .animate-fade-in,
+  .animate-fadeIn {
+    --gfs-enter-opacity: 0;
+    animation: gfs-enter 180ms ease-out both;
+  }
+
+  .backdrop-blur-2xs {
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+  }
+  .backdrop-blur-xs {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .shadow-2xs {
+    box-shadow: 0 1px 1px 0 rgb(0 0 0 / 0.04);
+  }
+  .shadow-xs {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  .h-7\.5 {
+    height: 1.875rem;
+  }
+}
+
 
