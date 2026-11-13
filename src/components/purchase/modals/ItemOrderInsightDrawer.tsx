@@ -20,6 +20,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { DAY_CHARS, addDaysYmd, getWeekdayCharYmd } from '@/lib/gfs/orderCalc';
+import { findNovLedgerRef } from '@/lib/gfs/novLedgerRef';
 
 export interface ItemOrderInsightTarget {
   rowId: number;
@@ -286,6 +287,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
   ].join(' ');
 
   const hoveredPoint = hoverIdx !== null && pts[hoverIdx] ? pts[hoverIdx] : null;
+  const novRef = useMemo(() => findNovLedgerRef(item?.name || ''), [item?.name]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px] animate-in fade-in duration-150">
@@ -700,6 +702,83 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
               </div>
             )}
           </div>
+
+          {/* 2-B. 11/1~11/12 현장 수불 관리대장 실적 레퍼런스 */}
+          {novRef && (
+            <div className="bg-white rounded-2xl border border-indigo-200 overflow-hidden shadow-2xs">
+              <div className="px-4 py-2.5 border-b border-indigo-100 flex items-center justify-between flex-wrap gap-2 bg-indigo-50/60">
+                <div className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>11/1~11/12 현장 수불대장 실제 발주·입고 리듬</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-indigo-700 border border-indigo-200">
+                    #{novRef.no} 참고
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-mono">
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                    총 입고 {novRef.totalIn}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">
+                    총 발주 {novRef.totalOrder}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-white font-black">
+                    현장 일평균 발주 {novRef.dailyAvgOrder}
+                  </span>
+                </div>
+              </div>
+
+              {novRef.totalIn === 0 && novRef.totalOrder === 0 ? (
+                <div className="px-4 py-3 text-xs text-slate-500 bg-slate-50/50 flex items-center gap-2">
+                  <span>💤</span>
+                  <span>2026-11-01 ~ 11-12 기간 동안 현장 수불대장상 입고·발주 실적이 0건입니다. (미사용/휴면 여부 확인)</span>
+                </div>
+              ) : (
+                <div className="p-3 grid grid-cols-4 sm:grid-cols-6 gap-1.5 bg-white">
+                  {novRef.days.map((d) => {
+                    const wd = getWeekdayCharYmd(d.date);
+                    const isFri = wd === '금';
+                    const hasAny = d.inQty > 0 || d.orderQty > 0 || d.stockQty > 0;
+                    return (
+                      <div
+                        key={d.date}
+                        className={`rounded-lg border px-2 py-1.5 text-center transition ${
+                          isFri && d.orderQty > 0
+                            ? 'bg-amber-50/80 border-amber-300'
+                            : hasAny
+                            ? 'bg-slate-50 border-slate-200'
+                            : 'bg-white border-slate-100 opacity-50'
+                        }`}
+                      >
+                        <div className="text-[10px] font-mono font-bold text-slate-500">
+                          {d.date.slice(5)}({wd})
+                        </div>
+                        <div className="mt-1 flex items-center justify-center gap-1.5 text-[11px] font-mono">
+                          <span
+                            className={d.orderQty > 0 ? 'text-blue-700 font-black' : 'text-slate-300'}
+                            title="발주"
+                          >
+                            발{d.orderQty}
+                          </span>
+                          <span className="text-slate-300">/</span>
+                          <span
+                            className={d.inQty > 0 ? 'text-emerald-700 font-black' : 'text-slate-300'}
+                            title="입고"
+                          >
+                            입{d.inQty}
+                          </span>
+                        </div>
+                        {d.stockQty > 0 && (
+                          <div className="text-[9.5px] font-mono text-indigo-600 font-bold mt-0.5">
+                            재고 {d.stockQty}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 3. 지난 7일 일자별 재고 변화 테이블 */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
