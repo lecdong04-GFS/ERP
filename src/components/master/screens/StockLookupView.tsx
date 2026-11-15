@@ -21,8 +21,10 @@ import {
   Unlock,
   RotateCcw,
   X,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
+import { ProductSubstituteModal } from '../modals/ProductSubstituteModal';
 import { normName } from '@/lib/gfs/norm';
 import {
   isTerminalProductStatus,
@@ -630,6 +632,7 @@ export const StockLookupView: React.FC = () => {
   const [onlyShortage, setOnlyShortage] = useState(false);
   const [includeDiscontinued, setIncludeDiscontinued] = useState(false);
   const [restoringProductId, setRestoringProductId] = useState<number | null>(null);
+  const [substituteTargetProductId, setSubstituteTargetProductId] = useState<number | null>(null);
   const lifecycleSyncRef = useRef({ targetDate, includeDiscontinued });
   lifecycleSyncRef.current = { targetDate, includeDiscontinued };
   const [keyword, setKeyword] = useState('');
@@ -2119,7 +2122,7 @@ export const StockLookupView: React.FC = () => {
               name={String(v || '')}
               refDate={targetDate}
             />
-            {isDeletedRow && row.productId && (
+            {isDeletedRow && row.productId ? (
               <button
                 type="button"
                 disabled={restoringProductId === row.productId}
@@ -2133,7 +2136,20 @@ export const StockLookupView: React.FC = () => {
                 <RotateCcw size={10} />
                 <span>{restoringProductId === row.productId ? '복구중' : '복구'}</span>
               </button>
-            )}
+            ) : row.productId ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSubstituteTargetProductId(row.productId!);
+                }}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-100 hover:bg-blue-600 text-slate-600 hover:text-white border border-slate-200 hover:border-blue-600 text-[10.5px] font-bold shrink-0 cursor-pointer transition"
+                title="대체품 지정/변경 (BOM 일괄 치환 및 재고 전환)"
+              >
+                <ArrowLeftRight size={10} />
+                <span>대체</span>
+              </button>
+            ) : null}
           </div>
         );
       },
@@ -3099,6 +3115,18 @@ export const StockLookupView: React.FC = () => {
           </div>
         </div>
       </main>
+
+      <ProductSubstituteModal
+        isOpen={substituteTargetProductId !== null}
+        sourceProductId={substituteTargetProductId}
+        onClose={() => setSubstituteTargetProductId(null)}
+        onSuccess={() => {
+          loadStockData(undefined, undefined, includeDiscontinued);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('gfs-product-lifecycle-changed'));
+          }
+        }}
+      />
     </div>
   );
 };
