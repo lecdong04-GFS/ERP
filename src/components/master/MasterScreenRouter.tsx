@@ -5,8 +5,6 @@ import { TabItem } from '@/types/erp';
 import { BaseCodeView } from './screens/BaseCodeView';
 import { PartnerMgmtView } from './screens/PartnerMgmtView';
 import { ProductRegView } from './screens/ProductRegView';
-import { ProductUnitView } from './screens/ProductUnitView';
-import { PackagingMgmtView } from './screens/PackagingMgmtView';
 import { BomNormalView } from './screens/BomNormalView';
 import { BomExplosionView } from './screens/BomExplosionView';
 import { CvsMgmtView } from './screens/CvsMgmtView';
@@ -26,10 +24,6 @@ export const MasterScreenRouter: React.FC<MasterScreenRouterProps> = ({ tab }) =
     case 'master-product-reg':
     case 'master-product-price':
       return <ProductRegView />;
-    case 'master-product-unit':
-      return <ProductUnitView />;
-    case 'master-pack-spec':
-      return <PackagingMgmtView />;
     case 'master-bom-normal':
       return <BomNormalView />;
     case 'master-bom-deploy':

@@ -2,9 +2,6 @@
 
 import React from 'react';
 import { TabItem } from '@/types/erp';
-import { ExtraOrderStatusView } from './screens/ExtraOrderStatusView';
-import { OrderCancelStatusView } from './screens/OrderCancelStatusView';
-import { ItemDeliveryStatusView } from './screens/ItemDeliveryStatusView';
 import { StatementIssueView } from './screens/StatementIssueView';
 import { TagPrintView } from './screens/TagPrintView';
 import { UndeliveredStatusView } from './screens/UndeliveredStatusView';
@@ -20,15 +17,9 @@ interface SalesScreenRouterProps {
 
 export const SalesScreenRouter: React.FC<SalesScreenRouterProps> = ({ tab }) => {
   switch (tab.menuId) {
-    case 'sales-extra-order-status':
-      return <ExtraOrderStatusView />;
-    case 'sales-order-cancel-status':
-      return <OrderCancelStatusView />;
     case 'sales-delivery-reg':
     case 'sales-delivery-status-edit':
       return <StatementIssueView />;
-    case 'sales-item-delivery-status':
-      return <ItemDeliveryStatusView />;
     case 'sales-statement-issue':
       return <StatementIssueView />;
     case 'sales-tag-print':

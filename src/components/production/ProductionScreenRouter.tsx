@@ -5,7 +5,6 @@ import { TabItem } from '@/types/erp';
 import { WorkOrderStatusView } from './screens/WorkOrderStatusView';
 import { DiscardRegGsrView } from './screens/DiscardRegGsrView';
 import { ProductionResultStatusView } from './screens/ProductionResultStatusView';
-import { ExtraProductionView } from './screens/ExtraProductionView';
 import { ProductionSeqRegView } from './screens/ProductionSeqRegView';
 import { ErpWorkspace } from '../common/ErpWorkspace';
 
@@ -24,8 +23,6 @@ export const ProductionScreenRouter: React.FC<ProductionScreenRouterProps> = ({ 
     case 'prod-discard-reg':
     case 'prod-food-waste-reg':
       return <DiscardRegGsrView />;
-    case 'prod-extra-prod':
-      return <ExtraProductionView />;
     case 'prod-seq-reg':
       return <ProductionSeqRegView />;
     default:
