@@ -32,6 +32,7 @@ export interface BomMaterialInput {
   materialName: string;
   unitQty: number; // 원물 단위 투입량
   unit: string; // g, kg, ea, 매 등
+  yieldRate?: number; // 수율(%) 기본 100
   warehouse?: string;
   nextProcess?: string;
 }
@@ -47,6 +48,10 @@ export interface AggregatedOrderItem {
   riceColorBadge: RiceColorBadge;
   primaryLine: FormingLineName;
   bomMaterials: BomMaterialInput[];
+  scheduledTimeRange?: string;
+  durationMin?: number;
+  totalMaterialKg?: number;
+  sharePct?: number;
 }
 
 export interface FormingScheduleRow {
@@ -102,6 +107,14 @@ export interface RiceWorkOrderResult {
     totalKg: number;
     shift2Ea: number;
     shift1Ea: number;
+    colorBreakdown: Array<{ badge: RiceColorBadge; ea: number; pct: number }>;
+    lineSummaries: Array<{
+      lineName: FormingLineName;
+      totalEa: number;
+      endTime: string;
+      endMin: number;
+      isBottleneck: boolean;
+    }>;
   };
 }
 
@@ -467,7 +480,10 @@ export function generateRiceWorkOrder(params: {
     const color = classifyRiceColor(entry.baseProductName, bomMaterials);
     const primaryLine = assignPrimaryLine(entry.baseProductName);
     const pre10Ea = pre10Map.get(key)?.eaQty;
-    const diffEa = mode === 'post10' && pre10Ea !== undefined ? entry.eaQty - pre10Ea : undefined;
+    const diffEa =
+      mode === 'post10' && pre10BaselineOrders.length > 0
+        ? entry.eaQty - (pre10Ea ?? 0)
+        : undefined;
 
     tab1Master.push({
       shiftType: entry.shiftType,
@@ -528,12 +544,13 @@ export function generateRiceWorkOrder(params: {
   const tab5FormingSamgak = filterPre10Forming([...deokunRows, ...samgak1Rows, ...samgak2Rows, ...couplePackRows]);
 
   // 5. 전처리실 역산 스케줄링 (Backward Scheduling)
-  const allFormingProd = [...bentoRows, ...gimbapMoldRows, ...deokunRows, ...samgak1Rows, ...samgak2Rows, ...couplePackRows].filter(
+  const allFormingProd = [...bentoRows, ...gimbapMoldRows, ...deokunRows, ...samgak1Rows, ...samgak2Rows].filter(
     (r) => r.rowType === '생산'
   );
 
   const tab2PrepRice: PrepScheduleRow[] = [];
   const tab3PrepCook: PrepScheduleRow[] = [];
+  const processedPrepKeys = new Set<string>();
 
   // 공통 토핑 Batching (예: 참치마요)
   const batchAccumulator = new Map<string, { shift: ShiftType | '공통'; materialName: string; totalKg: number; products: string[] }>();
@@ -546,6 +563,9 @@ export function generateRiceWorkOrder(params: {
           formRow.baseProductName.startsWith(m.baseProductName))
     );
     if (!master) continue;
+    const prepKey = `${formRow.shiftType}::${master.baseProductName}`;
+    if (processedPrepKeys.has(prepKey)) continue;
+    processedPrepKeys.add(prepKey);
 
     // 10시 이전 모드에서는 전처리 10:30 이전 시작분만 포함
     const materials = master.bomMaterials;
@@ -553,7 +573,8 @@ export function generateRiceWorkOrder(params: {
       const mat = materials[idx];
       const unitWeightG = toGramWeight(mat.unitQty, mat.unit);
       if (unitWeightG <= 0) continue; // g/kg 중량 환산 대상만 전처리 지시서에 표시
-      const requiredKg = Math.round(((formRow.eaQty * unitWeightG) / 1000) * 100) / 100;
+      const yieldFactor = 100 / Math.max(1, Number(mat.yieldRate) || 100);
+      const requiredKg = Math.round(((formRow.eaQty * unitWeightG * yieldFactor) / 1000) * 100) / 100;
       if (requiredKg <= 0) continue;
 
       const room = classifyPrepRoom(mat.materialName, mat.nextProcess);
@@ -624,24 +645,26 @@ export function generateRiceWorkOrder(params: {
     }
   }
 
-  // 로터리 믹서 10:30~11:30 완전 분해세척(45분) 고정 삽입
-  tab2PrepRice.push({
-    id: 'rotary-clean-mid',
-    room: '로터리 믹서',
-    shiftType: '공통',
-    startMin: 10 * 60 + 30,
-    endMin: 11 * 60 + 15,
-    timeRange: '10:30 ~ 11:15',
-    rowType: '세척/전환',
-    targetLine: '로터리 전 라인',
-    baseProductName: '2편 종료 후 로터리 완전 분해세척 (45분)',
-    materialName: '-',
-    eaQty: 0,
-    unitWeightG: 0,
-    requiredKg: 0,
-    riceColorBadge: '세척/전환',
-    note: '흰밥→주황→빨간 2편 사이클 종료 후 완전 세척',
-  });
+  // 로터리 믹서 10:30~11:30 완전 분해세척(45분) 고정 삽입 (수주가 있을 때만)
+  if (tab1Master.length > 0) {
+    tab2PrepRice.push({
+      id: 'rotary-clean-mid',
+      room: '로터리 믹서',
+      shiftType: '공통',
+      startMin: 10 * 60 + 30,
+      endMin: 11 * 60 + 15,
+      timeRange: '10:30 ~ 11:15',
+      rowType: '세척/전환',
+      targetLine: '로터리 전 라인',
+      baseProductName: '2편 종료 후 로터리 완전 분해세척 (45분)',
+      materialName: '-',
+      eaQty: 0,
+      unitWeightG: 0,
+      requiredKg: 0,
+      riceColorBadge: '세척/전환',
+      note: '흰밥→주황→빨간 2편 사이클 종료 후 완전 세척',
+    });
+  }
 
   // 통합 배합(Batching) 행 추가
   for (const [bKey, b] of batchAccumulator.entries()) {
@@ -677,6 +700,63 @@ export function generateRiceWorkOrder(params: {
     [...tab2PrepRice, ...tab3PrepCook].reduce((s, r) => s + r.requiredKg, 0) * 100
   ) / 100;
 
+  // Tab 1 각 품목에 예상 가동시간 · 원물중량(kg) · 물량비중(%) 매핑
+  const formByKey = new Map<string, FormingScheduleRow>();
+  for (const fr of allFormingProd) {
+    const cleanName = fr.baseProductName.replace(/\s*\((?:참치|비빔)파트\)$/, '');
+    const k = `${fr.shiftType}::${cleanName}`;
+    if (!formByKey.has(k)) formByKey.set(k, fr);
+  }
+  for (const item of tab1Master) {
+    const fr = formByKey.get(`${item.shiftType}::${item.baseProductName}`);
+    if (fr) {
+      item.scheduledTimeRange = fr.timeRange;
+      item.durationMin = fr.durationMin;
+    }
+    const itemKg = item.bomMaterials.reduce((sum, mat) => {
+      const g = toGramWeight(mat.unitQty, mat.unit);
+      const yf = 100 / Math.max(1, Number(mat.yieldRate) || 100);
+      return sum + (g > 0 ? Math.round(((item.eaQty * g * yf) / 1000) * 100) / 100 : 0);
+    }, 0);
+    item.totalMaterialKg = Math.round(itemKg * 100) / 100;
+    item.sharePct = totalEa > 0 ? Math.round((item.eaQty / totalEa) * 1000) / 10 : 0;
+  }
+
+  // 밥 색상별 물량 비율
+  const colorBadges: RiceColorBadge[] = ['흰밥', '흑미밥', '복합', '빨간밥'];
+  const colorBreakdown = colorBadges.map((badge) => {
+    const ea = tab1Master.filter((r) => r.riceColorBadge === badge).reduce((s, r) => s + r.eaQty, 0);
+    return { badge, ea, pct: totalEa > 0 ? Math.round((ea / totalEa) * 1000) / 10 : 0 };
+  });
+
+  // 라인별 예상 마감시각 및 병목(최장 가동 라인) 계산
+  const lineGroups: Array<{ lineName: FormingLineName; rows: FormingScheduleRow[] }> = [
+    { lineName: '도시락 1라인', rows: bentoRows },
+    { lineName: '김밥 성형', rows: gimbapMoldRows },
+    { lineName: '더큰 삼각라인', rows: deokunRows },
+    { lineName: '삼각 1호기', rows: samgak1Rows },
+    { lineName: '삼각 2호기', rows: samgak2Rows },
+  ];
+  const rawLineSummaries = lineGroups
+    .map((g) => {
+      const prodRows = g.rows.filter((r) => r.rowType === '생산');
+      const lineEa = prodRows.reduce((s, r) => s + r.eaQty, 0);
+      const lastEnd = prodRows.length > 0 ? Math.max(...prodRows.map((r) => r.endMin)) : 0;
+      return {
+        lineName: g.lineName,
+        totalEa: lineEa,
+        endTime: lastEnd > 0 ? formatMinutesToHHMM(lastEnd) : '-',
+        endMin: lastEnd,
+        isBottleneck: false,
+      };
+    })
+    .filter((l) => l.totalEa > 0);
+  const maxEndMin = rawLineSummaries.length > 0 ? Math.max(...rawLineSummaries.map((l) => l.endMin)) : 0;
+  const lineSummaries = rawLineSummaries.map((l) => ({
+    ...l,
+    isBottleneck: maxEndMin > 0 && l.endMin === maxEndMin,
+  }));
+
   return {
     mode,
     workDate,
@@ -691,6 +771,8 @@ export function generateRiceWorkOrder(params: {
       totalKg,
       shift2Ea,
       shift1Ea,
+      colorBreakdown,
+      lineSummaries,
     },
   };
 }

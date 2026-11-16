@@ -317,7 +317,7 @@ export async function PUT(req: NextRequest) {
           if (!pId) return;
           const pData: any = {};
           if (u.safetyStock !== undefined) pData.safetyStockQty = Number(u.safetyStock);
-          const nextBoxQty = Number(u.boxQty ?? u.packUnit ?? 0);
+          const nextBoxQty = Number(u.packUnit ?? u.boxQty ?? 0);
           if (nextBoxQty > 0 && !(pId === 265 && nextBoxQty === 30)) pData.boxQty = nextBoxQty;
           if (u.orderCycle !== undefined) {
             const normCycle = normalizeOrderCycleText(u.orderCycle);

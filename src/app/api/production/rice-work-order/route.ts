@@ -13,29 +13,58 @@ async function loadBomByNormName(): Promise<Map<string, BomMaterialInput[]>> {
   const headers = await prisma.bomHeader.findMany({
     where: { isUsed: true },
     include: {
-      parentProduct: { select: { name: true } },
+      parentProduct: { select: { id: true, name: true } },
       details: {
         include: {
-          childProduct: { select: { name: true, unit: true, warehouse: true } },
+          childProduct: { select: { id: true, name: true, unit: true, warehouse: true } },
         },
         orderBy: { sortOrder: 'asc' },
       },
     },
   });
 
+  const headerByParentId = new Map<number, (typeof headers)[number]>();
+  for (const h of headers) {
+    if (h.parentProductId && !headerByParentId.has(h.parentProductId)) {
+      headerByParentId.set(h.parentProductId, h);
+    }
+  }
+
+  const expandDetails = (
+    details: (typeof headers)[number]['details'],
+    parentFactor: number,
+    visited: Set<number>
+  ): BomMaterialInput[] => {
+    const out: BomMaterialInput[] = [];
+    for (const d of details) {
+      if (!d.childProduct?.name) continue;
+      const yf = 100 / Math.max(1, Number(d.yieldRate) || 100);
+      const subHeader = d.childProductId ? headerByParentId.get(d.childProductId) : undefined;
+      if (subHeader && !visited.has(d.childProductId) && subHeader.details.length > 0) {
+        const nextVisited = new Set(visited);
+        nextVisited.add(d.childProductId);
+        // 반제품 1단위당 하위 원물 전개 (unitQty * yieldFactor 누적)
+        const childFactor = parentFactor * (Number(d.unitQty) || 1) * yf;
+        out.push(...expandDetails(subHeader.details, childFactor, nextVisited));
+      } else {
+        out.push({
+          materialName: d.childProduct.name,
+          unitQty: (Number(d.unitQty) || 0) * parentFactor,
+          unit: d.unit || d.childProduct.unit || 'g',
+          yieldRate: Number(d.yieldRate) || 100,
+          warehouse: d.childProduct.warehouse || '',
+          nextProcess: d.nextProcess || '',
+        });
+      }
+    }
+    return out;
+  };
+
   const map = new Map<string, BomMaterialInput[]>();
   for (const h of headers) {
     const parentNorm = normalizeBaseProductName(h.parentProduct?.name || '').replace(/\s+/g, '');
     if (!parentNorm) continue;
-    const mats: BomMaterialInput[] = h.details
-      .filter((d) => d.childProduct?.name)
-      .map((d) => ({
-        materialName: d.childProduct.name,
-        unitQty: Number(d.unitQty) || 0,
-        unit: d.unit || d.childProduct.unit || 'g',
-        warehouse: d.childProduct.warehouse || '',
-        nextProcess: d.nextProcess || '',
-      }));
+    const mats = expandDetails(h.details, 1, new Set([h.parentProductId]));
     if (!map.has(parentNorm) || mats.length > (map.get(parentNorm)?.length || 0)) {
       map.set(parentNorm, mats);
     }

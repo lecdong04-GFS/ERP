@@ -248,3 +248,136 @@ export function getCutoffGroupLabel(cutoffMinutes: number | null, isCompleted: b
   return `⏰ ${hh}:${mm} 마감`;
 }
 
+export interface OrderGuideItem {
+  name: string;
+  boxes: number;
+  packUnit?: number;
+}
+
+export interface OrderMethodGuide {
+  title: string;
+  steps: string[];
+  copyLabel: string;
+  copyText: string;
+  emailSubject?: string;
+}
+
+/** 발주방법별 실무 안내 및 복/붙 문구 생성 (거래처의 오늘 발주 품목 일괄 반영) */
+export function buildOrderMethodGuide(params: {
+  info: ResolvedOrderMethod;
+  supplier: string;
+  orderDate: string;
+  items: OrderGuideItem[];
+}): OrderMethodGuide {
+  const { info, supplier, orderDate, items } = params;
+  const activeItems = items.filter((it) => it.boxes > 0);
+  const targetItems = activeItems.length > 0 ? activeItems : items.slice(0, 1);
+
+  const itemLines = targetItems
+    .map((it) => {
+      const qtyStr = it.boxes > 0 ? `${it.boxes}박스` : '수량 입력 필요';
+      const packStr = it.packUnit && it.packUnit > 0 ? ` (${it.packUnit}입)` : '';
+      return `• ${it.name}${packStr} : ${qtyStr}`;
+    })
+    .join('\n');
+
+  const cutoffDesc = info.cutoffTime ? `${info.cutoffTime} 마감` : '마감시각 확인 필요';
+
+  if (info.channel === '카톡') {
+    return {
+      title: '카카오톡 발주 안내 및 복/붙 문구',
+      steps: [
+        `1. 아래 [발주 문구 복사] 버튼을 눌러 전체 내용을 복사합니다.`,
+        `2. 카카오톡에서 '${supplier}' 담당자(또는 단체방)를 열어 붙여넣기 후 전송합니다.`,
+        `3. 마감(${cutoffDesc}) 전 답장/접수 확인 후 ERP에서 [발주 확정]을 눌러주세요.`,
+      ],
+      copyLabel: '카톡 발주 문구 복사',
+      copyText: [
+        `안녕하세요, (주)GFS입니다.`,
+        `[${orderDate} 발주 요청] 아래와 같이 발주 부탁드립니다.`,
+        ``,
+        itemLines,
+        ``,
+        info.note ? `※ 참고: ${info.note}` : '',
+        `확인 후 회신 부탁드립니다. 감사합니다.`,
+      ]
+        .filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''))
+        .join('\n'),
+    };
+  }
+
+  if (info.channel === '이메일') {
+    const emailSubject = `[GFS 발주 요청] ${orderDate} / ${supplier}`;
+    return {
+      title: '이메일 발주 안내 및 본문 양식',
+      steps: [
+        `1. 아래 본문을 복사하거나 [메일 앱 열기] 버튼으로 바로 작성 창을 엽니다.`,
+        `2. 마감(${cutoffDesc}) 전 발송 후 회신 메일을 확인합니다.`,
+      ],
+      copyLabel: '이메일 본문 복사',
+      emailSubject,
+      copyText: [
+        `제목: ${emailSubject}`,
+        ``,
+        `안녕하세요, (주)GFS 구매팀입니다.`,
+        `${orderDate} 기준 발주 내역 전달드립니다.`,
+        ``,
+        itemLines,
+        ``,
+        info.note ? `특이사항: ${info.note}` : '',
+        `확인 부탁드립니다. 감사합니다.`,
+      ]
+        .filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''))
+        .join('\n'),
+    };
+  }
+
+  if (info.channel === '발주고') {
+    return {
+      title: '발주고(전산) 발주 진행 안내',
+      steps: [
+        `1. 발주고 사이트에 로그인 후 거래처 '${supplier}'를 선택합니다.`,
+        `2. 아래 품목 및 박스 수량을 입력하고 납품일을 확인합니다.`,
+        `3. 마감(${cutoffDesc}) 전 최종 전송 완료 후 ERP에서 전표 확정을 진행하세요.`,
+      ],
+      copyLabel: '발주고 입력용 품목·수량 복사',
+      copyText: `[발주고 입력] ${supplier} (${orderDate})\n${itemLines}`,
+    };
+  }
+
+  if (info.channel === '통합구매') {
+    return {
+      title: 'GS통합구매 발주 진행 안내',
+      steps: [
+        `1. GS통합구매 포털 접속 후 납품요청일(${orderDate})과 입고처를 선택합니다.`,
+        `2. '${supplier}' 품목별 발주 수량(박스)을 입력합니다.`,
+        `3. 마감(${cutoffDesc}) 전 발주 확정을 눌러 전송을 완료합니다.`,
+      ],
+      copyLabel: '통합구매 입력용 품목·수량 복사',
+      copyText: `[GS통합구매] ${supplier} (${orderDate})\n${itemLines}`,
+    };
+  }
+
+  if (info.channel === '자사전산') {
+    return {
+      title: `업체 자사전산 발주 안내${info.tempTag ? ` (${info.tempTag})` : ''}`,
+      steps: [
+        `1. '${supplier}' 전용 발주 사이트에 접속합니다.${info.tempTag ? ` (보관구분 '${info.tempTag}' 마감시각 주의)` : ''}`,
+        `2. 아래 품목 및 박스 수량을 입력한 뒤 마감(${cutoffDesc}) 전 전송합니다.`,
+      ],
+      copyLabel: '입력용 품목·수량 복사',
+      copyText: `[자사전산] ${supplier} (${orderDate})\n${itemLines}`,
+    };
+  }
+
+  return {
+    title: '전화 / 일반 발주 안내',
+    steps: [
+      `1. 아래 담당자 연락처와 특이사항을 확인한 뒤 발주를 진행합니다.`,
+      `2. 통화/전달 시 아래 품목과 박스 수량을 안내해 주세요.`,
+    ],
+    copyLabel: '품목·수량 요약 복사',
+    copyText: `[발주 내역] ${supplier} (${orderDate})\n${itemLines}`,
+  };
+}
+

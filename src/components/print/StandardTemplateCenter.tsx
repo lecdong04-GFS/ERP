@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { emitSalesOrderChanged } from '@/lib/gfs/orderSyncEvent';
 import {
   Printer,
   FileSpreadsheet,
@@ -343,11 +344,12 @@ export const StandardTemplateCenter: React.FC<StandardTemplateCenterProps> = ({ 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date: auditDate,
+          orderDate: auditDate,
           fileName: parseResult.fileName,
           type: parseResult.detectedType,
         }),
       });
+      emitSalesOrderChanged({ source: 'StandardTemplateCenter', orderDate: auditDate });
       setIngestSuccessMsg(
         `✅ [${parseResult.detectedType}] 검증 완료!\n총 ${parseResult.rowCount.toLocaleString()}건의 데이터가 ERP 실시간 파이프라인에 안전하게 적재되었습니다.\n(재고조회 및 발주추천 화면에 즉시 반영됨)`
       );

@@ -349,30 +349,30 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
 
       {/* 우측 슬라이드 드로어 */}
       <div
-        className={`w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden transform transition-transform duration-300 ease-out will-change-transform ${
+        className={`w-full max-w-3xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col overflow-hidden transform transition-transform duration-300 ease-out will-change-transform ${
           isVisible ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* ── 상단 헤더 ── */}
-        <div className="px-5 py-3.5 bg-slate-900 text-white flex items-start justify-between gap-3 shrink-0">
+        <div className="px-6 py-4 bg-slate-900 text-white flex items-start justify-between gap-4 shrink-0">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded-md bg-blue-600 text-[11px] font-black tracking-tight">
+              <span className="px-2.5 py-0.5 rounded-md bg-blue-600 text-xs font-black tracking-tight">
                 {item.supplier || '거래처 미지정'}
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-slate-700 text-slate-200 text-[11px] font-bold">
+              <span className="px-2.5 py-0.5 rounded-md bg-slate-700 text-slate-200 text-xs font-bold">
                 {item.warehouse || '창고미상'} · {item.pattern}
               </span>
               {history?.latestExpiryDate && (
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[11px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-400/40 text-xs font-bold">
                   유통기한 {history.latestExpiryDate}
                 </span>
               )}
             </div>
-            <h2 className="text-lg font-black tracking-tight text-white mt-1 truncate" title={item.name}>
+            <h2 className="text-xl font-black tracking-tight text-white mt-1.5 leading-snug break-keep" title={item.name}>
               {item.name}
             </h2>
-            <div className="text-xs text-slate-300 mt-0.5 flex items-center gap-3 flex-wrap font-mono">
+            <div className="text-[13.5px] text-slate-300 mt-1 flex items-center gap-4 flex-wrap font-mono">
               <span>입수: 1박스 = {pack.toLocaleString()}봉</span>
               <span>박스단가: ₩{Math.round(item.boxPrice).toLocaleString()}</span>
               <span>기준일: {item.targetDayDate} ({DAY_CHARS[item.targetDayIdx]}요일)</span>
@@ -381,41 +381,41 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer shrink-0"
             title="닫기 (ESC)"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* ── 본문 스크롤 영역 ── */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/70">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/70">
           {/* 1. 현 재고 상태 4대 핵심 지표 카드 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs">
+              <div className="text-[13px] font-bold text-slate-500 flex items-center justify-between">
                 <span>현 실재고</span>
-                <Package className="w-3.5 h-3.5 text-blue-500" />
+                <Package className="w-4 h-4 text-blue-500" />
               </div>
-              <div className="text-base font-black text-slate-900 font-mono mt-1">
+              <div className="text-xl font-black text-slate-900 font-mono mt-1.5">
                 {item.currentStock.toLocaleString()}
-                <span className="text-xs font-sans font-bold text-slate-500 ml-0.5">봉</span>
+                <span className="text-[13px] font-sans font-bold text-slate-500 ml-0.5">봉</span>
               </div>
-              <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+              <div className="text-[12.5px] font-mono text-slate-500 mt-1">
                 약 {currentBoxes.toFixed(1)}박스
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs">
+              <div className="text-[13px] font-bold text-slate-500 flex items-center justify-between">
                 <span>입고예정(기발주)</span>
-                <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                <Clock className="w-4 h-4 text-emerald-500" />
               </div>
-              <div className="text-base font-black text-emerald-700 font-mono mt-1">
+              <div className="text-xl font-black text-emerald-700 font-mono mt-1.5">
                 +{item.incoming.toLocaleString()}
-                <span className="text-xs font-sans font-bold text-emerald-600 ml-0.5">봉</span>
+                <span className="text-[13px] font-sans font-bold text-emerald-600 ml-0.5">봉</span>
               </div>
-              <div className="text-[11px] font-mono text-slate-500 mt-0.5 truncate" title={item.pendingOrderNos.join(', ')}>
+              <div className="text-[12.5px] font-mono text-slate-500 mt-1 truncate" title={item.pendingOrderNos.join(', ')}>
                 {item.pendingBoxes > 0
                   ? `${item.pendingBoxes}박스 (${item.pendingOrderNos.length}건)`
                   : `${incomingBoxes.toFixed(1)}박스`}
@@ -423,7 +423,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
             </div>
 
             <div
-              className={`rounded-xl p-3 border shadow-2xs ${
+              className={`rounded-xl p-3.5 border shadow-2xs ${
                 item.stockDays < 1.5
                   ? 'bg-rose-50 border-rose-200'
                   : item.stockDays < item.targetDays
@@ -431,13 +431,13 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                   : 'bg-white border-slate-200'
               }`}
             >
-              <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
-                <span>버팀일수 (Runway)</span>
-                {item.stockDays < 1.5 && <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />}
+              <div className="text-[13px] font-bold text-slate-600 flex items-center justify-between">
+                <span>버팀일수</span>
+                {item.stockDays < 1.5 && <AlertTriangle className="w-4 h-4 text-rose-500" />}
               </div>
-              <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+              <div className="flex items-baseline gap-1.5 flex-wrap mt-1.5">
                 <span
-                  className={`text-base font-black font-mono ${
+                  className={`text-xl font-black font-mono ${
                     item.stockDays < 1.5
                       ? 'text-rose-700'
                       : item.stockDays < item.targetDays
@@ -449,7 +449,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                 </span>
                 {item.dayQty > 0 && item.dailyUsage > 0 && (
                   <span
-                    className={`text-xs font-mono font-black ${
+                    className={`text-[13px] font-mono font-black ${
                       afterOrderDays >= item.targetDays ? 'text-blue-700' : 'text-amber-700'
                     }`}
                   >
@@ -457,7 +457,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                   </span>
                 )}
               </div>
-              <div className="text-[11px] text-slate-600 mt-0.5">
+              <div className="text-[12.5px] text-slate-600 mt-1">
                 목표 {Number(item.targetDays.toFixed(1))}일 ({item.targetStock.toLocaleString()}봉)
                 {item.dayQty > 0 && item.dailyUsage > 0 && (
                   <span className="ml-1 font-mono font-bold text-blue-600">
@@ -467,24 +467,24 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-2xs">
-              <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
-                <span>7일 실소진 vs 기준</span>
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs">
+              <div className="text-[13px] font-bold text-slate-500 flex items-center justify-between">
+                <span>7일 실소진</span>
                 {usageDeltaPct !== null && usageDeltaPct >= 20 ? (
-                  <Flame className="w-3.5 h-3.5 text-rose-500" />
+                  <Flame className="w-4 h-4 text-rose-500" />
                 ) : (
-                  <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                  <TrendingUp className="w-4 h-4 text-indigo-500" />
                 )}
               </div>
-              <div className="text-base font-black text-slate-900 font-mono mt-1">
+              <div className="text-xl font-black text-slate-900 font-mono mt-1.5">
                 {recentAvg !== null ? recentAvg.toLocaleString() : item.dailyUsage.toLocaleString()}
-                <span className="text-xs font-sans font-bold text-slate-500 ml-0.5">봉/일</span>
+                <span className="text-[13px] font-sans font-bold text-slate-500 ml-0.5">봉/일</span>
               </div>
-              <div className="text-[11px] mt-0.5 flex items-center gap-1">
+              <div className="text-[12.5px] mt-1 flex items-center gap-1.5">
                 <span className="text-slate-500">기준 {item.dailyUsage.toLocaleString()}</span>
                 {usageDeltaPct !== null && (
                   <span
-                    className={`font-black px-1 rounded ${
+                    className={`font-black px-1.5 py-0.5 rounded text-[11.5px] ${
                       usageDeltaPct >= 15
                         ? 'bg-rose-100 text-rose-700'
                         : usageDeltaPct <= -15
@@ -855,27 +855,27 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
 
           {/* 3. 지난 7일 일자별 재고 변화 테이블 */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <span className="text-[14.5px] font-black text-slate-800 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-600" />
                 <span>최근 7일 일자별 재고 변동 상세</span>
               </span>
-              <span className="text-[11px] text-slate-500">스냅샷 + 수불/발주 기준</span>
+              <span className="text-[12.5px] text-slate-500 font-semibold">스냅샷 + 수불/발주 기준</span>
             </div>
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-[13.5px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[11px]">
-                  <th className="py-2 px-3 font-bold">일자</th>
-                  <th className="py-2 px-2 text-right font-bold">재고수량</th>
-                  <th className="py-2 px-2 text-right font-bold">전일대비</th>
-                  <th className="py-2 px-2 text-right font-bold">추정소진</th>
-                  <th className="py-2 px-3 text-right font-bold">발주/입고</th>
+                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-[12.5px]">
+                  <th className="py-2.5 px-4 font-bold">일자</th>
+                  <th className="py-2.5 px-3 text-right font-bold">재고수량</th>
+                  <th className="py-2.5 px-3 text-right font-bold">전일대비</th>
+                  <th className="py-2.5 px-3 text-right font-bold">추정소진</th>
+                  <th className="py-2.5 px-4 text-right font-bold">발주/입고</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {(history?.timeline || []).length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                    <td colSpan={5} className="py-6 text-center text-slate-400 text-sm">
                       최근 7일간 저장된 재고 스냅샷이 없습니다.
                     </td>
                   </tr>
@@ -884,17 +884,17 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                     const diff = row.diffFromPrev;
                     return (
                       <tr key={row.date} className="hover:bg-slate-50/80">
-                        <td className="py-2 px-3 font-mono font-bold text-slate-700">
+                        <td className="py-2.5 px-4 font-mono font-bold text-slate-800">
                           {row.date.slice(5)}{' '}
                           <span className="text-slate-400 font-sans font-normal">
                             ({getWeekdayCharYmd(row.date)})
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                           {row.hasSnapshot && row.qty !== null ? (
                             <>
                               {row.qty.toLocaleString()}봉
-                              <span className="text-[10.5px] text-slate-400 font-normal ml-1">
+                              <span className="text-[12px] text-slate-400 font-normal ml-1">
                                 ({(row.qty / pack).toFixed(1)}b)
                               </span>
                             </>
@@ -902,7 +902,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                             <span className="text-slate-300">-</span>
                           )}
                         </td>
-                        <td className="py-2 px-2 text-right font-mono">
+                        <td className="py-2.5 px-3 text-right font-mono">
                           {diff === null ? (
                             <span className="text-slate-300">-</span>
                           ) : diff > 0 ? (
@@ -913,16 +913,16 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                             <span className="text-slate-400">0</span>
                           )}
                         </td>
-                        <td className="py-2 px-2 text-right font-mono text-slate-600">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
                           {row.estimatedUsage !== null ? `${row.estimatedUsage.toLocaleString()}봉` : '-'}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono">
+                        <td className="py-2.5 px-4 text-right font-mono">
                           {row.orderedBoxes > 0 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10.5px] font-bold">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[12px] font-bold">
                               발주 {row.orderedBoxes}b
                             </span>
                           ) : row.inQty > 0 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-bold">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[12px] font-bold">
                               입고 +{row.inQty}
                             </span>
                           ) : (
@@ -939,26 +939,26 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
 
           {/* 4. 최근 발주 전표 내역 (중복 발주 방지) */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
-            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <span className="text-[14.5px] font-black text-slate-800 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-600" />
                 <span>최근 발주 전표 내역 (중복 발주 확인)</span>
               </span>
-              <span className="text-[11px] text-slate-500">최근 14일</span>
+              <span className="text-[12.5px] text-slate-500 font-semibold">최근 14일</span>
             </div>
             {(history?.recentOrders || []).length === 0 ? (
-              <div className="py-5 text-center text-xs text-slate-400">
+              <div className="py-6 text-center text-sm text-slate-400">
                 최근 14일간 발행된 발주 전표가 없습니다.
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
                 {history!.recentOrders.map((po) => (
-                  <div key={po.orderNo} className="px-4 py-2 flex items-center justify-between text-xs hover:bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-slate-700">{po.orderDate}</span>
-                      <span className="font-mono text-[11px] text-slate-500">{po.orderNo}</span>
+                  <div key={po.orderNo} className="px-4 py-2.5 flex items-center justify-between text-[13.5px] hover:bg-slate-50">
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono font-bold text-slate-800">{po.orderDate}</span>
+                      <span className="font-mono text-[12.5px] text-slate-500">{po.orderNo}</span>
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
+                        className={`px-2 py-0.5 rounded text-[11.5px] font-black ${
                           po.status === '입고완료'
                             ? 'bg-emerald-100 text-emerald-700'
                             : po.status === '부분입고'
@@ -972,7 +972,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                     <div className="font-mono font-bold text-slate-900">
                       {po.orderQty}박스
                       {po.remainQty > 0 && (
-                        <span className="ml-1.5 text-[11px] text-rose-600">(미입고 {po.remainQty}b)</span>
+                        <span className="ml-2 text-[12.5px] text-rose-600">(미입고 {po.remainQty}b)</span>
                       )}
                     </div>
                   </div>
@@ -983,13 +983,13 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
         </div>
 
         {/* ── 하단 원스톱 발주 수량 제어 액션 바 ── */}
-        <div className="px-5 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
-          <div>
-            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-2 flex-wrap">
-              <span>{DAY_CHARS[item.targetDayIdx]}요일({item.targetDayDate}) 발주 수량 즉시 조절</span>
+        <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-bold text-slate-600 flex items-center gap-2 flex-wrap">
+              <span>{DAY_CHARS[item.targetDayIdx]}요일({item.targetDayDate}) 발주 수량 조절</span>
               {item.dailyUsage > 0 && Number.isFinite(item.stockDays) && (
                 <span
-                  className={`px-1.5 py-0.5 rounded font-mono font-black text-[10.5px] border ${
+                  className={`px-2 py-0.5 rounded font-mono font-black text-[12px] border whitespace-nowrap ${
                     afterOrderDays >= item.targetDays
                       ? 'bg-blue-50 text-blue-700 border-blue-200'
                       : 'bg-amber-50 text-amber-800 border-amber-200'
@@ -1000,36 +1000,36 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                 </span>
               )}
             </div>
-            <div className="text-xs font-mono font-black text-slate-900 mt-0.5 flex items-center gap-2">
-              <span>추천: {item.autoDayQty}박스</span>
-              <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span className="text-blue-700">
+            <div className="text-[14px] font-mono font-black text-slate-900 mt-1 flex items-center gap-2 flex-wrap">
+              <span className="whitespace-nowrap">추천: {item.autoDayQty}박스</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-blue-700 whitespace-nowrap">
                 확정: {item.dayQty}박스 ({(item.dayQty * pack).toLocaleString()}봉 ·{' '}
                 ₩{Math.round(item.dayQty * item.boxPrice).toLocaleString()})
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-slate-50 shrink-0">
               <button
                 type="button"
                 onClick={() => onAdjustQty(item.rowId, Math.max(0, item.dayQty - 1))}
-                className="px-2.5 py-1.5 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                className="px-3 py-2 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
                 title="1박스 감소"
               >
-                <MinusIcon className="w-3.5 h-3.5" />
+                <MinusIcon className="w-4 h-4" />
               </button>
-              <span className="px-3 py-1 font-mono font-black text-sm text-slate-900 bg-white min-w-[44px] text-center">
+              <span className="px-4 py-1.5 font-mono font-black text-base text-slate-900 bg-white min-w-[52px] text-center">
                 {item.dayQty}
               </span>
               <button
                 type="button"
                 onClick={() => onAdjustQty(item.rowId, item.dayQty + 1)}
-                className="px-2.5 py-1.5 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                className="px-3 py-2 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
                 title="1박스 증가"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
               </button>
             </div>
 
@@ -1037,7 +1037,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
               <button
                 type="button"
                 onClick={() => onResetToAuto(item.rowId)}
-                className="px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                className="px-3 py-2 rounded-xl border border-slate-300 text-[13px] font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer whitespace-nowrap shrink-0"
               >
                 추천값
               </button>
@@ -1046,7 +1046,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
             <button
               type="button"
               onClick={() => onToggleStage(item.rowId)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer shadow-xs ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13.5px] font-black transition cursor-pointer shadow-xs whitespace-nowrap shrink-0 ${
                 item.isStaged
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'

@@ -166,6 +166,11 @@ export function expiryInDays(expiry: string, base: string): number | null {
 function inboundKey(s: string): string {
   const m = /(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
   if (m) return `${m[1]}${m[2]}${m[3]}`;
+  const mShort = /^(\d{2})-(\d{2})$/.exec((s || '').trim());
+  if (mShort) {
+    const curYear = new Date().getFullYear();
+    return `${curYear}${mShort[1]}${mShort[2]}`;
+  }
   const m2 = /D\+(\d+)/.exec(s || '');
   if (m2) return `9${m2[1].padStart(7, '0')}`;
   return '99999999';
@@ -200,10 +205,12 @@ export function applyBurnRank(rows: StockItem[]): StockItem[] {
     sorted.forEach((r, i) => {
       r.burnRank = i + 1;
     });
-    // FEFO 역전: 1순위보다 빠른 유통기한을 가진 후순위 LOT 존재 여부
-    const firstExp = sorted[0].expiryDate || '';
+    // FEFO 역전: 앞선 LOT 중 자신보다 늦은 유통기한이 하나라도 있으면 선입주의 경고
+    let maxExpBefore = '';
     sorted.forEach((r, i) => {
-      r.fefoWarn = i > 0 && !!firstExp && !!r.expiryDate && r.expiryDate < firstExp;
+      const exp = r.expiryDate || '';
+      r.fefoWarn = i > 0 && !!maxExpBefore && !!exp && exp < maxExpBefore;
+      if (exp && exp > maxExpBefore) maxExpBefore = exp;
     });
   });
   return rows;

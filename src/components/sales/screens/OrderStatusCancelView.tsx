@@ -7,6 +7,7 @@ import { EditableTableWrapper } from '@/components/common/EditableTableWrapper';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { erpConfirm } from '@/context/ConfirmContext';
 import { readJsonSafe } from '@/lib/http';
+import { emitSalesOrderChanged } from '@/lib/gfs/orderSyncEvent';
 
 function kstToday(): string {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -214,6 +215,7 @@ export const OrderStatusCancelView: React.FC = () => {
         }
       }
       void loadData(startDate, endDate);
+      emitSalesOrderChanged({ source: 'OrderStatusCancelView:cancel' });
     } catch (err: any) {
       alert(`취소 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
@@ -249,6 +251,7 @@ export const OrderStatusCancelView: React.FC = () => {
         }
       }
       void loadData(startDate, endDate);
+      emitSalesOrderChanged({ source: 'OrderStatusCancelView:cancel' });
     } catch (err: any) {
       alert(`확정 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
@@ -284,6 +287,7 @@ export const OrderStatusCancelView: React.FC = () => {
         }
       }
       void loadData(startDate, endDate);
+      emitSalesOrderChanged({ source: 'OrderStatusCancelView:cancel' });
     } catch (err: any) {
       alert(`복구 중 오류가 발생했습니다: ${err?.message || '네트워크 오류'}`);
     } finally {
