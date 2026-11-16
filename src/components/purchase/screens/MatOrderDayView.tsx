@@ -39,7 +39,6 @@ import {
   ShoppingCart,
   Heart,
   BarChart3,
-  Send,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -50,19 +49,6 @@ import {
   ItemOrderInsightDrawer,
   type ItemOrderInsightTarget,
 } from '@/components/purchase/modals/ItemOrderInsightDrawer';
-import { OrderDispatchDrawer } from '@/components/purchase/modals/OrderDispatchDrawer';
-import {
-  ORDER_PLATFORM_OPTIONS,
-  ORDER_WAVE_OPTIONS,
-  getOrderChannelMeta,
-  getCutoffStatus,
-  parseCutoffMinutes,
-  isOrderDayMatch,
-  resolveOrderPlatformAndCutoff,
-  type OrderPlatformCode,
-  type OrderWaveCode,
-  type PartnerOrderProfile,
-} from '@/lib/gfs/orderChannel';
 import {
   DAY_CHARS,
   WEEKDAY_DEMAND_FACTORS,
@@ -304,11 +290,6 @@ export const MatOrderDayView: React.FC = () => {
   const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'critical' | 'warning' | 'pending'>('all');
   const [patternFilter, setPatternFilter] = useState<string>('전체');
   const [suppliers, setSuppliers] = useState<string[]>([]);
-  const [partnerProfiles, setPartnerProfiles] = useState<PartnerOrderProfile[]>([]);
-  const [dispatchDrawerOpen, setDispatchDrawerOpen] = useState<boolean>(false);
-  const [showCutoffTimeline, setShowCutoffTimeline] = useState<boolean>(true);
-  const [waveFilter, setWaveFilter] = useState<OrderWaveCode | 'ALL'>('ALL');
-  const [platformFilter, setPlatformFilter] = useState<OrderPlatformCode | 'ALL'>('ALL');
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [keyword, setKeyword] = useState<string>('');
@@ -429,64 +410,6 @@ export const MatOrderDayView: React.FC = () => {
       ),
     [weekConfirmedPoList, currentDayDate]
   );
-
-  // 거래처별 마감시간·채널 타임라인 요약 (발주처가 제각각인 채널/시간대 한눈에 파악)
-  const cutoffTimelineItems = useMemo(() => {
-    const profileMap = new Map<string, PartnerOrderProfile>();
-    partnerProfiles.forEach((p) => {
-      if (p.name) profileMap.set(p.name.trim(), p);
-    });
-    const poBySupplier = new Map<string, { total: number; dispatched: number }>();
-    confirmedPoList.forEach((po: any) => {
-      const sName = String(po.partnerName || po.partner?.name || '').trim();
-      if (!sName) return;
-      const cur = poBySupplier.get(sName) || { total: 0, dispatched: 0 };
-      cur.total += 1;
-      if (po.dispatchStatus === '발송완료') cur.dispatched += 1;
-      poBySupplier.set(sName, cur);
-    });
-    const rowCountBySupplier = new Map<string, number>();
-    rows.forEach((r) => {
-      const s = String(r.supplier || '').trim();
-      if (!s) return;
-      rowCountBySupplier.set(s, (rowCountBySupplier.get(s) || 0) + 1);
-    });
-
-    const allNames = new Set<string>();
-    suppliers.forEach((s) => allNames.add(s));
-    poBySupplier.forEach((_, k) => allNames.add(k));
-
-    return Array.from(allNames)
-      .map((name) => {
-        const prof = profileMap.get(name);
-        const channelMeta = getOrderChannelMeta(prof?.orderChannel, prof?.orderMethod);
-        const cutoff = getCutoffStatus(prof?.orderCutoffTime);
-        const poStat = poBySupplier.get(name) || { total: 0, dispatched: 0 };
-        const isOrderDay = isOrderDayMatch(prof?.orderDay, currentDayDate);
-        const allDispatched = poStat.total > 0 && poStat.dispatched === poStat.total;
-        return {
-          name,
-          prof,
-          channelMeta,
-          cutoff,
-          poTotal: poStat.total,
-          poDispatched: poStat.dispatched,
-          allDispatched,
-          isOrderDay,
-          rowCount: rowCountBySupplier.get(name) || 0,
-        };
-      })
-      .filter((it) => Boolean(it.prof?.orderCutoffTime) || it.poTotal > 0)
-      .sort((a, b) => {
-        if (a.allDispatched !== b.allDispatched) return a.allDispatched ? 1 : -1;
-        const am = parseCutoffMinutes(a.prof?.orderCutoffTime);
-        const bm = parseCutoffMinutes(b.prof?.orderCutoffTime);
-        if (am !== null && bm !== null && am !== bm) return am - bm;
-        if (am !== null && bm === null) return -1;
-        if (am === null && bm !== null) return 1;
-        return a.name.localeCompare(b.name, 'ko');
-      });
-  }, [partnerProfiles, confirmedPoList, rows, suppliers, currentDayDate]);
 
   // 요일(YYYY-MM-DD)별 발행 전표 건수
   const weekPoCountByDate = useMemo(() => {
@@ -626,7 +549,6 @@ export const MatOrderDayView: React.FC = () => {
         });
         setRows(loaded);
         setSuppliers(json.data.suppliers || []);
-        setPartnerProfiles(Array.isArray(json.data.partnerProfiles) ? json.data.partnerProfiles : []);
         setDormantMeta({
           dormantCount: Number(json.data.dormantCount) || loaded.filter((x) => x.isDormant).length,
           unlinkedDormantCount:
@@ -1192,14 +1114,6 @@ export const MatOrderDayView: React.FC = () => {
       .sort((a, b) => a.m.stockDays - b.m.stockDays);
   }, [rows, dayIdx, getRowMetrics]);
 
-  const partnerProfileByName = useMemo(() => {
-    const map = new Map<string, PartnerOrderProfile>();
-    partnerProfiles.forEach((p) => {
-      if (p.name) map.set(p.name.trim(), p);
-    });
-    return map;
-  }, [partnerProfiles]);
-
   // 현재 요일에 해당하는 발주 행 목록
   const dayRows = useMemo(() => {
     const mapped = rows
@@ -1207,18 +1121,6 @@ export const MatOrderDayView: React.FC = () => {
         if (!showDormant && r.isDormant && !keyword.trim()) return null;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
         if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return null;
-        if (waveFilter !== 'ALL' || platformFilter !== 'ALL') {
-          const prof = partnerProfileByName.get((r.supplier || '').trim());
-          const resolved = resolveOrderPlatformAndCutoff({
-            partnerName: r.supplier,
-            orderChannel: prof?.orderChannel,
-            orderMethod: prof?.orderMethod,
-            orderCutoffTime: prof?.orderCutoffTime,
-            tempHint: r.warehouse || r.name,
-          });
-          if (waveFilter !== 'ALL' && resolved.wave !== waveFilter) return null;
-          if (platformFilter !== 'ALL' && resolved.platform !== platformFilter) return null;
-        }
         const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
         if (
@@ -1270,9 +1172,6 @@ export const MatOrderDayView: React.FC = () => {
     showOnlyOrderable,
     showOnlyUrgentUnallocated,
     sortMode,
-    waveFilter,
-    platformFilter,
-    partnerProfileByName,
   ]);
 
   // 비수주·장기무변동 휴면 재고 목록 (모달 검토용)
@@ -2614,23 +2513,9 @@ export const MatOrderDayView: React.FC = () => {
                     : dayTotals.boxes > 0
                     ? `${DAY_CHARS[dayIdx]}요일 발주 확정`
                     : confirmedPoList.length > 0
-                    ? '확정 완료'
-                    : '발주 확정'}
+                    ? `${DAY_CHARS[dayIdx]}요일 발주 완료`
+                    : `${DAY_CHARS[dayIdx]}요일 발주 0건`}
                 </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDispatchDrawerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12.5px] font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer whitespace-nowrap"
-                title="거래처별 마감시간·발주채널(웹포털/카톡/이메일/엑셀)에 맞춰 발주를 실행하고 발송완료를 체크합니다."
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>채널별 발주실행</span>
-                {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
-                    {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length}
-                  </span>
-                )}
               </button>
               <button
                 type="button"
@@ -3535,146 +3420,6 @@ export const MatOrderDayView: React.FC = () => {
               )}
               </div>
             </div>
-
-            {/* 거래처별 마감시간 · 채널 타임라인 큐 */}
-            {cutoffTimelineItems.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-100">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-extrabold text-slate-700">
-                    <Clock className="w-3.5 h-3.5 text-rose-600" />
-                    <span>시간대 웨이브 · 플랫폼별 발주 타임라인</span>
-                    <span className="text-[10px] font-medium text-slate-400">
-                      (웨이브/플랫폼/거래처 클릭 시 시트 즉시 필터링 · CJ/대상 온도대 자동 분리)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(waveFilter !== 'ALL' || platformFilter !== 'ALL') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWaveFilter('ALL');
-                          setPlatformFilter('ALL');
-                        }}
-                        className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
-                      >
-                        웨이브·플랫폼 초기화
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setDispatchDrawerOpen(true)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-bold cursor-pointer"
-                    >
-                      <Send className="w-3 h-3" /> 이 조건 발주실행
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowCutoffTimeline((prev) => !prev)}
-                      className="text-[10.5px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                    >
-                      {showCutoffTimeline ? '접기' : `펼치기 (${cutoffTimelineItems.length})`}
-                    </button>
-                  </div>
-                </div>
-                {showCutoffTimeline && (
-                  <div className="space-y-1.5">
-                    {/* 웨이브 & 플랫폼 빠른 필터 바 */}
-                    <div className="flex flex-wrap items-center gap-1">
-                      {ORDER_WAVE_OPTIONS.map((w) => {
-                        const active = waveFilter === w.code;
-                        return (
-                          <button
-                            key={w.code}
-                            type="button"
-                            onClick={() => setWaveFilter(active ? 'ALL' : w.code)}
-                            className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
-                              active
-                                ? 'bg-rose-600 text-white border-rose-700'
-                                : 'bg-rose-50/60 text-rose-900 border-rose-200 hover:bg-rose-100'
-                            }`}
-                          >
-                            {w.label}
-                          </button>
-                        );
-                      })}
-                      <span className="text-slate-300 mx-0.5">|</span>
-                      {ORDER_PLATFORM_OPTIONS.filter((p) => p.code !== 'OTHER').map((p) => {
-                        const active = platformFilter === p.code;
-                        return (
-                          <button
-                            key={p.code}
-                            type="button"
-                            onClick={() => setPlatformFilter(active ? 'ALL' : p.code)}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
-                              active
-                                ? 'bg-indigo-600 text-white border-indigo-700'
-                                : `${p.badgeClass} hover:opacity-85`
-                            }`}
-                          >
-                            <span>{p.emoji}</span>
-                            <span>{p.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* 거래처별 칩 */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                    {cutoffTimelineItems.map((it) => {
-                      const isSelected = supplierFilter === it.name;
-                      return (
-                        <button
-                          key={it.name}
-                          type="button"
-                          onClick={() => setSupplierFilter(isSelected ? '전체' : it.name)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition cursor-pointer ${
-                            isSelected
-                              ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                              : it.allDispatched
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                                : it.cutoff.status === 'overdue' || it.cutoff.status === 'urgent'
-                                  ? 'bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                          title={`${it.name} · ${it.channelMeta.label} · ${it.cutoff.label}${it.prof?.orderDay ? ` · 발주요일(${it.prof.orderDay})` : ''}`}
-                        >
-                          <span>{it.channelMeta.emoji}</span>
-                          <span className="truncate max-w-[110px]">{it.name}</span>
-                          {it.prof?.orderCutoffTime && (
-                            <span
-                              className={`font-mono text-[10px] px-1 rounded ${
-                                isSelected
-                                  ? 'bg-white/20 text-white'
-                                  : it.allDispatched
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : it.cutoff.badgeClass
-                              }`}
-                            >
-                              {it.cutoff.label}
-                            </span>
-                          )}
-                          {it.poTotal > 0 && (
-                            <span
-                              className={`text-[10px] px-1 rounded font-extrabold ${
-                                it.allDispatched
-                                  ? 'bg-emerald-600 text-white'
-                                  : 'bg-amber-100 text-amber-900'
-                              }`}
-                            >
-                              {it.allDispatched ? '발송완료' : `미발송 ${it.poTotal - it.poDispatched}`}
-                            </span>
-                          )}
-                          {!it.isOrderDay && (
-                            <span className="text-[9.5px] text-slate-400">(휴무/비발주일)</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </>
         ) : (
           /* 입고 검수 KPI & 필터 바 */
@@ -5856,19 +5601,6 @@ export const MatOrderDayView: React.FC = () => {
           />
         );
       })()}
-
-      <OrderDispatchDrawer
-        isOpen={dispatchDrawerOpen}
-        onClose={() => setDispatchDrawerOpen(false)}
-        defaultDate={currentDayDate || orderDate}
-        partnerProfiles={partnerProfiles}
-        initialSupplierFilter={supplierFilter !== '전체' ? supplierFilter : ''}
-        initialWaveFilter={waveFilter}
-        initialPlatformFilter={platformFilter}
-        onDispatched={() => {
-          void loadConfirmedPo();
-        }}
-      />
     </div>
   );
 };
