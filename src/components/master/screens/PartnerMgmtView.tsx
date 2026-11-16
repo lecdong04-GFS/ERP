@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { MasterActionBar } from '../common/MasterActionBar';
 import { MasterDataGrid, MasterGridColumnDef } from '../common/MasterDataGrid';
+import { ORDER_CHANNEL_OPTIONS, getOrderChannelMeta } from '@/lib/gfs/orderChannel';
 import {
   Building2,
   Users,
@@ -62,7 +63,11 @@ export interface PartnerItem {
   taxType: string; // T1=과세, T2=면세, T3=영세
   leadTime: number;
   orderMethod: string;
+  orderChannel: string;
+  orderCutoffTime: string;
+  orderPortalUrl: string;
   orderDay: string;
+  orderNote: string;
   closingDate: string;
   paymentTerms: string;
   remark: string;
@@ -120,7 +125,11 @@ export const PartnerMgmtView: React.FC = () => {
           taxType: p.taxType || 'T1',
           leadTime: p.leadTime !== undefined ? Number(p.leadTime) : 1,
           orderMethod: p.orderMethod || '',
+          orderChannel: p.orderChannel || '',
+          orderCutoffTime: p.orderCutoffTime || '',
+          orderPortalUrl: p.orderPortalUrl || '',
           orderDay: p.orderDay || '',
+          orderNote: p.orderNote || '',
           closingDate: p.closingDate || '',
           paymentTerms: p.paymentTerms || '',
           remark: p.remark || '',
@@ -254,7 +263,11 @@ export const PartnerMgmtView: React.FC = () => {
       taxType: 'T1',
       leadTime: 1,
       orderMethod: '이메일/발주서',
+      orderChannel: 'EMAIL',
+      orderCutoffTime: '14:00',
+      orderPortalUrl: '',
       orderDay: '매일',
+      orderNote: '',
       closingDate: '99',
       paymentTerms: '마감후 익월말 현금',
       remark: '신규 등록 거래처',
@@ -545,6 +558,35 @@ export const PartnerMgmtView: React.FC = () => {
       },
     },
     { key: 'orderDay', label: '발주요일', width: '85px', align: 'center' },
+    {
+      key: 'orderChannel',
+      label: '발주채널',
+      width: '100px',
+      align: 'center',
+      render: (_val, row) => {
+        const meta = getOrderChannelMeta(row.orderChannel, row.orderMethod);
+        return (
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold ${meta.badgeClass}`}>
+            <span>{meta.emoji}</span>
+            <span>{meta.shortLabel}</span>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'orderCutoffTime',
+      label: '마감시간',
+      width: '75px',
+      align: 'center',
+      render: (val) =>
+        val ? (
+          <span className="font-mono font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded text-[11px]">
+            {val}
+          </span>
+        ) : (
+          <span className="text-slate-400">-</span>
+        ),
+    },
     { key: 'orderMethod', label: '주문방식', width: '85px', align: 'center' },
     {
       key: 'closingDate',
@@ -1046,7 +1088,33 @@ export const PartnerMgmtView: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-600 mb-0.5">주문방법 (수단)</label>
+                        <label className="block text-[11px] font-bold text-gray-600 mb-0.5">발주 채널 (실행 방식)</label>
+                        <select
+                          value={formData.orderChannel || getOrderChannelMeta(formData.orderChannel, formData.orderMethod).value}
+                          onChange={(e) => setFormData({ ...formData, orderChannel: e.target.value })}
+                          className="w-full bg-white border border-gray-300 px-2 py-1 rounded text-[12px] font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
+                        >
+                          {ORDER_CHANNEL_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.emoji} {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-600 mb-0.5">발주 마감 시간 (HH:mm)</label>
+                        <input
+                          type="time"
+                          value={formData.orderCutoffTime}
+                          onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
+                          className="w-full bg-white border border-gray-300 px-2 py-1 rounded font-mono font-bold text-rose-700 text-[12px] focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-600 mb-0.5">주문방법 메모 (수단)</label>
                         <input
                           type="text"
                           placeholder="EDI, 이메일, 카카오톡, 전화"
@@ -1055,6 +1123,28 @@ export const PartnerMgmtView: React.FC = () => {
                           className="w-full bg-white border border-gray-300 px-2 py-1 rounded text-[12px] focus:border-blue-500 focus:outline-none"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 mb-0.5">웹 발주 포털 URL (웹포털 채널 시)</label>
+                      <input
+                        type="url"
+                        placeholder="https://order.supplier.co.kr"
+                        value={formData.orderPortalUrl}
+                        onChange={(e) => setFormData({ ...formData, orderPortalUrl: e.target.value })}
+                        className="w-full bg-white border border-gray-300 px-2 py-1 rounded text-[12px] font-mono focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-600 mb-0.5">발주 조건/특이사항 (최소발주금액 등)</label>
+                      <input
+                        type="text"
+                        placeholder="예: 10만원 이상 무료배송, 수요일 오전 마감"
+                        value={formData.orderNote}
+                        onChange={(e) => setFormData({ ...formData, orderNote: e.target.value })}
+                        className="w-full bg-white border border-gray-300 px-2 py-1 rounded text-[12px] focus:border-blue-500 focus:outline-none"
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
