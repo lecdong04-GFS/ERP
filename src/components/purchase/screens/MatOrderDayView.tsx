@@ -39,7 +39,6 @@ import {
   ShoppingCart,
   Heart,
   BarChart3,
-  Send,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
@@ -50,19 +49,6 @@ import {
   ItemOrderInsightDrawer,
   type ItemOrderInsightTarget,
 } from '@/components/purchase/modals/ItemOrderInsightDrawer';
-import { OrderDispatchDrawer } from '@/components/purchase/modals/OrderDispatchDrawer';
-import {
-  ORDER_PLATFORM_OPTIONS,
-  ORDER_WAVE_OPTIONS,
-  getOrderChannelMeta,
-  getCutoffStatus,
-  parseCutoffMinutes,
-  isOrderDayMatch,
-  resolveOrderPlatformAndCutoff,
-  type OrderPlatformCode,
-  type OrderWaveCode,
-  type PartnerOrderProfile,
-} from '@/lib/gfs/orderChannel';
 import {
   DAY_CHARS,
   WEEKDAY_DEMAND_FACTORS,
@@ -304,11 +290,6 @@ export const MatOrderDayView: React.FC = () => {
   const [urgencyFilter, setUrgencyFilter] = useState<'all' | 'critical' | 'warning' | 'pending'>('all');
   const [patternFilter, setPatternFilter] = useState<string>('전체');
   const [suppliers, setSuppliers] = useState<string[]>([]);
-  const [partnerProfiles, setPartnerProfiles] = useState<PartnerOrderProfile[]>([]);
-  const [dispatchDrawerOpen, setDispatchDrawerOpen] = useState<boolean>(false);
-  const [showCutoffTimeline, setShowCutoffTimeline] = useState<boolean>(true);
-  const [waveFilter, setWaveFilter] = useState<OrderWaveCode | 'ALL'>('ALL');
-  const [platformFilter, setPlatformFilter] = useState<OrderPlatformCode | 'ALL'>('ALL');
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [keyword, setKeyword] = useState<string>('');
@@ -429,60 +410,6 @@ export const MatOrderDayView: React.FC = () => {
       ),
     [weekConfirmedPoList, currentDayDate]
   );
-
-  const partnerProfileByName = useMemo(() => {
-    const map = new Map<string, PartnerOrderProfile>();
-    partnerProfiles.forEach((p) => {
-      if (p.name) map.set(p.name.trim(), p);
-    });
-    return map;
-  }, [partnerProfiles]);
-
-  // 거래처별 마감시간·채널 타임라인 요약
-  const cutoffTimelineItems = useMemo(() => {
-    const poBySupplier = new Map<string, { total: number; dispatched: number }>();
-    confirmedPoList.forEach((po: any) => {
-      const sName = String(po.partnerName || po.partner?.name || '').trim();
-      if (!sName) return;
-      const cur = poBySupplier.get(sName) || { total: 0, dispatched: 0 };
-      cur.total += 1;
-      if (po.dispatchStatus === '발송완료') cur.dispatched += 1;
-      poBySupplier.set(sName, cur);
-    });
-    const allNames = new Set<string>();
-    suppliers.forEach((s) => allNames.add(s));
-    poBySupplier.forEach((_, k) => allNames.add(k));
-
-    return Array.from(allNames)
-      .map((name) => {
-        const prof = partnerProfileByName.get(name);
-        const channelMeta = getOrderChannelMeta(prof?.orderChannel, prof?.orderMethod);
-        const cutoff = getCutoffStatus(prof?.orderCutoffTime);
-        const poStat = poBySupplier.get(name) || { total: 0, dispatched: 0 };
-        const isOrderDay = isOrderDayMatch(prof?.orderDay, currentDayDate);
-        const allDispatched = poStat.total > 0 && poStat.dispatched === poStat.total;
-        return {
-          name,
-          prof,
-          channelMeta,
-          cutoff,
-          poTotal: poStat.total,
-          poDispatched: poStat.dispatched,
-          allDispatched,
-          isOrderDay,
-        };
-      })
-      .filter((it) => Boolean(it.prof?.orderCutoffTime) || it.poTotal > 0)
-      .sort((a, b) => {
-        if (a.allDispatched !== b.allDispatched) return a.allDispatched ? 1 : -1;
-        const am = parseCutoffMinutes(a.prof?.orderCutoffTime);
-        const bm = parseCutoffMinutes(b.prof?.orderCutoffTime);
-        if (am !== null && bm !== null && am !== bm) return am - bm;
-        if (am !== null && bm === null) return -1;
-        if (am === null && bm !== null) return 1;
-        return a.name.localeCompare(b.name, 'ko');
-      });
-  }, [partnerProfileByName, confirmedPoList, suppliers, currentDayDate]);
 
   // 요일(YYYY-MM-DD)별 발행 전표 건수
   const weekPoCountByDate = useMemo(() => {
@@ -622,7 +549,6 @@ export const MatOrderDayView: React.FC = () => {
         });
         setRows(loaded);
         setSuppliers(json.data.suppliers || []);
-        setPartnerProfiles(Array.isArray(json.data.partnerProfiles) ? json.data.partnerProfiles : []);
         setDormantMeta({
           dormantCount: Number(json.data.dormantCount) || loaded.filter((x) => x.isDormant).length,
           unlinkedDormantCount:
@@ -642,26 +568,6 @@ export const MatOrderDayView: React.FC = () => {
   useEffect(() => {
     loadOrderSheet();
   }, [loadOrderSheet]);
-
-  useEffect(() => {
-    const applyFilter = (detail: any) => {
-      if (!detail) return;
-      if (detail.supplier) setSupplierFilter(detail.supplier);
-      if (detail.wave) setWaveFilter(detail.wave);
-      if (detail.platform) setPlatformFilter(detail.platform);
-    };
-    const pending = (window as any).__gfsPendingOrderFilter;
-    if (pending) {
-      applyFilter(pending);
-      delete (window as any).__gfsPendingOrderFilter;
-    }
-    const onExternalFilter = (e: any) => {
-      applyFilter(e?.detail);
-      delete (window as any).__gfsPendingOrderFilter;
-    };
-    window.addEventListener('gfs-order-filter', onExternalFilter);
-    return () => window.removeEventListener('gfs-order-filter', onExternalFilter);
-  }, []);
 
   // 삭제·비활성 품목 목록 및 개수 조회
   const loadDeletedProducts = useCallback(
@@ -1215,18 +1121,6 @@ export const MatOrderDayView: React.FC = () => {
         if (!showDormant && r.isDormant && !keyword.trim()) return null;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
         if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return null;
-        if (waveFilter !== 'ALL' || platformFilter !== 'ALL') {
-          const prof = partnerProfileByName.get((r.supplier || '').trim());
-          const resolved = resolveOrderPlatformAndCutoff({
-            partnerName: r.supplier,
-            orderChannel: prof?.orderChannel,
-            orderMethod: prof?.orderMethod,
-            orderCutoffTime: prof?.orderCutoffTime,
-            tempHint: r.warehouse || r.name,
-          });
-          if (waveFilter !== 'ALL' && resolved.wave !== waveFilter) return null;
-          if (platformFilter !== 'ALL' && resolved.platform !== platformFilter) return null;
-        }
         const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
         if (
@@ -1278,9 +1172,6 @@ export const MatOrderDayView: React.FC = () => {
     showOnlyOrderable,
     showOnlyUrgentUnallocated,
     sortMode,
-    waveFilter,
-    platformFilter,
-    partnerProfileByName,
   ]);
 
   // 비수주·장기무변동 휴면 재고 목록 (모달 검토용)
@@ -2625,20 +2516,6 @@ export const MatOrderDayView: React.FC = () => {
                     ? `${DAY_CHARS[dayIdx]}요일 발주 완료`
                     : `${DAY_CHARS[dayIdx]}요일 발주 0건`}
                 </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDispatchDrawerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12.5px] font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer whitespace-nowrap"
-                title="시간대별 발주 관제표 및 발주고/통합구매/카톡/이메일 일괄 실행 센터를 엽니다."
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>시간대별 발주표</span>
-                {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
-                    {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length}
-                  </span>
-                )}
               </button>
               <button
                 type="button"
@@ -5724,24 +5601,6 @@ export const MatOrderDayView: React.FC = () => {
           />
         );
       })()}
-
-      <OrderDispatchDrawer
-        isOpen={dispatchDrawerOpen}
-        onClose={() => setDispatchDrawerOpen(false)}
-        defaultDate={currentDayDate || orderDate}
-        partnerProfiles={partnerProfiles}
-        initialSupplierFilter={supplierFilter !== '전체' ? supplierFilter : ''}
-        initialWaveFilter={waveFilter}
-        initialPlatformFilter={platformFilter}
-        initialTab="watchtower"
-        onJumpToOrderSheet={(filter) => {
-          if (filter.supplier) setSupplierFilter(filter.supplier);
-        }}
-        onDispatched={() => {
-          void loadConfirmedPo();
-          window.dispatchEvent(new CustomEvent('gfs-order-dispatched'));
-        }}
-      />
     </div>
   );
 };

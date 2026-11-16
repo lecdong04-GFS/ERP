@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { LogOut, User, ShieldCheck, Server, Clock, Zap, FileSpreadsheet, Printer, Radar } from 'lucide-react';
-import { OrderDispatchDrawer } from '@/components/purchase/modals/OrderDispatchDrawer';
+import { LogOut, User, ShieldCheck, Server, Clock, Zap, FileSpreadsheet, Printer } from 'lucide-react';
 import { usePipeline } from '@/context/PipelineContext';
 import { usePrintReport } from '@/context/PrintReportContext';
 import { useSession, signOut } from 'next-auth/react';
@@ -24,40 +23,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
   const [timeStr, setTimeStr] = useState<string>('');
   const [liveName, setLiveName] = useState<string>('');
   const [liveDept, setLiveDept] = useState<string>('');
-  const [watchDrawerOpen, setWatchDrawerOpen] = useState<boolean>(false);
-  const [orderSummary, setOrderSummary] = useState<{
-    targetDate: string;
-    needsOrderCount: number;
-    confirmedPendingCount: number;
-    dispatchedCount: number;
-    nextUrgentCutoff: string;
-    nextUrgentStatus: string;
-    urgentCount: number;
-    urgentNames: string[];
-  } | null>(null);
-
-  useEffect(() => {
-    const fetchOrderSummary = () => {
-      fetch('/api/purchase/order-schedule', { cache: 'no-store' })
-        .then((r) => r.json())
-        .then((json) => {
-          if (json.success && json.data?.summary) {
-            setOrderSummary({
-              targetDate: json.data.targetDate,
-              ...json.data.summary,
-            });
-          }
-        })
-        .catch(() => {});
-    };
-    fetchOrderSummary();
-    const timer = setInterval(fetchOrderSummary, 120000);
-    window.addEventListener('gfs-order-dispatched', fetchOrderSummary);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('gfs-order-dispatched', fetchOrderSummary);
-    };
-  }, []);
 
   useEffect(() => {
     // 1. 프로필 실시간 변경 이벤트 청취
@@ -113,7 +78,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
   const userDept = liveDept !== '' ? liveDept : (session?.user as any)?.department;
 
   return (
-    <>
     <header className="h-[52px] bg-[#0f172a] text-slate-200 px-3 sm:px-5 flex items-center justify-between gap-3 border-b border-white/10 select-none">
       {/* Title & Logo */}
       <div className="flex items-center gap-3">
@@ -172,47 +136,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
           <span>표준 양식 센터</span>
         </button>
 
-        {/* Order Watchtower Pill (시간대별 발주 마감 관제) */}
-        {(() => {
-          const totalTodo =
-            (orderSummary?.needsOrderCount || 0) + (orderSummary?.confirmedPendingCount || 0);
-          const isHot =
-            orderSummary?.nextUrgentStatus === 'overdue' ||
-            orderSummary?.nextUrgentStatus === 'urgent';
-          return (
-            <button
-              type="button"
-              onClick={() => setWatchDrawerOpen(true)}
-              className={`flex items-center gap-1.5 h-8.5 px-3 whitespace-nowrap shrink-0 rounded-lg text-[12.5px] font-extrabold border transition-all cursor-pointer ${
-                isHot && totalTodo > 0
-                  ? 'bg-rose-600/85 hover:bg-rose-500 text-white border-rose-400/50 shadow-sm'
-                  : totalTodo > 0
-                    ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/30'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/30'
-              }`}
-              title={
-                orderSummary?.urgentNames?.length
-                  ? `임박 발주처: ${orderSummary.urgentNames.join(', ')}`
-                  : '오늘 시간대별 발주 마감 관제 센터 열기'
-              }
-            >
-              <Radar className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                {isHot && orderSummary?.nextUrgentCutoff && totalTodo > 0
-                  ? `${orderSummary.nextUrgentCutoff} 마감`
-                  : '발주 관제'}
-              </span>
-              {totalTodo > 0 ? (
-                <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-white text-[10.5px] font-black">
-                  {totalTodo}
-                </span>
-              ) : (
-                <span className="text-[10.5px] opacity-80">완료</span>
-              )}
-            </button>
-          );
-        })()}
-
         {/* Server status */}
         <div className="hidden lg:flex items-center gap-1.5 text-slate-200 text-[12.5px] font-bold bg-white/10 px-2.5 py-1 rounded-lg border border-white/15 whitespace-nowrap shadow-2xs">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
@@ -259,25 +182,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
         </div>
       </div>
     </header>
-    <OrderDispatchDrawer
-      isOpen={watchDrawerOpen}
-      onClose={() => setWatchDrawerOpen(false)}
-      defaultDate={
-        orderSummary?.targetDate ||
-        new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10)
-      }
-      initialTab="watchtower"
-      onJumpToOrderSheet={(filter) => {
-        (window as any).__gfsPendingOrderFilter = filter;
-        const item = getMenuItemById('pur-mat-order-day');
-        if (item) openTab(item);
-        window.dispatchEvent(new CustomEvent('gfs-order-filter', { detail: filter }));
-      }}
-      onDispatched={() => {
-        window.dispatchEvent(new CustomEvent('gfs-order-dispatched'));
-      }}
-    />
-    </>
   );
 };
 
