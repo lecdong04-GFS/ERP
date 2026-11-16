@@ -52,10 +52,15 @@ import {
 } from '@/components/purchase/modals/ItemOrderInsightDrawer';
 import { OrderDispatchDrawer } from '@/components/purchase/modals/OrderDispatchDrawer';
 import {
+  ORDER_PLATFORM_OPTIONS,
+  ORDER_WAVE_OPTIONS,
   getOrderChannelMeta,
   getCutoffStatus,
   parseCutoffMinutes,
   isOrderDayMatch,
+  resolveOrderPlatformAndCutoff,
+  type OrderPlatformCode,
+  type OrderWaveCode,
   type PartnerOrderProfile,
 } from '@/lib/gfs/orderChannel';
 import {
@@ -302,6 +307,8 @@ export const MatOrderDayView: React.FC = () => {
   const [partnerProfiles, setPartnerProfiles] = useState<PartnerOrderProfile[]>([]);
   const [dispatchDrawerOpen, setDispatchDrawerOpen] = useState<boolean>(false);
   const [showCutoffTimeline, setShowCutoffTimeline] = useState<boolean>(true);
+  const [waveFilter, setWaveFilter] = useState<OrderWaveCode | 'ALL'>('ALL');
+  const [platformFilter, setPlatformFilter] = useState<OrderPlatformCode | 'ALL'>('ALL');
   const [rows, setRows] = useState<SheetRow[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [keyword, setKeyword] = useState<string>('');
@@ -1185,6 +1192,14 @@ export const MatOrderDayView: React.FC = () => {
       .sort((a, b) => a.m.stockDays - b.m.stockDays);
   }, [rows, dayIdx, getRowMetrics]);
 
+  const partnerProfileByName = useMemo(() => {
+    const map = new Map<string, PartnerOrderProfile>();
+    partnerProfiles.forEach((p) => {
+      if (p.name) map.set(p.name.trim(), p);
+    });
+    return map;
+  }, [partnerProfiles]);
+
   // 현재 요일에 해당하는 발주 행 목록
   const dayRows = useMemo(() => {
     const mapped = rows
@@ -1192,6 +1207,18 @@ export const MatOrderDayView: React.FC = () => {
         if (!showDormant && r.isDormant && !keyword.trim()) return null;
         if (supplierFilter !== '전체' && r.supplier !== supplierFilter) return null;
         if (warehouseFilter !== '전체' && (r.warehouse || '').trim() !== warehouseFilter) return null;
+        if (waveFilter !== 'ALL' || platformFilter !== 'ALL') {
+          const prof = partnerProfileByName.get((r.supplier || '').trim());
+          const resolved = resolveOrderPlatformAndCutoff({
+            partnerName: r.supplier,
+            orderChannel: prof?.orderChannel,
+            orderMethod: prof?.orderMethod,
+            orderCutoffTime: prof?.orderCutoffTime,
+            tempHint: r.warehouse || r.name,
+          });
+          if (waveFilter !== 'ALL' && resolved.wave !== waveFilter) return null;
+          if (platformFilter !== 'ALL' && resolved.platform !== platformFilter) return null;
+        }
         const pattern = classifyPattern(r.supplier, r.orderDay);
         if (patternFilter !== '전체' && pattern !== patternFilter) return null;
         if (
@@ -1243,6 +1270,9 @@ export const MatOrderDayView: React.FC = () => {
     showOnlyOrderable,
     showOnlyUrgentUnallocated,
     sortMode,
+    waveFilter,
+    platformFilter,
+    partnerProfileByName,
   ]);
 
   // 비수주·장기무변동 휴면 재고 목록 (모달 검토용)
@@ -3509,24 +3539,87 @@ export const MatOrderDayView: React.FC = () => {
             {/* 거래처별 마감시간 · 채널 타임라인 큐 */}
             {cutoffTimelineItems.length > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-extrabold text-slate-700">
                     <Clock className="w-3.5 h-3.5 text-rose-600" />
-                    <span>마감시간 · 채널별 발주 타임라인</span>
+                    <span>시간대 웨이브 · 플랫폼별 발주 타임라인</span>
                     <span className="text-[10px] font-medium text-slate-400">
-                      (클릭 시 해당 거래처만 필터링 · 우측 상단 [채널별 발주실행]으로 카톡/웹포털/메일 일괄 처리)
+                      (웨이브/플랫폼/거래처 클릭 시 시트 즉시 필터링 · CJ/대상 온도대 자동 분리)
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowCutoffTimeline((prev) => !prev)}
-                    className="text-[10.5px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                  >
-                    {showCutoffTimeline ? '접기' : `펼치기 (${cutoffTimelineItems.length})`}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {(waveFilter !== 'ALL' || platformFilter !== 'ALL') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWaveFilter('ALL');
+                          setPlatformFilter('ALL');
+                        }}
+                        className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                      >
+                        웨이브·플랫폼 초기화
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDispatchDrawerOpen(true)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-bold cursor-pointer"
+                    >
+                      <Send className="w-3 h-3" /> 이 조건 발주실행
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCutoffTimeline((prev) => !prev)}
+                      className="text-[10.5px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                    >
+                      {showCutoffTimeline ? '접기' : `펼치기 (${cutoffTimelineItems.length})`}
+                    </button>
+                  </div>
                 </div>
                 {showCutoffTimeline && (
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="space-y-1.5">
+                    {/* 웨이브 & 플랫폼 빠른 필터 바 */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {ORDER_WAVE_OPTIONS.map((w) => {
+                        const active = waveFilter === w.code;
+                        return (
+                          <button
+                            key={w.code}
+                            type="button"
+                            onClick={() => setWaveFilter(active ? 'ALL' : w.code)}
+                            className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
+                              active
+                                ? 'bg-rose-600 text-white border-rose-700'
+                                : 'bg-rose-50/60 text-rose-900 border-rose-200 hover:bg-rose-100'
+                            }`}
+                          >
+                            {w.label}
+                          </button>
+                        );
+                      })}
+                      <span className="text-slate-300 mx-0.5">|</span>
+                      {ORDER_PLATFORM_OPTIONS.filter((p) => p.code !== 'OTHER').map((p) => {
+                        const active = platformFilter === p.code;
+                        return (
+                          <button
+                            key={p.code}
+                            type="button"
+                            onClick={() => setPlatformFilter(active ? 'ALL' : p.code)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
+                              active
+                                ? 'bg-indigo-600 text-white border-indigo-700'
+                                : `${p.badgeClass} hover:opacity-85`
+                            }`}
+                          >
+                            <span>{p.emoji}</span>
+                            <span>{p.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* 거래처별 칩 */}
+                    <div className="flex flex-wrap items-center gap-1.5">
                     {cutoffTimelineItems.map((it) => {
                       const isSelected = supplierFilter === it.name;
                       return (
@@ -3577,6 +3670,7 @@ export const MatOrderDayView: React.FC = () => {
                         </button>
                       );
                     })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -5769,6 +5863,8 @@ export const MatOrderDayView: React.FC = () => {
         defaultDate={currentDayDate || orderDate}
         partnerProfiles={partnerProfiles}
         initialSupplierFilter={supplierFilter !== '전체' ? supplierFilter : ''}
+        initialWaveFilter={waveFilter}
+        initialPlatformFilter={platformFilter}
         onDispatched={() => {
           void loadConfirmedPo();
         }}

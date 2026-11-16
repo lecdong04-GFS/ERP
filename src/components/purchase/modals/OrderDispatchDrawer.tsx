@@ -15,13 +15,19 @@ import {
   Phone,
   AlertTriangle,
   Send,
+  Zap,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
-  ORDER_CHANNEL_OPTIONS,
+  ORDER_PLATFORM_OPTIONS,
+  ORDER_WAVE_OPTIONS,
   getOrderChannelMeta,
   getCutoffStatus,
   parseCutoffMinutes,
   formatOrderMessageText,
+  resolveOrderPlatformAndCutoff,
+  type OrderPlatformCode,
+  type OrderWaveCode,
   type PartnerOrderProfile,
 } from '@/lib/gfs/orderChannel';
 import { exportGridToExcel } from '@/lib/excelExport';
@@ -58,6 +64,8 @@ interface OrderDispatchDrawerProps {
   defaultDate: string;
   partnerProfiles?: PartnerOrderProfile[];
   initialSupplierFilter?: string;
+  initialWaveFilter?: OrderWaveCode | 'ALL';
+  initialPlatformFilter?: OrderPlatformCode | 'ALL';
   onDispatched?: () => void;
 }
 
@@ -67,16 +75,20 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
   defaultDate,
   partnerProfiles = [],
   initialSupplierFilter = '',
+  initialWaveFilter = 'ALL',
+  initialPlatformFilter = 'ALL',
   onDispatched,
 }) => {
   const [targetDate, setTargetDate] = useState(defaultDate);
   const [orders, setOrders] = useState<DispatchableOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'DONE'>('ALL');
-  const [channelFilter, setChannelFilter] = useState<string>('ALL');
+  const [waveFilter, setWaveFilter] = useState<OrderWaveCode | 'ALL'>(initialWaveFilter);
+  const [platformFilter, setPlatformFilter] = useState<OrderPlatformCode | 'ALL'>(initialPlatformFilter);
   const [searchKw, setSearchKw] = useState(initialSupplierFilter);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [batchUpdating, setBatchUpdating] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState<Date>(() => new Date());
 
@@ -84,8 +96,10 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
     if (isOpen) {
       setTargetDate(defaultDate);
       setSearchKw(initialSupplierFilter || '');
+      setWaveFilter(initialWaveFilter || 'ALL');
+      setPlatformFilter(initialPlatformFilter || 'ALL');
     }
-  }, [isOpen, defaultDate, initialSupplierFilter]);
+  }, [isOpen, defaultDate, initialSupplierFilter, initialWaveFilter, initialPlatformFilter]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -134,21 +148,34 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
           ...fallbackProfile,
           ...po.partner,
         };
+        const tempHint = po.details.map((d) => d.productName).join(' ');
+        const resolved = resolveOrderPlatformAndCutoff({
+          partnerName: po.partnerName,
+          orderChannel: mergedPartner.orderChannel,
+          orderMethod: mergedPartner.orderMethod,
+          orderCutoffTime: mergedPartner.orderCutoffTime,
+          tempHint,
+        });
         const channelMeta = getOrderChannelMeta(mergedPartner.orderChannel, mergedPartner.orderMethod);
-        const cutoff = getCutoffStatus(mergedPartner.orderCutoffTime, nowTick);
+        const cutoff = getCutoffStatus(resolved.cutoffTime, nowTick);
         const isDone = po.dispatchStatus === '발송완료';
         return {
           po,
           partner: mergedPartner,
           channelMeta,
+          platform: resolved.platform,
+          platformMeta: resolved.platformMeta,
+          platformDetail: resolved.platformDetail,
+          cutoffTime: resolved.cutoffTime,
+          wave: resolved.wave,
           cutoff,
           isDone,
         };
       })
       .sort((a, b) => {
         if (a.isDone !== b.isDone) return a.isDone ? 1 : -1;
-        const am = parseCutoffMinutes(a.partner.orderCutoffTime);
-        const bm = parseCutoffMinutes(b.partner.orderCutoffTime);
+        const am = parseCutoffMinutes(a.cutoffTime);
+        const bm = parseCutoffMinutes(b.cutoffTime);
         if (am !== null && bm !== null && am !== bm) return am - bm;
         if (am !== null && bm === null) return -1;
         if (am === null && bm !== null) return 1;
@@ -156,12 +183,38 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
       });
   }, [orders, profileByName, nowTick]);
 
+  const wavePendingCounts = useMemo(() => {
+    const map = new Map<OrderWaveCode | 'ALL', number>();
+    map.set('ALL', 0);
+    ORDER_WAVE_OPTIONS.forEach((w) => map.set(w.code, 0));
+    enrichedOrders.forEach((it) => {
+      if (!it.isDone) {
+        map.set('ALL', (map.get('ALL') || 0) + 1);
+        map.set(it.wave, (map.get(it.wave) || 0) + 1);
+      }
+    });
+    return map;
+  }, [enrichedOrders]);
+
+  const platformCounts = useMemo(() => {
+    const map = new Map<OrderPlatformCode | 'ALL', number>();
+    map.set('ALL', 0);
+    ORDER_PLATFORM_OPTIONS.forEach((p) => map.set(p.code, 0));
+    enrichedOrders.forEach((it) => {
+      if (waveFilter !== 'ALL' && it.wave !== waveFilter) return;
+      map.set('ALL', (map.get('ALL') || 0) + 1);
+      map.set(it.platform, (map.get(it.platform) || 0) + 1);
+    });
+    return map;
+  }, [enrichedOrders, waveFilter]);
+
   const filteredOrders = useMemo(() => {
     const kw = searchKw.trim().toLowerCase();
     return enrichedOrders.filter((item) => {
       if (statusFilter === 'PENDING' && item.isDone) return false;
       if (statusFilter === 'DONE' && !item.isDone) return false;
-      if (channelFilter !== 'ALL' && item.channelMeta.value !== channelFilter) return false;
+      if (waveFilter !== 'ALL' && item.wave !== waveFilter) return false;
+      if (platformFilter !== 'ALL' && item.platform !== platformFilter) return false;
       if (
         kw &&
         !item.po.partnerName.toLowerCase().includes(kw) &&
@@ -171,7 +224,7 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
       }
       return true;
     });
-  }, [enrichedOrders, statusFilter, channelFilter, searchKw]);
+  }, [enrichedOrders, statusFilter, waveFilter, platformFilter, searchKw]);
 
   const stats = useMemo(() => {
     const total = enrichedOrders.length;
@@ -199,8 +252,17 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
       await navigator.clipboard.writeText(text);
       setCopiedId(item.po.id);
       setTimeout(() => setCopiedId((prev) => (prev === item.po.id ? null : prev)), 2000);
+      return true;
     } catch {
       alert('클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.');
+      return false;
+    }
+  };
+
+  const handleCopyAndDispatch = async (item: (typeof enrichedOrders)[number]) => {
+    const copied = await handleCopyMessage(item);
+    if (copied && !item.isDone) {
+      await handleToggleDispatch(item.po, '발송완료', item.platform);
     }
   };
 
@@ -241,6 +303,56 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
         { key: '순번', label: '순번', format: 'number' },
         { key: '발주번호', label: '발주번호' },
         { key: '거래처명', label: '거래처명' },
+        { key: '품목코드', label: '품목코드' },
+        { key: '품명', label: '품명' },
+        { key: '단위', label: '단위' },
+        { key: '발주수량', label: '발주수량', format: 'number' },
+        { key: '박스환산', label: '박스환산', format: 'number' },
+        { key: '단가', label: '단가', format: 'currency' },
+        { key: '금액', label: '금액', format: 'currency' },
+      ],
+      data: rows,
+    });
+  };
+
+  const handleBatchDownloadExcel = () => {
+    if (filteredOrders.length === 0) return;
+    const rows: any[] = [];
+    let seq = 1;
+    filteredOrders.forEach((item) => {
+      item.po.details.forEach((d) => {
+        rows.push({
+          순번: seq++,
+          마감시간: item.cutoffTime || '-',
+          플랫폼: item.platformDetail || item.platformMeta.label,
+          거래처명: item.po.partnerName,
+          발주번호: item.po.orderNo,
+          입고예정일: item.po.deliveryDate || '-',
+          품목코드: d.productCode,
+          품명: d.productName,
+          단위: d.unit || 'EA',
+          발주수량: d.orderQty,
+          박스환산: d.expectedBoxQty || 0,
+          단가: d.unitPrice,
+          금액: d.amount,
+        });
+      });
+    });
+    const waveTag = waveFilter === 'ALL' ? '전체시간대' : waveFilter;
+    const platTag =
+      platformFilter === 'ALL'
+        ? '전체플랫폼'
+        : ORDER_PLATFORM_OPTIONS.find((p) => p.code === platformFilter)?.shortLabel || platformFilter;
+    exportGridToExcel({
+      filename: `일괄발주_${targetDate}_${waveTag}_${platTag}`,
+      sheetName: '일괄발주목록',
+      columns: [
+        { key: '순번', label: '순번', format: 'number' },
+        { key: '마감시간', label: '마감시간' },
+        { key: '플랫폼', label: '발주처/플랫폼' },
+        { key: '거래처명', label: '거래처명' },
+        { key: '발주번호', label: '발주번호' },
+        { key: '입고예정일', label: '입고예정일' },
         { key: '품목코드', label: '품목코드' },
         { key: '품명', label: '품명' },
         { key: '단위', label: '단위' },
@@ -295,19 +407,66 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
     }
   };
 
+  const handleBatchDispatchDone = async () => {
+    const pendingIds = filteredOrders.filter((it) => !it.isDone).map((it) => it.po.id);
+    if (pendingIds.length === 0) return;
+    if (!confirm(`현재 표시된 미발송 ${pendingIds.length}건을 모두 [발송완료] 처리할까요?`)) return;
+    setBatchUpdating(true);
+    try {
+      const res = await fetch('/api/purchase/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'dispatch',
+          ids: pendingIds,
+          dispatchStatus: '발송완료',
+          dispatchChannel: platformFilter === 'ALL' ? 'BATCH' : platformFilter,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        const idSet = new Set(pendingIds);
+        const nowIso = new Date().toISOString();
+        setOrders((prev) =>
+          prev.map((o) =>
+            idSet.has(o.id)
+              ? {
+                  ...o,
+                  dispatchStatus: '발송완료',
+                  dispatchChannel: platformFilter === 'ALL' ? 'BATCH' : platformFilter,
+                  dispatchedAt: nowIso,
+                }
+              : o
+          )
+        );
+        onDispatched?.();
+      } else {
+        alert(json.error || '일괄 발송완료 처리 실패');
+      }
+    } catch (e: any) {
+      alert(e.message || '네트워크 오류');
+    } finally {
+      setBatchUpdating(false);
+    }
+  };
+
   if (!isOpen) return null;
+
+  const filteredPendingCount = filteredOrders.filter((x) => !x.isDone).length;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px]">
-      <div className="w-full max-w-[780px] h-full bg-slate-50 shadow-2xl border-l border-slate-200 flex flex-col">
+      <div className="w-full max-w-[860px] h-full bg-slate-50 shadow-2xl border-l border-slate-200 flex flex-col">
         {/* 헤더 */}
         <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <Send className="w-5 h-5 text-emerald-400" />
             <div>
-              <h2 className="text-[15px] font-bold leading-tight">채널별 · 마감시간별 발주 실행 큐</h2>
+              <h2 className="text-[15px] font-bold leading-tight">
+                시간대 웨이브 × 플랫폼별 발주 실행 큐
+              </h2>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                발주처별 마감시간 순으로 정렬되며, 카톡 복사 · 웹포털 열기 · 메일 · 엑셀 후 발송완료를 체크합니다.
+                11시~16시 마감 웨이브와 발주고·통합구매·자사전산·카톡·메일 플랫폼별로 묶어 일괄 처리합니다.
               </p>
             </div>
           </div>
@@ -320,7 +479,7 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
           </button>
         </div>
 
-        {/* 요약 & 필터 바 */}
+        {/* 상단 날짜 & 웨이브 탭 */}
         <div className="bg-white border-b border-slate-200 px-5 py-3 space-y-2.5 shrink-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -346,25 +505,99 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
               <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">미발송 {stats.pending}</span>
               {stats.urgent > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 inline-flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> 마감임박/초과 {stats.urgent}
+                  <AlertTriangle className="w-3 h-3" /> 임박/초과 {stats.urgent}
                 </span>
               )}
               <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">완료 {stats.done}</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-slate-200 overflow-hidden text-[11px] font-bold">
+          {/* 1) 마감 시간대 웨이브 탭 */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setWaveFilter('ALL')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
+                waveFilter === 'ALL'
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              전체 웨이브 ({wavePendingCounts.get('ALL') || 0} 미발송)
+            </button>
+            {ORDER_WAVE_OPTIONS.map((w) => {
+              const cnt = wavePendingCounts.get(w.code) || 0;
+              const active = waveFilter === w.code;
+              return (
+                <button
+                  key={w.code}
+                  type="button"
+                  onClick={() => setWaveFilter(w.code)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                    active
+                      ? 'bg-rose-600 text-white border-rose-700'
+                      : cnt > 0
+                        ? 'bg-rose-50/70 text-rose-900 border-rose-200 hover:bg-rose-100'
+                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{w.label}</span>
+                  <span
+                    className={`px-1.5 rounded-full text-[10px] font-black ${
+                      active ? 'bg-white/25 text-white' : cnt > 0 ? 'bg-rose-200 text-rose-900' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {cnt}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 2) 플랫폼 필터 & 검색 */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPlatformFilter('ALL')}
+              className={`px-2 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
+                platformFilter === 'ALL'
+                  ? 'bg-indigo-600 text-white border-indigo-700'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              전체 플랫폼 ({platformCounts.get('ALL') || 0})
+            </button>
+            {ORDER_PLATFORM_OPTIONS.map((p) => {
+              const cnt = platformCounts.get(p.code) || 0;
+              if (cnt === 0 && platformFilter !== p.code) return null;
+              const active = platformFilter === p.code;
+              return (
+                <button
+                  key={p.code}
+                  type="button"
+                  onClick={() => setPlatformFilter(p.code)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold border transition cursor-pointer ${
+                    active ? 'bg-indigo-600 text-white border-indigo-700' : `${p.badgeClass} hover:opacity-85`
+                  }`}
+                >
+                  <span>{p.emoji}</span>
+                  <span>{p.label}</span>
+                  <span className="font-mono text-[10px] opacity-80">({cnt})</span>
+                </button>
+              );
+            })}
+
+            <div className="flex rounded-md border border-slate-200 overflow-hidden text-[11px] font-bold ml-auto">
               {([
                 ['ALL', '전체'],
                 ['PENDING', '미발송'],
-                ['DONE', '발송완료'],
+                ['DONE', '완료'],
               ] as const).map(([k, lbl]) => (
                 <button
                   key={k}
                   type="button"
                   onClick={() => setStatusFilter(k)}
-                  className={`px-2.5 py-1 transition-colors ${
+                  className={`px-2 py-1 transition-colors cursor-pointer ${
                     statusFilter === k ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
@@ -373,27 +606,45 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
               ))}
             </div>
 
-            <select
-              value={channelFilter}
-              onChange={(e) => setChannelFilter(e.target.value)}
-              className="border border-slate-200 rounded px-2 py-1 text-[11px] font-bold text-slate-700 bg-white"
-            >
-              <option value="ALL">전체 채널</option>
-              {ORDER_CHANNEL_OPTIONS.map((ch) => (
-                <option key={ch.value} value={ch.value}>
-                  {ch.emoji} {ch.label}
-                </option>
-              ))}
-            </select>
-
             <input
               type="text"
               value={searchKw}
               onChange={(e) => setSearchKw(e.target.value)}
-              placeholder="거래처명 또는 발주번호 검색..."
-              className="flex-1 min-w-[160px] border border-slate-200 rounded px-2.5 py-1 text-[11px]"
+              placeholder="거래처 / 발주번호..."
+              className="w-[150px] border border-slate-200 rounded px-2 py-1 text-[11px]"
             />
           </div>
+
+          {/* 3) 묶음 일괄 실행 바 */}
+          {filteredOrders.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <span className="text-[11px] font-semibold text-slate-600">
+                현재 필터: <strong className="text-slate-900">{filteredOrders.length}건</strong> (미발송{' '}
+                <strong className="text-amber-700">{filteredPendingCount}건</strong>)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleBatchDownloadExcel}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold cursor-pointer shadow-2xs"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  현재 목록 통합 엑셀 ({filteredOrders.length}건)
+                </button>
+                {filteredPendingCount > 0 && (
+                  <button
+                    type="button"
+                    disabled={batchUpdating}
+                    onClick={() => void handleBatchDispatchDone()}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer shadow-2xs disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    미발송 {filteredPendingCount}건 일괄 발송완료
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 본문 카드 리스트 */}
@@ -402,14 +653,14 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
             <div className="py-16 text-center text-slate-500 text-[13px]">발주서를 불러오는 중...</div>
           ) : filteredOrders.length === 0 ? (
             <div className="py-16 text-center bg-white rounded-xl border border-dashed border-slate-300 text-slate-500 text-[13px]">
-              해당 조건의 발주서가 없습니다.
+              해당 웨이브/플랫폼 조건의 발주서가 없습니다.
               <div className="text-[11px] text-slate-400 mt-1">
-                먼저 [자재발주(요일별)]에서 발주서를 저장하면 이곳에서 채널·시간대별로 일괄 전송할 수 있습니다.
+                먼저 [자재발주(요일별)]에서 발주서를 확정 저장하면 이곳에서 발주고·통합구매·카톡별로 묶어 처리할 수 있습니다.
               </div>
             </div>
           ) : (
             filteredOrders.map((item) => {
-              const { po, partner, channelMeta, cutoff, isDone } = item;
+              const { po, partner, platformMeta, platformDetail, cutoff, isDone } = item;
               const isExpanded = expandedId === po.id;
               return (
                 <div
@@ -427,11 +678,15 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                       <div>
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-[14px] font-extrabold text-slate-900">{po.partnerName}</span>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${channelMeta.badgeClass}`}>
-                            <span>{channelMeta.emoji}</span>
-                            <span>{channelMeta.label}</span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${platformMeta.badgeClass}`}
+                          >
+                            <span>{platformMeta.emoji}</span>
+                            <span>{platformDetail || platformMeta.label}</span>
                           </span>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${cutoff.badgeClass}`}>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${cutoff.badgeClass}`}
+                          >
                             <Clock className="w-3 h-3" />
                             <span>{cutoff.label}</span>
                           </span>
@@ -447,11 +702,20 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
                           <span className="font-mono">{po.orderNo}</span>
-                          <span>입고예정: <strong className="text-slate-700">{po.deliveryDate || '-'}</strong></span>
-                          <span>품목: <strong className="text-slate-700">{po.details.length}건</strong></span>
-                          <span>합계: <strong className="text-slate-800">₩{Math.round(po.totalAmount).toLocaleString()}</strong></span>
+                          <span>
+                            입고예정: <strong className="text-slate-700">{po.deliveryDate || '-'}</strong>
+                          </span>
+                          <span>
+                            품목: <strong className="text-slate-700">{po.details.length}건</strong>
+                          </span>
+                          <span>
+                            합계:{' '}
+                            <strong className="text-slate-800">₩{Math.round(po.totalAmount).toLocaleString()}</strong>
+                          </span>
                           {partner.contactPerson && (
-                            <span>담당: {partner.contactPerson} {partner.contactTel || partner.tel || ''}</span>
+                            <span>
+                              담당: {partner.contactPerson} {partner.contactTel || partner.tel || ''}
+                            </span>
                           )}
                           {!partner.contactPerson && partner.tel && (
                             <span className="inline-flex items-center gap-0.5">
@@ -471,13 +735,9 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                         type="button"
                         disabled={updatingId === po.id}
                         onClick={() =>
-                          void handleToggleDispatch(
-                            po,
-                            isDone ? '미발송' : '발송완료',
-                            channelMeta.value
-                          )
+                          void handleToggleDispatch(po, isDone ? '미발송' : '발송완료', item.platform)
                         }
-                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 ${
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer ${
                           isDone
                             ? 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100'
                             : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
@@ -498,51 +758,50 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                     {/* 채널별 원클릭 액션 바 */}
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
+                        {item.platform === 'KAKAO' && !isDone && (
+                          <button
+                            type="button"
+                            disabled={updatingId === po.id}
+                            onClick={() => void handleCopyAndDispatch(item)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-amber-500 text-white border border-amber-600 hover:bg-amber-600 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <Zap className="w-3.5 h-3.5" /> 카톡 복사 &amp; 완료
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => void handleCopyMessage(item)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors ${
-                            channelMeta.value === 'KAKAO' || channelMeta.value === 'PHONE'
-                              ? 'bg-amber-500 text-white border-amber-600 hover:bg-amber-600'
-                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                          }`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-white text-slate-700 border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer"
                         >
                           {copiedId === po.id ? (
                             <>
-                              <Check className="w-3.5 h-3.5" /> 복사됨!
+                              <Check className="w-3.5 h-3.5 text-emerald-600" /> 복사됨!
                             </>
                           ) : (
                             <>
-                              <Copy className="w-3.5 h-3.5" /> 카톡/문자 복사
+                              <Copy className="w-3.5 h-3.5" /> 문구 복사
                             </>
                           )}
                         </button>
 
-                        {partner.orderPortalUrl ? (
+                        {partner.orderPortalUrl && (
                           <a
                             href={partner.orderPortalUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors ${
-                              channelMeta.value === 'WEB'
-                                ? 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'
-                                : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
-                            }`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 transition-colors"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" /> 웹포털 열기
+                            <ExternalLink className="w-3.5 h-3.5" /> 포털 열기
                           </a>
-                        ) : channelMeta.value === 'WEB' ? (
-                          <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
-                            ※ 거래처관리에서 포털 URL 등록 시 바로가기 활성화
-                          </span>
-                        ) : null}
+                        )}
 
-                        {(channelMeta.value === 'EMAIL' || partner.email) && (
+                        {(item.platform === 'EMAIL' || partner.email) && (
                           <button
                             type="button"
                             onClick={() => handleOpenMail(item)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors ${
-                              channelMeta.value === 'EMAIL'
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                              item.platform === 'EMAIL'
                                 ? 'bg-sky-600 text-white border-sky-700 hover:bg-sky-700'
                                 : 'bg-white text-sky-700 border-sky-200 hover:bg-sky-50'
                             }`}
@@ -554,7 +813,7 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDownloadExcel(item)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
                         >
                           <Download className="w-3.5 h-3.5" /> 엑셀
                         </button>
@@ -563,7 +822,7 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : po.id)}
-                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 underline"
+                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 underline cursor-pointer"
                       >
                         {isExpanded ? '품목 접기' : `품목 ${po.details.length}건 보기`}
                       </button>

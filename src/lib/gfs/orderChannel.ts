@@ -1,5 +1,70 @@
 export type OrderChannelCode = 'WEB' | 'KAKAO' | 'EMAIL' | 'PHONE' | 'FAX' | 'EDI' | '';
 
+export type OrderPlatformCode = 'BALJUGO' | 'INTEGRATED' | 'PORTAL' | 'KAKAO' | 'EMAIL' | 'OTHER';
+
+export type OrderWaveCode = '11:00' | '12:00' | '13:00' | '14:00+' | 'UNSET';
+
+export interface OrderPlatformMeta {
+  code: OrderPlatformCode;
+  label: string;
+  shortLabel: string;
+  emoji: string;
+  badgeClass: string;
+}
+
+export const ORDER_PLATFORM_OPTIONS: OrderPlatformMeta[] = [
+  {
+    code: 'BALJUGO',
+    label: '발주고',
+    shortLabel: '발주고',
+    emoji: '🛒',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  {
+    code: 'INTEGRATED',
+    label: 'GS/통합구매',
+    shortLabel: '통합구매',
+    emoji: '🏢',
+    badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+  },
+  {
+    code: 'PORTAL',
+    label: '자사전산',
+    shortLabel: '자사전산',
+    emoji: '🖥️',
+    badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+  {
+    code: 'KAKAO',
+    label: '카톡발주',
+    shortLabel: '카톡',
+    emoji: '💬',
+    badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  {
+    code: 'EMAIL',
+    label: '이메일',
+    shortLabel: '이메일',
+    emoji: '✉️',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  {
+    code: 'OTHER',
+    label: '전화/기타',
+    shortLabel: '기타',
+    emoji: '📞',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+];
+
+export const ORDER_WAVE_OPTIONS: Array<{ code: OrderWaveCode; label: string; shortLabel: string }> = [
+  { code: '11:00', label: '1차 11:00 마감', shortLabel: '11시' },
+  { code: '12:00', label: '2차 12:00 마감', shortLabel: '12시' },
+  { code: '13:00', label: '3차 13:00 피크', shortLabel: '13시' },
+  { code: '14:00+', label: '4차 14~16시', shortLabel: '14~16시' },
+  { code: 'UNSET', label: '상시/미지정', shortLabel: '상시' },
+];
+
 export interface OrderChannelMeta {
   value: Exclude<OrderChannelCode, ''>;
   label: string;
@@ -218,5 +283,91 @@ export function formatOrderMessageText(params: {
     lines.push(`※ 참고: ${orderNote.trim()}`);
   }
   return lines.join('\n');
+}
+
+export function getWaveBucket(cutoffTime?: string | null): OrderWaveCode {
+  const mins = parseCutoffMinutes(cutoffTime);
+  if (mins === null) return 'UNSET';
+  if (mins <= 11 * 60) return '11:00';
+  if (mins <= 12 * 60) return '12:00';
+  if (mins <= 13 * 60) return '13:00';
+  return '14:00+';
+}
+
+export function resolveOrderPlatformAndCutoff(params: {
+  partnerName?: string | null;
+  orderChannel?: string | null;
+  orderMethod?: string | null;
+  orderCutoffTime?: string | null;
+  tempHint?: string | null; // e.g., warehouse ('상온', '냉장', '냉동') or item names
+}): {
+  platform: OrderPlatformCode;
+  platformMeta: OrderPlatformMeta;
+  platformDetail: string;
+  cutoffTime: string;
+  wave: OrderWaveCode;
+} {
+  const pName = String(params.partnerName || '').trim();
+  const method = String(params.orderMethod || '').trim();
+  const ch = inferOrderChannel(params.orderChannel, params.orderMethod);
+  const temp = String(params.tempHint || '');
+  const isAmbient = temp.includes('상온') && !temp.includes('냉장') && !temp.includes('냉동');
+
+  let platform: OrderPlatformCode = 'OTHER';
+  let platformDetail = method || '';
+  let cutoffTime = String(params.orderCutoffTime || '').trim();
+
+  // 온도대별 분리 규칙 (CJ제일제당: 저온 11시 vs 상온 16시 / 대상: 저온 통합구매 14시 vs 상온 발주고 13시)
+  if (pName.includes('씨제이') || pName.toUpperCase().includes('CJ제일제당')) {
+    platform = 'PORTAL';
+    if (isAmbient) {
+      cutoffTime = '16:00';
+      platformDetail = 'CJ전산(상온)';
+    } else {
+      cutoffTime = '11:00';
+      platformDetail = 'CJ전산(저온)';
+    }
+  } else if (pName.includes('대상')) {
+    if (isAmbient) {
+      platform = 'BALJUGO';
+      cutoffTime = '13:00';
+      platformDetail = '발주고(상온)';
+    } else {
+      platform = 'INTEGRATED';
+      cutoffTime = '14:00';
+      platformDetail = '통합구매(저온)';
+    }
+  } else {
+    if (method.includes('발주고')) {
+      platform = 'BALJUGO';
+      platformDetail = method || '발주고';
+    } else if (method.includes('통합구매') || method.includes('GS통합')) {
+      platform = 'INTEGRATED';
+      platformDetail = method || '통합구매';
+    } else if (method.includes('전산') || ch === 'WEB' || ch === 'EDI') {
+      platform = 'PORTAL';
+      platformDetail = method || '자사전산';
+    } else if (ch === 'KAKAO') {
+      platform = 'KAKAO';
+      platformDetail = method || '카톡발주';
+    } else if (ch === 'EMAIL') {
+      platform = 'EMAIL';
+      platformDetail = method || '이메일';
+    } else {
+      platform = 'OTHER';
+      platformDetail = method || '전화/기타';
+    }
+  }
+
+  const platformMeta =
+    ORDER_PLATFORM_OPTIONS.find((o) => o.code === platform) || ORDER_PLATFORM_OPTIONS[5];
+
+  return {
+    platform,
+    platformMeta,
+    platformDetail,
+    cutoffTime,
+    wave: getWaveBucket(cutoffTime),
+  };
 }
 
