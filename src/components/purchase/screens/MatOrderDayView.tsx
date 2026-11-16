@@ -644,11 +644,20 @@ export const MatOrderDayView: React.FC = () => {
   }, [loadOrderSheet]);
 
   useEffect(() => {
-    const onExternalFilter = (e: any) => {
-      const detail = e?.detail || {};
+    const applyFilter = (detail: any) => {
+      if (!detail) return;
       if (detail.supplier) setSupplierFilter(detail.supplier);
       if (detail.wave) setWaveFilter(detail.wave);
       if (detail.platform) setPlatformFilter(detail.platform);
+    };
+    const pending = (window as any).__gfsPendingOrderFilter;
+    if (pending) {
+      applyFilter(pending);
+      delete (window as any).__gfsPendingOrderFilter;
+    }
+    const onExternalFilter = (e: any) => {
+      applyFilter(e?.detail);
+      delete (window as any).__gfsPendingOrderFilter;
     };
     window.addEventListener('gfs-order-filter', onExternalFilter);
     return () => window.removeEventListener('gfs-order-filter', onExternalFilter);

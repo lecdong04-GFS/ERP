@@ -107,6 +107,14 @@ interface OrderDispatchDrawerProps {
   onDispatched?: () => void;
 }
 
+function toSafeHttpUrl(raw?: string | null): string | null {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(s)) return `https://${s}`;
+  return null;
+}
+
 export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
   isOpen,
   onClose,
@@ -976,16 +984,19 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
                           )}
                         </button>
 
-                        {partner.orderPortalUrl && (
-                          <a
-                            href={partner.orderPortalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" /> 포털 열기
-                          </a>
-                        )}
+                        {(() => {
+                          const safeUrl = toSafeHttpUrl(partner.orderPortalUrl);
+                          return safeUrl ? (
+                            <a
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> 포털 열기
+                            </a>
+                          ) : null;
+                        })()}
 
                         {(item.platform === 'EMAIL' || partner.email) && (
                           <button
@@ -1059,3 +1070,4 @@ export const OrderDispatchDrawer: React.FC<OrderDispatchDrawerProps> = ({
     </div>
   );
 };
+

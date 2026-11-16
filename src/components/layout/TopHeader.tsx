@@ -268,11 +268,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
       }
       initialTab="watchtower"
       onJumpToOrderSheet={(filter) => {
+        (window as any).__gfsPendingOrderFilter = filter;
         const item = getMenuItemById('pur-mat-order-day');
         if (item) openTab(item);
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('gfs-order-filter', { detail: filter }));
-        }, 120);
+        window.dispatchEvent(new CustomEvent('gfs-order-filter', { detail: filter }));
       }}
       onDispatched={() => {
         window.dispatchEvent(new CustomEvent('gfs-order-dispatched'));
