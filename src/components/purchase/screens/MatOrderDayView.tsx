@@ -39,12 +39,24 @@ import {
   ShoppingCart,
   Heart,
   BarChart3,
+  Copy,
+  Mail,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
+import {
+  resolveOrderMethodInfo,
+  getCutoffBadgeState,
+  getNowKstMinutes,
+  buildKakaoOrderText,
+  CUTOFF_SLOTS,
+  getCutoffSlotKey,
+  getCutoffGroupLabel,
+  type CutoffSlotKey,
+} from '@/lib/gfs/orderMethodHelper';
 import {
   ItemOrderInsightDrawer,
   type ItemOrderInsightTarget,
@@ -276,7 +288,17 @@ export const MatOrderDayView: React.FC = () => {
   // 발주 필요 품목만 보기 (기본 true) vs 전체 품목 보기 / 정렬 모드 / 타요일 긴급미배정 필터
   const [showOnlyOrderable, setShowOnlyOrderable] = useState<boolean>(true);
   const [showOnlyUrgentUnallocated, setShowOnlyUrgentUnallocated] = useState<boolean>(false);
-  const [sortMode, setSortMode] = useState<'urgency' | 'default'>('urgency');
+  const [sortMode, setSortMode] = useState<'urgency' | 'cutoff' | 'default'>('urgency');
+  const [cutoffSlotFilter, setCutoffSlotFilter] = useState<CutoffSlotKey>('all');
+  const [nowKstMinutes, setNowKstMinutes] = useState<number>(() => getNowKstMinutes());
+  const [copiedRowId, setCopiedRowId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowKstMinutes(getNowKstMinutes());
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // 기준일자 및 요일 인덱스 (0=월, 1=화, 2=수, 3=목, 4=금, 5=토, 6=일)
   const [orderDate, setOrderDate] = useState<string>(kstToday());
@@ -543,6 +565,11 @@ export const MatOrderDayView: React.FC = () => {
             discontinuedDate: r.discontinuedDate || '',
             status: r.status || '정상',
             orderCycle: r.orderCycle || '',
+            orderMethod: r.orderMethod || '',
+            partnerRemark: r.partnerRemark || '',
+            partnerTel: r.partnerTel || '',
+            partnerEmail: r.partnerEmail || '',
+            partnerContact: r.partnerContact || '',
             isReplaced: Boolean(r.isReplaced),
             replacementNote: r.replacementNote || '',
           };
@@ -1115,7 +1142,7 @@ export const MatOrderDayView: React.FC = () => {
   }, [rows, dayIdx, getRowMetrics]);
 
   // 현재 요일에 해당하는 발주 행 목록
-  const dayRows = useMemo(() => {
+  const baseDayRows = useMemo(() => {
     const mapped = rows
       .map((r) => {
         if (!showDormant && r.isDormant && !keyword.trim()) return null;
@@ -1157,6 +1184,30 @@ export const MatOrderDayView: React.FC = () => {
         return 3;
       };
       mapped.sort((a, b) => rank(a) - rank(b) || a.m.stockDays - b.m.stockDays);
+    } else if (sortMode === 'cutoff') {
+      const getCutoffSortKey = (item: (typeof mapped)[number]) => {
+        const info = resolveOrderMethodInfo({
+          orderMethod: item.r.orderMethod,
+          supplier: item.r.supplier,
+          warehouse: item.r.warehouse,
+          productName: item.r.name,
+        });
+        const isCompleted = (item.r.pendingBoxes || 0) > 0;
+        if (isCompleted) return { tier: 3, mins: info.cutoffMinutes ?? 9999 };
+        if (info.cutoffMinutes === null) return { tier: 2, mins: 9999 };
+        if (info.cutoffMinutes < nowKstMinutes) return { tier: 0, mins: info.cutoffMinutes };
+        return { tier: 1, mins: info.cutoffMinutes };
+      };
+      mapped.sort((a, b) => {
+        const ka = getCutoffSortKey(a);
+        const kb = getCutoffSortKey(b);
+        return (
+          ka.tier - kb.tier ||
+          ka.mins - kb.mins ||
+          a.r.supplier.localeCompare(b.r.supplier, 'ko') ||
+          a.m.stockDays - b.m.stockDays
+        );
+      });
     }
     return mapped;
   }, [
@@ -1172,7 +1223,48 @@ export const MatOrderDayView: React.FC = () => {
     showOnlyOrderable,
     showOnlyUrgentUnallocated,
     sortMode,
+    nowKstMinutes,
   ]);
+
+  const cutoffSlotSummary = useMemo(() => {
+    const counts: Record<Exclude<CutoffSlotKey, 'all'>, { total: number; pending: number; hasUrgent: boolean; hasOverdue: boolean }> = {
+      until11: { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+      '12': { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+      '13': { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+      '14': { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+      after15: { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+      none: { total: 0, pending: 0, hasUrgent: false, hasOverdue: false },
+    };
+    baseDayRows.forEach(({ r }) => {
+      const info = resolveOrderMethodInfo({
+        orderMethod: r.orderMethod,
+        supplier: r.supplier,
+        warehouse: r.warehouse,
+        productName: r.name,
+      });
+      const slot = getCutoffSlotKey(info.cutoffMinutes);
+      const isDone = (r.pendingBoxes || 0) > 0;
+      const badge = getCutoffBadgeState(info.cutoffMinutes, nowKstMinutes, isDone);
+      counts[slot].total += 1;
+      if (!isDone) counts[slot].pending += 1;
+      if (badge.kind === 'urgent') counts[slot].hasUrgent = true;
+      if (badge.kind === 'overdue') counts[slot].hasOverdue = true;
+    });
+    return counts;
+  }, [baseDayRows, nowKstMinutes]);
+
+  const dayRows = useMemo(() => {
+    if (cutoffSlotFilter === 'all') return baseDayRows;
+    return baseDayRows.filter(({ r }) => {
+      const info = resolveOrderMethodInfo({
+        orderMethod: r.orderMethod,
+        supplier: r.supplier,
+        warehouse: r.warehouse,
+        productName: r.name,
+      });
+      return getCutoffSlotKey(info.cutoffMinutes) === cutoffSlotFilter;
+    });
+  }, [baseDayRows, cutoffSlotFilter]);
 
   // 비수주·장기무변동 휴면 재고 목록 (모달 검토용)
   const dormantRows = useMemo(() => {
@@ -3295,18 +3387,28 @@ export const MatOrderDayView: React.FC = () => {
                   </button>
                 </div>
 
-                {/* 정렬 모드 전환 (긴급도순 vs 창고·품목순) */}
+                {/* 정렬 모드 전환 (긴급순 → 마감시각순 → 창고·품목순) */}
                 <button
                   type="button"
-                  onClick={() => setSortMode((prev) => (prev === 'urgency' ? 'default' : 'urgency'))}
+                  onClick={() =>
+                    setSortMode((prev) =>
+                      prev === 'urgency' ? 'cutoff' : prev === 'cutoff' ? 'default' : 'urgency'
+                    )
+                  }
                   className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border whitespace-nowrap ${
                     sortMode === 'urgency'
                       ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                      : sortMode === 'cutoff'
+                      ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                       : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
                   }`}
-                  title="긴급 품목(결품초임박/안전미달)을 테이블 맨 위에 우선 배치합니다."
+                  title="클릭하여 정렬 기준을 전환합니다: 긴급순 → 마감시각순 → 창고·품목순"
                 >
-                  {sortMode === 'urgency' ? '🚨 긴급순' : '창고·품목순'}
+                  {sortMode === 'urgency'
+                    ? '🚨 긴급순'
+                    : sortMode === 'cutoff'
+                    ? '⏰ 마감시각순'
+                    : '창고·품목순'}
                 </button>
 
               {/* 발행 전표 목록 드로어 버튼 */}
@@ -3587,7 +3689,60 @@ export const MatOrderDayView: React.FC = () => {
       <div className="flex-1 min-h-[420px] min-w-0 bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs flex flex-col">
         {mainMode === 'order' ? (
           /* ──────── ① 오늘 발주할 양 테이블 ──────── */
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 초슬림 마감 시간대 필터 바 */}
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-50/80 border-b border-slate-200 overflow-x-auto">
+              <span className="text-[11px] font-black text-slate-500 whitespace-nowrap mr-0.5">
+                ⏰ 마감시간대
+              </span>
+              <button
+                type="button"
+                onClick={() => setCutoffSlotFilter('all')}
+                className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer whitespace-nowrap border ${
+                  cutoffSlotFilter === 'all'
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                전체 <span className="font-mono opacity-80">{baseDayRows.length}</span>
+              </button>
+              {CUTOFF_SLOTS.map((slot) => {
+                const stat = cutoffSlotSummary[slot.key];
+                if (stat.total === 0) return null;
+                const isSelected = cutoffSlotFilter === slot.key;
+                return (
+                  <button
+                    key={slot.key}
+                    type="button"
+                    onClick={() => setCutoffSlotFilter(isSelected ? 'all' : slot.key)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold transition cursor-pointer whitespace-nowrap border ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : stat.hasOverdue
+                        ? 'bg-rose-50/70 text-rose-800 border-rose-200 hover:bg-rose-100'
+                        : stat.hasUrgent
+                        ? 'bg-amber-50/80 text-amber-900 border-amber-300 hover:bg-amber-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{slot.label}</span>
+                    <span className={`font-mono text-[10.5px] ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
+                      {stat.pending > 0 ? stat.pending : stat.total}
+                    </span>
+                  </button>
+                );
+              })}
+              {sortMode !== 'cutoff' && (
+                <button
+                  type="button"
+                  onClick={() => setSortMode('cutoff')}
+                  className="ml-auto text-[11px] font-bold text-slate-500 hover:text-amber-800 cursor-pointer whitespace-nowrap"
+                >
+                  마감시각순으로 보기 →
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {isLoading ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-16 gap-3 text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
@@ -3598,19 +3753,20 @@ export const MatOrderDayView: React.FC = () => {
             ) : (
               <table className="w-full table-fixed text-left border-collapse">
                 <colgroup>
-                  <col className="w-[2.7%]" />
-                  <col className="w-[2.5%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[21.5%]" />
+                  <col className="w-[2.4%]" />
+                  <col className="w-[2.4%]" />
+                  <col className="w-[7.5%]" />
+                  <col className="w-[10.5%]" />
+                  <col className="w-[18.5%]" />
                   <col className="w-[5.5%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[6%]" />
-                  <col className="w-[7.5%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[7.5%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[4.8%]" />
+                  <col className="w-[7.2%]" />
+                  <col className="w-[5.5%]" />
+                  <col className="w-[7.0%]" />
+                  <col className="w-[8.0%]" />
+                  <col className="w-[9.0%]" />
+                  <col className="w-[6.8%]" />
+                  <col className="w-[5.5%]" />
+                  <col className="w-[4.2%]" />
                 </colgroup>
                 <thead className="sticky top-0 z-10 bg-slate-100 text-slate-800 text-[12.5px] 2xl:text-[13.5px] font-black border-b border-slate-300 tracking-tight select-none">
                   <tr>
@@ -3633,6 +3789,10 @@ export const MatOrderDayView: React.FC = () => {
                     </th>
                     <th className="py-2.5 px-1 text-center">No</th>
                     <th className="py-2.5 px-1.5">거래처</th>
+                    <th className="py-2.5 px-1.5">
+                      발주방법 · 마감
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">채널·마감시각</span>
+                    </th>
                     <th className="py-2.5 px-2">품목명</th>
                     <th className="py-2.5 px-0.5 text-center">
                       패턴·창고
@@ -3646,17 +3806,17 @@ export const MatOrderDayView: React.FC = () => {
                       일소진
                       <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">봉/일</span>
                     </th>
-                    <th className="py-2.5 px-1 text-center bg-blue-50/70 text-blue-950 font-black border-x border-blue-100">
+                    <th className="py-2.5 px-1 text-center bg-slate-100 text-slate-800 font-black border-x border-slate-200">
                       유지일
-                      <span className="block text-[10.5px] 2xl:text-[11px] text-blue-700 font-bold leading-tight">Runway</span>
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">Runway</span>
                     </th>
                     <th className="py-2.5 px-1 text-center">
                       발주일수
                       <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">기준일수·목표재고</span>
                     </th>
-                    <th className="py-2.5 px-1.5 text-right bg-amber-50/70 text-amber-950 border-x border-amber-200">
+                    <th className="py-2.5 px-1.5 text-right bg-slate-100 text-slate-900 border-x border-slate-200">
                       {DAY_CHARS[dayIdx]}요일 발주(✏️)
-                      <span className="block text-[10.5px] 2xl:text-[11px] text-amber-800 font-bold leading-tight">추천·확정</span>
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">추천·확정</span>
                     </th>
                     <th className="py-2.5 px-1.5 text-right">
                       단가·입수
@@ -3672,13 +3832,14 @@ export const MatOrderDayView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-[13.5px] 2xl:text-[14.5px]">
                   {dayRows.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-20 text-center">
+                      <td colSpan={14} className="py-20 text-center">
                         <div className="max-w-md mx-auto flex flex-col items-center gap-3">
                           {confirmedPoList.length > 0 &&
                           supplierFilter === '전체' &&
                           warehouseFilter === '전체' &&
                           patternFilter === '전체' &&
                           urgencyFilter === 'all' &&
+                          cutoffSlotFilter === 'all' &&
                           !showOnlyUrgentUnallocated &&
                           !keyword.trim() ? (
                             <>
@@ -3715,16 +3876,17 @@ export const MatOrderDayView: React.FC = () => {
                                 발행 전표 {confirmedPoList.length}건 확인
                               </button>
                             )}
-                            {(warehouseFilter !== '전체' || urgencyFilter !== 'all') && (
+                            {(warehouseFilter !== '전체' || urgencyFilter !== 'all' || cutoffSlotFilter !== 'all') && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   setWarehouseFilter('전체');
                                   setUrgencyFilter('all');
+                                  setCutoffSlotFilter('all');
                                 }}
                                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer"
                               >
-                                창고·긴급 필터 초기화
+                                필터 초기화
                               </button>
                             )}
                             {showOnlyOrderable && (
@@ -3745,21 +3907,65 @@ export const MatOrderDayView: React.FC = () => {
                       const isBriefingOpen = activeBriefingId === r.id;
                       const stagedEntry = stagedOrders[makeStagedKey(currentDayDate, r.id)];
                       const isRowStaged = Boolean(stagedEntry && stagedEntry.qty > 0);
+                      const rowOrderInfo = resolveOrderMethodInfo({
+                        orderMethod: r.orderMethod,
+                        supplier: r.supplier,
+                        warehouse: r.warehouse,
+                        productName: r.name,
+                      });
+                      const rowIsDone = (r.pendingBoxes || 0) > 0;
+                      const groupLabel = getCutoffGroupLabel(rowOrderInfo.cutoffMinutes, rowIsDone);
+                      const prevRow = idx > 0 ? dayRows[idx - 1].r : null;
+                      const prevGroupLabel = prevRow
+                        ? getCutoffGroupLabel(
+                            resolveOrderMethodInfo({
+                              orderMethod: prevRow.orderMethod,
+                              supplier: prevRow.supplier,
+                              warehouse: prevRow.warehouse,
+                              productName: prevRow.name,
+                            }).cutoffMinutes,
+                            (prevRow.pendingBoxes || 0) > 0
+                          )
+                        : null;
+                      const showGroupHeader = sortMode === 'cutoff' && groupLabel !== prevGroupLabel;
+                      const groupBadge = getCutoffBadgeState(rowOrderInfo.cutoffMinutes, nowKstMinutes, rowIsDone);
+
                       return (
+                        <React.Fragment key={r.id}>
+                          {showGroupHeader && (
+                            <tr className="bg-slate-100/90 border-y border-slate-200">
+                              <td colSpan={14} className="py-1 px-3">
+                                <div className="flex items-center gap-2 text-[11.5px] font-black">
+                                  <span
+                                    className={
+                                      groupBadge.kind === 'overdue'
+                                        ? 'text-rose-700'
+                                        : groupBadge.kind === 'urgent'
+                                        ? 'text-amber-800'
+                                        : groupBadge.kind === 'completed'
+                                        ? 'text-emerald-700'
+                                        : 'text-slate-700'
+                                    }
+                                  >
+                                    {groupLabel}
+                                  </span>
+                                  {groupBadge.kind === 'overdue' && (
+                                    <span className="text-[10.5px] font-bold text-rose-600">· 마감 시간 경과</span>
+                                  )}
+                                  {groupBadge.kind === 'urgent' && (
+                                    <span className="text-[10.5px] font-bold text-amber-700">· {groupBadge.label}</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                         <tr
-                          key={r.id}
                           className={`transition-colors relative border-l-4 ${
                             isRowStaged
-                              ? 'border-l-blue-500 bg-blue-50/70 hover:bg-blue-100/60'
-                              : m.stockDays < 1.5 && m.dailyUsage > 0
-                              ? 'border-l-rose-500 bg-rose-50/25 hover:bg-rose-50/50'
-                              : m.stockDays < 3 && m.dailyUsage > 0
-                              ? 'border-l-amber-400 bg-white hover:bg-amber-50/30'
-                              : (r.pendingBoxes || 0) > 0
-                              ? 'border-l-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/40'
+                              ? 'border-l-blue-600 bg-blue-50/40 hover:bg-blue-50/70'
                               : idx % 2 === 0
-                              ? 'border-l-transparent bg-white hover:bg-blue-50/40'
-                              : 'border-l-transparent bg-slate-50/40 hover:bg-blue-50/40'
+                              ? 'border-l-transparent bg-white hover:bg-slate-50/80'
+                              : 'border-l-transparent bg-slate-50/35 hover:bg-slate-100/60'
                           }`}
                         >
                           {/* 발주 담기 체크박스 */}
@@ -3787,13 +3993,129 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 거래처명 */}
-                          <td className="py-2 px-1">
+                          <td className="py-2 px-1.5">
                             <div
-                              className="text-[12.5px] 2xl:text-[13.5px] font-black text-slate-800 tracking-tight truncate"
+                              className="text-[12.5px] 2xl:text-[13.5px] font-black text-slate-800 tracking-tight leading-snug break-keep"
                               title={r.supplier}
                             >
                               {r.supplier}
                             </div>
+                          </td>
+
+                          {/* 발주방법 · 마감시각 (거래처 오른쪽 인라인 표시) */}
+                          <td className="py-2 px-1.5">
+                            {(() => {
+                              const orderInfo = resolveOrderMethodInfo({
+                                orderMethod: r.orderMethod,
+                                supplier: r.supplier,
+                                warehouse: r.warehouse,
+                                productName: r.name,
+                                partnerRemark: r.partnerRemark,
+                                partnerTel: r.partnerTel,
+                                partnerEmail: r.partnerEmail,
+                                partnerContact: r.partnerContact,
+                              });
+                              const isDone = (r.pendingBoxes || 0) > 0;
+                              const badge = getCutoffBadgeState(orderInfo.cutoffMinutes, nowKstMinutes, isDone);
+
+                              if (!orderInfo.channelLabel && !orderInfo.cutoffTime && !orderInfo.note) {
+                                return <span className="text-[11px] text-slate-300">-</span>;
+                              }
+
+                              const mainText = [
+                                orderInfo.channelLabel,
+                                orderInfo.cutoffTime,
+                                orderInfo.tempTag ? `(${orderInfo.tempTag})` : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ');
+
+                              return (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span
+                                    className={`text-[11.5px] 2xl:text-[12px] font-bold tracking-tight whitespace-nowrap ${
+                                      badge.kind === 'completed'
+                                        ? 'text-slate-400'
+                                        : badge.kind === 'overdue'
+                                        ? 'text-rose-800'
+                                        : badge.kind === 'urgent'
+                                        ? 'text-amber-900'
+                                        : 'text-slate-600'
+                                    }`}
+                                    title={orderInfo.raw || mainText}
+                                  >
+                                    {mainText || orderInfo.raw}
+                                  </span>
+
+                                  {badge.kind === 'overdue' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                      {badge.label}
+                                    </span>
+                                  )}
+                                  {badge.kind === 'urgent' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                      {badge.label}
+                                    </span>
+                                  )}
+                                  {badge.kind === 'completed' && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">
+                                      {badge.label}
+                                    </span>
+                                  )}
+
+                                  {orderInfo.channel === '카톡' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const text = buildKakaoOrderText({
+                                          supplier: r.supplier,
+                                          orderDate: currentDayDate || orderDate,
+                                          productName: r.name,
+                                          boxes: m.dayQty,
+                                        });
+                                        navigator.clipboard?.writeText(text);
+                                        setCopiedRowId(r.id);
+                                        window.setTimeout(() => {
+                                          setCopiedRowId((cur) => (cur === r.id ? null : cur));
+                                        }, 1500);
+                                      }}
+                                      className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                                      title="카톡 발주 문구 복사"
+                                      aria-label={`${r.supplier} 카톡 발주 문구 복사`}
+                                    >
+                                      {copiedRowId === r.id ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {orderInfo.channel === '이메일' && r.partnerEmail && (
+                                    <a
+                                      href={`mailto:${r.partnerEmail}?subject=${encodeURIComponent(
+                                        `[GFS 발주] ${currentDayDate || orderDate} ${r.name}`
+                                      )}`}
+                                      className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                                      title={`이메일 발주 (${r.partnerEmail})`}
+                                      aria-label={`${r.supplier} 이메일 발주`}
+                                    >
+                                      <Mail className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+
+                                  {orderInfo.note && (
+                                    <span
+                                      className="inline-flex items-center text-slate-400 hover:text-slate-700 cursor-help"
+                                      title={orderInfo.note}
+                                      aria-label={orderInfo.note}
+                                    >
+                                      <Info className="w-3.5 h-3.5" />
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </td>
 
                           {/* 품목명 (클릭 시 현 재고상태 & 7일 재고추이 드로어 오픈) */}
@@ -3805,7 +4127,7 @@ export const MatOrderDayView: React.FC = () => {
                                 className="group flex items-center gap-1 min-w-0 text-left cursor-pointer hover:text-blue-700 transition-colors"
                                 title={`${r.name} — 클릭하여 현 재고상태 및 지난 7일 재고 변화·향후 발주 시뮬레이션 보기`}
                               >
-                                <span className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-tight truncate min-w-0 group-hover:underline">
+                                <span className="text-[13.5px] 2xl:text-[14.5px] font-bold tracking-tight leading-snug break-keep min-w-0 group-hover:underline">
                                   {r.name}
                                 </span>
                                 <BarChart3 className="w-3.5 h-3.5 shrink-0 text-slate-300 group-hover:text-blue-600 transition-colors" />
@@ -3845,17 +4167,7 @@ export const MatOrderDayView: React.FC = () => {
 
                           {/* 납품패턴 · 보관창고 */}
                           <td className="py-1.5 px-1 text-center">
-                            <span
-                              className={`inline-block px-1.5 py-0.5 rounded-full text-[11.5px] 2xl:text-[12px] font-black border leading-tight ${
-                                pattern === '월수금'
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                  : pattern === '화목토'
-                                  ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                  : pattern === '매일'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : 'bg-slate-100 text-slate-600 border-slate-200'
-                              }`}
-                            >
+                            <span className="inline-block px-1.5 py-0.5 rounded-full text-[11.5px] 2xl:text-[12px] font-bold border leading-tight bg-slate-100 text-slate-700 border-slate-200">
                               {pattern}
                             </span>
                             {r.orderCycle && r.orderCycle !== pattern && (
@@ -3866,15 +4178,7 @@ export const MatOrderDayView: React.FC = () => {
                                 {r.orderCycle}
                               </span>
                             )}
-                            <span
-                              className={`inline-block mt-0.5 px-1.5 py-[1px] rounded text-[11px] 2xl:text-[11.5px] font-black ${
-                                (r.warehouse || '').includes('냉동')
-                                  ? 'bg-cyan-50 text-cyan-700'
-                                  : (r.warehouse || '').includes('냉장')
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'bg-amber-50 text-amber-700'
-                              }`}
-                            >
+                            <span className="inline-block mt-0.5 px-1.5 py-[1px] rounded text-[11px] 2xl:text-[11.5px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80">
                               {r.warehouse || '-'}
                             </span>
                           </td>
@@ -3908,7 +4212,7 @@ export const MatOrderDayView: React.FC = () => {
                                 </span>
                                 {r.isBomDriven && (
                                   <span
-                                    className="mt-0.5 text-[10.5px] px-1 py-[1px] rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-sans font-bold tracking-tight"
+                                    className="mt-0.5 text-[10.5px] px-1 py-[1px] rounded bg-slate-100 text-slate-600 border border-slate-200 font-sans font-bold tracking-tight"
                                     title={`오늘 GS25 수주 x 레시피 BOM 실시간 소요량: ${r.liveBomUsage?.toLocaleString()}봉/일 (엑셀 기준치: ${r.surveyDailyUsage?.toLocaleString()}봉/일)`}
                                   >
                                     BOM
@@ -3931,44 +4235,44 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 재고유지일 (Runway) */}
-                          <td className="py-1.5 px-1 text-center bg-blue-50/30 border-x border-blue-100">
+                          <td className="py-1.5 px-1 text-center border-x border-slate-100">
                             {m.isPastScheduledDeletion ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-black bg-rose-100 text-rose-800 border border-rose-300 leading-tight">
-                                <span>🚫 삭제도래</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[11.5px] 2xl:text-[12px] font-black bg-rose-50 text-rose-700 border border-rose-200 leading-tight">
+                                <span>삭제도래</span>
                                 <span className="text-[10.5px] font-bold">발주제외</span>
                               </div>
                             ) : (r.pendingBoxes || 0) > 0 && m.suggestedBoxes === 0 ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 leading-tight">
-                                <span>✅ {m.stockDays.toFixed(1)}일</span>
-                                <span className="text-[10.5px] font-bold">기발주 {r.pendingBoxes}b</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 leading-tight">
+                                <span>{m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-semibold text-slate-500">기발주 {r.pendingBoxes}b</span>
                               </div>
                             ) : m.auditStatus === 'critical' ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-rose-100 text-rose-700 border border-rose-300 animate-pulse leading-tight">
-                                <span>🚨 {m.stockDays.toFixed(1)}일</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-rose-50 text-rose-700 border border-rose-200 leading-tight">
+                                <span>{m.stockDays.toFixed(1)}일</span>
                                 <span className="text-[10.5px] font-bold">임박</span>
                               </div>
                             ) : m.auditStatus === 'warning' ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-amber-100 text-amber-800 border border-amber-300 leading-tight">
-                                <span>⚠️ {m.stockDays.toFixed(1)}일</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-amber-50 text-amber-800 border border-amber-200 leading-tight">
+                                <span>{m.stockDays.toFixed(1)}일</span>
                                 <span className="text-[10.5px] font-bold">미달</span>
                               </div>
                             ) : m.auditStatus === 'overstock' ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-slate-100 text-slate-600 border border-slate-300 leading-tight">
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-bold bg-slate-100 text-slate-600 border border-slate-200 leading-tight">
                                 <span className="inline-flex items-center gap-0.5">
-                                  <Lock className="w-3 h-3 text-slate-500" />
+                                  <Lock className="w-3 h-3 text-slate-400" />
                                   {Math.round(m.stockDays)}일
                                 </span>
-                                <span className="text-[10.5px] font-bold">과잉</span>
+                                <span className="text-[10.5px] font-semibold text-slate-500">과잉</span>
                               </div>
                             ) : m.auditStatus === 'pending_overlap' ? (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 leading-tight">
-                                <span>📦 {m.stockDays.toFixed(1)}일</span>
-                                <span className="text-[10.5px] font-bold">입고대기</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 leading-tight">
+                                <span>{m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-semibold text-slate-500">입고대기</span>
                               </div>
                             ) : (
-                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 leading-tight">
-                                <span>✅ {m.stockDays.toFixed(1)}일</span>
-                                <span className="text-[10.5px] font-bold">적정</span>
+                              <div className="inline-flex flex-col items-center px-1.5 py-0.5 rounded-md text-[12px] 2xl:text-[12.5px] font-bold bg-slate-50 text-slate-700 border border-slate-200 leading-tight">
+                                <span>{m.stockDays.toFixed(1)}일</span>
+                                <span className="text-[10.5px] font-semibold text-slate-500">적정</span>
                               </div>
                             )}
                             {!m.isPastScheduledDeletion &&
@@ -4109,7 +4413,7 @@ export const MatOrderDayView: React.FC = () => {
                           </td>
 
                           {/* 요일 발주수량 (추천치 대비 확정) */}
-                          <td className="py-1.5 px-1.5 text-right bg-amber-50/40 border-x border-amber-200">
+                          <td className="py-1.5 px-1.5 text-right border-x border-slate-100">
                             <div className="flex flex-col items-end gap-0.5">
                               {m.isConfirmedOnTargetDay ? (
                                 <span
@@ -4313,12 +4617,14 @@ export const MatOrderDayView: React.FC = () => {
                             )}
                           </td>
                         </tr>
+                        </React.Fragment>
                       );
                     })
                   )}
                 </tbody>
               </table>
             )}
+            </div>
           </div>
         ) : (
           /* ──────── ② 오늘 회사창고에 들어올 양 (입고 검수 & 재고 반영) 테이블 ──────── */

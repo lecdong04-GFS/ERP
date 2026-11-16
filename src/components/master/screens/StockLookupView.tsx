@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { ProductSubstituteModal } from '../modals/ProductSubstituteModal';
+import { StockItemDetailModal, type StockDetailItem } from '../modals/StockItemDetailModal';
 import { normName } from '@/lib/gfs/norm';
 import {
   isTerminalProductStatus,
@@ -637,6 +638,7 @@ export const StockLookupView: React.FC = () => {
   lifecycleSyncRef.current = { targetDate, includeDiscontinued };
   const [keyword, setKeyword] = useState('');
   const [selectedRowId, setSelectedRowId] = useState<number | null>(null);
+  const [detailItem, setDetailItem] = useState<StockItem | null>(null);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
   const [priceEditedIds, setPriceEditedIds] = useState<Set<number>>(new Set());
   const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
@@ -1077,7 +1079,40 @@ export const StockLookupView: React.FC = () => {
     return () => window.removeEventListener('gfs-product-lifecycle-changed', onLifecycleChanged);
   }, []);
 
-  const handleRestoreProduct = async (row: StockItem) => {
+  const handleDeleteProduct = async (row: StockDetailItem, reason: string): Promise<boolean> => {
+    if (!row.productId) return false;
+    try {
+      const res = await fetch('/api/master/product/lifecycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.productId, action: 'delete', reason }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        alert('품목 삭제 실패: ' + (json.error || `HTTP ${res.status}`));
+        return false;
+      }
+      setData((prev) =>
+        prev.map((item) =>
+          item.productId === row.productId
+            ? { ...item, productStatus: '삭제', isUsed: false }
+            : item
+        )
+      );
+      setSaveStatusMsg(`🗑️ [${row.itemName}] 품목이 미사용(삭제) 처리되어 재고조회·발주 목록에서 제외되었습니다.`);
+      window.dispatchEvent(
+        new CustomEvent('gfs-product-lifecycle-changed', {
+          detail: { source: 'stock', action: 'delete', ids: [row.productId] },
+        })
+      );
+      return true;
+    } catch (err: any) {
+      alert('품목 삭제 중 통신 오류: ' + (err?.message || String(err)));
+      return false;
+    }
+  };
+
+  const handleRestoreProduct = async (row: StockItem | StockDetailItem) => {
     if (!row.productId || restoringProductId) return;
     setRestoringProductId(row.productId);
     try {
@@ -2105,16 +2140,21 @@ export const StockLookupView: React.FC = () => {
         const isDeletedRow = row.productStatus === '삭제' || row.isUsed === false;
         return (
           <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              className={`font-black tracking-tight truncate ${
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailItem(row);
+              }}
+              className={`text-left font-black tracking-tight truncate cursor-pointer hover:text-blue-700 hover:underline transition-colors ${
                 isDeletedRow ? 'line-through text-slate-400' : 'text-slate-900'
               } ${
                 density === 'large' ? 'text-[16px]' : density === 'spacious' ? 'text-[15px]' : 'text-[13px]'
               }`}
-              title={String(v || '')}
+              title={`${String(v || '')} — 클릭하여 전 창고·LOT 전체 내용 보기 및 미사용 삭제`}
             >
               {v}
-            </span>
+            </button>
             <ProductLifecycleBadge
               status={row.productStatus}
               discontinuedDate={row.discontinuedDate}
@@ -3126,6 +3166,15 @@ export const StockLookupView: React.FC = () => {
             window.dispatchEvent(new CustomEvent('gfs-product-lifecycle-changed'));
           }
         }}
+      />
+
+      <StockItemDetailModal
+        item={detailItem}
+        allItems={data}
+        targetDate={targetDate}
+        onClose={() => setDetailItem(null)}
+        onDeleteProduct={handleDeleteProduct}
+        onRestoreProduct={handleRestoreProduct}
       />
     </div>
   );

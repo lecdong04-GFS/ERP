@@ -145,6 +145,11 @@ export interface SheetRowInput {
   suppressedSurveyDailyUsage?: number;
   isReplaced?: boolean;
   replacementNote?: string;
+  orderMethod?: string;
+  partnerRemark?: string;
+  partnerTel?: string;
+  partnerEmail?: string;
+  partnerContact?: string;
 }
 
 export const DAY_CHARS = ['월', '화', '수', '목', '금', '토', '일'] as const;
