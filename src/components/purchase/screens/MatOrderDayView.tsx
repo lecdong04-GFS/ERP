@@ -2633,7 +2633,7 @@ export const MatOrderDayView: React.FC = () => {
                 title="시간대별 발주 관제표 및 발주고/통합구매/카톡/이메일 일괄 실행 센터를 엽니다."
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>발주 관제 · 실행</span>
+                <span>시간대별 발주표</span>
                 {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
                     {confirmedPoList.filter((po: any) => po.dispatchStatus !== '발송완료').length}
@@ -3543,144 +3543,6 @@ export const MatOrderDayView: React.FC = () => {
               )}
               </div>
             </div>
-
-            {/* 시간대 웨이브 · 플랫폼별 발주 타임라인 */}
-            {cutoffTimelineItems.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-100">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-extrabold text-slate-700">
-                    <Clock className="w-3.5 h-3.5 text-rose-600" />
-                    <span>시간대 웨이브 · 플랫폼별 발주 타임라인</span>
-                    <span className="text-[10px] font-medium text-slate-400">
-                      (웨이브/플랫폼/거래처 클릭 시 시트 즉시 필터링 · CJ/대상 온도대 자동 분리)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {(waveFilter !== 'ALL' || platformFilter !== 'ALL') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWaveFilter('ALL');
-                          setPlatformFilter('ALL');
-                        }}
-                        className="text-[10.5px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
-                      >
-                        웨이브·플랫폼 초기화
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setDispatchDrawerOpen(true)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10.5px] font-bold cursor-pointer"
-                    >
-                      <Send className="w-3 h-3" /> 관제/실행 열기
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowCutoffTimeline((prev) => !prev)}
-                      className="text-[10.5px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                    >
-                      {showCutoffTimeline ? '접기' : `펼치기 (${cutoffTimelineItems.length})`}
-                    </button>
-                  </div>
-                </div>
-                {showCutoffTimeline && (
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-1">
-                      {ORDER_WAVE_OPTIONS.map((w) => {
-                        const active = waveFilter === w.code;
-                        return (
-                          <button
-                            key={w.code}
-                            type="button"
-                            onClick={() => setWaveFilter(active ? 'ALL' : w.code)}
-                            className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
-                              active
-                                ? 'bg-rose-600 text-white border-rose-700'
-                                : 'bg-rose-50/60 text-rose-900 border-rose-200 hover:bg-rose-100'
-                            }`}
-                          >
-                            {w.label}
-                          </button>
-                        );
-                      })}
-                      <span className="text-slate-300 mx-0.5">|</span>
-                      {ORDER_PLATFORM_OPTIONS.filter((p) => p.code !== 'OTHER').map((p) => {
-                        const active = platformFilter === p.code;
-                        return (
-                          <button
-                            key={p.code}
-                            type="button"
-                            onClick={() => setPlatformFilter(active ? 'ALL' : p.code)}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold border transition cursor-pointer ${
-                              active
-                                ? 'bg-indigo-600 text-white border-indigo-700'
-                                : `${p.badgeClass} hover:opacity-85`
-                            }`}
-                          >
-                            <span>{p.emoji}</span>
-                            <span>{p.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {cutoffTimelineItems.map((it) => {
-                        const isSelected = supplierFilter === it.name;
-                        return (
-                          <button
-                            key={it.name}
-                            type="button"
-                            onClick={() => setSupplierFilter(isSelected ? '전체' : it.name)}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                                : it.allDispatched
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                                  : it.cutoff.status === 'overdue' || it.cutoff.status === 'urgent'
-                                    ? 'bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100'
-                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                            }`}
-                            title={`${it.name} · ${it.channelMeta.label} · ${it.cutoff.label}${it.prof?.orderDay ? ` · 발주요일(${it.prof.orderDay})` : ''}`}
-                          >
-                            <span>{it.channelMeta.emoji}</span>
-                            <span className="truncate max-w-[110px]">{it.name}</span>
-                            {it.prof?.orderCutoffTime && (
-                              <span
-                                className={`font-mono text-[10px] px-1 rounded ${
-                                  isSelected
-                                    ? 'bg-white/20 text-white'
-                                    : it.allDispatched
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : it.cutoff.badgeClass
-                                }`}
-                              >
-                                {it.cutoff.label}
-                              </span>
-                            )}
-                            {it.poTotal > 0 && (
-                              <span
-                                className={`text-[10px] px-1 rounded font-extrabold ${
-                                  it.allDispatched
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-amber-100 text-amber-900'
-                                }`}
-                              >
-                                {it.allDispatched ? '발송완료' : `미발송 ${it.poTotal - it.poDispatched}`}
-                              </span>
-                            )}
-                            {!it.isOrderDay && (
-                              <span className="text-[9.5px] text-slate-400">(비발주일)</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </>
         ) : (
           /* 입고 검수 KPI & 필터 바 */
@@ -5874,8 +5736,6 @@ export const MatOrderDayView: React.FC = () => {
         initialTab="watchtower"
         onJumpToOrderSheet={(filter) => {
           if (filter.supplier) setSupplierFilter(filter.supplier);
-          if (filter.wave) setWaveFilter(filter.wave);
-          if (filter.platform) setPlatformFilter(filter.platform);
         }}
         onDispatched={() => {
           void loadConfirmedPo();

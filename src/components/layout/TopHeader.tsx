@@ -185,9 +185,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({ onToggleSidebar, isSidebar
               onClick={() => setWatchDrawerOpen(true)}
               className={`flex items-center gap-1.5 h-8.5 px-3 whitespace-nowrap shrink-0 rounded-lg text-[12.5px] font-extrabold border transition-all cursor-pointer ${
                 isHot && totalTodo > 0
-                  ? 'bg-rose-600/90 hover:bg-rose-500 text-white border-rose-400/60 shadow-sm animate-pulse'
+                  ? 'bg-rose-600/85 hover:bg-rose-500 text-white border-rose-400/50 shadow-sm'
                   : totalTodo > 0
-                    ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/40'
+                    ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border-amber-400/30'
                     : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/30'
               }`}
               title={
