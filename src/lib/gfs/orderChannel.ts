@@ -241,7 +241,7 @@ const WEEKDAY_CHARS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
 export function getKstWeekdayChar(ymd?: string): string {
   const targetYmd = ymd || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-  const dt = new Date(`${targetYmd}T00:00:00+09:00`);
+  const dt = new Date(`${targetYmd}T00:00:00Z`);
   if (Number.isNaN(dt.getTime())) return '월';
   return WEEKDAY_CHARS[dt.getUTCDay()];
 }
