@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { STANDARD_PRODUCT_SPEEDS, ProductSpeed } from '@/lib/production/ganttData';
+import { kstToday } from '@/lib/kst';
+import { normalizeBaseProductName } from '@/lib/production/riceScheduleEngine';
+import { GFS_SALES_ORDER_CHANGED_EVENT } from '@/lib/gfs/orderSyncEvent';
 import {
   Gauge,
   Calculator,
@@ -20,19 +23,122 @@ import {
 interface SimRow extends ProductSpeed {
   curShift2Qty: number;
   curShift1Qty: number;
+  baseShift2Qty: number;
+  baseShift1Qty: number;
 }
 
-export const SpeedSimulatorView: React.FC = () => {
-  const [searchTerm, setSearchTerm] = useState('');
+interface SpeedSimulatorProps {
+  workDate?: string;
+}
 
-  // 시뮬레이션 수량 상태
+export const SpeedSimulatorView: React.FC<SpeedSimulatorProps> = ({ workDate }) => {
+  const targetDate = workDate || kstToday();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [hasLiveOrders, setHasLiveOrders] = useState(false);
+
+  // 시뮬레이션 수량 상태 (초기값은 표준 기준, 로드 후 실수주 1편/2편 자동 연동)
   const [simData, setSimData] = useState<SimRow[]>(() =>
     STANDARD_PRODUCT_SPEEDS.map((s) => ({
       ...s,
       curShift2Qty: s.shift2Qty,
       curShift1Qty: s.shift1Qty,
+      baseShift2Qty: s.shift2Qty,
+      baseShift1Qty: s.shift1Qty,
     }))
   );
+
+  const loadLiveOrders = useCallback(async (dateStr: string) => {
+    try {
+      const res = await fetch(`/api/sales/order?orderDate=${encodeURIComponent(dateStr)}`, {
+        cache: 'no-store',
+      });
+      const json = await res.json();
+      if (!json?.success || !Array.isArray(json.data) || json.data.length === 0) {
+        setHasLiveOrders(false);
+        setSimData(
+          STANDARD_PRODUCT_SPEEDS.map((s) => ({
+            ...s,
+            curShift2Qty: s.shift2Qty,
+            curShift1Qty: s.shift1Qty,
+            baseShift2Qty: s.shift2Qty,
+            baseShift1Qty: s.shift1Qty,
+          }))
+        );
+        return;
+      }
+
+      const qtyByNorm = new Map<string, { name: string; s2: number; s1: number }>();
+      for (const so of json.data) {
+        if (so.status === '취소' || !Array.isArray(so.details)) continue;
+        for (const d of so.details) {
+          const rawName = d.product?.name || '';
+          const norm = normalizeBaseProductName(rawName).replace(/\s+/g, '');
+          if (!norm) continue;
+          const q2 = Number(d.orderQty2) || 0;
+          const q1 = Number(d.orderQty1) || 0;
+          const fallbackTotal = q2 === 0 && q1 === 0 ? Number(d.totalQty) || 0 : 0;
+          const add2 = q2 + (so.shift !== '1편' ? fallbackTotal : 0);
+          const add1 = q1 + (so.shift === '1편' ? fallbackTotal : 0);
+          const cur = qtyByNorm.get(norm);
+          if (cur) {
+            cur.s2 += add2;
+            cur.s1 += add1;
+          } else {
+            qtyByNorm.set(norm, { name: normalizeBaseProductName(rawName), s2: add2, s1: add1 });
+          }
+        }
+      }
+
+      const matchedNorms = new Set<string>();
+      const merged: SimRow[] = STANDARD_PRODUCT_SPEEDS.map((s) => {
+        const sNorm = normalizeBaseProductName(s.item).replace(/\s+/g, '');
+        const hit = qtyByNorm.get(sNorm);
+        if (hit) matchedNorms.add(sNorm);
+        const s2 = hit ? hit.s2 : 0;
+        const s1 = hit ? hit.s1 : 0;
+        return {
+          ...s,
+          curShift2Qty: s2,
+          curShift1Qty: s1,
+          baseShift2Qty: s2,
+          baseShift1Qty: s1,
+        };
+      });
+
+      // 표준 속도표에 없는 신규 수주 품목도 자동 추가
+      for (const [norm, info] of qtyByNorm.entries()) {
+        if (matchedNorms.has(norm) || (info.s2 === 0 && info.s1 === 0)) continue;
+        const defaultSpeed = /삼각|무스비/.test(info.name) ? 2400 : /김밥/.test(info.name) ? 1600 : 1500;
+        merged.push({
+          item: info.name,
+          speed: defaultSpeed,
+          shift2Qty: info.s2,
+          shift1Qty: info.s1,
+          curShift2Qty: info.s2,
+          curShift1Qty: info.s1,
+          baseShift2Qty: info.s2,
+          baseShift1Qty: info.s1,
+        });
+      }
+
+      setHasLiveOrders(true);
+      setSimData(merged);
+    } catch {
+      // 통신 오류 시 기존 상태 유지
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLiveOrders(targetDate);
+  }, [targetDate, loadLiveOrders]);
+
+  useEffect(() => {
+    const onOrderChanged = () => {
+      void loadLiveOrders(targetDate);
+    };
+    window.addEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
+    return () => window.removeEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
+  }, [targetDate, loadLiveOrders]);
 
   // 수량 변경 핸들러
   const updateQty = (item: string, shift: 'shift2' | 'shift1', val: number) => {
@@ -65,19 +171,19 @@ export const SpeedSimulatorView: React.FC = () => {
     setSimData((prev) =>
       prev.map((r) => ({
         ...r,
-        curShift2Qty: Math.round(r.shift2Qty * multiplier),
-        curShift1Qty: Math.round(r.shift1Qty * multiplier),
+        curShift2Qty: Math.round(r.baseShift2Qty * multiplier),
+        curShift1Qty: Math.round(r.baseShift1Qty * multiplier),
       }))
     );
   };
 
-  // 초기화
+  // 초기화 (실수주 연동 시 실수주 기준 복원)
   const handleReset = () => {
-    setSimData(
-      STANDARD_PRODUCT_SPEEDS.map((s) => ({
-        ...s,
-        curShift2Qty: s.shift2Qty,
-        curShift1Qty: s.shift1Qty,
+    setSimData((prev) =>
+      prev.map((r) => ({
+        ...r,
+        curShift2Qty: r.baseShift2Qty,
+        curShift1Qty: r.baseShift1Qty,
       }))
     );
   };
@@ -166,7 +272,7 @@ export const SpeedSimulatorView: React.FC = () => {
             <Clock size={24} />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500">총 가동 소요시간</span>
+            <span className="text-[13px] font-bold text-slate-500">총 가동 소요시간</span>
             <div className="text-xl font-black text-purple-900">{stats.totalHoursStr}</div>
           </div>
         </div>
@@ -176,9 +282,9 @@ export const SpeedSimulatorView: React.FC = () => {
             <Calculator size={24} />
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-500">평균 생산 속도</span>
+            <span className="text-[13px] font-bold text-slate-500">평균 생산 속도</span>
             <div className="text-xl font-black text-slate-900">
-              {stats.avgSpeed.toLocaleString()} <span className="text-xs font-bold">UPH</span>
+              {stats.avgSpeed.toLocaleString()} <span className="text-[13px] font-bold">UPH</span>
             </div>
           </div>
         </div>
@@ -186,16 +292,27 @@ export const SpeedSimulatorView: React.FC = () => {
 
       {/* 2. 컨트롤 바 (검색 + 프리셋 버튼) */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        {/* 검색 */}
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="품목명 검색 (예: 전주비빔, 스팸, 고진많...)"
-            className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-[240px]"
-          />
+        {/* 검색 및 실수주 연동 상태 */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="품목명 검색 (예: 전주비빔, 스팸, 고진많...)"
+              className="pl-9 pr-3 py-2 text-[13.5px] bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-[280px]"
+            />
+          </div>
+          <span
+            className={`px-2.5 py-1 rounded-full text-[12px] font-bold border ${
+              hasLiveOrders
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-slate-100 text-slate-600 border-slate-200'
+            }`}
+          >
+            {hasLiveOrders ? `✅ ${targetDate} 실수주(1·2편) 연동 중` : `${targetDate} 수주 대기 (표준 기준)`}
+          </span>
         </div>
 
         {/* 프리셋 버튼 그룹 */}
@@ -203,61 +320,72 @@ export const SpeedSimulatorView: React.FC = () => {
           <button
             type="button"
             onClick={handleReset}
-            className="px-3 py-1.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-[13px] flex items-center gap-1.5 cursor-pointer transition-colors"
           >
-            <RotateCcw size={13} />
+            <RotateCcw size={14} />
             <span>정본 기준 복원</span>
           </button>
           <button
             type="button"
             onClick={() => applyPreset(1.1)}
-            className="px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-[13px] flex items-center gap-1.5 cursor-pointer transition-colors"
           >
-            <TrendingUp size={13} />
+            <TrendingUp size={14} />
             <span>+10% 증량</span>
           </button>
           <button
             type="button"
             onClick={() => applyPreset(0.9)}
-            className="px-3 py-1.5 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 font-bold text-[13px] flex items-center gap-1.5 cursor-pointer transition-colors"
           >
-            <TrendingDown size={13} />
+            <TrendingDown size={14} />
             <span>-10% 감량</span>
           </button>
           <button
             type="button"
             onClick={handleExportCsv}
-            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[13px] flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
           >
-            <Download size={13} />
+            <Download size={14} />
             <span>엑셀(CSV) 다운로드</span>
           </button>
         </div>
       </div>
 
       {/* 3. 시뮬레이션 계산 테이블 */}
-      <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-900 text-white uppercase text-[11px] font-black tracking-wider">
+          <table className="w-full table-fixed text-left text-[14.5px] border-collapse">
+            <colgroup>
+              <col className="w-[4%]" />
+              <col className="w-[23%]" />
+              <col className="w-[11%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[9%]" />
+            </colgroup>
+            <thead className="bg-slate-900 text-white text-[13.5px] font-black tracking-tight">
               <tr>
-                <th className="px-4 py-3 text-center w-12 border-r border-slate-800">NO</th>
-                <th className="px-4 py-3 border-r border-slate-800">완제품 품목명</th>
-                <th className="px-4 py-3 text-right w-28 border-r border-slate-800">표준속도 (UPH)</th>
-                <th className="px-4 py-3 text-right w-24 border-r border-slate-800">분당속도</th>
-                <th className="px-4 py-3 text-center w-36 border-r border-slate-800 bg-blue-950/60">
+                <th className="px-2 py-3 text-center border-r border-slate-800">NO</th>
+                <th className="px-3 py-3 border-r border-slate-800">완제품 품목명</th>
+                <th className="px-3 py-3 text-right border-r border-slate-800">표준속도 (UPH)</th>
+                <th className="px-3 py-3 text-right border-r border-slate-800">분당속도</th>
+                <th className="px-3 py-3 text-center border-r border-slate-800">
                   2편 지시수량 (EA)
                 </th>
-                <th className="px-4 py-3 text-center w-32 border-r border-slate-800 bg-blue-950/60">
+                <th className="px-3 py-3 text-center border-r border-slate-800">
                   2편 가동 소요시간
                 </th>
-                <th className="px-4 py-3 text-center w-36 border-r border-slate-800 bg-indigo-950/60">
+                <th className="px-3 py-3 text-center border-r border-slate-800">
                   1편 지시수량 (EA)
                 </th>
-                <th className="px-4 py-3 text-center w-32 border-r border-slate-800 bg-indigo-950/60">
+                <th className="px-3 py-3 text-center border-r border-slate-800">
                   1편 가동 소요시간
                 </th>
-                <th className="px-4 py-3 text-right w-28 bg-slate-950">합계 수량</th>
+                <th className="px-3 py-3 text-right bg-slate-950">합계 수량</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -267,53 +395,53 @@ export const SpeedSimulatorView: React.FC = () => {
                 const total = r.curShift2Qty + r.curShift1Qty;
 
                 return (
-                  <tr key={r.item} className="hover:bg-blue-50/40 transition-colors">
-                    <td className="px-4 py-2 text-center text-slate-400 font-bold border-r border-slate-100">
+                  <tr key={r.item} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-2 py-2.5 text-center text-slate-400 font-bold border-r border-slate-100">
                       {idx + 1}
                     </td>
-                    <td className="px-4 py-2 font-black text-slate-900 border-r border-slate-100">
+                    <td className="px-3 py-2.5 font-black text-slate-900 border-r border-slate-100 break-keep leading-snug">
                       {r.item}
                     </td>
-                    <td className="px-4 py-2 text-right font-mono font-bold text-blue-700 border-r border-slate-100">
-                      {r.speed.toLocaleString()} <span className="text-[10px] text-slate-400">ea/h</span>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-800 border-r border-slate-100">
+                      {r.speed.toLocaleString()} <span className="text-[12px] text-slate-400 font-sans">ea/h</span>
                     </td>
-                    <td className="px-4 py-2 text-right font-mono text-slate-600 border-r border-slate-100">
-                      {(r.speed / 60).toFixed(1)} <span className="text-[10px] text-slate-400">ea/m</span>
+                    <td className="px-3 py-2.5 text-right font-mono text-slate-600 border-r border-slate-100">
+                      {(r.speed / 60).toFixed(1)} <span className="text-[12px] text-slate-400 font-sans">ea/m</span>
                     </td>
 
                     {/* 2편 수량 및 계산 소요시간 */}
-                    <td className="px-3 py-1.5 text-center border-r border-slate-100 bg-blue-50/20">
+                    <td className="px-2.5 py-2 text-center border-r border-slate-100">
                       <input
                         type="number"
                         min="0"
                         step="10"
                         value={r.curShift2Qty || ''}
                         onChange={(e) => updateQty(r.item, 'shift2', Number(e.target.value) || 0)}
-                        className="w-full text-center px-2 py-1 font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full text-center px-2 py-1.5 text-[14.5px] font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-4 py-2 text-center font-mono font-bold text-blue-900 border-r border-slate-100 bg-blue-50/20">
-                      {dur2.text} <span className="text-[10px] text-slate-500">({dur2.min}분)</span>
+                    <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-800 border-r border-slate-100">
+                      {dur2.text} <span className="text-[12px] text-slate-500 font-sans">({dur2.min}분)</span>
                     </td>
 
                     {/* 1편 수량 및 계산 소요시간 */}
-                    <td className="px-3 py-1.5 text-center border-r border-slate-100 bg-indigo-50/20">
+                    <td className="px-2.5 py-2 text-center border-r border-slate-100">
                       <input
                         type="number"
                         min="0"
                         step="10"
                         value={r.curShift1Qty || ''}
                         onChange={(e) => updateQty(r.item, 'shift1', Number(e.target.value) || 0)}
-                        className="w-full text-center px-2 py-1 font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full text-center px-2 py-1.5 text-[14.5px] font-mono font-bold text-slate-900 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </td>
-                    <td className="px-4 py-2 text-center font-mono font-bold text-indigo-900 border-r border-slate-100 bg-indigo-50/20">
-                      {dur1.text} <span className="text-[10px] text-slate-500">({dur1.min}분)</span>
+                    <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-800 border-r border-slate-100">
+                      {dur1.text} <span className="text-[12px] text-slate-500 font-sans">({dur1.min}분)</span>
                     </td>
 
                     {/* 합계 */}
-                    <td className="px-4 py-2 text-right font-mono font-black text-slate-900 bg-slate-50">
-                      {total.toLocaleString()} <span className="text-[10px] text-slate-500">개</span>
+                    <td className="px-3 py-2.5 text-right font-mono font-black text-slate-900 bg-slate-50">
+                      {total.toLocaleString()} <span className="text-[12px] text-slate-500 font-sans">개</span>
                     </td>
                   </tr>
                 );

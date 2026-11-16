@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { SalesActionBar } from '../common/SalesActionBar';
 import { SalesDataGrid, GridColumnDef } from '../common/SalesDataGrid';
 import { displayRemark } from '@/lib/gfs/docKey';
+import { emitSalesOrderChanged } from '@/lib/gfs/orderSyncEvent';
 
 interface ExtraOrderItem {
   id: number;
@@ -283,6 +284,7 @@ export const OrderExtraRegGsrView: React.FC = () => {
         }
         createdNos.push(json.data.orderNo);
       }
+      emitSalesOrderChanged({ source: 'OrderExtraRegGsrView' });
       alert(`추가 주문 저장 완료 (${createdNos.join(', ')})\n품목 ${targets.length}건`);
       void loadOrders();
     } catch (err: any) {

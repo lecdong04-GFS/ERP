@@ -47,6 +47,7 @@ import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
 import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
+import { GFS_SALES_ORDER_CHANGED_EVENT } from '@/lib/gfs/orderSyncEvent';
 import {
   resolveOrderMethodInfo,
   getCutoffBadgeState,
@@ -594,6 +595,14 @@ export const MatOrderDayView: React.FC = () => {
 
   useEffect(() => {
     loadOrderSheet();
+  }, [loadOrderSheet]);
+
+  useEffect(() => {
+    const onOrderChanged = () => {
+      void loadOrderSheet();
+    };
+    window.addEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
+    return () => window.removeEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
   }, [loadOrderSheet]);
 
   // 삭제·비활성 품목 목록 및 개수 조회

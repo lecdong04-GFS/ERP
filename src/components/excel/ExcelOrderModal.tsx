@@ -15,6 +15,8 @@ import {
   Building2,
   Clock,
 } from 'lucide-react';
+import { emitSalesOrderChanged } from '@/lib/gfs/orderSyncEvent';
+
 import {
   generateSampleGsRetailExcel,
   parseGsRetailExcelBuffer,
@@ -277,6 +279,7 @@ export const ExcelOrderModal: React.FC<ExcelOrderModalProps> = ({ isOpen, onClos
       } catch (pipeErr) {
         console.error('Pipeline visual engine error:', pipeErr);
       }
+      emitSalesOrderChanged({ source: 'ExcelOrderModal', orderDate: orderDateLabel });
 
       const totalQty = parsedData.orders.reduce((sum, o) => sum + (o.totalOrderQty || 0), 0);
       const totalAmt = parsedData.orders.reduce(

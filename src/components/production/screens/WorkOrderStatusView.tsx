@@ -42,6 +42,8 @@ import {
 import { GanttTimelineView } from '@/components/production/GanttTimelineView';
 import { SpeedSimulatorView } from '@/components/production/SpeedSimulatorView';
 import { ProductionConfigModal } from '@/components/production/modals/ProductionConfigModal';
+import { RiceWorkOrderTabsPanel } from '@/components/production/RiceWorkOrderTabsPanel';
+import { GFS_SALES_ORDER_CHANGED_EVENT } from '@/lib/gfs/orderSyncEvent';
 
 const SEONGHYEONG_LINES = [
   { id: 'ALL_SEONGHYEONG', name: '전체 성형장 (9개 라인 종합)', icon: '🌟', count: 9 },
@@ -171,7 +173,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);
   const lineDropdownRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('GANTT');
+  const [activeTab, setActiveTab] = useState<'AUTO_5TAB' | 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('AUTO_5TAB');
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
 
   // 큰 팝업 모달 상태
@@ -181,7 +183,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   const openLargeModal = (tab?: 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR') => {
-    setModalActiveTab(tab || activeTab);
+    setModalActiveTab(tab || (activeTab === 'AUTO_5TAB' ? 'TIMETABLE' : activeTab));
     setIsLargeModalOpen(true);
   };
 
@@ -311,6 +313,14 @@ export const WorkOrderStatusView: React.FC = () => {
       setLoading(false);
     }
   }, [currentLine]);
+
+  useEffect(() => {
+    const onOrderChanged = () => {
+      void fetchServerWorkOrders(workDate, shift, selectedLine, true);
+    };
+    window.addEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
+    return () => window.removeEventListener(GFS_SALES_ORDER_CHANGED_EVENT, onOrderChanged);
+  }, [workDate, shift, selectedLine, fetchServerWorkOrders]);
 
   useEffect(() => {
     void fetchServerWorkOrders(workDate, shift, selectedLine);
@@ -2216,6 +2226,20 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 3. 4대 멀티 탭 네비게이션 (타임테이블 간트 vs 작업지시서 vs 소요 원부자재 vs 속도 시뮬레이터) */}
       <div className="px-6 pt-3 shrink-0 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 기본 탭: 실별·시간대별 자동지시서 (5시트 · 10시 전/후) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('AUTO_5TAB')}
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+              activeTab === 'AUTO_5TAB'
+                ? 'bg-white text-slate-900 border-slate-900 shadow-xs'
+                : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+            }`}
+          >
+            <Sparkles size={16} className={activeTab === 'AUTO_5TAB' ? 'text-slate-900' : 'text-slate-400'} />
+            <span>실별·시간대별 자동지시서 (5시트)</span>
+          </button>
+
           {/* 탭 1: 10분 단위 타임테이블 간트 */}
           <button
             type="button"
@@ -2354,6 +2378,13 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 4. 메인 콘텐츠 영역 (선택된 탭에 따라 렌더링) */}
       <div className="flex-1 min-h-0 px-6 pb-5 pt-0 overflow-hidden flex flex-col">
         <div className="flex-1 min-h-0 bg-white border border-slate-300 rounded-b-2xl rounded-tr-2xl shadow-sm overflow-hidden flex flex-col">
+          {/* 기본 탭: 실별·시간대별 5시트 자동지시서 (10시 전/후) */}
+          {activeTab === 'AUTO_5TAB' && (
+            <div className="flex-1 min-h-0 p-3 bg-slate-50/40 overflow-hidden">
+              <RiceWorkOrderTabsPanel workDate={workDate} />
+            </div>
+          )}
+
           {/* TAB 1: 10분 단위 타임테이블 간트차트 뷰 */}
           {activeTab === 'GANTT' && (
             <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
@@ -2376,7 +2407,7 @@ export const WorkOrderStatusView: React.FC = () => {
           {/* TAB 4: 수주량 연동 속도 시뮬레이터 뷰 */}
           {activeTab === 'SIMULATOR' && (
             <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
-              <SpeedSimulatorView />
+              <SpeedSimulatorView workDate={workDate} />
             </div>
           )}
           {/* TAB 2: 타임테이블 스케줄 테이블 (일일 작업지시서 - 스마트 편집 모드) */}

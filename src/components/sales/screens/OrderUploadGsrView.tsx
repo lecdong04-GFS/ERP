@@ -9,6 +9,7 @@ import { exportGridToExcel } from '@/lib/excelExport';
 import { parseOrderStatusRows, pickOrderSheetName } from '@/lib/gfs/salesIntake';
 import { parseBonbaljuRows, BonbaljuParseResult } from '@/lib/gfs/bonbaljuIntake';
 import { displayRemark } from '@/lib/gfs/docKey';
+import { emitSalesOrderChanged } from '@/lib/gfs/orderSyncEvent';
 import { CheckCircle2, Loader2, Search, Trash2 } from 'lucide-react';
 
 interface OrderUploadRow {
@@ -300,6 +301,7 @@ export const OrderUploadGsrView: React.FC = () => {
     });
     const json = await res.json();
     if (json.success) {
+      emitSalesOrderChanged({ source: 'OrderUploadGsrView', orderDate });
       return {
         ok: true,
         orderNo: json.data.orderNo,
@@ -473,6 +475,7 @@ export const OrderUploadGsrView: React.FC = () => {
         json = null;
       }
       if (res.ok && json?.success) {
+        emitSalesOrderChanged({ source: 'OrderUploadGsrView:delete', orderDate: filterDate });
         setToast(`${filterDate} 수주 ${json.deleted}건이 삭제되었습니다.`);
         window.setTimeout(() => setToast(null), 2500);
         void loadOrders();
