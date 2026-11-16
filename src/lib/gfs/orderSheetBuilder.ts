@@ -18,6 +18,7 @@ import {
 export interface OrderSheetBuildResult {
   rows: any[];
   suppliers: string[];
+  partnerProfiles: any[];
   checkDate: string;
   auditCount: number;
   rowCount: number;
@@ -287,12 +288,33 @@ export async function buildOrderSheet(params?: {
     (a, b) => String(a.warehouse).localeCompare(String(b.warehouse)) || String(a.itemId).localeCompare(String(b.itemId))
   );
   const suppliers = Array.from(suppliersSet).sort();
+  const partnerProfiles = await prisma.partner.findMany({
+    where: { isUsed: true },
+    select: {
+      id: true,
+      name: true,
+      orderMethod: true,
+      orderChannel: true,
+      orderCutoffTime: true,
+      orderPortalUrl: true,
+      orderDay: true,
+      orderNote: true,
+      email: true,
+      tel: true,
+      fax: true,
+      contactPerson: true,
+      contactTel: true,
+      leadTime: true,
+    },
+    orderBy: { name: 'asc' },
+  });
   const dormantCount = rows.filter((r) => r.isDormant).length;
   const unlinkedDormantCount = rows.filter((r) => r.dormantTier === 'unlinked_dormant').length;
 
   return {
     rows,
     suppliers,
+    partnerProfiles,
     checkDate,
     auditCount: rows.length,
     rowCount: rows.length,

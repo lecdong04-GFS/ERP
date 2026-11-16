@@ -83,6 +83,9 @@ export async function GET(req: NextRequest) {
         orderType: true,
         deliveryDate: true,
         status: true,
+        dispatchStatus: true,
+        dispatchChannel: true,
+        dispatchedAt: true,
         totalAmount: true,
         cancelReason: true,
         cancelDate: true,
@@ -94,7 +97,17 @@ export async function GET(req: NextRequest) {
             id: true,
             name: true,
             tel: true,
+            fax: true,
+            email: true,
+            contactPerson: true,
+            contactTel: true,
             leadTime: true,
+            orderMethod: true,
+            orderChannel: true,
+            orderCutoffTime: true,
+            orderPortalUrl: true,
+            orderDay: true,
+            orderNote: true,
           },
         },
         details: {
@@ -313,6 +326,42 @@ export async function POST(req: NextRequest) {
         return res;
       });
       return NextResponse.json({ success: true, data: updated });
+    }
+
+    if (action === 'dispatch') {
+      const targetIds: number[] = Array.isArray(body.ids)
+        ? body.ids.map((n: any) => Number(n)).filter((n: number) => Number.isFinite(n) && n > 0)
+        : id
+          ? [Number(id)].filter((n: number) => Number.isFinite(n) && n > 0)
+          : [];
+      if (targetIds.length === 0) {
+        return NextResponse.json({ success: false, error: '발송 상태를 변경할 발주 ID가 없습니다.' }, { status: 400 });
+      }
+      const nextStatus = body.dispatchStatus === '미발송' ? '미발송' : '발송완료';
+      const nextChannel = String(body.dispatchChannel || '');
+      const updated = await prisma.$transaction(async (tx) => {
+        const res = await tx.purchaseOrder.updateMany({
+          where: { id: { in: targetIds } },
+          data: {
+            dispatchStatus: nextStatus,
+            dispatchChannel: nextStatus === '발송완료' ? nextChannel : '',
+            dispatchedAt: nextStatus === '발송완료' ? new Date() : null,
+          },
+        });
+        await recordOrderAuditLog(
+          tx,
+          auth.user,
+          'DISPATCH',
+          `발주서 ${targetIds.length}건 발송상태 변경 → ${nextStatus}${nextChannel ? ` (${nextChannel})` : ''}`
+        );
+        return res;
+      });
+      return NextResponse.json({
+        success: true,
+        updatedCount: updated.count,
+        dispatchStatus: nextStatus,
+        dispatchChannel: nextChannel,
+      });
     }
 
     if (action === 'update_order') {

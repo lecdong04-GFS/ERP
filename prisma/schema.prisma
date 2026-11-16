@@ -73,10 +73,14 @@ model Partner {
   bankAccount   String   @default("") // 계좌번호
   bankHolder    String   @default("") // 예금주
   taxType       String   @default("T1") // 과세구분: T1=과세, T2=면세, T3=영세
-  leadTime      Int      @default(1)  // 조달기간(일)
-  orderMethod   String   @default("") // 주문방법 (EDI, 전화, FAX)
-  orderDay      String   @default("") // 발주요일 (월,화,수,...)
-  closingDate   String   @default("") // 마감일자
+  leadTime        Int      @default(1)  // 조달기간(일)
+  orderMethod     String   @default("") // 주문방법 (EDI, 전화, FAX)
+  orderChannel    String   @default("") // 발주채널 (WEB, KAKAO, EMAIL, PHONE, FAX, EDI)
+  orderCutoffTime String   @default("") // 발주마감시간 (HH:mm, 예: 11:00, 14:30)
+  orderPortalUrl  String   @default("") // 웹 발주 포털 URL
+  orderDay        String   @default("") // 발주요일 (월,화,수,...)
+  orderNote       String   @default("") // 발주 조건/특이사항
+  closingDate     String   @default("") // 마감일자
   paymentTerms  String   @default("") // 결제조건
   remark        String   @default("")
   isUsed        Boolean  @default(true)
@@ -468,8 +472,11 @@ model PurchaseOrder {
   partnerName     String   @default("")
   orderType       String   @default("정기") // 정기, 수시, 시뮬레이션
   deliveryDate    String   @default("") // 납기일
-  status          String   @default("발주") // 발주, 부분입고, 입고완료, 취소
-  totalAmount     Float    @default(0)
+  status          String    @default("발주") // 발주, 부분입고, 입고완료, 취소
+  dispatchStatus  String    @default("미발송") // 발송상태: 미발송, 발송완료
+  dispatchChannel String    @default("")       // 발송채널
+  dispatchedAt    DateTime?                    // 발송완료 시각
+  totalAmount     Float     @default(0)
   cancelReason    String   @default("")
   cancelDate      String?
   remark          String   @default("")
