@@ -2223,7 +2223,7 @@ export const MatOrderDayView: React.FC = () => {
         { key: 'No', label: 'No' },
         { key: '거래처명', label: '거래처명' },
         { key: '품목명', label: '품목명' },
-        { key: '납품요일패턴', label: '납품패턴' },
+        { key: '납품요일패턴', label: '발주요일' },
         { key: '보관창고', label: '보관창고' },
         { key: '현재재고유지일_일', label: '재고유지일(일)' },
         { key: '발주일수_일', label: '발주일수(일)' },
@@ -3269,16 +3269,16 @@ export const MatOrderDayView: React.FC = () => {
                   ))}
                 </select>
 
-                {/* 납품패턴 필터 */}
+                {/* 발주요일 필터 */}
                 <select
                   value={patternFilter}
                   onChange={(e) => setPatternFilter(e.target.value)}
                   className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-[13px] font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
-                  title="거래처 납품패턴별 필터"
+                  title="거래처 발주요일별 필터"
                 >
                   {['전체', '월수금', '화목토', '수금', '화금', '주5일', '매일', '기타'].map((pat) => (
                     <option key={pat} value={pat}>
-                      {pat === '전체' ? '납품패턴: 전체' : `패턴: ${pat}`}
+                      {pat === '전체' ? '발주요일: 전체' : `발주: ${pat}`}
                     </option>
                   ))}
                 </select>
@@ -4261,7 +4261,7 @@ export const MatOrderDayView: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* 납품패턴 · 보관창고 */}
+                          {/* 발주요일 · 보관창고 */}
                           <td className="py-1.5 px-1 text-center">
                             <span className="inline-block px-1.5 py-0.5 rounded-full text-[11.5px] 2xl:text-[12px] font-bold border leading-tight bg-slate-100 text-slate-700 border-slate-200">
                               {pattern}

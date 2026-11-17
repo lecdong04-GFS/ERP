@@ -236,44 +236,13 @@ export interface SplitWeekOptions {
  * activeDayMask 전달 시 해당 주에서 실제 발주/납품 가능한 요일(예: 오늘 이후)에만 100% 배분
  * options.weekendRelief: 토요일 입고 현장 작업자의 노동강도를 낮추기 위해 토요일 비중을 20% 경감(0.8x)하고 주중으로 분산
  */
-export function getOrderDaysFromDelivery(
-  deliveryDays: boolean[],
-  leadDays: number,
-  supplierName = ''
-): boolean[] {
-  const isDaily = deliveryDays.slice(0, 5).every(Boolean);
-  const sup = supplierName.toUpperCase();
-  // 특이사항 1: 엠디에스(MDS)는 기본 월/수/금 입고이나 D-2 발주시 화/목/토도 입고 가능
-  if ((sup.includes('엠디에스') || sup.includes('MDS')) && leadDays >= 2) {
-    return [true, true, true, true, true, true, false];
-  }
-  if (isDaily || leadDays <= 0) return deliveryDays;
-
-  const orderDays = [false, false, false, false, false, false, false];
-  for (let d = 0; d < 7; d++) {
-    if (!deliveryDays[d]) continue;
-    const o = (d - leadDays + 7) % 7;
-    orderDays[o] = true;
-  }
-  return orderDays;
-}
-
 export function splitWeek(
   r: SheetRowInput,
   finalBoxes: number,
   activeDayMask?: boolean[],
   options?: SplitWeekOptions
 ): number[] {
-  const deliveryDays = parseDeliveryDays(r.supplier || '', r.orderDay);
-  const parsedLead =
-    typeof r.leadDays === 'number' && r.leadDays > 0
-      ? r.leadDays
-      : String(r.orderCycle || '').includes('2')
-      ? 2
-      : String(r.orderCycle || '').includes('1')
-      ? 1
-      : 0;
-  const days = getOrderDaysFromDelivery(deliveryDays, parsedLead, r.supplier || r.vendor || '');
+  const days = parseDeliveryDays(r.supplier || '', r.orderDay);
   const eligible = activeDayMask ? days.map((on, i) => Boolean(on && activeDayMask[i])) : days;
   const idx = eligible.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
   const out = [0, 0, 0, 0, 0, 0, 0];

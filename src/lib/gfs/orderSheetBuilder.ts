@@ -288,7 +288,12 @@ export async function buildOrderSheet(params?: {
       itemId: code,
       status: p.status || '정상',
       orderCycle: p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : ''),
-      leadDays: p.partner?.leadTime || (String(p.orderCycle || '').includes('2') ? 2 : 1),
+      leadDays: (() => {
+        const cycle = p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : '');
+        if (cycle.includes('2')) return 2;
+        if (cycle.includes('1')) return 1;
+        return p.partner?.leadTime || 1;
+      })(),
       discontinuedDate: discDate,
       isReplaced: isReplacedSpam,
       replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,
