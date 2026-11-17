@@ -137,7 +137,21 @@ export async function GET(req: NextRequest) {
     }
 
     if (status && status !== '전체') {
-      where.status = status === '입고완료' ? { in: ['입고완료', '입고'] } : status;
+      if (status === '입고완료') {
+        where.status = { in: ['입고완료', '입고'] };
+      } else if (status === '취소') {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : []),
+          {
+            OR: [
+              { status: '취소' },
+              { details: { some: { receivedQty: { lte: 0 } } } },
+            ],
+          },
+        ];
+      } else {
+        where.status = status;
+      }
     }
     if (search) {
       where.OR = [
@@ -1357,15 +1371,23 @@ export async function DELETE(req: NextRequest) {
           },
         });
 
-        // 부모 전표 합계 재계산
-        const sumResult = await tx.receivingDetail.aggregate({
+        // 부모 전표 합계 및 상태 재계산 (전 품목 취소 시 전표 상태도 '취소'로 전환)
+        const remainingDetails = await tx.receivingDetail.findMany({
           where: { receivingId: dt.receivingId },
-          _sum: { amount: true },
+          select: { receivedQty: true, amount: true },
         });
+        const totalAmt = remainingDetails.reduce(
+          (sum, d) => sum + (Number(d.amount) || 0),
+          0
+        );
+        const allCancelled =
+          remainingDetails.length > 0 &&
+          remainingDetails.every((d) => (Number(d.receivedQty) || 0) <= 0);
         await tx.receiving.update({
           where: { id: dt.receivingId },
           data: {
-            totalAmount: sumResult._sum.amount || 0,
+            totalAmount: totalAmt,
+            ...(allCancelled ? { status: '취소' } : {}),
           },
         });
 

@@ -223,19 +223,19 @@ export function StockItemDetailModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+        className="w-full max-w-5xl max-h-[92vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── 상단 헤더 ── */}
-        <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-4">
+        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[11px] font-bold">
-                <Package className="w-3 h-3" />
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[12.5px] font-bold">
+                <Package className="w-3.5 h-3.5" />
                 {item.itemType || item.category || '원부자재'}
               </span>
               {item.itemCode && (
-                <span className="font-mono text-[11.5px] font-bold text-slate-500">
+                <span className="font-mono text-[12.5px] font-bold text-slate-500">
                   {item.itemCode}
                 </span>
               )}
@@ -248,13 +248,13 @@ export function StockItemDetailModal({
               />
             </div>
             <h2
-              className={`text-lg font-black tracking-tight leading-snug break-keep ${
+              className={`text-xl font-black tracking-tight leading-snug break-keep ${
                 isDeletedRow ? 'line-through text-slate-400' : 'text-slate-900'
               }`}
             >
               {item.itemName}
             </h2>
-            <div className="mt-1 flex items-center gap-3 flex-wrap text-xs text-slate-600 font-semibold">
+            <div className="mt-1.5 flex items-center gap-4 flex-wrap text-[13.5px] text-slate-600 font-semibold">
               <span>
                 거래처: <strong className="text-slate-900">{item.orderSupplier || item.vendor || '-'}</strong>
               </span>
@@ -274,24 +274,24 @@ export function StockItemDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition cursor-pointer shrink-0"
+            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition cursor-pointer shrink-0"
             aria-label="닫기"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* ── 본문 스크롤 영역 ── */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* 1) 핵심 KPI 4칸 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-bold text-slate-500">전 창고 총 현재고</div>
-              <div className="mt-1 text-lg font-black font-mono text-slate-900">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[13px] font-bold text-slate-500">전 창고 총 현재고</div>
+              <div className="mt-1.5 text-2xl font-black font-mono text-slate-900">
                 {totalStock.toLocaleString()}
-                <span className="text-xs font-bold text-slate-500 ml-0.5">{item.unit || '봉'}</span>
+                <span className="text-sm font-bold text-slate-500 ml-1">{item.unit || '봉'}</span>
               </div>
-              <div className="text-[11px] text-slate-500 font-semibold">
+              <div className="mt-1 text-[13px] text-slate-600 font-semibold">
                 약 {totalBoxesApprox}박스 · 전일대비{' '}
                 <span className={totalStock - totalPrevStock >= 0 ? 'text-blue-600' : 'text-rose-600'}>
                   {totalStock - totalPrevStock >= 0 ? '+' : ''}
@@ -300,40 +300,40 @@ export function StockItemDetailModal({
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200">
-              <div className="text-[11px] font-bold text-blue-700 flex items-center gap-1">
-                <TrendingDown className="w-3.5 h-3.5" />
+            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200">
+              <div className="text-[13px] font-bold text-blue-700 flex items-center gap-1.5">
+                <TrendingDown className="w-4 h-4" />
                 예상 유지일 (Runway)
               </div>
-              <div className="mt-1 text-lg font-black font-mono text-blue-950">
+              <div className="mt-1.5 text-2xl font-black font-mono text-blue-950">
                 {runwayDays !== null && runwayDays !== undefined ? `${runwayDays}일` : '-'}
               </div>
-              <div className="text-[11px] text-blue-800/80 font-semibold">
+              <div className="mt-1 text-[13px] text-blue-900/80 font-semibold">
                 일소진 {effectiveDaily.toLocaleString()}
                 {item.unit || '봉'}/일 · 안전재고 {item.safetyStock.toLocaleString()}
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[11px] font-bold text-slate-500">입수 · 단가 · 자산</div>
-              <div className="mt-1 text-lg font-black font-mono text-slate-900">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[13px] font-bold text-slate-500">입수 · 단가 · 자산</div>
+              <div className="mt-1.5 text-2xl font-black font-mono text-slate-900">
                 ₩{Math.round(totalAmount).toLocaleString()}
               </div>
-              <div className="text-[11px] text-slate-500 font-semibold">
+              <div className="mt-1 text-[13px] text-slate-600 font-semibold">
                 입수 {pack} · 봉 ₩{Math.round(item.unitPrice || 0).toLocaleString()} · 박스 ₩
                 {Math.round(item.boxPrice || (item.unitPrice || 0) * pack).toLocaleString()}
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200">
-              <div className="text-[11px] font-bold text-amber-800 flex items-center gap-1">
-                <Truck className="w-3.5 h-3.5" />
+            <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200">
+              <div className="text-[13px] font-bold text-amber-800 flex items-center gap-1.5">
+                <Truck className="w-4 h-4" />
                 입고 예정 (미입고 PO)
               </div>
-              <div className="mt-1 text-lg font-black font-mono text-amber-950">
+              <div className="mt-1.5 text-2xl font-black font-mono text-amber-950">
                 {pendingOrders.length > 0 ? `${pendingBoxesTotal.toLocaleString()}박스` : '없음'}
               </div>
-              <div className="text-[11px] text-amber-800/80 font-semibold">
+              <div className="mt-1 text-[13px] text-amber-900/80 font-semibold">
                 {pendingOrders.length > 0 ? `진행 중 발주서 ${pendingOrders.length}건` : '대기 발주 없음'}
               </div>
             </div>
@@ -341,25 +341,25 @@ export function StockItemDetailModal({
 
           {/* 2) 전 창고 · 전체 LOT 상세 테이블 */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 className="text-[15px] font-black text-slate-800 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-slate-500" />
                 전 창고 · 전체 LOT 현황 ({siblings.length}건)
               </h3>
-              <span className="text-[11px] text-slate-500 font-semibold">유통기한 임박순 정렬</span>
+              <span className="text-[13px] text-slate-500 font-semibold">유통기한 임박순 정렬</span>
             </div>
             <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="bg-slate-100 text-slate-700 font-black border-b border-slate-200">
+              <table className="w-full text-[14px] text-left border-collapse">
+                <thead className="bg-slate-100 text-slate-700 text-[13px] font-black border-b border-slate-200">
                   <tr>
-                    <th className="py-2 px-3">창고</th>
-                    <th className="py-2 px-2">LOT번호</th>
-                    <th className="py-2 px-2">입고일</th>
-                    <th className="py-2 px-2">유통기한</th>
-                    <th className="py-2 px-2 text-right">박스</th>
-                    <th className="py-2 px-2 text-right">낱개</th>
-                    <th className="py-2 px-3 text-right">현재고</th>
-                    <th className="py-2 px-2 text-center">상태</th>
+                    <th className="py-2.5 px-3">창고</th>
+                    <th className="py-2.5 px-3">LOT번호</th>
+                    <th className="py-2.5 px-3">입고일</th>
+                    <th className="py-2.5 px-3">유통기한</th>
+                    <th className="py-2.5 px-3 text-right">박스</th>
+                    <th className="py-2.5 px-3 text-right">낱개</th>
+                    <th className="py-2.5 px-3 text-right">현재고</th>
+                    <th className="py-2.5 px-3 text-center">상태</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -368,27 +368,27 @@ export function StockItemDetailModal({
                       key={s.id}
                       className={s.id === item.id ? 'bg-blue-50/50 font-semibold' : 'bg-white'}
                     >
-                      <td className="py-2 px-3 font-bold text-slate-800">{s.whName || '-'}</td>
-                      <td className="py-2 px-2 font-mono text-slate-600">{s.lotNo || '-'}</td>
-                      <td className="py-2 px-2 font-mono text-slate-600">{s.inboundDate || '-'}</td>
-                      <td className="py-2 px-2 font-mono">
+                      <td className="py-2.5 px-3 font-bold text-slate-800">{s.whName || '-'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600">{s.lotNo || '-'}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600">{s.inboundDate || '-'}</td>
+                      <td className="py-2.5 px-3 font-mono">
                         <span className={s.fefoWarn ? 'text-rose-600 font-bold' : 'text-slate-700'}>
                           {s.expiryDate || '-'}
                         </span>
                         {s.fefoWarn && (
-                          <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-100 text-rose-700 font-black">
+                          <span className="ml-1.5 text-[11.5px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-black">
                             선입주의
                           </span>
                         )}
                       </td>
-                      <td className="py-2 px-2 text-right font-mono">{s.boxQty.toLocaleString()}</td>
-                      <td className="py-2 px-2 text-right font-mono">{s.pieceQty.toLocaleString()}</td>
-                      <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
+                      <td className="py-2.5 px-3 text-right font-mono">{s.boxQty.toLocaleString()}</td>
+                      <td className="py-2.5 px-3 text-right font-mono">{s.pieceQty.toLocaleString()}</td>
+                      <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
                         {s.currentStock.toLocaleString()}
                       </td>
-                      <td className="py-2 px-2 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         <span
-                          className={`inline-block px-1.5 py-0.5 rounded-full text-[10.5px] font-bold ${
+                          className={`inline-block px-2 py-0.5 rounded-full text-[12px] font-bold ${
                             s.status === '품절'
                               ? 'bg-rose-100 text-rose-700'
                               : s.status === '부족'
@@ -410,22 +410,22 @@ export function StockItemDetailModal({
 
           {/* 3) 최근 7일 재고 변화 & 최근 발주서 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="border border-slate-200 rounded-xl p-3.5 bg-white">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <div className="border border-slate-200 rounded-xl p-4 bg-white">
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="text-[14.5px] font-black text-slate-800 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-slate-500" />
                   최근 7일 재고 추이
                 </h3>
-                {historyLoading && <span className="text-[11px] text-slate-400">불러오는 중...</span>}
+                {historyLoading && <span className="text-[12.5px] text-slate-400">불러오는 중...</span>}
               </div>
               {timeline.length === 0 && !historyLoading ? (
-                <div className="text-xs text-slate-400 py-4 text-center">최근 스냅샷 이력이 없습니다.</div>
+                <div className="text-[13.5px] text-slate-400 py-4 text-center">최근 스냅샷 이력이 없습니다.</div>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {timeline.map((t) => (
                     <div
                       key={t.date}
-                      className="flex items-center justify-between text-[11.5px] py-1 border-b border-slate-100 last:border-b-0"
+                      className="flex items-center justify-between text-[13.5px] py-1.5 border-b border-slate-100 last:border-b-0"
                     >
                       <span className="font-mono text-slate-600">{t.date}</span>
                       <div className="flex items-center gap-3 font-mono">
@@ -433,7 +433,7 @@ export function StockItemDetailModal({
                         {t.estimatedUsage !== null && t.estimatedUsage > 0 && (
                           <span className="text-slate-500">소진 {t.estimatedUsage}</span>
                         )}
-                        <span className="font-black text-slate-900 w-16 text-right">
+                        <span className="font-black text-slate-900 w-20 text-right">
                           {t.hasSnapshot ? t.qty.toLocaleString() : '-'}
                         </span>
                       </div>
@@ -443,21 +443,21 @@ export function StockItemDetailModal({
               )}
             </div>
 
-            <div className="border border-slate-200 rounded-xl p-3.5 bg-white">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-slate-500" />
+            <div className="border border-slate-200 rounded-xl p-4 bg-white">
+              <div className="flex items-center justify-between mb-2.5">
+                <h3 className="text-[14.5px] font-black text-slate-800 flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-slate-500" />
                   최근 발주 / 입고 전표
                 </h3>
               </div>
               {recentOrders.length === 0 && !historyLoading ? (
-                <div className="text-xs text-slate-400 py-4 text-center">최근 발주 전표가 없습니다.</div>
+                <div className="text-[13.5px] text-slate-400 py-4 text-center">최근 발주 전표가 없습니다.</div>
               ) : (
                 <div className="space-y-1.5">
                   {recentOrders.slice(0, 6).map((o) => (
                     <div
                       key={o.orderNo}
-                      className="flex items-center justify-between text-[11.5px] py-1 border-b border-slate-100 last:border-b-0"
+                      className="flex items-center justify-between text-[13.5px] py-1.5 border-b border-slate-100 last:border-b-0"
                     >
                       <div>
                         <span className="font-mono font-bold text-slate-800">{o.orderNo}</span>
@@ -468,7 +468,7 @@ export function StockItemDetailModal({
                           {o.receivedQty}/{o.orderQty}box
                         </span>
                         <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          className={`px-2 py-0.5 rounded text-[11.5px] font-bold ${
                             o.status === '완료'
                               ? 'bg-emerald-50 text-emerald-700'
                               : 'bg-amber-50 text-amber-800'
@@ -487,10 +487,10 @@ export function StockItemDetailModal({
           {/* 4) 미사용 품목 삭제 확인 영역 (열렸을 때만 표시) */}
           {confirmDeleteOpen && !isDeletedRow && (
             <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-3">
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-2.5">
                 <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div className="text-xs text-rose-900 space-y-1">
-                  <div className="font-black text-sm">정말 이 품목을 미사용(삭제) 처리하시겠습니까?</div>
+                <div className="text-[13.5px] text-rose-900 space-y-1">
+                  <div className="font-black text-[15px]">정말 이 품목을 미사용(삭제) 처리하시겠습니까?</div>
                   <p className="text-rose-800">
                     소프트 삭제 처리되어 재고조회·자재발주 목록에서 즉시 숨겨지며, 상단{' '}
                     <strong>[삭제·이관 포함]</strong> 체크 후 언제든 복구할 수 있습니다.
@@ -502,8 +502,8 @@ export function StockItemDetailModal({
                       ))}
                     </ul>
                   ) : (
-                    <div className="mt-1 inline-flex items-center gap-1 text-emerald-700 font-bold">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    <div className="mt-1 inline-flex items-center gap-1.5 text-emerald-700 font-bold">
+                      <CheckCircle2 className="w-4 h-4" />
                       현재고 0 · 미입고 발주 0 · 일소진 0 — 안전하게 정리 가능한 품목입니다.
                     </div>
                   )}
@@ -515,13 +515,13 @@ export function StockItemDetailModal({
                   value={deleteReason}
                   onChange={(e) => setDeleteReason(e.target.value)}
                   placeholder="삭제 사유 (선택사항: 예) 단종, 미사용 자재 정리"
-                  className="flex-1 px-3 py-1.5 text-xs bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-400"
+                  className="flex-1 px-3 py-2 text-[13.5px] bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-400"
                 />
                 <button
                   type="button"
                   onClick={() => setConfirmDeleteOpen(false)}
                   disabled={isSubmitting}
-                  className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
+                  className="px-3.5 py-2 text-[13px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
                 >
                   취소
                 </button>
@@ -529,7 +529,7 @@ export function StockItemDetailModal({
                   type="button"
                   onClick={handleConfirmDelete}
                   disabled={isSubmitting}
-                  className="px-3.5 py-1.5 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 text-[13px] font-black text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? '처리 중...' : '미사용 삭제 확정'}
                 </button>
@@ -539,10 +539,10 @@ export function StockItemDetailModal({
         </div>
 
         {/* ── 하단 푸터 ── */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
           <div>
             {!item.productId ? (
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[12.5px] text-slate-400">
                 미등록 마스터 행은 삭제할 수 없습니다.
               </span>
             ) : isDeletedRow ? (
@@ -550,9 +550,9 @@ export function StockItemDetailModal({
                 type="button"
                 onClick={handleRestore}
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[13.5px] font-black cursor-pointer transition disabled:opacity-50"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-4 h-4" />
                 {isSubmitting ? '복구 중...' : '정상 품목 복구'}
               </button>
             ) : (
@@ -560,12 +560,12 @@ export function StockItemDetailModal({
                 <button
                   type="button"
                   onClick={() => setConfirmDeleteOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold cursor-pointer transition"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-[13.5px] font-bold cursor-pointer transition"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                   미사용 품목 삭제
                   {safetyWarnings.length > 0 && (
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                    <AlertTriangle className="w-4 h-4 text-amber-500" />
                   )}
                 </button>
               )
@@ -575,7 +575,7 @@ export function StockItemDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer transition"
+            className="px-5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[13.5px] font-bold cursor-pointer transition"
           >
             닫기
           </button>

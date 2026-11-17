@@ -108,7 +108,7 @@ export function OrderBatchDispatchModal({ isOpen, orderDate, suppliers, onClose 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[1px] p-4"
+      className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-900/50 backdrop-blur-[1px] p-4"
       onClick={onClose}
     >
       <div

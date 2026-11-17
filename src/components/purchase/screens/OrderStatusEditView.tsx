@@ -916,7 +916,8 @@ export const OrderStatusEditView: React.FC = () => {
   // 공용 발주 품목 편집 테이블 렌더러 (기본 화면 + 크게보기 팝업 공용)
   const renderOrderItemsTable = (
     rowsToRender: FlatOrderItemRow[],
-    fontScale: 'normal' | 'large' | 'xlarge' = 'normal'
+    fontScale: 'normal' | 'large' | 'xlarge' = 'normal',
+    singleLine = false
   ) => {
     const visibleIdSet = new Set(rowsToRender.map((x) => x.id));
     const isAllVisibleChecked =
@@ -940,40 +941,67 @@ export const OrderStatusEditView: React.FC = () => {
         : fontScale === 'large'
         ? 'text-[16px]'
         : 'text-[14.5px]';
-    const qtyInputCls =
-      fontScale === 'xlarge'
-        ? 'w-24 px-2.5 py-1.5 text-[16.5px]'
+    const qtyInputCls = singleLine
+      ? fontScale === 'xlarge'
+        ? 'w-14 px-1 py-0.5 text-[14px]'
         : fontScale === 'large'
-        ? 'w-[88px] px-2 py-1 text-[15.5px]'
-        : 'w-20 px-2 py-1 text-[14px]';
-    const priceInputCls =
-      fontScale === 'xlarge'
-        ? 'w-28 px-2.5 py-1.5 text-[16px]'
+        ? 'w-13 px-1 py-0.5 text-[13.5px]'
+        : 'w-12 px-1 py-0.5 text-[12.5px]'
+      : fontScale === 'xlarge'
+      ? 'w-24 px-2.5 py-1.5 text-[16.5px]'
+      : fontScale === 'large'
+      ? 'w-[88px] px-2 py-1 text-[15.5px]'
+      : 'w-20 px-2 py-1 text-[14px]';
+    const priceInputCls = singleLine
+      ? fontScale === 'xlarge'
+        ? 'w-[68px] px-1 py-0.5 text-[14px]'
         : fontScale === 'large'
-        ? 'w-[104px] px-2 py-1 text-[15px]'
-        : 'w-24 px-2 py-1 text-[13.5px]';
-    const bagInputCls =
-      fontScale === 'xlarge'
-        ? 'w-[104px] px-2.5 py-1.5 text-[15.5px]'
+        ? 'w-16 px-1 py-0.5 text-[13.5px]'
+        : 'w-[60px] px-1 py-0.5 text-[12.5px]'
+      : fontScale === 'xlarge'
+      ? 'w-28 px-2.5 py-1.5 text-[16px]'
+      : fontScale === 'large'
+      ? 'w-[104px] px-2 py-1 text-[15px]'
+      : 'w-24 px-2 py-1 text-[13.5px]';
+    const bagInputCls = singleLine
+      ? fontScale === 'xlarge'
+        ? 'w-[62px] px-1 py-0.5 text-[13.5px]'
         : fontScale === 'large'
-        ? 'w-24 px-2 py-1 text-[14.5px]'
-        : 'w-20 px-2 py-1 text-[13px]';
+        ? 'w-[58px] px-1 py-0.5 text-[13px]'
+        : 'w-[54px] px-1 py-0.5 text-[12px]'
+      : fontScale === 'xlarge'
+      ? 'w-[104px] px-2.5 py-1.5 text-[15.5px]'
+      : fontScale === 'large'
+      ? 'w-24 px-2 py-1 text-[14.5px]'
+      : 'w-20 px-2 py-1 text-[13px]';
     const amtTextCls =
       fontScale === 'xlarge'
         ? 'text-[17.5px]'
         : fontScale === 'large'
         ? 'text-[16px]'
         : 'text-[14.5px]';
-    const cellPadCls =
-      fontScale === 'xlarge' ? 'py-3 px-3.5' : fontScale === 'large' ? 'py-3 px-3' : 'py-2.5 px-3';
+    const cellPadCls = singleLine
+      ? 'py-2 px-1'
+      : fontScale === 'xlarge'
+      ? 'py-3 px-3.5'
+      : fontScale === 'large'
+      ? 'py-3 px-3'
+      : 'py-2.5 px-3';
+    const thPadCls = singleLine ? 'py-2.5 px-1' : 'py-3 px-3';
 
     return (
-      <table className="w-full text-left border-collapse min-w-[1100px]">
+      <table
+        className={
+          singleLine
+            ? 'w-full table-fixed text-left border-collapse whitespace-nowrap'
+            : 'w-full text-left border-collapse min-w-[1100px]'
+        }
+      >
         <thead
-          className={`sticky top-0 z-10 bg-slate-100 text-slate-700 ${headTextCls} font-black border-b border-slate-200 uppercase tracking-tight select-none`}
+          className={`sticky top-0 z-10 bg-slate-100 text-slate-700 ${singleLine ? 'text-[11.5px]' : headTextCls} font-black border-b border-slate-200 uppercase tracking-tight select-none`}
         >
           <tr>
-            <th className="py-3 px-3 text-center w-12">
+            <th className={`${singleLine ? 'py-2.5 px-0.5 w-7' : 'py-3 px-3 w-12'} text-center`}>
               <input
                 type="checkbox"
                 checked={isAllVisibleChecked}
@@ -982,27 +1010,29 @@ export const OrderStatusEditView: React.FC = () => {
                 title="현재 목록 전체 선택"
               />
             </th>
-            <th className="py-3 px-2 text-center w-14">No</th>
-            <th className="py-3 px-3 w-28 text-center">발주일자</th>
-            <th className="py-3 px-3 w-28 text-center">입고예정</th>
-            <th className="py-3 px-3 w-36 text-center">발주번호</th>
-            <th className="py-3 px-3 w-40">거래처명</th>
-            <th className="py-3 px-4 min-w-[220px]">품명</th>
-            <th className="py-3 px-3 w-28 text-center">규격/단위</th>
-            <th className="py-3 px-2.5 w-20 text-right">입수량</th>
-            <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
-              발주박스수 (✏️)
+            <th className={`${singleLine ? 'py-2.5 px-0.5 w-7' : 'py-3 px-2 w-14'} text-center`}>No</th>
+            <th className={`${thPadCls} text-center ${singleLine ? 'w-[94px]' : 'w-28'}`}>발주일자</th>
+            <th className={`${thPadCls} text-center ${singleLine ? 'w-[90px]' : 'w-28'}`}>입고예정</th>
+            <th className={`${thPadCls} text-center ${singleLine ? 'w-[104px]' : 'w-36'}`}>발주번호</th>
+            <th className={`${thPadCls} ${singleLine ? 'w-[108px]' : 'w-40'}`}>거래처명</th>
+            <th className={`${singleLine ? 'py-2.5 px-1.5' : 'py-3 px-4 min-w-[220px]'}`}>품명</th>
+            <th className={`${thPadCls} text-center ${singleLine ? 'w-[80px]' : 'w-28'}`}>규격/단위</th>
+            <th className={`${singleLine ? 'py-2.5 px-1 w-[46px]' : 'py-3 px-2.5 w-20'} text-right`}>입수량</th>
+            <th className={`${thPadCls} text-right bg-blue-50/70 text-blue-900 border-x border-blue-100 ${singleLine ? 'w-[84px]' : 'w-32'}`}>
+              {singleLine ? '발주박스' : '발주박스수 (✏️)'}
             </th>
-            <th className="py-3 px-3 w-28 text-right bg-emerald-50/60 text-emerald-900 border-r border-blue-100">
-              봉단가 (✏️)
+            <th className={`${thPadCls} text-right bg-emerald-50/60 text-emerald-900 border-r border-blue-100 ${singleLine ? 'w-[76px]' : 'w-28'}`}>
+              {singleLine ? '봉단가' : '봉단가 (✏️)'}
             </th>
-            <th className="py-3 px-3 w-32 text-right bg-blue-50/70 text-blue-900 border-r border-blue-100">
-              박스단가 (✏️)
+            <th className={`${thPadCls} text-right bg-blue-50/70 text-blue-900 border-r border-blue-100 ${singleLine ? 'w-[84px]' : 'w-32'}`}>
+              {singleLine ? '박스단가' : '박스단가 (✏️)'}
             </th>
-            <th className="py-3 px-3 w-36 text-right">발주금액(합계)</th>
-            <th className="py-3 px-3 w-28 text-center">상태</th>
-            <th className="py-3 px-3 min-w-[140px]">비고(✏️)</th>
-            <th className="py-3 px-3 text-center w-16">삭제</th>
+            <th className={`${thPadCls} text-right ${singleLine ? 'w-[86px]' : 'w-36'}`}>
+              {singleLine ? '발주금액' : '발주금액(합계)'}
+            </th>
+            <th className={`${thPadCls} text-center ${singleLine ? 'w-[76px]' : 'w-28'}`}>상태</th>
+            <th className={`${thPadCls} ${singleLine ? 'w-[76px]' : 'min-w-[140px]'}`}>비고(✏️)</th>
+            <th className={`${singleLine ? 'py-2.5 px-0.5 w-8' : 'py-3 px-3 w-16'} text-center`}>삭제</th>
           </tr>
         </thead>
         <tbody className={`divide-y divide-slate-100 ${bodyTextCls}`}>
@@ -1075,19 +1105,32 @@ export const OrderStatusEditView: React.FC = () => {
                   </td>
 
                   {/* 발주일자 */}
-                  <td className={`${cellPadCls} text-center font-mono text-slate-600`}>
-                    <div>{item.orderDate}</div>
-                    {getWeekdayCharYmd(item.orderDate) && (
-                      <div className="text-[10.5px] text-slate-400">
-                        ({getWeekdayCharYmd(item.orderDate)})
-                      </div>
+                  <td className={`${cellPadCls} text-center font-mono text-slate-600 ${singleLine ? 'whitespace-nowrap' : ''}`}>
+                    {singleLine ? (
+                      <span>
+                        {item.orderDate}
+                        {getWeekdayCharYmd(item.orderDate) && (
+                          <span className="text-[11px] text-slate-400 ml-1">
+                            ({getWeekdayCharYmd(item.orderDate)})
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <>
+                        <div>{item.orderDate}</div>
+                        {getWeekdayCharYmd(item.orderDate) && (
+                          <div className="text-[10.5px] text-slate-400">
+                            ({getWeekdayCharYmd(item.orderDate)})
+                          </div>
+                        )}
+                      </>
                     )}
                   </td>
 
                   {/* 입고예정일 (D+1/D+2) */}
-                  <td className={`${cellPadCls} text-center`}>
+                  <td className={`${cellPadCls} text-center ${singleLine ? 'whitespace-nowrap' : ''}`}>
                     {item.expectedDeliveryDate ? (
-                      <div className="flex flex-col items-center gap-0.5">
+                      <div className={singleLine ? 'inline-flex items-center justify-center gap-1.5' : 'flex flex-col items-center gap-0.5'}>
                         <span className="font-mono text-[12px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
                           {item.expectedDeliveryDate.slice(5)}({getWeekdayCharYmd(item.expectedDeliveryDate) || '-'})
                         </span>
@@ -1110,36 +1153,45 @@ export const OrderStatusEditView: React.FC = () => {
                         e.stopPropagation();
                         openLargePopup({ mode: 'po', orderId: item.orderId });
                       }}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-100 text-slate-800 hover:text-blue-800 font-mono text-[12px] font-bold border border-slate-200 hover:border-blue-300 shadow-2xs transition cursor-pointer"
-                      title="클릭하여 이 발주서 품목 전체를 큰 팝업으로 보기/수정"
+                      className={`inline-flex items-center gap-0.5 ${singleLine ? 'max-w-full px-1.5 py-0.5 text-[11px]' : 'px-2 py-0.5 text-[12px]'} rounded-md bg-slate-100 hover:bg-blue-100 text-slate-800 hover:text-blue-800 font-mono font-bold border border-slate-200 hover:border-blue-300 shadow-2xs transition cursor-pointer`}
+                      title={`${item.orderNo} (클릭하여 이 발주서 품목 전체를 큰 팝업으로 보기/수정)`}
                     >
-                      <span>{item.orderNo}</span>
-                      <Maximize2 className="w-2.5 h-2.5 opacity-60" />
+                      <span className={singleLine ? 'truncate' : ''}>{item.orderNo}</span>
+                      <Maximize2 className="w-2.5 h-2.5 opacity-60 shrink-0" />
                     </button>
                   </td>
 
                   {/* 거래처명 */}
-                  <td className={`${cellPadCls} font-extrabold text-slate-800`}>
+                  <td
+                    className={`${cellPadCls} font-extrabold text-slate-800 ${singleLine ? 'truncate' : ''}`}
+                    title={item.partnerName}
+                  >
                     {item.partnerName}
                   </td>
 
                   {/* 품명 */}
-                  <td className={`${cellPadCls} px-4 font-black ${nameTextCls} text-slate-900 tracking-tight`}>
+                  <td
+                    className={`${cellPadCls} ${singleLine ? 'px-1.5 truncate' : 'px-4'} font-black ${nameTextCls} text-slate-900 tracking-tight`}
+                    title={item.productName}
+                  >
                     {item.productName}
                   </td>
 
                   {/* 규격/단위 */}
-                  <td className={`${cellPadCls} text-center text-slate-500 text-[12.5px] font-medium`}>
+                  <td
+                    className={`${cellPadCls} text-center text-slate-500 text-[12px] font-medium ${singleLine ? 'truncate' : ''}`}
+                    title={`${item.spec} / ${item.unit}`}
+                  >
                     {item.spec} / {item.unit}
                   </td>
 
                   {/* 입수량 */}
-                  <td className={`${cellPadCls} px-2.5 text-right font-mono font-bold text-slate-700`}>
+                  <td className={`${cellPadCls} ${singleLine ? 'px-1.5' : 'px-2.5'} text-right font-mono font-bold text-slate-700`}>
                     {item.packUnit.toLocaleString()}
                   </td>
 
                   {/* 발주박스수 (인라인 수정) */}
-                  <td className="py-1.5 px-2 text-right bg-blue-50/40 border-x border-blue-100">
+                  <td className={`${singleLine ? 'py-1 px-1.5' : 'py-1.5 px-2'} text-right bg-blue-50/40 border-x border-blue-100`}>
                     <div className="flex items-center justify-end gap-1">
                       <input
                         type="number"
@@ -1155,8 +1207,8 @@ export const OrderStatusEditView: React.FC = () => {
                   </td>
 
                   {/* 봉단가 (양방향 연동) */}
-                  <td className="py-1.5 px-2 text-right bg-emerald-50/30 border-r border-blue-100">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className={`${singleLine ? 'py-1 px-1.5' : 'py-1.5 px-2'} text-right bg-emerald-50/30 border-r border-blue-100`}>
+                    <div className="flex items-center justify-end gap-0.5">
                       <span className="text-[12px] text-slate-400 font-mono">₩</span>
                       <input
                         type="number"
@@ -1172,50 +1224,52 @@ export const OrderStatusEditView: React.FC = () => {
                   </td>
 
                   {/* 박스단가 (인라인 수정 + 마스터 동기화) */}
-                  <td className="py-1.5 px-2 text-right bg-blue-50/40 border-r border-blue-100">
-                    <div className="flex items-center justify-end gap-1">
-                      <span className="text-[12px] text-slate-400 font-mono">₩</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={100}
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          handleItemFieldChange(item.id, 'unitPrice', e.target.value)
-                        }
-                        className={`${priceInputCls} text-right bg-white border border-blue-300 rounded-lg font-black font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs`}
-                      />
-                    </div>
-                    {item.masterBoxPrice != null &&
-                      item.masterBoxPrice > 0 &&
-                      Math.abs(
-                        item.unitPrice -
-                          (isBoxUnitLabel(item.unit)
-                            ? item.masterBoxPrice
-                            : item.masterBagPrice || item.masterBoxPrice)
-                      ) > 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleItemFieldChange(
-                              item.id,
-                              'unitPrice',
-                              isBoxUnitLabel(item.unit)
-                                ? item.masterBoxPrice
-                                : item.masterBagPrice || item.masterBoxPrice
-                            )
+                  <td className={`${singleLine ? 'py-1 px-1.5' : 'py-1.5 px-2'} text-right bg-blue-50/40 border-r border-blue-100 ${singleLine ? 'whitespace-nowrap' : ''}`}>
+                    <div className={singleLine ? 'inline-flex items-center justify-end gap-1.5' : ''}>
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-[12px] text-slate-400 font-mono">₩</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={100}
+                          value={item.unitPrice}
+                          onChange={(e) =>
+                            handleItemFieldChange(item.id, 'unitPrice', e.target.value)
                           }
-                          className="mt-0.5 text-[10.5px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
-                          title="마스터 기준단가로 동기화"
-                        >
-                          마스터 ₩
-                          {(isBoxUnitLabel(item.unit)
-                            ? item.masterBoxPrice
-                            : item.masterBagPrice || item.masterBoxPrice
-                          ).toLocaleString()}{' '}
-                          적용
-                        </button>
-                      )}
+                          className={`${priceInputCls} text-right bg-white border border-blue-300 rounded-lg font-black font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs`}
+                        />
+                      </div>
+                      {item.masterBoxPrice != null &&
+                        item.masterBoxPrice > 0 &&
+                        Math.abs(
+                          item.unitPrice -
+                            (isBoxUnitLabel(item.unit)
+                              ? item.masterBoxPrice
+                              : item.masterBagPrice || item.masterBoxPrice)
+                        ) > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleItemFieldChange(
+                                item.id,
+                                'unitPrice',
+                                isBoxUnitLabel(item.unit)
+                                  ? item.masterBoxPrice
+                                  : item.masterBagPrice || item.masterBoxPrice
+                              )
+                            }
+                            className={`${singleLine ? '' : 'mt-0.5 '}text-[10.5px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer whitespace-nowrap`}
+                            title="마스터 기준단가로 동기화"
+                          >
+                            마스터 ₩
+                            {(isBoxUnitLabel(item.unit)
+                              ? item.masterBoxPrice
+                              : item.masterBagPrice || item.masterBoxPrice
+                            ).toLocaleString()}{' '}
+                            적용
+                          </button>
+                        )}
+                    </div>
                   </td>
 
                   {/* 발주금액 (수량 x 단가 자동 연산) */}
@@ -1224,37 +1278,39 @@ export const OrderStatusEditView: React.FC = () => {
                   </td>
 
                   {/* 발주상태 뱃지 */}
-                  <td className={`${cellPadCls} text-center`}>
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-extrabold border ${
-                        item.status === '입고완료'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                          : item.status === '부분입고'
-                          ? 'bg-amber-50 text-amber-700 border-amber-300'
-                          : item.status === '발주취소'
-                          ? 'bg-rose-50 text-rose-700 border-rose-300'
-                          : 'bg-blue-50 text-blue-700 border-blue-300'
-                      }`}
-                    >
-                      {item.status === '발주' ? '미입고(발주)' : item.status}
-                    </span>
-                    {item.receivedQty > 0 && item.remainQty > 0 && (
-                      <div className="text-[10.5px] font-mono font-bold text-amber-700 mt-0.5 whitespace-nowrap">
-                        기입고 {item.receivedQty} / 미입고 {item.remainQty}
-                      </div>
-                    )}
+                  <td className={`${cellPadCls} text-center ${singleLine ? 'whitespace-nowrap' : ''}`}>
+                    <div className={singleLine ? 'inline-flex items-center justify-center gap-1.5' : ''}>
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11.5px] font-extrabold border ${
+                          item.status === '입고완료'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                            : item.status === '부분입고'
+                            ? 'bg-amber-50 text-amber-700 border-amber-300'
+                            : item.status === '발주취소'
+                            ? 'bg-rose-50 text-rose-700 border-rose-300'
+                            : 'bg-blue-50 text-blue-700 border-blue-300'
+                        }`}
+                      >
+                        {item.status === '발주' ? '미입고(발주)' : item.status}
+                      </span>
+                      {item.receivedQty > 0 && item.remainQty > 0 && (
+                        <div className={`text-[10.5px] font-mono font-bold text-amber-700 ${singleLine ? '' : 'mt-0.5 '}whitespace-nowrap`}>
+                          기입고 {item.receivedQty} / 미입고 {item.remainQty}
+                        </div>
+                      )}
+                    </div>
                   </td>
 
                   {/* 비고 인라인 수정 */}
-                  <td className="py-1.5 px-2">
+                  <td className={singleLine ? 'py-1 px-1' : 'py-1.5 px-2'}>
                     <input
                       type="text"
                       value={item.remark}
                       onChange={(e) =>
                         handleItemFieldChange(item.id, 'remark', e.target.value)
                       }
-                      placeholder="비고 입력..."
-                      className="w-full px-2 py-1 bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-400 rounded-lg text-[13px] outline-none"
+                      placeholder="비고..."
+                      className={`${singleLine ? 'w-full px-1 py-0.5 text-[11.5px]' : 'w-full px-2 py-1 text-[13px]'} bg-transparent hover:bg-white focus:bg-white border border-transparent hover:border-slate-300 focus:border-blue-400 rounded-lg outline-none`}
                     />
                   </td>
 
@@ -1899,11 +1955,11 @@ export const OrderStatusEditView: React.FC = () => {
       {/* ===================================================================== */}
       {orderPopup && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-1 sm:p-2"
           onClick={() => setOrderPopup(null)}
         >
           <div
-            className="w-[96vw] h-[92vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
+            className="w-[98vw] h-[94vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* 팝업 상단 헤더 바 */}
@@ -2094,8 +2150,8 @@ export const OrderStatusEditView: React.FC = () => {
             </div>
 
             {/* 팝업 테이블 본문 */}
-            <div className="flex-1 overflow-auto bg-white">
-              {renderOrderItemsTable(popupItems, popupFontSize)}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white">
+              {renderOrderItemsTable(popupItems, popupFontSize, true)}
             </div>
 
             {/* 팝업 하단 큰 합계 바 */}

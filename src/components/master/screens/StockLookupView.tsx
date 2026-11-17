@@ -2880,7 +2880,7 @@ export const StockLookupView: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100">
           <div className="flex flex-wrap items-center gap-2">
             {/* 창고 세그먼트 탭 버튼 (원클릭 전환) */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="h-10 flex items-center gap-1 bg-slate-100 px-1 rounded-xl border border-slate-200">
               {(['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'] as const).map((w) => {
                 const count = whCounts[w] || 0;
                 const isSelected = selectedWh === w;
@@ -2889,7 +2889,7 @@ export const StockLookupView: React.FC = () => {
                     key={w}
                     type="button"
                     onClick={() => setSelectedWh(w)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`h-8 px-3 rounded-lg text-[13px] font-black transition cursor-pointer flex items-center gap-1.5 ${
                       isSelected
                         ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-700 hover:text-slate-950 hover:bg-white'
@@ -2897,7 +2897,7 @@ export const StockLookupView: React.FC = () => {
                   >
                     <span>{w}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      className={`text-[10.5px] px-1.5 py-0.2 rounded-full font-mono ${
                         isSelected
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-200 text-slate-600'
@@ -2911,14 +2911,14 @@ export const StockLookupView: React.FC = () => {
             </div>
 
             {/* 통합 검색창 */}
-            <div className="relative w-64 min-w-[200px]">
+            <div className="relative w-72 min-w-[220px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="품명, 품번, 거래처 검색..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="h-9.5 pl-9 pr-8 w-full bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none"
+                className="h-10 pl-9 pr-8 w-full bg-slate-50 border border-slate-300 rounded-xl text-[13px] font-semibold text-slate-900 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:bg-white focus:outline-none"
               />
               {keyword && (
                 <button
@@ -2935,7 +2935,7 @@ export const StockLookupView: React.FC = () => {
             <select
               value={selectedVendor}
               onChange={(e) => setSelectedVendor(e.target.value)}
-              className="h-9.5 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none max-w-[150px]"
+              className="h-10 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-[13px] font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none min-w-[160px] max-w-[220px]"
             >
               <option value="전체">전체 거래처 ({vendors.length})</option>
               {vendors.map((v) => (
@@ -2949,7 +2949,7 @@ export const StockLookupView: React.FC = () => {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="h-9.5 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="h-10 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-[13px] font-bold text-slate-800 shadow-2xs focus:ring-2 focus:ring-blue-500 focus:outline-none min-w-[115px]"
             >
               <option value="전체">전체 상태</option>
               <option value="정상">정상</option>
@@ -2962,16 +2962,16 @@ export const StockLookupView: React.FC = () => {
             <button
               type="button"
               onClick={() => setOnlyShortage((prev) => !prev)}
-              className={`h-9.5 px-3 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+              className={`h-10 px-3.5 rounded-xl text-[13px] font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
                 onlyShortage
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
               }`}
             >
-              <ShieldAlert size={14} />
+              <ShieldAlert size={15} />
               <span>안전재고 미달만</span>
               {shortageStats.shortageCount > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${onlyShortage ? 'bg-white/20 text-white' : 'bg-rose-200 text-rose-800'}`}>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10.5px] font-mono ${onlyShortage ? 'bg-white/20 text-white' : 'bg-rose-200 text-rose-800'}`}>
                   {shortageStats.shortageCount}
                 </span>
               )}
@@ -2986,7 +2986,7 @@ export const StockLookupView: React.FC = () => {
                   void loadByDate(targetDate, nextVal);
                 }
               }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-black transition cursor-pointer whitespace-nowrap ${
+              className={`h-10 inline-flex items-center gap-1.5 px-3.5 rounded-xl text-[13px] font-black transition cursor-pointer whitespace-nowrap ${
                 includeDiscontinued
                   ? 'bg-slate-800 text-white shadow-xs'
                   : 'bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200'
@@ -2999,14 +2999,14 @@ export const StockLookupView: React.FC = () => {
 
           {/* 우측: 글자크기 줌 & 필터 리셋 */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-black text-slate-500 px-1">글자:</span>
+            <div className="h-10 flex items-center gap-1 bg-slate-100 px-1.5 rounded-xl border border-slate-200">
+              <span className="text-[12px] font-black text-slate-500 px-1">글자:</span>
               {(['normal', 'spacious', 'large'] as const).map((d) => (
                 <button
                   key={d}
                   type="button"
                   onClick={() => setDensity(d)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  className={`h-8 px-2.5 rounded-lg text-[13px] font-bold transition cursor-pointer ${
                     density === d
                       ? 'bg-blue-600 text-white font-black shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white'

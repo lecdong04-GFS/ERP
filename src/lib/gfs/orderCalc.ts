@@ -252,7 +252,7 @@ export function splitWeek(
     return out;
   }
 
-  const applyWeekendRelief = options?.weekendRelief !== false;
+  const applyWeekendRelief = options?.weekendRelief === true;
 
   // 1. 활성 납품 요일들의 가중치 맵 구성
   const weights: Record<number, number> = {};

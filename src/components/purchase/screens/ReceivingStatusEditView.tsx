@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePrintReport } from '@/context/PrintReportContext';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
@@ -15,7 +14,6 @@ import {
 } from '@/lib/gfs/pricing';
 import {
   ExternalLink,
-  Printer,
   Search,
   RotateCcw,
   FileSpreadsheet,
@@ -28,6 +26,7 @@ import {
   AlertTriangle,
   Clock,
   Calendar,
+  Maximize2,
   Layers,
   ArrowRight,
   Filter,
@@ -115,7 +114,6 @@ interface ReceivingRow {
 }
 
 export const ReceivingStatusEditView: React.FC = () => {
-  const { openPrintModal } = usePrintReport();
   const { openTab } = useTabs();
 
   // 검색 및 필터 상태
@@ -133,6 +131,16 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   // 파일 업로드 모달 상태
   const [uploadModalOpen, setUploadModalOpen] = useState<boolean>(false);
+  const [showLargeTableModal, setShowLargeTableModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!showLargeTableModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowLargeTableModal(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showLargeTableModal]);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -208,6 +216,11 @@ export const ReceivingStatusEditView: React.FC = () => {
             const rowCarNo = dt.remark?.includes('차량:') ? dt.remark.replace(/.*차량:\s*([^,\s·]+).*/, '$1') : parsedCarNo;
             const rowJudge = dt.inspectResult === '불합격' ? 'X' : (parsedJudge === 'X' ? 'X' : 'O');
 
+            const rowStatus =
+              rcv.status === '취소' || dt.remark?.includes('[품목취소]') || qty <= 0
+                ? '취소'
+                : rcv.status || '입고완료';
+
             loaded.push({
               id: dt.id,
               receivingId: rcv.id,
@@ -215,7 +228,7 @@ export const ReceivingStatusEditView: React.FC = () => {
               receivingDate: rcv.receivingDate,
               partnerId: rcv.partnerId || '',
               partnerName: rcv.partner?.name || rcv.partnerName || '공급사',
-              status: rcv.status || '입고완료',
+              status: rowStatus,
               productId: dt.productId,
               productCode: dt.productCode || dt.product?.productCode || `P-${dt.id}`,
               productName: dt.product?.name || dt.productName || '원료',
@@ -292,7 +305,9 @@ export const ReceivingStatusEditView: React.FC = () => {
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
       if (supplierFilter !== 'ALL' && r.partnerName !== supplierFilter) return false;
-      if (statusFilter !== '전체') {
+      if (statusFilter === '전체') {
+        if (r.status === '취소') return false;
+      } else {
         if (statusFilter === '입고완료') {
           if (r.status !== '입고완료' && r.status !== '입고') return false;
         } else if (r.status !== statusFilter) {
@@ -513,9 +528,11 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   // ── 11. 선택 입고 취소 / 롤백 (DELETE /api/purchase/receiving) ──
   const handleCancelSelected = async () => {
-    const checkedRows = filteredRows.filter((r) => r.checked);
+    const checkedRows = filteredRows.filter(
+      (r) => r.checked && r.status !== '취소' && r.recvQty > 0
+    );
     if (checkedRows.length === 0) {
-      alert('취소(롤백)할 입고 행을 체크박스로 선택해주세요.');
+      alert('취소(롤백)할 유효한 입고 행을 체크박스로 선택해주세요.');
       return;
     }
 
@@ -716,15 +733,6 @@ export const ReceivingStatusEditView: React.FC = () => {
             >
               <Trash2 size={16} />
               <span>선택 입고취소 (재고 롤백)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openPrintModal('HACCP_INSPECTION')}
-              className="h-11 px-4 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
-            >
-              <Printer size={16} />
-              <span>HACCP 검수일지(A4)</span>
             </button>
 
             <input
@@ -1028,9 +1036,72 @@ export const ReceivingStatusEditView: React.FC = () => {
         </div>
       </section>
 
-      {/* ── [섹션 4] 고해상도 메인 입고현황/수정 데이터 그리드 (시원시원한 대형 글자 & 쾌적한 행 높이) ── */}
+      {/* ── [섹션 4] 고해상도 메인 입고현황/수정 데이터 그리드 (크게 보기 팝업 겸용) ── */}
       <main className="flex-1 px-6 pb-6 min-h-0 flex flex-col">
-        <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
+        {showLargeTableModal && (
+          <div
+            className="fixed inset-0 z-[190] bg-slate-900/50 backdrop-blur-[1px]"
+            onClick={() => setShowLargeTableModal(false)}
+          />
+        )}
+        <div
+          className={
+            showLargeTableModal
+              ? 'fixed inset-2 sm:inset-4 z-[200] bg-white rounded-2xl border border-slate-300 shadow-2xl flex flex-col overflow-hidden'
+              : 'flex-1 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden'
+          }
+        >
+          {showLargeTableModal && (
+            <div className="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-base font-black">
+                  입고현황 및 단가수정 ({startDate} ~ {endDate})
+                </h2>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder="품명, 코드, 입고번호, LOT 검색..."
+                    className="w-full pl-9 pr-7 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {keyword && (
+                    <button
+                      type="button"
+                      onClick={() => setKeyword('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {stats.modifiedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleBatchSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[13.5px] font-black cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{saving ? '저장 중...' : `수정사항 ${stats.modifiedCount}건 저장`}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowLargeTableModal(false)}
+                  className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-[13px] font-bold cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                  <span>닫기 (ESC)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 테이블 상단 정보 요약 행 */}
           <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-sm font-bold text-slate-700">
             <div className="flex items-center gap-3.5">
@@ -1052,7 +1123,7 @@ export const ReceivingStatusEditView: React.FC = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-5 text-slate-600 font-semibold text-xs">
+            <div className="flex items-center gap-4 text-slate-600 font-semibold text-xs">
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-emerald-500" /> 정상입고
               </span>
@@ -1062,11 +1133,22 @@ export const ReceivingStatusEditView: React.FC = () => {
               <span className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-rose-500" /> 입고취소
               </span>
+              {!showLargeTableModal && (
+                <button
+                  type="button"
+                  onClick={() => setShowLargeTableModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-[13px] font-bold cursor-pointer transition whitespace-nowrap"
+                  title="상단 영역을 접고 입고 품목 테이블만 전체화면 팝업으로 크게 봅니다."
+                >
+                  <Maximize2 className="w-4 h-4 text-slate-600" />
+                  <span>크게 보기</span>
+                </button>
+              )}
             </div>
           </div>
 
           {/* 테이블 본체 */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             {loading ? (
               <div className="h-full flex flex-col items-center justify-center py-20 text-slate-400">
                 <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mb-3" />
@@ -1102,33 +1184,33 @@ export const ReceivingStatusEditView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <table className="w-full text-left border-collapse min-w-[1950px]">
-                {/* 14.5px 고대비 테이블 헤더 */}
-                <thead className="bg-slate-100/90 backdrop-blur sticky top-0 z-10 border-b-2 border-slate-300 text-slate-800 text-[14.5px] font-black uppercase tracking-wider">
+              <table className="w-full table-fixed text-left border-collapse">
+                {/* 컴팩트 고대비 테이블 헤더 */}
+                <thead className="bg-slate-100/95 backdrop-blur sticky top-0 z-10 border-b-2 border-slate-300 text-slate-800 text-[11px] font-black tracking-tight">
                   <tr>
-                    <th className="py-4 px-3 text-center w-14">선택</th>
-                    <th className="py-4 px-3 text-center w-28">상태</th>
-                    <th className="py-4 px-3 text-center w-40">입고일자</th>
-                    <th className="py-4 px-3 text-center w-40">입고번호</th>
-                    <th className="py-4 px-3 text-left w-52">매입처(공급사)</th>
-                    <th className="py-4 px-3 text-center w-24">구분</th>
-                    <th className="py-4 px-4 text-left min-w-[300px]">원부재료 품명 / 규격</th>
-                    <th className="py-4 px-3 text-right w-36">입고수량</th>
-                    <th className="py-4 px-3 text-right w-40">구매단가</th>
-                    <th className="py-4 px-3 text-right w-44">입고공급가액</th>
-                    <th className="py-4 px-3 text-center w-28">수량차이</th>
-                    <th className="py-4 px-3 text-center w-32">입고창고</th>
-                    <th className="py-4 px-3 text-center w-40">유통기한</th>
-                    <th className="py-4 px-3 text-center w-48">차량번호 / 온도</th>
-                    <th className="py-4 px-3 text-center w-52">HACCP 검수 (표시/외관/청결/종합)</th>
-                    <th className="py-4 px-3 text-center w-40">LOT 번호</th>
-                    <th className="py-4 px-3 text-left min-w-[200px]">비고</th>
-                    <th className="py-4 px-3 text-center w-28 sticky right-0 bg-slate-100 border-l border-slate-200 shadow-l">관리</th>
+                    <th className="py-2.5 px-0.5 text-center w-7">선택</th>
+                    <th className="py-2.5 px-0.5 text-center w-[54px]">상태</th>
+                    <th className="py-2.5 px-1 text-center w-[78px]">입고일자</th>
+                    <th className="py-2.5 px-1 text-center w-[74px]">입고번호</th>
+                    <th className="py-2.5 px-1 text-left w-[78px]">매입처</th>
+                    <th className="py-2.5 px-0.5 text-center w-[42px]">구분</th>
+                    <th className="py-2.5 px-1.5 text-left">원부재료 품명 / 규격</th>
+                    <th className="py-2.5 px-1 text-right w-[72px]">입고수량</th>
+                    <th className="py-2.5 px-1 text-right w-[86px]">구매단가</th>
+                    <th className="py-2.5 px-1 text-right w-[74px]">공급가액</th>
+                    <th className="py-2.5 px-0.5 text-center w-[50px]">차이</th>
+                    <th className="py-2.5 px-0.5 text-center w-[56px]">창고</th>
+                    <th className="py-2.5 px-1 text-center w-[92px]">유통기한</th>
+                    <th className="py-2.5 px-1 text-center w-[92px]">차량 / 온도</th>
+                    <th className="py-2.5 px-0.5 text-center w-[84px]">HACCP</th>
+                    <th className="py-2.5 px-1 text-center w-[64px]">LOT</th>
+                    <th className="py-2.5 px-1 text-left w-[64px]">비고</th>
+                    <th className="py-2.5 px-0.5 text-center w-[44px]">관리</th>
                   </tr>
                 </thead>
 
-                {/* 15.5px~18.5px 대형 시원시원한 글자 & 쾌적한 행 높이 테이블 바디 */}
-                <tbody className="divide-y divide-slate-200 text-[15.5px]">
+                {/* 컴팩트 가독성 테이블 바디 */}
+                <tbody className="divide-y divide-slate-200 text-[12px]">
                   {filteredRows.map((row) => {
                     const isCancelled = row.status === '취소';
                     const isPartial = row.status === '부분입고' || row.diffQty < 0;
@@ -1136,7 +1218,7 @@ export const ReceivingStatusEditView: React.FC = () => {
                     return (
                       <tr
                         key={row.id}
-                        className={`transition-colors py-4 ${
+                        className={`transition-colors ${
                           row.isModified
                             ? 'bg-amber-50 border-l-4 border-l-amber-500 font-medium'
                             : isCancelled
@@ -1147,53 +1229,53 @@ export const ReceivingStatusEditView: React.FC = () => {
                         }`}
                       >
                         {/* 1. 선택 체크박스 */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           <input
                             type="checkbox"
                             checked={row.checked}
                             onChange={(e) => handleSelectRow(row.id, e.target.checked)}
-                            className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                         </td>
 
                         {/* 2. 상태 배지 */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           {isCancelled ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
                               취소됨
                             </span>
                           ) : isPartial ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
                               부분입고
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
                               입고완료
                             </span>
                           )}
                         </td>
 
                         {/* 3. 입고일자 */}
-                        <td className="py-4 px-3 text-center font-mono font-bold text-slate-900 text-[15px]">
-                          {row.receivingDate} <span className="text-sm font-semibold text-slate-500 font-sans">({getKoreanDayOfWeek(row.receivingDate)})</span>
+                        <td className="py-2 px-1 text-center font-mono font-bold text-slate-900 text-[11px] whitespace-nowrap">
+                          {row.receivingDate.slice(2)}<span className="text-[10px] font-semibold text-slate-500 font-sans">({getKoreanDayOfWeek(row.receivingDate)})</span>
                         </td>
 
                         {/* 4. 입고번호 */}
-                        <td className="py-4 px-3 text-center">
-                          <span className="inline-block font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                        <td className="py-2 px-1 text-center" title={row.receivingNo}>
+                          <span className="inline-block max-w-full truncate font-mono text-[10.5px] font-bold text-slate-700 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
                             {row.receivingNo}
                           </span>
                         </td>
 
                         {/* 5. 매입처(공급사) */}
-                        <td className="py-4 px-3 text-left font-black text-slate-950 text-[16px]">
+                        <td className="py-2 px-1 text-left font-bold text-slate-900 text-[12px] truncate" title={row.partnerName}>
                           {row.partnerName}
                         </td>
 
                         {/* 6. 구분 배지 */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           <span
-                            className={`inline-block px-2.5 py-1 rounded-md text-xs font-black ${
+                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-black whitespace-nowrap ${
                               row.category === '원재료'
                                 ? 'bg-blue-50 text-blue-700 border border-blue-200'
                                 : 'bg-purple-50 text-purple-700 border border-purple-200'
@@ -1203,10 +1285,10 @@ export const ReceivingStatusEditView: React.FC = () => {
                           </span>
                         </td>
 
-                        {/* 7. 품명 및 규격 (18px 대형 볼드 타이포그래피) */}
-                        <td className="py-4 px-4 text-left">
-                          <div className="font-black text-slate-950 text-[18px] tracking-tight leading-snug flex items-center gap-2 flex-wrap">
-                            <span>{row.productName}</span>
+                        {/* 7. 품명 및 규격 */}
+                        <td className="py-2 px-1.5 text-left overflow-hidden" title={`${row.productName} (${row.productCode} · ${row.spec})`}>
+                          <div className="font-black text-slate-950 text-[12.5px] tracking-tight leading-tight flex items-center gap-1 min-w-0">
+                            <span className="truncate">{row.productName}</span>
                             <ProductLifecycleBadge
                               status={row.productStatus}
                               discontinuedDate={row.discontinuedDate}
@@ -1215,73 +1297,69 @@ export const ReceivingStatusEditView: React.FC = () => {
                               refDate={row.receivingDate}
                             />
                           </div>
-                          <div className="flex items-center gap-2.5 mt-1 text-[13px] text-slate-600 font-medium">
-                            <span>코드: <strong className="text-slate-800 font-mono">{row.productCode}</strong></span>
+                          <div className="flex items-center gap-1 mt-0.5 text-[10.5px] text-slate-500 font-medium truncate">
+                            <span className="font-mono text-slate-700">{row.productCode}</span>
                             <span>·</span>
-                            <span>규격: <strong className="text-slate-800">{row.spec}</strong></span>
+                            <span className="truncate">{row.spec}</span>
                           </div>
                         </td>
 
-                        {/* 8. 입고수량 (대형 인풋 에디터) */}
-                        <td className="py-4 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        {/* 8. 입고수량 */}
+                        <td className="py-2 px-1 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
                             <input
                               type="number"
                               disabled={isCancelled}
                               value={row.recvQty}
                               onChange={(e) => handleCellChange(row.id, 'recvQty', e.target.value)}
-                              className="w-28 h-11 px-3 text-right font-black text-[18px] text-blue-800 bg-blue-50/70 hover:bg-blue-100/50 focus:bg-white border-2 border-blue-400 focus:border-blue-600 rounded-xl shadow-xs focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+                              className="w-11 h-7 px-1 text-right font-black text-[12.5px] text-blue-800 bg-blue-50/70 hover:bg-blue-100/50 focus:bg-white border border-blue-400 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-400 focus:outline-none transition"
                             />
-                            <span className="text-sm font-black text-slate-700 w-8 text-left">{row.unit}</span>
+                            <span className="text-[10.5px] font-bold text-slate-600 truncate max-w-[24px]">{row.unit}</span>
                           </div>
                         </td>
 
-                        {/* 9. 구매단가 (대형 인풋 에디터 + 입수/봉단가/박스단가 연동) */}
-                        <td className="py-4 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-sm font-bold text-slate-400">₩</span>
+                        {/* 9. 구매단가 */}
+                        <td className="py-2 px-1 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <span className="text-[10.5px] font-bold text-slate-400">₩</span>
                             <input
                               type="number"
                               disabled={isCancelled}
                               value={row.buyPrice}
                               onChange={(e) => handleCellChange(row.id, 'buyPrice', e.target.value)}
-                              className="w-32 h-11 px-3 text-right font-black text-[17.5px] text-slate-950 bg-slate-50 hover:bg-white focus:bg-white border-2 border-slate-300 focus:border-blue-600 rounded-xl shadow-xs focus:ring-2 focus:ring-blue-400 focus:outline-none transition"
+                              className="w-[62px] h-7 px-1 text-right font-black text-[12px] text-slate-950 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-600 rounded-lg focus:ring-1 focus:ring-blue-400 focus:outline-none transition"
                             />
                           </div>
-                          <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] font-semibold text-slate-500">
-                            <span>입수 {row.packUnit}</span>
-                            <span>·</span>
-                            <span>봉 ₩{row.bagPrice.toLocaleString()}</span>
-                            <span>·</span>
-                            <span className="text-blue-700">박스 ₩{row.boxPrice.toLocaleString()}</span>
+                          <div className="mt-0.5 text-[9.5px] font-semibold text-slate-500 truncate" title={`입수 ${row.packUnit} · 봉 ₩${row.bagPrice.toLocaleString()} · 박스 ₩${row.boxPrice.toLocaleString()}`}>
+                            입수{row.packUnit} · ₩{row.bagPrice.toLocaleString()}
                           </div>
                         </td>
 
-                        {/* 10. 입고공급가액 (18.5px 대형 고대비 금액) */}
-                        <td className="py-4 px-3 text-right font-mono font-black text-indigo-900 text-[18.5px]">
+                        {/* 10. 입고공급가액 */}
+                        <td className="py-2 px-1 text-right font-mono font-black text-indigo-900 text-[12.5px] whitespace-nowrap truncate" title={`₩${row.recvAmt.toLocaleString()}`}>
                           ₩{row.recvAmt.toLocaleString()}
                         </td>
 
                         {/* 11. 수량차이 */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           {row.diffQty < 0 ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
-                              {row.diffQty} {row.unit}
+                            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap">
+                              {row.diffQty}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600">
-                              정상 (0)
+                            <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 whitespace-nowrap">
+                              정상
                             </span>
                           )}
                         </td>
 
                         {/* 12. 입고창고 (드롭다운) */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           <select
                             disabled={isCancelled}
                             value={row.warehouse}
                             onChange={(e) => handleCellChange(row.id, 'warehouse', e.target.value)}
-                            className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="h-7 w-full px-0.5 rounded-lg border border-slate-300 bg-white text-[11px] font-bold text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                           >
                             <option value="상온">상온</option>
                             <option value="냉장1">냉장1</option>
@@ -1292,26 +1370,26 @@ export const ReceivingStatusEditView: React.FC = () => {
                         </td>
 
                         {/* 13. 유통기한 (데이트 피커) */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           <input
                             type="date"
                             disabled={isCancelled}
                             value={row.expiryDate}
                             onChange={(e) => handleCellChange(row.id, 'expiryDate', e.target.value)}
-                            className="h-10 px-2.5 rounded-xl border border-slate-300 bg-white text-sm font-mono font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="h-7 w-full px-1 rounded-lg border border-slate-300 bg-white text-[10.5px] font-mono font-bold text-slate-800 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                           />
                         </td>
 
                         {/* 14. 차량번호 / 차량온도 */}
-                        <td className="py-4 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="py-2 px-0.5 text-center">
+                          <div className="flex items-center justify-center gap-0.5">
                             <input
                               type="text"
                               disabled={isCancelled}
                               value={row.carNo}
                               onChange={(e) => handleCellChange(row.id, 'carNo', e.target.value)}
-                              placeholder="차량번호"
-                              className="h-10 w-28 px-2.5 rounded-xl border border-slate-300 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              placeholder="차량"
+                              className="h-7 w-[54px] px-1 rounded-lg border border-slate-300 text-[10.5px] font-bold text-slate-800 bg-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             />
                             <input
                               type="text"
@@ -1319,20 +1397,20 @@ export const ReceivingStatusEditView: React.FC = () => {
                               value={row.carTemp}
                               onChange={(e) => handleCellChange(row.id, 'carTemp', e.target.value)}
                               placeholder="온도"
-                              className="h-10 w-16 px-1.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-slate-800 bg-white text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              className="h-7 w-[32px] px-0.5 rounded-lg border border-slate-300 text-[10.5px] font-mono font-bold text-slate-800 bg-white text-center focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             />
                           </div>
                         </td>
 
                         {/* 15. HACCP 4대 검수 토글 (표시 / 외관 / 청결 / 종합) */}
-                        <td className="py-4 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="py-2 px-0.5 text-center">
+                          <div className="flex items-center justify-center gap-0.5">
                             {/* 표시 */}
                             <button
                               type="button"
                               title="라벨/표시상태 (클릭 시 토글)"
                               onClick={() => handleCellChange(row.id, 'markStatus', row.markStatus === 'O' ? 'X' : 'O')}
-                              className={`w-8 h-8 rounded-lg text-sm font-black border transition cursor-pointer flex items-center justify-center ${
+                              className={`w-[18px] h-6 rounded text-[10.5px] font-black border transition cursor-pointer flex items-center justify-center ${
                                 row.markStatus === 'O'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
                                   : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
@@ -1346,7 +1424,7 @@ export const ReceivingStatusEditView: React.FC = () => {
                               type="button"
                               title="포장/외관파손 (클릭 시 토글)"
                               onClick={() => handleCellChange(row.id, 'lookStatus', row.lookStatus === 'O' ? 'X' : 'O')}
-                              className={`w-8 h-8 rounded-lg text-sm font-black border transition cursor-pointer flex items-center justify-center ${
+                              className={`w-[18px] h-6 rounded text-[10.5px] font-black border transition cursor-pointer flex items-center justify-center ${
                                 row.lookStatus === 'O'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
                                   : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
@@ -1360,7 +1438,7 @@ export const ReceivingStatusEditView: React.FC = () => {
                               type="button"
                               title="차량적재함 청결 (클릭 시 토글)"
                               onClick={() => handleCellChange(row.id, 'carClean', row.carClean === 'O' ? 'X' : 'O')}
-                              className={`w-8 h-8 rounded-lg text-sm font-black border transition cursor-pointer flex items-center justify-center ${
+                              className={`w-[18px] h-6 rounded text-[10.5px] font-black border transition cursor-pointer flex items-center justify-center ${
                                 row.carClean === 'O'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
                                   : 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
@@ -1374,10 +1452,10 @@ export const ReceivingStatusEditView: React.FC = () => {
                               type="button"
                               title="HACCP 종합판정 (클릭 시 토글)"
                               onClick={() => handleCellChange(row.id, 'totalJudge', row.totalJudge === 'O' ? 'X' : 'O')}
-                              className={`w-9 h-8 rounded-lg text-sm font-black border transition cursor-pointer flex items-center justify-center ${
+                              className={`w-5 h-6 rounded text-[10.5px] font-black border transition cursor-pointer flex items-center justify-center ${
                                 row.totalJudge === 'O'
-                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                                  : 'bg-rose-600 text-white border-rose-700 shadow-xs'
+                                  ? 'bg-emerald-600 text-white border-emerald-700'
+                                  : 'bg-rose-600 text-white border-rose-700'
                               }`}
                             >
                               {row.totalJudge}
@@ -1386,31 +1464,31 @@ export const ReceivingStatusEditView: React.FC = () => {
                         </td>
 
                         {/* 16. LOT 번호 */}
-                        <td className="py-4 px-3 text-center">
+                        <td className="py-2 px-0.5 text-center">
                           <input
                             type="text"
                             disabled={isCancelled}
                             value={row.lotNo}
                             onChange={(e) => handleCellChange(row.id, 'lotNo', e.target.value)}
-                            className="h-10 w-36 px-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="h-7 w-full px-1 rounded-lg border border-slate-300 text-[10.5px] font-mono font-bold text-slate-800 bg-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
                           />
                         </td>
 
                         {/* 17. 비고 */}
-                        <td className="py-4 px-3 text-left">
+                        <td className="py-2 px-0.5 text-left">
                           <input
                             type="text"
                             disabled={isCancelled}
                             value={row.remark}
                             onChange={(e) => handleCellChange(row.id, 'remark', e.target.value)}
-                            placeholder="특이사항 메모..."
-                            className="h-10 w-full px-3 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            placeholder="메모..."
+                            className="h-7 w-full px-1 rounded-lg border border-slate-300 text-[11px] font-medium text-slate-800 bg-white focus:ring-1 focus:ring-blue-500 focus:outline-none"
                           />
                         </td>
 
                         {/* 18. 우측 개별 관리 버튼 */}
-                        <td className="py-4 px-3 text-center sticky right-0 bg-white border-l border-slate-200 shadow-l">
-                          <div className="flex items-center justify-center gap-1.5">
+                        <td className="py-2 px-0.5 text-center">
+                          <div className="flex items-center justify-center gap-0.5">
                             {row.isModified ? (
                               <>
                                 <button
@@ -1418,17 +1496,17 @@ export const ReceivingStatusEditView: React.FC = () => {
                                   title="변경사항 즉시 저장"
                                   onClick={() => handleSingleSave(row)}
                                   disabled={saving}
-                                  className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer transition"
+                                  className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer transition"
                                 >
-                                  <Save size={18} />
+                                  <Save size={14} />
                                 </button>
                                 <button
                                   type="button"
                                   title="원래대로 취소"
                                   onClick={() => handleRevertRow(row.id)}
-                                  className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-xs cursor-pointer transition"
+                                  className="p-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 shadow-xs cursor-pointer transition"
                                 >
-                                  <Undo2 size={18} />
+                                  <Undo2 size={14} />
                                 </button>
                               </>
                             ) : (

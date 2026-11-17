@@ -85,12 +85,12 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     window.alert = (msg?: any) => {
       const text = String(msg ?? '');
-      if (text.includes('실패') || text.includes('오류') || text.includes('에러') || text.includes('불가') || text.includes('취소')) {
+      if (text.includes('실패') || text.includes('오류') || text.includes('에러') || text.includes('불가')) {
         error(text);
+      } else if (text.includes('완료') || text.includes('성공') || text.includes('정상') || text.includes('저장') || text.includes('삭제') || text.includes('반영') || text.includes('초기화')) {
+        success(text);
       } else if (text.includes('선택') || text.includes('확인') || text.includes('주의') || text.includes('경고') || text.includes('양식') || text.includes('없습니다')) {
         warning(text);
-      } else if (text.includes('완료') || text.includes('성공') || text.includes('저장') || text.includes('삭제') || text.includes('반영') || text.includes('초기화')) {
-        success(text);
       } else {
         info(text);
       }

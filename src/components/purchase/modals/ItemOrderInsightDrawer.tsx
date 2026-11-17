@@ -340,7 +340,7 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-300 ease-out ${
+      className={`fixed inset-0 z-[250] flex justify-end bg-slate-900/40 backdrop-blur-[1px] transition-opacity duration-300 ease-out ${
         isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
     >
