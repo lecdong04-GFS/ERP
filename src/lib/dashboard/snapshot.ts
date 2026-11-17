@@ -5,8 +5,8 @@ import { readSharedDashboard, writeSharedDashboard } from '@/lib/cache/shared';
 import { nextCutoff } from './cutoff';
 
 const KEY = 'dashboard';
-const MEM_TTL_MS = 5_000;
-const STALE_MS = 60_000;
+const MEM_TTL_MS = 300_000;
+const STALE_MS = 300_000;
 
 let mem: { at: number; data: DashboardStats } | null = null;
 let inflight: Promise<void> | null = null;
@@ -173,6 +173,7 @@ export async function getDashboardStats(options: { force?: boolean } = {}): Prom
 
 /** 업로드 성공 후 다음 조회에서 갱신되도록 표시 */
 export async function touchDashboardSnapshot(): Promise<void> {
+  mem = null;
   await pgQuery(
     `update "DashboardSnapshot" set as_of = '1970-01-01' where key = $1`,
     [KEY]

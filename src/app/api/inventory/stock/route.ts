@@ -18,12 +18,21 @@ import {
   toBagQty,
 } from '@/lib/gfs/pricing';
 
+const STOCK_CACHE_TTL_MS = 5 * 60 * 1000;
+const stockGetCache = new Map<string, { payload: any; cachedAt: number }>();
+
 // GET /api/inventory/stock?category=원재료&warehouse=상온보관고&targetDate=2026-11-09
 export async function GET(req: NextRequest) {
   const auth = await requireSession();
   if (auth.error) return auth.error;
 
   try {
+    const cacheKey = req.nextUrl.search || 'default';
+    const hit = stockGetCache.get(cacheKey);
+    if (hit && Date.now() - hit.cachedAt < STOCK_CACHE_TTL_MS) {
+      return NextResponse.json(hit.payload);
+    }
+
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
     const warehouse = searchParams.get('warehouse');
@@ -181,7 +190,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ success: true, data: responseItems });
+    const resPayload = { success: true, data: responseItems };
+    stockGetCache.set(cacheKey, { payload: resPayload, cachedAt: Date.now() });
+    return NextResponse.json(resPayload);
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch inventory' },
@@ -194,6 +205,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
   if (auth.error) return auth.error;
+  stockGetCache.clear();
 
   try {
     const body = await req.json();
@@ -425,6 +437,7 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireSession({ categoryId: 'inventory', action: 'write' });
   if (auth.error) return auth.error;
+  stockGetCache.clear();
   const me = auth.user;
 
   try {
@@ -744,6 +757,7 @@ export async function POST(req: NextRequest) {
                     unitPrice: pt.price,
                     stockAmount: Math.round((Number(lot.currentQty) || 0) * pt.price),
                   },
+                  select: { id: true },
                 })
                 .catch(() => {});
             }

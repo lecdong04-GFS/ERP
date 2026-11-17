@@ -6,9 +6,16 @@ import { kstToday } from '@/lib/kst';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const TICKER_CACHE_TTL_MS = 5 * 60 * 1000;
+let tickerCache: { payload: any; cachedAt: number } | null = null;
+
 export async function GET() {
   const auth = await requireSession();
   if (auth.error) return auth.error;
+
+  if (tickerCache && Date.now() - tickerCache.cachedAt < TICKER_CACHE_TTL_MS) {
+    return NextResponse.json(tickerCache.payload);
+  }
 
   try {
     const now = new Date();
@@ -221,7 +228,7 @@ export async function GET() {
       text: `💡 [HACCP 품질 관리] 완제품 냉장 보관실 온도(0~5℃) 준수 및 금속검출기 공정 점검 필수`,
     });
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       data: messages,
       meta: {
@@ -229,7 +236,9 @@ export async function GET() {
         totalCount: messages.length,
         kstHour,
       },
-    });
+    };
+    tickerCache = { payload: responsePayload, cachedAt: Date.now() };
+    return NextResponse.json(responsePayload);
   } catch (error: any) {
     console.error('live-ticker API error:', error);
     return NextResponse.json(

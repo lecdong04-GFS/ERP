@@ -26,6 +26,9 @@ const CENTER_NAME_MAP: Record<string, string> = {
   'GSR-007': 'GSR 해인CVS',
 };
 
+const DELIVERY_CACHE_TTL_MS = 5 * 60 * 1000;
+const deliveryGetCache = new Map<string, { payload: any; cachedAt: number }>();
+
 // GET /api/sales/delivery?deliveryDate=2026-11-05
 // GET /api/sales/delivery?startDate=2026-10-01&endDate=2026-11-07&status=전체&centerCode=...
 export async function GET(req: NextRequest) {
@@ -33,6 +36,12 @@ export async function GET(req: NextRequest) {
   if (auth.error) return auth.error;
 
   try {
+    const cacheKey = req.nextUrl.search || 'default';
+    const hit = deliveryGetCache.get(cacheKey);
+    if (hit && Date.now() - hit.cachedAt < DELIVERY_CACHE_TTL_MS) {
+      return NextResponse.json(hit.payload);
+    }
+
     const { searchParams } = new URL(req.url);
     const deliveryDate = searchParams.get('deliveryDate');
     const startDate = searchParams.get('startDate');
@@ -115,12 +124,14 @@ export async function GET(req: NextRequest) {
       centerStats,
     };
 
-    return NextResponse.json({
+    const resPayload = {
       success: true,
       data: enriched,
       totalCount: enriched.length,
       summary,
-    });
+    };
+    deliveryGetCache.set(cacheKey, { payload: resPayload, cachedAt: Date.now() });
+    return NextResponse.json(resPayload);
   } catch (error: any) {
     console.error('Error fetching deliveries:', error);
     return NextResponse.json(
@@ -134,6 +145,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireSession({ categoryId: 'sales', action: 'write' });
   if (auth.error) return auth.error;
+  deliveryGetCache.clear();
 
   try {
     const body = await req.json();

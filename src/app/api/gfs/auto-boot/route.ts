@@ -15,7 +15,7 @@ interface AutoBootCacheEntry {
   cachedAt: number;
 }
 let autoBootCache: AutoBootCacheEntry | null = null;
-const CACHE_TTL_MS = 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // GET /api/gfs/auto-boot?orderDate=YYYY-MM-DD&stockDate=YYYY-MM-DD&includeMaster=1
 export async function GET(req: NextRequest) {
@@ -190,6 +190,16 @@ export async function GET(req: NextRequest) {
     if (usedStockDate && availableStockDates.length > 0) {
       const snapRows = await prisma.inventorySnapshot.findMany({
         where: { snapshotDate: usedStockDate },
+        select: {
+          productName: true,
+          warehouse: true,
+          boxQty: true,
+          pieceQty: true,
+          currentQty: true,
+          packUnit: true,
+          unitPrice: true,
+          dailyUsage: true,
+        },
         orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
       });
       stockItems = snapRows

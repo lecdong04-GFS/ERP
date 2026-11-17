@@ -8,6 +8,8 @@ import { normName } from '@/lib/gfs/norm';
 import { resolveBagPrice } from '@/lib/gfs/pricing';
 
 const MASTER_KEY = 'gfs_master_workbook';
+const MASTER_CACHE_TTL_MS = 5 * 60 * 1000;
+let masterSnapCache: { row: any; cachedAt: number } | null = null;
 
 // GET /api/gfs/master-sheet?meta=1 → 최신 발주서(신메뉴+BOM 마스터) 메타 또는 전체(base64 포함) 조회
 export async function GET(req: NextRequest) {
@@ -18,9 +20,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const metaOnly = searchParams.get('meta') === '1';
 
-    const row = await prisma.dashboardSnapshot.findUnique({
-      where: { key: MASTER_KEY },
-    });
+    let row: any;
+    if (masterSnapCache && Date.now() - masterSnapCache.cachedAt < MASTER_CACHE_TTL_MS) {
+      row = masterSnapCache.row;
+    } else {
+      row = await prisma.dashboardSnapshot.findUnique({
+        where: { key: MASTER_KEY },
+        select: { payload: true, asOf: true, updatedAt: true },
+      });
+      masterSnapCache = { row, cachedAt: Date.now() };
+    }
 
     if (!row || !row.payload || typeof row.payload !== 'object') {
       return NextResponse.json({
@@ -99,7 +108,9 @@ export async function POST(req: NextRequest) {
         payload,
         asOf,
       },
+      select: { key: true },
     });
+    masterSnapCache = null;
 
     await prisma.systemLog
       .create({
@@ -113,6 +124,7 @@ export async function POST(req: NextRequest) {
           menuName: '자재발주(요일별)',
           detail: `발주서 마스터(신메뉴·BOM) 영구 교체: ${fileName} (${asOf})`,
         },
+        select: { id: true },
       })
       .catch(() => {});
 

@@ -223,32 +223,50 @@ export function getEstimatedDailyUsage(forceRefresh = false): EstimatedUsageResu
   return cachedResult;
 }
 
+let dbCachedResult: EstimatedUsageResult | null = null;
+let dbCachedAt = 0;
+
 /**
  * 로컬 엑셀 파일(26년도) 우선 계산 + 서버리스(Vercel) 환경이거나 신규 스냅샷이 DB에 추가된 경우
  * InventorySnapshot 테이블로부터 동일 알고리즘으로 추정 일사용량을 산출
  */
 export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = false): Promise<EstimatedUsageResult> {
+  if (!forceRefresh && dbCachedResult && Date.now() - dbCachedAt < 5 * 60 * 1000) {
+    return dbCachedResult;
+  }
   if (!forceRefresh && cachedResult && cachedResult.fileCount > 0 && Date.now() - cachedAt < 5 * 60 * 1000) {
     return cachedResult;
   }
   const localRes = getEstimatedDailyUsage(forceRefresh);
   try {
+    const cutoff14 = new Date(Date.now() + 9 * 3600 * 1000 - 14 * 86400 * 1000)
+      .toISOString()
+      .slice(0, 10);
     const dbRows: Array<{
       snapshotDate: string;
       warehouse: string;
       productName: string;
       currentQty: number;
       packUnit: number;
-    }> = await prisma.inventorySnapshot.findMany({
-      select: {
-        snapshotDate: true,
-        warehouse: true,
-        productName: true,
-        currentQty: true,
-        packUnit: true,
-      },
-      orderBy: [{ snapshotDate: 'asc' }],
-    });
+    }> = [];
+    for (let skip = 0; ; skip += 100) {
+      const page = await prisma.inventorySnapshot.findMany({
+        where: { snapshotDate: { gte: cutoff14 } },
+        select: {
+          snapshotDate: true,
+          warehouse: true,
+          productName: true,
+          currentQty: true,
+          packUnit: true,
+        },
+        orderBy: [{ snapshotDate: 'desc' }, { id: 'desc' }],
+        skip,
+        take: 100,
+      });
+      if (!page || page.length === 0) break;
+      dbRows.push(...page);
+      if (page.length < 100) break;
+    }
     if (!dbRows || dbRows.length === 0) {
       return localRes;
     }
@@ -361,6 +379,8 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
       dateRange: dates.length > 0 ? [dates[0], dates[dates.length - 1]] : ['', ''],
     };
     cachedAt = Date.now();
+    dbCachedResult = cachedResult;
+    dbCachedAt = cachedAt;
     return cachedResult;
   } catch {
     return localRes;
@@ -374,7 +394,7 @@ export async function getEstimatedDailyUsageWithDb(prisma: any, forceRefresh = f
 export async function getRollingUsageWindowWithDb(
   prisma: any,
   targetDate?: string,
-  windowDays = 20,
+  windowDays = 14,
   _forceRefresh = false,
 ): Promise<EstimatedUsageResult> {
   try {
@@ -392,7 +412,7 @@ export async function getRollingUsageWindowWithDb(
     const windowDates = dateList
       .filter((d) => {
         const diff = (tDateObj.getTime() - new Date(d + 'T00:00:00Z').getTime()) / 86400000;
-        return diff >= 0 && diff <= (windowDays + 1); // 20일 구간 (앞뒤 포함)
+        return diff >= 0 && diff <= (windowDays + 1);
       })
       .sort();
 
@@ -406,17 +426,26 @@ export async function getRollingUsageWindowWithDb(
       productName: string;
       currentQty: number;
       packUnit: number;
-    }> = await prisma.inventorySnapshot.findMany({
-      where: { snapshotDate: { in: windowDates } },
-      select: {
-        snapshotDate: true,
-        warehouse: true,
-        productName: true,
-        currentQty: true,
-        packUnit: true,
-      },
-      orderBy: [{ snapshotDate: 'asc' }],
-    });
+    }> = [];
+    for (let skip = 0; ; skip += 100) {
+      const page = await prisma.inventorySnapshot.findMany({
+        where: { snapshotDate: { in: windowDates } },
+        select: {
+          snapshotDate: true,
+          warehouse: true,
+          productName: true,
+          currentQty: true,
+          packUnit: true,
+        },
+        orderBy: [{ snapshotDate: 'desc' }, { id: 'desc' }],
+        skip,
+        take: 100,
+      });
+      if (!page || page.length === 0) break;
+      dbRows.push(...page);
+      if (page.length < 100) break;
+    }
+    dbRows.sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
 
     const series = new Map<string, Array<{ date: string; qty: number }>>();
     const meta = new Map<string, { warehouse: string; canonKey: string; productName: string; packUnit: number }>();

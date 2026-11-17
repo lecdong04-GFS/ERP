@@ -632,16 +632,30 @@ export async function GET(req: NextRequest) {
 
     // 2) 실시간 재고(Inventory) 및 당일 재고조사표 스냅샷(InventorySnapshot) 통합 인덱싱 (단일 진실 공급원 확립)
     // 업로드된 재고조사표(실사 확정)를 최우선 정본으로 동기화하여 재고조회와 100% 일치 보장
+    const cutoff14 = (() => {
+      const d = new Date(Date.now() + 9 * 3600 * 1000 - 14 * 86400 * 1000);
+      return d.toISOString().slice(0, 10);
+    })();
     const [targetSnapshots, latestSnapshots, allInventories] = await Promise.all([
       prisma.inventorySnapshot.findMany({
         where: { snapshotDate: targetDate },
+        select: { snapshotDate: true, warehouse: true, productName: true, productCode: true, currentQty: true },
+        orderBy: { snapshotDate: 'desc' },
       }),
       prisma.inventorySnapshot.findMany({
-        take: 850,
+        where: { snapshotDate: { gte: cutoff14 } },
+        select: { snapshotDate: true, warehouse: true, productName: true, productCode: true, currentQty: true },
+        take: 100,
         orderBy: { snapshotDate: 'desc' },
       }),
       prisma.inventory.findMany({
-        include: { product: true },
+        select: {
+          warehouse: true,
+          productCode: true,
+          productName: true,
+          currentQty: true,
+          product: { select: { name: true } },
+        },
       }),
     ]);
 

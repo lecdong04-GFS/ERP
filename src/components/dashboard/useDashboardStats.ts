@@ -79,8 +79,6 @@ export function useDashboardStats() {
       setLoading(false);
     }
     void load(false);
-    const timer = setInterval(() => void load(false), 60_000);
-    return () => clearInterval(timer);
   }, [load]);
 
   return {

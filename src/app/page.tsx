@@ -61,10 +61,8 @@ function ErpApp() {
     };
 
     fetchLiveTicker();
-    const interval = setInterval(fetchLiveTicker, 60000); // 1분 주기 자동 동기화
     return () => {
       mounted = false;
-      clearInterval(interval);
     };
   }, []);
 
