@@ -60,6 +60,10 @@ export interface ProductionConfigData {
 
   // 제2부. 현장 특이사항 (확인 5)
   specialNotes: string;
+
+  // 성형 라인별 · 전처리 작업장별 기본 투입인원
+  lineWorkers?: Record<string, string>;
+  roomWorkers?: Record<string, string>;
 }
 
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfigData = {
@@ -97,6 +101,23 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfigData = {
     weighing: { prepOffsetMin: 30, thawTiming: 'PREV_DAY' },
   },
   specialNotes: '1. 밥 종류별 시퀀싱: 백미(1순위) -> 흑미(2순위) -> 빨간 볶음밥(3순위) 순서 준수 (슈트 착색 방지)\n2. 알레르기 교차오염 방지: 알코올 70% 세척 후 10분 건조\n3. 금속검출기 30분 주기 Fe 1.5mm, SUS 2.5mm 통과 테스트 필수',
+  lineWorkers: {
+    '도시락 1라인': '14명',
+    '김밥 성형': '4명',
+    '김밥 포장': '6명',
+    '더큰 삼각라인': '3명',
+    '삼각 1호기': '3명',
+    '삼각 2호기': '3명',
+    '커플 포장기': '2명',
+  },
+  roomWorkers: {
+    '계량실·냉동실': '2명',
+    '취반기': '3명',
+    '로터리 믹서': '2명',
+    '채소·커팅실': '4명',
+    '조리실': '4명',
+    '샐러드실': '3명',
+  },
 };
 
 const STORAGE_KEY = 'GFS_PRODUCTION_CONFIG';
@@ -113,6 +134,8 @@ export function loadProductionConfig(): ProductionConfigData {
       lineSpeeds: { ...DEFAULT_PRODUCTION_CONFIG.lineSpeeds, ...(parsed.lineSpeeds || {}) },
       operationRules: { ...DEFAULT_PRODUCTION_CONFIG.operationRules, ...(parsed.operationRules || {}) },
       prepOffsets: { ...DEFAULT_PRODUCTION_CONFIG.prepOffsets, ...(parsed.prepOffsets || {}) },
+      lineWorkers: { ...DEFAULT_PRODUCTION_CONFIG.lineWorkers, ...(parsed.lineWorkers || {}) },
+      roomWorkers: { ...DEFAULT_PRODUCTION_CONFIG.roomWorkers, ...(parsed.roomWorkers || {}) },
     };
   } catch (err) {
     console.error('Failed to parse production config from localStorage:', err);
@@ -177,11 +200,11 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
+      className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-[96vw] max-w-5xl h-[92vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
+        className="w-[96vw] max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 상단 헤더 */}
@@ -192,14 +215,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
                   현장 기준정보 확인 및 타임테이블 설정
                 </h2>
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-sm font-bold">
                   성형장 · 취반/전처리실 과장님 확인서 100% 매칭
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
+              <p className="text-sm text-slate-300 mt-0.5">
                 과장님께서 종이에 적어주신 기준값을 여기에 입력하시면, 당일 수주와 실시간 연동되어 작업지시서가 자동 역산 계산됩니다.
               </p>
             </div>
@@ -209,7 +232,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
             <button
               type="button"
               onClick={handleResetToDefault}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-sm font-bold transition cursor-pointer"
               title="파란색 기본 기준값으로 되돌리기"
             >
               <RotateCcw size={13} />
@@ -218,7 +241,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
             <button
               type="button"
               onClick={handleSave}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-black shadow-md transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-black shadow-md transition cursor-pointer"
             >
               <Save size={14} />
               <span>설정 저장 & 타임테이블 반영</span>
@@ -239,15 +262,15 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
           <button
             type="button"
             onClick={() => setActiveTab('PART1')}
-            className={`px-5 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-5 py-2.5 rounded-t-xl font-black text-base flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'PART1'
                 ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <span className="text-base">🍱</span>
+            <span className="text-lg">🍱</span>
             <span>제1부. 성형장 · 포장실 운영 기준 (확인 1~3)</span>
-            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">
+            <span className="text-sm bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">
               UPH / 09:25 선가동 / 교대
             </span>
           </button>
@@ -255,15 +278,15 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
           <button
             type="button"
             onClick={() => setActiveTab('PART2')}
-            className={`px-5 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+            className={`px-5 py-2.5 rounded-t-xl font-black text-base flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
               activeTab === 'PART2'
                 ? 'bg-white text-indigo-900 border-indigo-600 shadow-xs'
                 : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <span className="text-base">🍳</span>
+            <span className="text-lg">🍳</span>
             <span>제2부. 취반실 · 전처리(조리)실 운영 기준 (확인 4~5)</span>
-            <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+            <span className="text-sm bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
               역산 준비시간 / 1솥 배치
             </span>
           </button>
@@ -272,7 +295,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
         {/* 탭 본문 영역 */}
         <div className="flex-1 min-h-0 overflow-y-auto p-6 bg-slate-50 space-y-6">
           {saveSuccess && (
-            <div className="p-4 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-sm font-black flex items-center gap-2 shadow-xs animate-bounce">
+            <div className="p-4 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 text-base font-black flex items-center gap-2 shadow-xs animate-bounce">
               <CheckCircle2 size={18} />
               <span>✨ 현장 운영 기준정보가 성공적으로 저장되었습니다! 타임테이블과 작업지시서가 즉시 재계산됩니다.</span>
             </div>
@@ -285,18 +308,18 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
               <div className="bg-white rounded-xl border border-slate-300 p-5 shadow-xs">
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-black">확인 1</span>
-                    <h3 className="text-base font-black text-slate-900">
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-sm font-black">확인 1</span>
+                    <h3 className="text-lg font-black text-slate-900">
                       성형 라인별 시간당 생산 속도(UPH) 및 품목 교체 세척 시간
                     </h3>
                   </div>
-                  <span className="text-xs text-slate-500 font-medium">
+                  <span className="text-sm text-slate-500 font-medium">
                     과장님이 기재하신 실제 속도와 교체 시간(분)을 입력해 주세요.
                   </span>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <table className="w-full text-left border-collapse text-base sm:text-lg">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-black">
                         <th className="py-2.5 px-3">성형 라인명</th>
@@ -329,7 +352,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black focus:ring-2 focus:ring-blue-500"
                             />
-                            <span className="text-xs text-slate-600">줄/h</span>
+                            <span className="text-sm text-slate-600">줄/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -348,7 +371,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black focus:ring-2 focus:ring-amber-500"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
@@ -388,7 +411,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">개/h</span>
+                            <span className="text-sm text-slate-600">개/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -408,7 +431,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
@@ -432,7 +455,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">개/h</span>
+                            <span className="text-sm text-slate-600">개/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -451,7 +474,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
@@ -475,7 +498,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-24 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">개/h</span>
+                            <span className="text-sm text-slate-600">개/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -494,7 +517,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
@@ -534,7 +557,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">개/h</span>
+                            <span className="text-sm text-slate-600">개/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -554,7 +577,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
@@ -594,7 +617,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">개/h</span>
+                            <span className="text-sm text-slate-600">개/h</span>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 bg-amber-50/30">
@@ -614,31 +637,58 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                               }
                               className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                             />
-                            <span className="text-xs text-slate-600">분</span>
+                            <span className="text-sm text-slate-600">분</span>
                           </div>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
+
+                {/* 성형 라인별 기본 투입인원 설정 */}
+                <div className="mt-5 pt-4 border-t border-slate-200">
+                  <div className="text-sm font-black text-slate-800 mb-2.5 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800">투입인원</span>
+                    <span>성형 라인별 기본 투입인원 (작업지시서 · 종합본 PDF 자동 반영)</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {Object.entries(DEFAULT_PRODUCTION_CONFIG.lineWorkers || {}).map(([lineName, defVal]) => (
+                      <div key={lineName} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-slate-800 truncate">{lineName}</span>
+                        <input
+                          type="text"
+                          value={config.lineWorkers?.[lineName] ?? defVal}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              lineWorkers: { ...(prev.lineWorkers || {}), [lineName]: e.target.value },
+                            }))
+                          }
+                          className="w-20 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black text-sm text-blue-900"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
 
               {/* 확인 2. 아침 09:25 선가동 생산 순서 및 기본 수량 (10:20 확정 수주 전) */}
               <div className="bg-white rounded-xl border border-slate-300 p-5 shadow-xs">
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-black">확인 2</span>
-                    <h3 className="text-base font-black text-slate-900">
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-sm font-black">확인 2</span>
+                    <h3 className="text-lg font-black text-slate-900">
                       아침 09:25 선가동 생산 순서 및 기본 수량 (10:20 확정 수주 전)
                     </h3>
                   </div>
-                  <span className="text-xs text-slate-500 font-medium">
+                  <span className="text-sm text-slate-500 font-medium">
                     매일 아침 10:20 수주 확정 전, 09:25부터 각 라인에서 미리 생산해 두는 품목과 기본 수량입니다.
                   </span>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <table className="w-full text-left border-collapse text-base sm:text-lg">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-black">
                         <th className="py-2.5 px-3 w-16 text-center">순서</th>
@@ -678,7 +728,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 onChange={(e) => updatePreRun(idx, 'preQty', Number(e.target.value) || 0)}
                                 className="w-28 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-black text-emerald-950 focus:ring-2 focus:ring-emerald-500"
                               />
-                              <span className="text-xs text-slate-600">개/줄</span>
+                              <span className="text-sm text-slate-600">개/줄</span>
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-center">
@@ -699,19 +749,19 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
               {/* 확인 3. 성형장 작업 전환 · 휴게시간 · 포장 마감 기준 */}
               <div className="bg-white rounded-xl border border-slate-300 p-5 shadow-xs">
                 <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-200">
-                  <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-black">확인 3</span>
-                  <h3 className="text-base font-black text-slate-900">
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-sm font-black">확인 3</span>
+                  <h3 className="text-lg font-black text-slate-900">
                     성형장 작업 전환 · 휴게시간 · 포장 마감 기준
                   </h3>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-base sm:text-lg">
                   {/* 항목 1 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                     <div className="font-black text-slate-900">① 2편 ➔ 1편 교대 세척·점검 시간</div>
-                    <p className="text-xs text-slate-500">주간(2편) 종료 후 야간(1편) 시작 전 라인 살균 소독 시간</p>
+                    <p className="text-sm text-slate-500">주간(2편) 종료 후 야간(1편) 시작 전 라인 살균 소독 시간</p>
                     <div className="flex items-center gap-2 pt-1 font-mono">
-                      <span className="text-xs text-slate-600">실제 소요:</span>
+                      <span className="text-sm text-slate-600">실제 소요:</span>
                       <input
                         type="number"
                         value={config.operationRules.shiftChangeoverMin}
@@ -726,14 +776,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                         }
                         className="w-20 px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                       />
-                      <span className="text-xs font-bold text-slate-700">분 소요</span>
+                      <span className="text-sm font-bold text-slate-700">분 소요</span>
                     </div>
                   </div>
 
                   {/* 항목 2 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                     <div className="font-black text-slate-900">② 점심·저녁 식사시간 (12:30~13:20)</div>
-                    <p className="text-xs text-slate-500">식사 시간 동안 라인 가동 방식</p>
+                    <p className="text-sm text-slate-500">식사 시간 동안 라인 가동 방식</p>
                     <div className="space-y-1.5 pt-1">
                       <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800">
                         <input
@@ -771,9 +821,9 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                   {/* 항목 3 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                     <div className="font-black text-slate-900">③ 성형 완료 후 포장 마감 소요</div>
-                    <p className="text-xs text-slate-500">내포장·라벨링·금속검출·박스 적재 완료까지 추가 시간</p>
+                    <p className="text-sm text-slate-500">내포장·라벨링·금속검출·박스 적재 완료까지 추가 시간</p>
                     <div className="flex items-center gap-2 pt-1 font-mono">
-                      <span className="text-xs text-slate-600">성형 완료 후:</span>
+                      <span className="text-sm text-slate-600">성형 완료 후:</span>
                       <input
                         type="number"
                         value={config.operationRules.packagingOffsetMin}
@@ -788,10 +838,11 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                         }
                         className="w-20 px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-right font-black"
                       />
-                      <span className="text-xs font-bold text-slate-700">분 이내 출고 대기</span>
+                      <span className="text-sm font-bold text-slate-700">분 이내 출고 대기</span>
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
           )}
@@ -803,30 +854,30 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
               <div className="bg-white rounded-xl border border-slate-300 p-5 shadow-xs">
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-black">확인 4</span>
-                    <h3 className="text-base font-black text-slate-900">
+                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-sm font-black">확인 4</span>
+                    <h3 className="text-lg font-black text-slate-900">
                       파트별 선행 준비 시간(성형 시작 몇 분 전 완료) 및 1배치 처리 용량
                     </h3>
                   </div>
-                  <span className="text-xs text-slate-500 font-medium">
+                  <span className="text-base text-slate-600 font-medium">
                     성형실이 09:25 가동될 때 취반실과 전처리실이 역산하여 준비해야 할 시각과 설비 용량입니다.
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-base sm:text-lg">
                   {/* 1. 취반실 */}
                   <div className="p-4 rounded-xl bg-indigo-50/50 border border-indigo-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-indigo-950 text-sm flex items-center gap-1.5">
+                      <span className="font-black text-indigo-950 text-lg flex items-center gap-1.5">
                         <span>🍚</span> 취반실 (로터리 · 연속식 취반기)
                       </span>
-                      <span className="text-[11px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded">
+                      <span className="text-sm font-bold bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded">
                         쌀 세척·불림·취반·초밥배합
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">배합 완료 시점</div>
+                    <div className="grid grid-cols-2 gap-3 text-base font-mono">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">배합 완료 시점</div>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-slate-700 font-sans">성형</span>
                           <input
@@ -841,14 +892,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black text-indigo-900"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black text-indigo-900"
                           />
                           <span className="text-slate-700 font-sans">분 전 배합 완료</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">불림·취반 시작</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">불림·취반 시작</div>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-slate-700 font-sans">성형</span>
                           <input
@@ -863,14 +914,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black text-indigo-900"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black text-indigo-900"
                           />
                           <span className="text-slate-700 font-sans">분 전 불림 시작</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">1솥 생쌀 기준 용량</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">1솥 생쌀 기준 용량</div>
                         <div className="flex items-center gap-1 mt-1">
                           <input
                             type="number"
@@ -884,14 +935,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">kg / 솥</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">1회 취반 총 소요시간</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">1회 취반 총 소요시간</div>
                         <div className="flex items-center gap-1 mt-1">
                           <input
                             type="number"
@@ -905,7 +956,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">분 소요</span>
                         </div>
@@ -916,16 +967,16 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                   {/* 2. 스팀솥 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                      <span className="font-black text-slate-900 text-lg flex items-center gap-1.5">
                         <span>🍲</span> 스팀솥 (1·2번 / 자동 2대)
                       </span>
-                      <span className="text-[11px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
+                      <span className="text-sm font-bold bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
                         불고기, 제육, 볶음류, 소스
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">조리/냉각 완료</div>
+                    <div className="grid grid-cols-2 gap-3 text-base font-mono">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">조리/냉각 완료</div>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-slate-700 font-sans">성형</span>
                           <input
@@ -940,14 +991,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">분 전</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">1솥 최대 용량</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">1솥 최대 용량</div>
                         <div className="flex items-center gap-1 mt-1">
                           <input
                             type="number"
@@ -961,7 +1012,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">kg / 솥</span>
                         </div>
@@ -972,16 +1023,16 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                   {/* 3. 오토후라이어 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                      <span className="font-black text-slate-900 text-lg flex items-center gap-1.5">
                         <span>🍗</span> 오토후라이어 (1·2호기)
                       </span>
-                      <span className="text-[11px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
+                      <span className="text-sm font-bold bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
                         돈까스, 치킨가라아게, 튀김류
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">튀김/냉각 완료</div>
+                    <div className="grid grid-cols-2 gap-3 text-base font-mono">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">튀김/냉각 완료</div>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-slate-700 font-sans">성형</span>
                           <input
@@ -996,14 +1047,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">분 전</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">1회 투입 용량</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">1회 투입 용량</div>
                         <div className="flex items-center gap-1 mt-1">
                           <input
                             type="number"
@@ -1017,7 +1068,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">kg</span>
                         </div>
@@ -1028,16 +1079,16 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                   {/* 4. 샐러드실 */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                      <span className="font-black text-slate-900 text-lg flex items-center gap-1.5">
                         <span>🥗</span> 샐러드실 (믹서 1·2호기)
                       </span>
-                      <span className="text-[11px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
+                      <span className="text-sm font-bold bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded">
                         참치마요, 샐러드, 속재료 배합
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">배합/소분 완료</div>
+                    <div className="grid grid-cols-2 gap-3 text-base font-mono">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">배합/소분 완료</div>
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-slate-700 font-sans">성형</span>
                           <input
@@ -1052,14 +1103,14 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-14 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">분 전</span>
                         </div>
                       </div>
 
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                        <div className="text-slate-500 text-[11px]">1회 배합 용량</div>
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                        <div className="text-slate-500 text-sm font-bold">1회 배합 용량</div>
                         <div className="flex items-center gap-1 mt-1">
                           <input
                             type="number"
@@ -1073,7 +1124,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                                 },
                               }))
                             }
-                            className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-right font-black"
+                            className="w-20 px-2.5 py-1.5 text-base border border-slate-300 rounded-lg text-right font-black"
                           />
                           <span className="text-slate-700 font-sans">kg</span>
                         </div>
@@ -1081,13 +1132,39 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                     </div>
                   </div>
                 </div>
+
+                {/* 전처리 작업장별 기본 투입인원 설정 */}
+                <div className="mt-5 pt-4 border-t border-slate-200">
+                  <div className="text-base font-black text-slate-800 mb-2.5 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-sm">투입인원</span>
+                    <span>전처리 작업장(실)별 기본 투입인원 (작업지시서 · 종합본 PDF 자동 반영)</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {Object.entries(DEFAULT_PRODUCTION_CONFIG.roomWorkers || {}).map(([roomName, defVal]) => (
+                      <div key={roomName} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2">
+                        <span className="text-base font-bold text-slate-800 truncate">{roomName}</span>
+                        <input
+                          type="text"
+                          value={config.roomWorkers?.[roomName] ?? defVal}
+                          onChange={(e) =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              roomWorkers: { ...(prev.roomWorkers || {}), [roomName]: e.target.value },
+                            }))
+                          }
+                          className="w-20 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-right font-black text-base text-emerald-900"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* 확인 5. 과장님 특이사항 의견 기재란 */}
               <div className="bg-white rounded-xl border border-slate-300 p-5 shadow-xs">
                 <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-200">
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-xs font-black">확인 5</span>
-                  <h3 className="text-base font-black text-slate-900">
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-sm font-black">확인 5</span>
+                  <h3 className="text-lg font-black text-slate-900">
                     취반 · 전처리 공정 운영 시 꼭 반영해야 할 현장 특이사항
                   </h3>
                 </div>
@@ -1096,7 +1173,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
                   onChange={(e) => setConfig((prev) => ({ ...prev, specialNotes: e.target.value }))}
                   rows={4}
                   placeholder="과장님께서 기재하신 특이사항(예: 밥 종류별 추가 배합 시간, 솥 세척 시간, 동시 조리 불가 알레르기 품목 순서 등)을 적어주세요."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed"
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-base sm:text-lg font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 leading-relaxed"
                 />
               </div>
             </div>
@@ -1104,7 +1181,7 @@ export const ProductionConfigModal: React.FC<ProductionConfigModalProps> = ({ is
         </div>
 
         {/* 팝업 하단 푸터 바 */}
-        <div className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex items-center justify-between text-xs text-slate-600 font-medium shrink-0">
+        <div className="bg-slate-100 px-6 py-3 border-t border-slate-300 flex items-center justify-between text-sm text-slate-600 font-medium shrink-0">
           <div className="flex items-center gap-2">
             <span className="font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded">안내</span>
             <span>저장된 기준값은 영구 보존되며, 작업지시서 발행 시 모든 라인/설비의 시간과 배치 수량이 자동 연쇄 계산됩니다.</span>

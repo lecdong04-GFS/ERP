@@ -11,14 +11,21 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Printer,
 } from 'lucide-react';
-import type {
-  RiceWorkOrderResult,
-  WorkOrderWindowMode,
-  RiceColorBadge,
-  FormingScheduleRow,
-  PrepScheduleRow,
+import { buildMasterWorkOrderPrintHtml } from '@/lib/production/printMasterWorkOrder';
+import {
+  applyWorkersOverride,
+  type RiceWorkOrderResult,
+  type WorkOrderWindowMode,
+  type RiceColorBadge,
+  type FormingScheduleRow,
+  type PrepScheduleRow,
 } from '@/lib/production/riceScheduleEngine';
+import {
+  loadProductionConfig,
+  type ProductionConfigData,
+} from '@/components/production/modals/ProductionConfigModal';
 import { GFS_SALES_ORDER_CHANGED_EVENT } from '@/lib/gfs/orderSyncEvent';
 
 interface ApiPayload {
@@ -81,6 +88,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
   const [tab1LineFilter, setTab1LineFilter] = useState<string>('전체');
   const [expandedMasterKey, setExpandedMasterKey] = useState<string | null>(null);
   const [excelSourceName, setExcelSourceName] = useState<string | null>(null);
+  const [prodConfig, setProdConfig] = useState<ProductionConfigData>(() => loadProductionConfig());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSchedule = async (targetDate: string) => {
@@ -124,11 +132,28 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
     setRoomOrLineFilter('전체');
   }, [activeTab]);
 
-  const currentResult: RiceWorkOrderResult | null = payload
+  useEffect(() => {
+    const onConfigUpdated = () => {
+      setProdConfig(loadProductionConfig());
+    };
+    window.addEventListener('gfs_production_config_updated', onConfigUpdated);
+    return () => window.removeEventListener('gfs_production_config_updated', onConfigUpdated);
+  }, []);
+
+  const rawCurrentResult: RiceWorkOrderResult | null = payload
     ? mode === 'pre10'
       ? payload.pre10
       : payload.post10
     : null;
+
+  const currentResult: RiceWorkOrderResult | null = useMemo(() => {
+    if (!rawCurrentResult) return null;
+    return applyWorkersOverride(
+      rawCurrentResult,
+      prodConfig.lineWorkers,
+      prodConfig.roomWorkers
+    );
+  }, [rawCurrentResult, prodConfig]);
 
   const handleOrdviewUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -185,53 +210,339 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
   const handleDownload5SheetExcel = () => {
     if (!currentResult) return;
     const wb = XLSX.utils.book_new();
+    const modeLabel = mode === 'pre10' ? '10시 이전 (선행)' : '10시 이후 (본수주 확정)';
 
-    const s1 = currentResult.tab1Master.map((r, i) => ({
-      순번: i + 1,
-      편구분: r.shiftType,
-      밥색상코드: r.riceColorCode,
-      밥색상: r.riceColorBadge,
-      주라인: r.primaryLine,
-      기본상품명: r.baseProductName,
-      발주수량_EA: r.eaQty,
-      ...(mode === 'post10' ? { 선행대비증감: r.diffEa ?? 0 } : {}),
-    }));
+    const calcColWidth = (val: unknown): number => {
+      const str = String(val ?? '');
+      let w = 0;
+      for (let i = 0; i < str.length; i++) {
+        w += str.charCodeAt(i) > 127 ? 2 : 1;
+      }
+      return w;
+    };
 
-    const mapPrep = (list: PrepScheduleRow[]) =>
-      list.map((r, i) => ({
-        순번: i + 1,
-        작업실: r.room,
-        편구분: r.shiftType,
-        작업시간대: r.timeRange,
-        밥색상: r.riceColorBadge,
-        대상라인: r.targetLine,
-        기본상품명: r.baseProductName,
-        투입원물: r.materialName,
-        수량_EA: r.eaQty || '',
-        필요중량_kg: r.requiredKg || '',
-        비고: r.note,
-      }));
+    const buildSheet = (
+      title: string,
+      subtitle: string,
+      headers: string[],
+      rows: Array<Array<string | number>>,
+      minWidths: number[] = []
+    ) => {
+      const aoa: Array<Array<string | number>> = [
+        [title],
+        [subtitle],
+        [],
+        headers,
+        ...rows,
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      if (headers.length > 1) {
+        ws['!merges'] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+        ];
+      }
+      ws['!cols'] = headers.map((h, colIdx) => {
+        let maxW = calcColWidth(h);
+        for (const r of rows) {
+          const cw = calcColWidth(r[colIdx]);
+          if (cw > maxW) maxW = cw;
+        }
+        const minW = minWidths[colIdx] || 8;
+        return { wch: Math.min(44, Math.max(minW, maxW + 3)) };
+      });
+      ws['!rows'] = [{ hpt: 24 }, { hpt: 18 }, { hpt: 8 }, { hpt: 22 }];
+      return ws;
+    };
 
-    const mapForming = (list: FormingScheduleRow[]) =>
-      list.map((r) => ({
-        라인: r.lineName,
-        순번: r.seq,
-        편구분: r.shiftType,
-        시간대: r.timeRange,
-        소요분: r.durationMin,
-        구분: r.rowType,
-        밥색상: r.riceColorBadge,
-        기본상품명: r.baseProductName,
-        발주수량_EA: r.eaQty || '',
-        표준UPH: r.uph,
-        비고: r.note,
-      }));
+    // ── 0. 현장 한눈에 보기: 품목별 작업지시서 (품목별 블록 + 하위 투입원물 정리) ──
+    const prepByProduct = new Map<string, PrepScheduleRow[]>();
+    for (const p of [...currentResult.tab2PrepRice, ...currentResult.tab3PrepCook]) {
+      const key = `${p.shiftType}::${p.baseProductName}`;
+      const arr = prepByProduct.get(key) || [];
+      arr.push(p);
+      prepByProduct.set(key, arr);
+    }
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s1), '1_발주집계_색상순위');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mapPrep(currentResult.tab2PrepRice)), '2_전처리_계량취반로터리');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mapPrep(currentResult.tab3PrepCook)), '3_전처리_조리샐러드커팅');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mapForming(currentResult.tab4FormingBentoGimbap)), '4_성형_도시락김밥');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mapForming(currentResult.tab5FormingSamgak)), '5_성형_더큰삼각커플');
+    const itemGroupedRows: Array<Array<string | number>> = [];
+    const sortedItems = [...currentResult.tab1Master].sort(
+      (a, b) =>
+        (a.shiftType === b.shiftType ? 0 : a.shiftType === '2편' ? -1 : 1) ||
+        a.primaryLine.localeCompare(b.primaryLine, 'ko') ||
+        a.baseProductName.localeCompare(b.baseProductName, 'ko')
+    );
+
+    sortedItems.forEach((item, idx) => {
+      const prepRows = prepByProduct.get(`${item.shiftType}::${item.baseProductName}`) || [];
+      const prepTimeByMat = new Map<string, { room: string; timeRange: string }>();
+      for (const pr of prepRows) {
+        if (!prepTimeByMat.has(pr.materialName)) {
+          prepTimeByMat.set(pr.materialName, { room: pr.room, timeRange: pr.timeRange });
+        }
+      }
+
+      itemGroupedRows.push([
+        idx + 1,
+        '▶ 품목',
+        item.shiftType,
+        item.primaryLine,
+        item.riceColorBadge,
+        item.baseProductName,
+        item.eaQty,
+        item.scheduledTimeRange || '-',
+        item.durationMin ? `${item.durationMin}분` : '-',
+        item.totalMaterialKg ?? 0,
+        mode === 'post10' && item.diffEa != null ? item.diffEa : '',
+        '',
+      ]);
+
+      if (item.bomMaterials.length > 0) {
+        for (const mat of item.bomMaterials) {
+          const g =
+            mat.unit === 'kg' || mat.unit === 'KG'
+              ? mat.unitQty * 1000
+              : mat.unit === 'g' || mat.unit === 'G'
+              ? mat.unitQty
+              : 0;
+          const yf = 100 / Math.max(1, Number(mat.yieldRate) || 100);
+          const reqKg = g > 0 ? Math.round(((item.eaQty * g * yf) / 1000) * 100) / 100 : '';
+          const prepMeta = prepTimeByMat.get(mat.materialName);
+          itemGroupedRows.push([
+            '',
+            '  └ 원물',
+            '',
+            prepMeta?.room || mat.nextProcess || mat.warehouse || '-',
+            '',
+            `  · ${mat.materialName}`,
+            `${mat.unitQty}${mat.unit}`,
+            prepMeta?.timeRange || '-',
+            `수율 ${mat.yieldRate}%`,
+            reqKg,
+            '',
+            mat.warehouse || '',
+          ]);
+        }
+      }
+      // 품목 간 구분 빈 줄
+      itemGroupedRows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
+    });
+
+    const sharedBatchRows = currentResult.tab3PrepCook.filter((r) => r.isBatched);
+    if (sharedBatchRows.length > 0) {
+      itemGroupedRows.push([
+        '',
+        '★ 공통배치',
+        '',
+        '샐러드실',
+        '',
+        '공통 토핑 일괄 합산',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ]);
+      for (const sb of sharedBatchRows) {
+        itemGroupedRows.push([
+          '',
+          '  └ 합산',
+          sb.shiftType,
+          sb.room,
+          '',
+          sb.materialName,
+          '',
+          sb.timeRange,
+          '',
+          sb.requiredKg,
+          '',
+          sb.note,
+        ]);
+      }
+    }
+
+    const ws0 = buildSheet(
+      `[GFS] 품목별 작업지시서 (${workDate} · ${modeLabel})`,
+      `총 ${currentResult.summary.totalEa.toLocaleString()} EA (2편 ${currentResult.summary.shift2Ea.toLocaleString()} / 1편 ${currentResult.summary.shift1Ea.toLocaleString()}) | BOM 총 원물 ${currentResult.summary.totalKg.toLocaleString()} kg`,
+      [
+        '순번',
+        '구분',
+        '편',
+        '라인 / 작업실',
+        '밥색상',
+        '품명 / 투입원물',
+        '수량(EA) / 단위소요',
+        '가동 / 작업시간대',
+        '소요 / 수율',
+        '필요중량(kg)',
+        '선행대비증감',
+        '창고 / 비고',
+      ],
+      itemGroupedRows,
+      [6, 10, 6, 16, 10, 32, 16, 16, 12, 14, 13, 18]
+    );
+    XLSX.utils.book_append_sheet(wb, ws0, '0_품목별_작업지시서');
+
+    // ── 1. 발주집계 · 색상순위 ──
+    const s1Headers = [
+      '순번',
+      '편구분',
+      '밥색상',
+      '주라인',
+      '품목명',
+      '발주수량(EA)',
+      '가동시간대',
+      '소요(분)',
+      '원물합계(kg)',
+      '비중(%)',
+      ...(mode === 'post10' ? ['선행대비증감'] : []),
+    ];
+    const s1Rows = currentResult.tab1Master.map((r, i) => [
+      i + 1,
+      r.shiftType,
+      r.riceColorBadge,
+      r.primaryLine,
+      r.baseProductName,
+      r.eaQty,
+      r.scheduledTimeRange || '-',
+      r.durationMin ?? 0,
+      r.totalMaterialKg ?? 0,
+      r.sharePct ?? 0,
+      ...(mode === 'post10' ? [r.diffEa ?? 0] : []),
+    ]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildSheet(
+        `발주집계 · 밥색상 순위 (${workDate} · ${modeLabel})`,
+        `총 ${currentResult.summary.totalEa.toLocaleString()} EA | ${currentResult.tab1Master.length}개 품목`,
+        s1Headers,
+        s1Rows,
+        [6, 8, 10, 16, 28, 14, 15, 10, 14, 10, 13]
+      ),
+      '1_발주집계_색상순위'
+    );
+
+    // ── 2~3. 전처리 시트 (품목별 묶음 정렬) ──
+    const buildPrepSheet = (title: string, list: PrepScheduleRow[]) => {
+      const grouped = [...list].sort(
+        (a, b) =>
+          (a.shiftType === b.shiftType ? 0 : a.shiftType === '2편' ? -1 : 1) ||
+          a.baseProductName.localeCompare(b.baseProductName, 'ko') ||
+          a.room.localeCompare(b.room, 'ko') ||
+          a.startMin - b.startMin
+      );
+      const rows: Array<Array<string | number>> = [];
+      let prevItemKey = '';
+      grouped.forEach((r, i) => {
+        const curKey = `${r.shiftType}::${r.baseProductName}`;
+        if (prevItemKey && prevItemKey !== curKey) {
+          rows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
+        }
+        prevItemKey = curKey;
+        rows.push([
+          i + 1,
+          r.shiftType,
+          r.baseProductName,
+          r.room,
+          r.workers || '-',
+          r.timeRange,
+          r.targetLine,
+          r.riceColorBadge,
+          r.materialName,
+          r.eaQty || '',
+          r.requiredKg || '',
+          r.note,
+        ]);
+      });
+      return buildSheet(
+        `${title} (${workDate} · ${modeLabel})`,
+        `품목별 정리 | 총 ${list.length}건`,
+        [
+          '순번',
+          '편구분',
+          '품목명',
+          '작업실',
+          '투입인원',
+          '작업시간대',
+          '대상라인',
+          '밥색상',
+          '투입원물',
+          '생산수량(EA)',
+          '필요중량(kg)',
+          '비고',
+        ],
+        rows,
+        [6, 8, 28, 15, 10, 15, 15, 10, 24, 13, 14, 20]
+      );
+    };
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildPrepSheet('전처리 · 계량 · 취반 · 로터리', currentResult.tab2PrepRice),
+      '2_전처리_계량취반로터리'
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildPrepSheet('전처리 · 조리 · 샐러드 · 커팅', currentResult.tab3PrepCook),
+      '3_전처리_조리샐러드커팅'
+    );
+
+    // ── 4~5. 성형 시트 (라인별 구분 빈 줄 포함) ──
+    const buildFormingSheet = (title: string, list: FormingScheduleRow[]) => {
+      const rows: Array<Array<string | number>> = [];
+      let prevLine = '';
+      for (const r of list) {
+        if (prevLine && prevLine !== r.lineName) {
+          rows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
+        }
+        prevLine = r.lineName;
+        rows.push([
+          r.lineName,
+          r.workers || '-',
+          r.seq,
+          r.shiftType,
+          r.timeRange,
+          r.durationMin,
+          r.rowType,
+          r.riceColorBadge,
+          r.baseProductName,
+          r.eaQty || '',
+          r.uph,
+          r.note,
+        ]);
+      }
+      return buildSheet(
+        `${title} (${workDate} · ${modeLabel})`,
+        `라인별 생산 순서 | 총 ${list.filter((x) => x.rowType === '생산').length}건`,
+        [
+          '라인',
+          '투입인원',
+          '순번',
+          '편구분',
+          '시간대',
+          '소요(분)',
+          '구분',
+          '밥색상',
+          '품목명',
+          '발주수량(EA)',
+          '표준UPH',
+          '비고',
+        ],
+        rows,
+        [15, 10, 6, 8, 15, 10, 10, 10, 28, 13, 10, 20]
+      );
+    };
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildFormingSheet('성형 · 도시락 · 김밥', currentResult.tab4FormingBentoGimbap),
+      '4_성형_도시락김밥'
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildFormingSheet('성형 · 더큰 · 삼각1·2 · 커플', currentResult.tab5FormingSamgak),
+      '5_성형_더큰삼각커플'
+    );
 
     const suffix = mode === 'pre10' ? '10시이전_선행' : '10시이후_본수주확정';
     XLSX.writeFile(wb, `GFS_작업지시서_${workDate}_${suffix}.xlsx`);
@@ -331,6 +642,27 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
             title="최신 수주·BOM 기준으로 다시 계산"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!currentResult) return;
+              const win = window.open('', '_blank');
+              if (!win) {
+                alert('팝업이 차단되어 인쇄 창을 열 수 없습니다.');
+                return;
+              }
+              const html = buildMasterWorkOrderPrintHtml(currentResult, { scope: 'ALL' });
+              win.document.open();
+              win.document.write(html);
+              win.document.close();
+            }}
+            disabled={!currentResult || currentResult.tab1Master.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-300 text-white text-[13px] font-black cursor-pointer transition"
+            title="성형 라인별·전처리 작업장별 1페이지씩 분리된 종합본 인쇄"
+          >
+            <Printer className="w-4 h-4" />
+            라인·작업장별 종합인쇄
           </button>
           <button
             type="button"
@@ -690,6 +1022,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
             <thead className="sticky top-0 bg-slate-100 text-slate-800 text-[13.5px] font-black border-b border-slate-200">
               <tr>
                 <th className="py-2.5 px-3 w-32">작업실</th>
+                <th className="py-2.5 px-2 w-16 text-center">인원</th>
                 <th className="py-2.5 px-2 w-16 text-center">편</th>
                 <th className="py-2.5 px-2 w-32">시간대</th>
                 <th className="py-2.5 px-2 w-24">밥색상</th>
@@ -715,6 +1048,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
                     }
                   >
                     <td className="py-2 px-3 font-black text-slate-800">{r.room}</td>
+                    <td className="py-2 px-2 text-center font-bold text-indigo-700">{r.workers || '-'}</td>
                     <td className="py-2 px-2 text-center font-bold text-slate-600">{r.shiftType}</td>
                     <td className="py-2 px-2 font-mono font-bold text-slate-800">{r.timeRange}</td>
                     <td className="py-2 px-2">
@@ -743,6 +1077,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
                 <th className="py-2.5 px-2 w-28">밥색상</th>
                 <th className="py-2.5 px-3">품목 / 공정 내용</th>
                 <th className="py-2.5 px-3 text-right w-36">발주수량(EA)</th>
+                <th className="py-2.5 px-2 text-center w-16">인원</th>
                 <th className="py-2.5 px-2 text-right w-24">UPH</th>
                 <th className="py-2.5 px-3">비고</th>
               </tr>
@@ -770,6 +1105,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
                       {r.eaQty > 0 ? r.eaQty.toLocaleString() : '-'}
                       {mode === 'post10' && <DiffBadge diff={r.diffEa} />}
                     </td>
+                    <td className="py-2 px-2 text-center font-bold text-indigo-700">{r.workers || '-'}</td>
                     <td className="py-2 px-2 text-right font-mono text-slate-500">
                       {r.uph.toLocaleString()}
                     </td>

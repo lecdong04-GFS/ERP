@@ -1016,11 +1016,31 @@ export async function GET(req: NextRequest) {
       routing.keywords.some((kw) => p.cleanName.includes(kw))
     );
 
-    // 키워드 미매칭 시 해당 범주 폴백 (도시락/성형 품목 기본 포괄)
-    if (matchedProducts.length === 0 && routing.kind === 'FORMING') {
+    // ALL_SEONGHYEONG / ALL_JEONCHEORI 통합 조회일 때만 미매칭 성형 품목 포괄 (개별 라인에 타 라인 품목 혼입 금지)
+    if (
+      matchedProducts.length === 0 &&
+      routing.kind === 'FORMING' &&
+      (line === 'ALL_SEONGHYEONG' || line === 'ALL_JEONCHEORI')
+    ) {
       matchedProducts = Array.from(productMap.values()).filter((p) =>
         p.cleanName.includes('도시락') || p.cleanName.includes('혜자') || p.cleanName.includes('김밥') || p.cleanName.includes('삼각')
       );
+    }
+
+    if (matchedProducts.length === 0) {
+      return NextResponse.json({
+        success: true,
+        workDate: targetDate,
+        line,
+        shift,
+        hasRealOrders: false,
+        totalOrdersCount,
+        totalDayQty: 0,
+        distinctItemCount: 0,
+        lineTotalPlan: '0 ea (해당 라인 수주 없음)',
+        data: [],
+        materials: [],
+      });
     }
 
     // 1) 2편(당일 오후 출하) 최우선 정렬 후 1편(익일 새벽 출하) 순차 배치

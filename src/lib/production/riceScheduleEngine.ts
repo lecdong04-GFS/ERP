@@ -71,6 +71,7 @@ export interface FormingScheduleRow {
   riceColorCode?: RiceColorCode;
   riceColorLabel: string;
   riceColorBadge: RiceColorBadge;
+  workers?: string;
   note: string;
 }
 
@@ -90,8 +91,28 @@ export interface PrepScheduleRow {
   requiredKg: number;
   riceColorBadge: RiceColorBadge;
   isBatched?: boolean;
+  workers?: string;
   note: string;
 }
+
+export const DEFAULT_LINE_WORKERS: Record<FormingLineName, string> = {
+  '도시락 1라인': '14명',
+  '김밥 성형': '4명',
+  '김밥 포장': '6명',
+  '더큰 삼각라인': '3명',
+  '삼각 1호기': '3명',
+  '삼각 2호기': '3명',
+  '커플 포장기': '2명',
+};
+
+export const DEFAULT_ROOM_WORKERS: Record<PrepScheduleRow['room'], string> = {
+  '계량실·냉동실': '2명',
+  '취반기': '3명',
+  '로터리 믹서': '2명',
+  '채소·커팅실': '4명',
+  '조리실': '4명',
+  '샐러드실': '3명',
+};
 
 export interface RiceWorkOrderResult {
   mode: WorkOrderWindowMode;
@@ -411,6 +432,7 @@ function scheduleFormingLine(
         riceColorCode: item.riceColorCode,
         riceColorLabel: item.riceColorLabel,
         riceColorBadge: item.riceColorBadge,
+        workers: DEFAULT_LINE_WORKERS[lineName] || '-',
         note: i === 0 ? '동일색상 최우선 대량 배치' : '',
       });
       cursor += durationMin;
@@ -630,6 +652,7 @@ export function generateRiceWorkOrder(params: {
         unitWeightG,
         requiredKg,
         riceColorBadge: master.riceColorBadge,
+        workers: DEFAULT_ROOM_WORKERS[room] || '-',
         note: isPriorityVeg
           ? '06:00~07:30 최우선 데침/찹핑'
           : room === '계량실·냉동실' && formRow.shiftType === '1편'
@@ -662,6 +685,7 @@ export function generateRiceWorkOrder(params: {
       unitWeightG: 0,
       requiredKg: 0,
       riceColorBadge: '세척/전환',
+      workers: DEFAULT_ROOM_WORKERS['로터리 믹서'],
       note: '흰밥→주황→빨간 2편 사이클 종료 후 완전 세척',
     });
   }
@@ -686,6 +710,7 @@ export function generateRiceWorkOrder(params: {
       requiredKg: b.totalKg,
       riceColorBadge: '흰밥',
       isBatched: true,
+      workers: DEFAULT_ROOM_WORKERS['샐러드실'],
       note: '편별 1회 일괄 배합 후 라인별 소분 불출',
     });
   }
@@ -774,6 +799,43 @@ export function generateRiceWorkOrder(params: {
       colorBreakdown,
       lineSummaries,
     },
+  };
+}
+
+/**
+ * 기준정보 설정(ProductionConfigModal)에 저장된 라인·작업실별 투입인원을
+ * 생성된 RiceWorkOrderResult에 반영한다.
+ */
+export function applyWorkersOverride(
+  result: RiceWorkOrderResult,
+  lineWorkers?: Partial<Record<FormingLineName, string>>,
+  roomWorkers?: Partial<Record<PrepScheduleRow['room'], string>>
+): RiceWorkOrderResult {
+  const mapForming = (rows: FormingScheduleRow[]) =>
+    rows.map((r) => ({
+      ...r,
+      workers:
+        (lineWorkers && lineWorkers[r.lineName]) ||
+        r.workers ||
+        DEFAULT_LINE_WORKERS[r.lineName] ||
+        '-',
+    }));
+  const mapPrep = (rows: PrepScheduleRow[]) =>
+    rows.map((r) => ({
+      ...r,
+      workers:
+        (roomWorkers && roomWorkers[r.room]) ||
+        r.workers ||
+        DEFAULT_ROOM_WORKERS[r.room] ||
+        '-',
+    }));
+
+  return {
+    ...result,
+    tab2PrepRice: mapPrep(result.tab2PrepRice),
+    tab3PrepCook: mapPrep(result.tab3PrepCook),
+    tab4FormingBentoGimbap: mapForming(result.tab4FormingBentoGimbap),
+    tab5FormingSamgak: mapForming(result.tab5FormingSamgak),
   };
 }
 
