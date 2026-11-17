@@ -658,7 +658,7 @@ export function RiceWorkOrderTabsPanel({ workDate }: Props) {
               win.document.close();
             }}
             disabled={!currentResult || currentResult.tab1Master.length === 0}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-300 text-white text-[13px] font-black cursor-pointer transition"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 disabled:bg-slate-300 text-white text-[13px] font-black cursor-pointer transition"
             title="성형 라인별·전처리 작업장별 1페이지씩 분리된 종합본 인쇄"
           >
             <Printer className="w-4 h-4" />

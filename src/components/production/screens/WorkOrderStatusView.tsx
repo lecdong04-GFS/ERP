@@ -345,38 +345,54 @@ export const WorkOrderStatusView: React.FC = () => {
     void fetchServerWorkOrders(workDate, shift, selectedLine);
   }, [fetchServerWorkOrders, workDate, shift, selectedLine]);
 
+  // 순서 변경 시 원래 라인 시작 시각을 유지한 채 전체 시간 연쇄 재계산
+  const cascadeScheduleTimes = (
+    reordered: ScheduleTask[],
+    anchorStartTime: string
+  ): ScheduleTask[] => {
+    if (!autoCascadeOnReorder || reordered.length === 0) return reordered;
+    const [sh, sm] = anchorStartTime.split(':').map(Number);
+    let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 30 : sm);
+    return reordered.map((task) => {
+      const dur = parseDurationMin(task.duration, 30);
+      const endMin = curStartMin + dur;
+      const nextTime = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
+      const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
+      curStartMin = endMin + gap;
+      return {
+        ...task,
+        time: nextTime,
+      };
+    });
+  };
+
   // 순서 이동 핸들러 (▲ / ▼)
-  const moveTask = (index: number, direction: 'UP' | 'DOWN') => {
-    if (direction === 'UP' && index === 0) return;
-    if (direction === 'DOWN' && index === scheduleTasks.length - 1) return;
+  const moveTask = (filteredIdx: number, direction: 'UP' | 'DOWN') => {
+    if (direction === 'UP' && filteredIdx === 0) return;
+    if (direction === 'DOWN' && filteredIdx >= filteredSchedule.length - 1) return;
+
+    const fromTask = filteredSchedule[filteredIdx];
+    const toTask = filteredSchedule[direction === 'UP' ? filteredIdx - 1 : filteredIdx + 1];
+    if (!fromTask || !toTask) return;
+
+    const fromIdx = scheduleTasks.findIndex((t) => t.id === fromTask.id);
+    const toIdx = scheduleTasks.findIndex((t) => t.id === toTask.id);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const anchorStart =
+      (scheduleTasks[0] && parseTimeStr(scheduleTasks[0].time).start) || '09:30';
 
     const newTasks = [...scheduleTasks];
-    const targetIdx = direction === 'UP' ? index - 1 : index + 1;
-    const temp = newTasks[index];
-    newTasks[index] = newTasks[targetIdx];
-    newTasks[targetIdx] = temp;
+    const temp = newTasks[fromIdx];
+    newTasks[fromIdx] = newTasks[toIdx];
+    newTasks[toIdx] = temp;
 
-    // seq 재계산 및 시간 연쇄 자동 정렬
     const reordered = newTasks.map((t, idx) => ({
       ...t,
       seq: idx + 1,
     }));
 
-    if (autoCascadeOnReorder && reordered.length > 0) {
-      const baseStart = parseTimeStr(reordered[0].time).start || '09:00';
-      const [sh, sm] = baseStart.split(':').map(Number);
-      let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
-      for (let i = 0; i < reordered.length; i++) {
-        const task = reordered[i];
-        const dur = parseDurationMin(task.duration, 30);
-        const endMin = curStartMin + dur;
-        reordered[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
-        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
-        curStartMin = endMin + gap;
-      }
-    }
-
-    setScheduleTasks(reordered);
+    setScheduleTasks(cascadeScheduleTimes(reordered, anchorStart));
   };
 
   // 드래그 앤 드롭 이동 핸들러
@@ -398,38 +414,43 @@ export const WorkOrderStatusView: React.FC = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetFilteredIndex: number) => {
     e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIndex) {
+    if (draggedIndex === null || draggedIndex === targetFilteredIndex) {
       setDraggedIndex(null);
       setDragOverIndex(null);
       return;
     }
 
+    const fromTask = filteredSchedule[draggedIndex];
+    const toTask = filteredSchedule[targetFilteredIndex];
+    if (!fromTask || !toTask) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const fromIdx = scheduleTasks.findIndex((t) => t.id === fromTask.id);
+    const toIdx = scheduleTasks.findIndex((t) => t.id === toTask.id);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const anchorStart =
+      (scheduleTasks[0] && parseTimeStr(scheduleTasks[0].time).start) || '09:30';
+
     const newTasks = [...scheduleTasks];
-    const [draggedItem] = newTasks.splice(draggedIndex, 1);
-    newTasks.splice(targetIndex, 0, draggedItem);
+    const [draggedItem] = newTasks.splice(fromIdx, 1);
+    newTasks.splice(toIdx, 0, draggedItem);
 
     const reordered = newTasks.map((t, idx) => ({
       ...t,
       seq: idx + 1,
     }));
 
-    if (autoCascadeOnReorder && reordered.length > 0) {
-      const baseStart = parseTimeStr(reordered[0].time).start || '09:00';
-      const [sh, sm] = baseStart.split(':').map(Number);
-      let curStartMin = (isNaN(sh) ? 9 : sh) * 60 + (isNaN(sm) ? 0 : sm);
-      for (let i = 0; i < reordered.length; i++) {
-        const task = reordered[i];
-        const dur = parseDurationMin(task.duration, 30);
-        const endMin = curStartMin + dur;
-        reordered[i].time = `${minToTimeStr(curStartMin)} ~ ${minToTimeStr(endMin)}`;
-        const gap = task.type === '휴게' || task.type === '청소' ? 0 : 5;
-        curStartMin = endMin + gap;
-      }
-    }
-
-    setScheduleTasks(reordered);
+    setScheduleTasks(cascadeScheduleTimes(reordered, anchorStart));
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -940,19 +961,22 @@ export const WorkOrderStatusView: React.FC = () => {
             color: #94a3b8;
           }
 
-          /* KPI 카드 5분할 */
+          /* KPI 카드 5분할 (CSS Grid 비례 배분: 긴 상자 넓게, 짧은 상자 좁게) */
           .kpi-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: 2.2fr 1.1fr 2.2fr 1fr 1.3fr;
             gap: 6px;
             margin-bottom: 7px;
+            align-items: stretch;
           }
           .kpi-card {
-            flex: 1;
+            min-width: 0;
             background: #ffffff;
             border: 1px solid #cbd5e1;
             border-radius: 5px;
-            padding: 4px 8px;
+            padding: 5px 9px;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            overflow: hidden;
           }
           .kpi-card.highlight {
             background: #eff6ff;
@@ -963,18 +987,24 @@ export const WorkOrderStatusView: React.FC = () => {
             font-size: 9px;
             font-weight: 700;
             color: #64748b;
-            margin-bottom: 1px;
+            margin-bottom: 2px;
+            white-space: nowrap;
           }
           .kpi-val {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 900;
             color: #0f172a;
             font-family: monospace;
+            line-height: 1.25;
+            word-break: keep-all;
+            overflow-wrap: break-word;
           }
           .kpi-sub {
             font-size: 8.5px;
             color: #64748b;
-            margin-top: 1px;
+            margin-top: 2px;
+            line-height: 1.25;
+            word-break: keep-all;
           }
 
           /* 타임테이블 */
@@ -1247,7 +1277,7 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
 
-        <!-- 2. 핵심 KPI 5분할 카드 -->
+        <!-- 2. 핵심 KPI 5분할 카드 (내용에 맞춘 비례 너비) -->
         <div class="kpi-row">
           <div class="kpi-card highlight">
             <div class="kpi-label">일일 총 생산계획</div>
@@ -1275,12 +1305,12 @@ export const WorkOrderStatusView: React.FC = () => {
           <div class="kpi-card">
             <div class="kpi-label">소인화 투입인원</div>
             <div class="kpi-val" style="color:#b45309;">${escapeHtml(currentLine.personnel)}</div>
-            <div class="kpi-sub">라인 오퍼레이터 및 패커</div>
+            <div class="kpi-sub">오퍼레이터·패커</div>
           </div>
           <div class="kpi-card">
             <div class="kpi-label">공정 및 품질책임자</div>
             <div class="kpi-val" style="color:#4f46e5;">${escapeHtml(currentLine.leadWorker)}</div>
-            <div class="kpi-sub">HACCP 안전 관리자 겸임</div>
+            <div class="kpi-sub">HACCP 안전 관리자</div>
           </div>
         </div>
 
@@ -2082,113 +2112,156 @@ export const WorkOrderStatusView: React.FC = () => {
         })()}
       </div>
 
-      {/* 1. 상단 공정 대분류 스위처 및 작업 조건 바 */}
-      <div className="bg-white border-b border-slate-300 px-6 py-3 shadow-xs shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* 좌측: [🍱 성형장 타임테이블] vs [🍳 전처리실 타임테이블] 대분류 토글 */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-300 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => handleDepartmentChange('SEONGHYEONG')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-base transition-all cursor-pointer ${
+      {/* 1. 상단 공정 대분류 스위처 및 작업 조건 바 (고정 2단 구조로 줄바꿈 점프 방지) */}
+      <div className="bg-white border-b border-slate-300 px-6 py-2.5 shadow-xs shrink-0 space-y-2">
+        {/* 1행: 공정 대분류 토글 + 인쇄/저장 핵심 액션 */}
+        <div className="flex items-center justify-between gap-3 flex-nowrap">
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-300 shadow-2xs shrink-0">
+            <button
+              type="button"
+              onClick={() => handleDepartmentChange('SEONGHYEONG')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-[15px] transition-all cursor-pointer whitespace-nowrap ${
+                department === 'SEONGHYEONG'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+              }`}
+            >
+              <span className="text-lg">🍱</span>
+              <span>성형장 타임테이블</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-black ${
                   department === 'SEONGHYEONG'
-                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                    : 'text-slate-700 hover:bg-slate-200/80 hover:text-slate-950'
+                    ? 'bg-white/15 text-white'
+                    : 'bg-slate-200 text-slate-700'
                 }`}
               >
-                <span className="text-xl">🍱</span>
-                <span>성형장 타임테이블</span>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
-                    department === 'SEONGHYEONG'
-                      ? 'bg-emerald-700 text-emerald-100'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  9개 라인
-                </span>
-              </button>
+                9개 라인
+              </span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => handleDepartmentChange('JEONCHEORI')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-base transition-all cursor-pointer ${
+            <button
+              type="button"
+              onClick={() => handleDepartmentChange('JEONCHEORI')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm sm:text-[15px] transition-all cursor-pointer whitespace-nowrap ${
+                department === 'JEONCHEORI'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+              }`}
+            >
+              <span className="text-lg">🍳</span>
+              <span>전처리실 타임테이블</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-black ${
                   department === 'JEONCHEORI'
-                    ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
-                    : 'text-slate-700 hover:bg-slate-200/80 hover:text-slate-950'
+                    ? 'bg-white/15 text-white'
+                    : 'bg-slate-200 text-slate-700'
                 }`}
               >
-                <span className="text-xl">🍳</span>
-                <span>전처리실 타임테이블</span>
-                <span
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
-                    department === 'JEONCHEORI'
-                      ? 'bg-indigo-700 text-indigo-100'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  20개 설비
-                </span>
-              </button>
-            </div>
+                20개 설비
+              </span>
+            </button>
           </div>
 
-          {/* 우측: 날짜, 시프트, 검색, 액션 버튼들 */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* 작업일자 피커 & 실 수주 연동 상태 뱃지 */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-500 flex items-center gap-1">
-                <Calendar size={16} className="text-blue-600" /> 월/일:
-              </span>
-              <input
-                type="date"
-                value={workDate}
-                onChange={(e) => setWorkDate(e.target.value)}
-                className="bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              />
-              {realOrderMeta && realOrderMeta.hasRealOrders ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>실 수주 연동 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-200 text-slate-600">
-                  표준 템플릿
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
-                disabled={loading}
-                title="수주 물량이 입력/변경되었을 때 최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산합니다."
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
-                <span>수주 동기화</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsConfigModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 shadow-2xs transition-all cursor-pointer"
-                title="과장님 확인 요청서 기준값(UPH 속도, 09:25 선가동, 취반/전처리 역산 시간)을 화면에서 보고 언제든 수정합니다."
-              >
-                <Gauge size={13} className="text-amber-400" />
-                <span>현장 기준정보 설정</span>
-              </button>
-            </div>
+          {/* 인쇄 및 저장 버튼 그룹 */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handlePrintLiveWorkOrder}
+              title="현재 선택된 날짜와 시프트, 실 수주 수량이 반영된 A4 가로 작업지시서를 새 창으로 열어 즉시 인쇄 및 PDF로 저장합니다."
+              className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[13.5px] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap"
+            >
+              <Printer size={15} />
+              <span>라인 PDF 인쇄</span>
+              <ExternalLink size={12} className="opacity-80" />
+            </button>
 
+            <button
+              type="button"
+              onClick={handleOpenMasterPdf}
+              title="전라인 종합본 PDF를 인쇄합니다."
+              className="h-10 px-4 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-black text-[13.5px] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 whitespace-nowrap"
+            >
+              <Printer size={16} />
+              <span>종합본 인쇄</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSaveOrders}
+              disabled={saving}
+              className="h-10 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-xl font-black text-[13.5px] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <Save size={15} />
+              <span>{saving ? '저장 중...' : '순서 저장'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+              disabled={loading}
+              title="최신 수주 데이터를 불러와 작업지시서를 새로고침합니다."
+              className="h-10 w-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors disabled:opacity-50"
+            >
+              <RotateCcw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {/* 2행: 날짜 · 수주연동 · 기준정보 · 시프트 · 검색 (항상 고정 위치) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-600 flex items-center gap-1 whitespace-nowrap">
+              <Calendar size={15} className="text-slate-600" /> 월/일:
+            </span>
+            <input
+              type="date"
+              value={workDate}
+              onChange={(e) => setWorkDate(e.target.value)}
+              className="h-9 bg-slate-50 border border-slate-300 px-3 rounded-xl text-[13.5px] font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 cursor-pointer"
+            />
+            {realOrderMeta && realOrderMeta.hasRealOrders ? (
+              <span className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl text-[13px] font-bold bg-slate-100 text-slate-800 border border-slate-300 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>실 수주 연동 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)</span>
+              </span>
+            ) : (
+              <span className="h-9 inline-flex items-center gap-1 px-3 rounded-xl text-[13px] font-bold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                표준 템플릿
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
+              disabled={loading}
+              title="수주 물량이 입력/변경되었을 때 최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산합니다."
+              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl text-[13px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
+            >
+              <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
+              <span>수주 동기화</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsConfigModalOpen(true)}
+              className="h-9 inline-flex items-center gap-1.5 px-3.5 rounded-xl text-[13px] font-bold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 transition-all cursor-pointer whitespace-nowrap"
+              title="과장님 확인 요청서 기준값(UPH 속도, 09:25 선가동, 취반/전처리 역산 시간)을 화면에서 보고 언제든 수정합니다."
+            >
+              <Gauge size={14} className="text-slate-600" />
+              <span>현장 기준정보 설정</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
             {/* 시프트 필터 */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
-              <span className="text-sm font-bold text-slate-500">시프트:</span>
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-300">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-bold text-slate-600">시프트:</span>
+              <div className="h-9 flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-300">
                 {(['전체', '2편', '1편'] as const).map((s) => (
                   <button
                     key={s}
                     onClick={() => setShift(s)}
-                    className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    className={`h-8 px-3 rounded-lg text-[13px] font-black transition-all cursor-pointer ${
                       shift === s
-                        ? 'bg-blue-600 text-white shadow-xs'
+                        ? 'bg-slate-900 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
                     }`}
                   >
@@ -2200,59 +2273,14 @@ export const WorkOrderStatusView: React.FC = () => {
 
             {/* 검색창 */}
             <div className="relative pl-2 border-l border-slate-300">
-              <Search size={15} className="absolute left-4 top-2 text-slate-400" />
+              <Search size={15} className="absolute left-4.5 top-2.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="품목명, BOM, CCP 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-7 pr-3 py-1 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
+                className="h-9 pl-8 pr-3 bg-slate-50 border border-slate-300 rounded-xl text-[13px] text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 w-48"
               />
-            </div>
-
-            {/* 인쇄 및 저장 버튼 그룹 */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-300">
-              {/* 1. 라인 실시간 A4 인쇄 & PDF 저장 버튼 */}
-              <button
-                type="button"
-                onClick={handlePrintLiveWorkOrder}
-                title="현재 선택된 날짜와 시프트, 실 수주 수량이 반영된 A4 가로 작업지시서를 새 창으로 열어 즉시 인쇄 및 PDF로 저장합니다."
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <Printer size={15} />
-                <span>라인 PDF 인쇄</span>
-                <ExternalLink size={12} className="opacity-75" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenMasterPdf}
-                title="전라인 종합본 PDF를 인쇄합니다."
-                className="px-3.5 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <Printer size={15} />
-                <span>종합본 인쇄</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSaveOrders}
-                disabled={saving}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-xl font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Save size={14} />
-                <span>{saving ? '저장 중...' : '순서 저장'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void fetchServerWorkOrders(workDate, shift, selectedLine, true)}
-                disabled={loading}
-                title="최신 수주 데이터를 불러와 작업지시서를 새로고침합니다."
-                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl cursor-pointer transition-colors disabled:opacity-50"
-              >
-                <RotateCcw size={15} className={loading ? 'animate-spin' : ''} />
-              </button>
             </div>
           </div>
         </div>
@@ -2331,9 +2359,9 @@ export const WorkOrderStatusView: React.FC = () => {
 
           return (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-black text-slate-600">
+              <div className="flex items-center justify-between gap-2 min-h-[44px] flex-nowrap">
+                <div className="flex items-center gap-2 min-w-0 flex-nowrap">
+                  <span className="text-[13px] font-black text-slate-600 whitespace-nowrap shrink-0">
                     {isSeong ? '🍱 성형장 라인:' : '🍳 전처리 설비:'}
                   </span>
 
@@ -2341,15 +2369,11 @@ export const WorkOrderStatusView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsLineDropdownOpen((v) => !v)}
-                    className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-black border shadow-xs transition cursor-pointer ${
-                      isSeong
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
-                    }`}
+                    className="h-9.5 inline-flex items-center gap-2 px-4 rounded-xl text-[14px] font-black border shadow-xs transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-white border-slate-900 whitespace-nowrap shrink-0"
                   >
                     <span className="text-base">{activeItem?.icon}</span>
                     <span>{activeItem?.name || selectedLine}</span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-white/20 text-white font-mono">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 text-white font-mono">
                       {activeItem?.count ?? 0}
                     </span>
                     <ChevronDown
@@ -2368,17 +2392,17 @@ export const WorkOrderStatusView: React.FC = () => {
                         setSelectedLine(allItem.id);
                         setIsLineDropdownOpen(false);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-300 shadow-2xs transition cursor-pointer"
+                      className="h-9.5 inline-flex items-center gap-1.5 px-3.5 rounded-xl text-[13px] font-black bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-300 shadow-2xs transition cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <span>{allItem.icon}</span>
                       <span>{isSeong ? '성형장 전체 보기' : '전처리실 전체 보기'}</span>
                     </button>
                   )}
 
-                  {/* 자주 쓰는 대표 빠른 선택 칩 (성형장 주요 라인 / 전처리 주요실) */}
-                  <div className="hidden lg:flex items-center gap-1.5 pl-2 border-l border-slate-300">
+                  {/* 자주 쓰는 대표 빠른 선택 칩 (줄바꿈 없이 고정 4개) */}
+                  <div className="hidden xl:flex items-center gap-1.5 pl-2 border-l border-slate-300 overflow-hidden">
                     {(isSeong
-                      ? ['도시락 1', '김밥성형', '삼각김밥 1호기', '삼각김밥 2호기', '삼각김밥(더큰)']
+                      ? ['도시락 1', '김밥성형', '삼각김밥 1호기', '삼각김밥(더큰)']
                       : ['취반실', '스팀솥 1번', '샐러드실(믹서1)', '계량실(계량)']
                     ).map((quickId) => {
                       const qItem = activeLineList.find((x) => x.id === quickId);
@@ -2392,7 +2416,7 @@ export const WorkOrderStatusView: React.FC = () => {
                             setSelectedLine(qItem.id);
                             setIsLineDropdownOpen(false);
                           }}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                          className={`h-9 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold transition cursor-pointer border whitespace-nowrap shrink-0 ${
                             isSel
                               ? 'bg-slate-900 text-white border-slate-900'
                               : 'bg-white/80 hover:bg-white text-slate-700 border-slate-300'
@@ -2409,7 +2433,7 @@ export const WorkOrderStatusView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsLineDropdownOpen((v) => !v)}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                  className="text-[13px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <span>
                     {isLineDropdownOpen
@@ -2419,108 +2443,123 @@ export const WorkOrderStatusView: React.FC = () => {
                 </button>
               </div>
 
-              {/* 펼쳐지는 공정별 그룹 옵션 테이블 */}
+              {/* 공정별 그룹 옵션 테이블 모달 (화면 중앙 고정 + 내부 스크롤) */}
               {isLineDropdownOpen && (
-                <div className="absolute left-6 right-6 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-2xl border border-slate-300 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-slate-900">
-                        {isSeong
-                          ? '🍱 성형장 라인 선택 테이블'
-                          : '🍳 전처리 설비 · 작업실 선택 테이블'}
-                      </span>
-                      <span className="text-xs text-slate-500 font-semibold">
-                        원하는 라인·설비를 클릭하면 즉시 전환됩니다
-                      </span>
+                <div
+                  className="fixed inset-0 z-[200] bg-slate-900/55 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-6"
+                  onClick={() => setIsLineDropdownOpen(false)}
+                >
+                  <div
+                    className="w-full max-w-6xl max-h-[88vh] bg-white rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* 모달 상단 헤더 */}
+                    <div className="px-6 py-4 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 shrink-0">
+                      <div>
+                        <div className="text-xl sm:text-2xl font-black tracking-tight">
+                          {isSeong
+                            ? '🍱 성형장 라인 선택 테이블'
+                            : '🍳 전처리 설비 · 작업실 선택 테이블'}
+                        </div>
+                        <div className="text-sm text-slate-300 font-medium mt-0.5">
+                          원하는 라인 또는 설비를 클릭하면 즉시 전환됩니다
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentChange('SEONGHYEONG')}
+                          className={`h-10 px-4 rounded-xl text-sm sm:text-base font-black transition cursor-pointer ${
+                            isSeong
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white/10 text-slate-200 hover:bg-white/20'
+                          }`}
+                        >
+                          🍱 성형장 ({SEONGHYEONG_LINES.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentChange('JEONCHEORI')}
+                          className={`h-10 px-4 rounded-xl text-sm sm:text-base font-black transition cursor-pointer ${
+                            !isSeong
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-white/10 text-slate-200 hover:bg-white/20'
+                          }`}
+                        >
+                          🍳 전처리실 ({JEONCHEORI_EQUIPMENT.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsLineDropdownOpen(false)}
+                          className="h-10 w-10 flex items-center justify-center rounded-xl bg-white/10 hover:bg-rose-500 text-white transition cursor-pointer"
+                          title="닫기 (ESC)"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDepartmentChange('SEONGHYEONG')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
-                          isSeong
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        🍱 성형장 ({SEONGHYEONG_LINES.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDepartmentChange('JEONCHEORI')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
-                          !isSeong
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        🍳 전처리실 ({JEONCHEORI_EQUIPMENT.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsLineDropdownOpen(false)}
-                        className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
-                        title="닫기"
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
-                    {groups.map((grp) => {
-                      const items = grp.ids
-                        .map((id) => activeLineList.find((x) => x.id === id))
-                        .filter((x): x is NonNullable<typeof x> => Boolean(x));
-                      if (items.length === 0) return null;
-                      return (
-                        <div key={grp.title}>
-                          <div className="text-xs font-black text-slate-600 mb-2 flex items-center gap-1.5">
-                            <span>{grp.title}</span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                            {items.map((item) => {
-                              const isSel = selectedLine === item.id;
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedLine(item.id);
-                                    setIsLineDropdownOpen(false);
-                                  }}
-                                  className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border text-left transition cursor-pointer ${
-                                    isSel
-                                      ? isSeong
-                                        ? 'bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200 shadow-xs'
-                                        : 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-2 ring-indigo-200 shadow-xs'
-                                      : 'bg-slate-50/80 hover:bg-white border-slate-200 hover:border-slate-400 text-slate-800'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-base shrink-0">{item.icon}</span>
-                                    <span className="text-[13px] font-black truncate">
-                                      {item.name}
-                                    </span>
-                                  </div>
-                                  <span
-                                    className={`text-[11px] px-1.5 py-0.5 rounded-full font-mono font-black shrink-0 ${
+                    {/* 모달 본문 (항상 스크롤 가능) */}
+                    <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 bg-slate-50 space-y-5">
+                      {groups.map((grp) => {
+                        const items = grp.ids
+                          .map((id) => activeLineList.find((x) => x.id === id))
+                          .filter((x): x is NonNullable<typeof x> => Boolean(x));
+                        if (items.length === 0) return null;
+                        return (
+                          <div
+                            key={grp.title}
+                            className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs"
+                          >
+                            <div className="text-base sm:text-lg font-black text-slate-900 mb-3.5 pb-2 border-b border-slate-100 flex items-center gap-2">
+                              <span>{grp.title}</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {items.map((item) => {
+                                const isSel = selectedLine === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedLine(item.id);
+                                      setIsLineDropdownOpen(false);
+                                    }}
+                                    className={`flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
                                       isSel
-                                        ? isSeong
-                                          ? 'bg-emerald-600 text-white'
-                                          : 'bg-indigo-600 text-white'
-                                        : 'bg-slate-200 text-slate-700'
+                                        ? 'bg-slate-900 border-slate-900 text-white shadow-md'
+                                        : 'bg-slate-50/70 hover:bg-white border-slate-200 hover:border-blue-600 hover:shadow-sm text-slate-900'
                                     }`}
                                   >
-                                    {item.count}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span
+                                        className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+                                          isSel ? 'bg-white/15' : 'bg-white border border-slate-200'
+                                        }`}
+                                      >
+                                        {item.icon}
+                                      </span>
+                                      <span className="text-base sm:text-lg font-black leading-snug break-keep">
+                                        {item.name}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`text-sm px-3 py-1 rounded-full font-mono font-black shrink-0 ${
+                                        isSel
+                                          ? 'bg-blue-600 text-white'
+                                          : 'bg-slate-200/80 text-slate-800'
+                                      }`}
+                                    >
+                                      {item.count}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}

@@ -139,7 +139,7 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
       kind: 'FORMING',
       keywords: ['전주비빔', '비빔', '삼각', '소고기고추장'],
       gyeIds: ['GFS007'],
-      defaultTimeStart: '14:00',
+      defaultTimeStart: '09:30',
       speedUph: 2600,
       workers: '2명',
       leadWorker: '삼각김밥 1호기 조장',
