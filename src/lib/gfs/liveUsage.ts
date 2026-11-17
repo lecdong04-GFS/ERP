@@ -232,7 +232,25 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
     headerQtyMap.set(matchedHeader.id, cur);
   }
 
-  // 3) 자재별 일사용량 집계 = ROUNDUP(SUM(메뉴수량 x 단위소요량 x 발주여유계수) / bomDivisor, bomRoundDigits) x bomMultiplier
+  const BARCODE_SPLIT_MAP: Record<
+  string,
+  Array<{ targetCode: string; ratio: number; divisor: number }>
+> = {
+  '30003108': [
+    { targetCode: 'PM-00001', ratio: 0.45, divisor: 3500 }, // 54*45 적색(삼각)
+    { targetCode: 'PM-00002', ratio: 0.55, divisor: 3500 }, // 54*45 청색(삼각)
+  ],
+  '30003107': [
+    { targetCode: 'PM-00003', ratio: 0.45, divisor: 3500 }, // 56*45 적색(김밥)
+    { targetCode: 'PM-00004', ratio: 0.55, divisor: 3500 }, // 56*45 청색(김밥)
+  ],
+  '30003109': [
+    { targetCode: 'PM-00005', ratio: 0.45, divisor: 4000 }, // 60*35 적색(도시락)
+    { targetCode: 'PM-00006', ratio: 0.55, divisor: 4000 }, // 60*35 청색(도시락)
+  ],
+};
+
+// 3) 자재별 일사용량 집계 = ROUNDUP(SUM(메뉴수량 x 단위소요량 x 발주여유계수) / bomDivisor, bomRoundDigits) x bomMultiplier
   const acc = new Map<
     number,
     { sum: number; productCode: string; productName: string; divisor: number; multiplier: number; digits: number }
@@ -249,12 +267,16 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
       if (d.childProductId === h.parentProductId) continue;
 
       const cp = d.childProduct as any;
-      if (!cp || !cp.isUsed) continue;
-      if (cp.category === '완성품' || cp.category === '반제품') continue;
-      if (isTerminalProductStatus(cp.status)) continue;
-      if (isExcludedFromOrder(cp.name, exclusionDate)) continue;
-      // 동적 기준일: 조회 대상일(targetDate) 기준으로만 단종 판정
-      if (cp.discontinuedDate && exclusionDate >= cp.discontinuedDate) continue;
+      if (!cp) continue;
+      const isBarcodeSource = Boolean(cp.productCode && BARCODE_SPLIT_MAP[cp.productCode]);
+      if (!isBarcodeSource) {
+        if (!cp.isUsed) continue;
+        if (cp.category === '완성품' || cp.category === '반제품') continue;
+        if (isTerminalProductStatus(cp.status)) continue;
+        if (isExcludedFromOrder(cp.name, exclusionDate)) continue;
+        // 동적 기준일: 조회 대상일(targetDate) 기준으로만 단종 판정
+        if (cp.discontinuedDate && exclusionDate >= cp.discontinuedDate) continue;
+      }
 
       // 단위 정규화: 만약 단위가 'Kg' / 'kg' 이고 bomDivisor >= 100 이면 g으로 환산
       const u = (d.unit || '').trim().toLowerCase();
@@ -280,7 +302,34 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
     }
   }
 
+  const barcodeTargetCodes = Object.values(BARCODE_SPLIT_MAP)
+    .flat()
+    .map((x) => x.targetCode);
+  const barcodeTargets = await prisma.product.findMany({
+    where: { productCode: { in: barcodeTargetCodes }, isUsed: true },
+    select: { id: true, productCode: true, name: true },
+  });
+  const barcodeTargetMap = new Map(barcodeTargets.map((t) => [t.productCode, t]));
+
   acc.forEach((v, pid) => {
+    const splitRules = v.productCode ? BARCODE_SPLIT_MAP[v.productCode] : undefined;
+    if (splitRules) {
+      // 엑셀 발주시트 수식 동일: ROUNDUP(ROUNDUP(총필요장수, 0) * 비율 / 롤당장수, 1)
+      const totalSheets = Math.ceil(v.sum);
+      for (const rule of splitRules) {
+        const target = barcodeTargetMap.get(rule.targetCode);
+        if (!target) continue;
+        const daily = calcDailyUsageFromParams(totalSheets * rule.ratio, rule.divisor, 1, 1, 1);
+        if (daily > 0) {
+          byProductId.set(target.id, (byProductId.get(target.id) || 0) + daily);
+          byProductCode.set(target.productCode, (byProductCode.get(target.productCode) || 0) + daily);
+          const n = normName(target.name);
+          if (n) byNormName.set(n, (byNormName.get(n) || 0) + daily);
+        }
+      }
+      return;
+    }
+
     // 엑셀 H열 공식과 동일: ROUNDUP(SUMPRODUCT/분모, 자릿수) x 계수
     const daily = calcDailyUsageFromParams(v.sum, v.divisor, v.multiplier, 1, v.digits);
     if (daily > 0) {

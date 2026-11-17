@@ -1360,6 +1360,7 @@ export const StockLookupView: React.FC = () => {
       const cleanCodeOf = (s: unknown) => String(s ?? '').split('#')[0].trim();
       const next = data.map((d) => ({ ...d }));
       const nextByCodeName = new Map<string, StockItem>();
+      const nextByCode = new Map<string, StockItem>();
       const nextByWhName = new Map<string, StockItem>();
       const nextByName = new Map<string, StockItem>();
       const nextByWhNorm = new Map<string, StockItem>();
@@ -1368,6 +1369,9 @@ export const StockLookupView: React.FC = () => {
         const cc = cleanCodeOf(d.itemCode);
         if (cc && d.itemName && !nextByCodeName.has(`${cc}|${d.itemName}`)) {
           nextByCodeName.set(`${cc}|${d.itemName}`, d);
+        }
+        if (cc && !nextByCode.has(cc)) {
+          nextByCode.set(cc, d);
         }
         if (d.whName && d.itemName && !nextByWhName.has(`${d.whName}|${d.itemName}`)) {
           nextByWhName.set(`${d.whName}|${d.itemName}`, d);
@@ -1516,11 +1520,12 @@ export const StockLookupView: React.FC = () => {
           }
 
           let exist =
-            (cleanItemId ? nextByCodeName.get(`${cleanItemId}|${name}`) : undefined) ||
             (wh ? nextByWhName.get(`${wh}|${name}`) : undefined) ||
             nextByName.get(name) ||
             (wh ? nextByWhNorm.get(`${wh}|${norm}`) : undefined) ||
-            nextByNorm.get(norm);
+            nextByNorm.get(norm) ||
+            (cleanItemId ? nextByCodeName.get(`${cleanItemId}|${name}`) : undefined) ||
+            (cleanItemId ? nextByCode.get(cleanItemId) : undefined);
 
           const hasNinePieceTypo =
             (pack === 1 && /9개입|9개/.test(name) && (exist?.packUnit || 0) === 9) ||
@@ -1533,13 +1538,9 @@ export const StockLookupView: React.FC = () => {
           const current = rawCurrent !== null ? rawCurrent : (box * (effectivePack || 0) + piece);
 
           if (exist && seenInUpload.has(exist.id)) {
-            const prev = seenInUpload.get(exist.id)!;
             if (isDeletedRow && current <= 0) {
               parsed += 1;
               continue;
-            }
-            if (!isDeletedRow && !prev.isTerminal && prev.code && cleanItemId && prev.code !== cleanItemId) {
-              exist = undefined;
             }
           }
 
