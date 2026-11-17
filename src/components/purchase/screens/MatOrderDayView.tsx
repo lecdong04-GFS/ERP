@@ -572,6 +572,7 @@ export const MatOrderDayView: React.FC = () => {
             discontinuedDate: r.discontinuedDate || '',
             status: r.status || '정상',
             orderCycle: r.orderCycle || '',
+            leadDays: r.leadDays,
             orderMethod: r.orderMethod || '',
             partnerRemark: r.partnerRemark || '',
             partnerTel: r.partnerTel || '',

@@ -72,6 +72,75 @@ interface LineRoutingDef {
   ccp: string;
 }
 
+const SEONGHYEONG_LINE_IDS = [
+  '도시락 1',
+  '김밥성형',
+  '김밥포장',
+  '햄버거',
+  '샌드위치',
+  '커플 포장기',
+  '삼각김밥 1호기',
+  '삼각김밥 2호기',
+  '삼각김밥(더큰)',
+];
+
+const JEONCHEORI_LINE_IDS = [
+  '취반실',
+  '취반실(로터리 1호)',
+  '취반실(로터리 2호)',
+  '스팀솥 1번',
+  '스팀솥 2번',
+  '자동스팀솥 1호기',
+  '자동스팀솥 2호기',
+  '오토후라이어1',
+  '오토후라이어2',
+  '제트오븐',
+  '콤비오븐',
+  '샐러드실(믹서1)',
+  '샐러드실(믹서2)',
+  '커팅실(후드)',
+  '커팅실(푸드커터)',
+  '채소작업실(슬라이스)',
+  '채소작업실(후드)',
+  '계량실(계량)',
+  '계량실(냉동)',
+  '빵슬라이스실(슬라이서)',
+];
+
+function computeLineCounts(productMap: Map<string, any>): Record<string, number> {
+  const items = Array.from(productMap.values());
+  const counts: Record<string, number> = {};
+  const seongMatched = new Set<string>();
+  const jeonMatched = new Set<string>();
+
+  for (const id of SEONGHYEONG_LINE_IDS) {
+    const r = resolveLineRouting(id);
+    let c = 0;
+    for (const p of items) {
+      if (r.keywords.some((kw) => p.cleanName.includes(kw))) {
+        c++;
+        seongMatched.add(`${p.cleanName}::${p.shift}`);
+      }
+    }
+    counts[id] = c;
+  }
+  counts['ALL_SEONGHYEONG'] = seongMatched.size;
+
+  for (const id of JEONCHEORI_LINE_IDS) {
+    const r = resolveLineRouting(id);
+    let c = 0;
+    for (const p of items) {
+      if (r.keywords.some((kw) => p.cleanName.includes(kw))) {
+        c++;
+        jeonMatched.add(`${p.cleanName}::${p.shift}`);
+      }
+    }
+    counts[id] = c;
+  }
+  counts['ALL_JEONCHEORI'] = jeonMatched.size;
+  return counts;
+}
+
 function resolveLineRouting(lineName: string): LineRoutingDef {
   const l = (lineName || '').trim();
 
@@ -1008,6 +1077,7 @@ export async function GET(req: NextRequest) {
         lineTotalPlan: '0 ea (수주 대기)',
         data: [],
         materials: [],
+        lineCounts: {},
       });
     }
 
@@ -1040,6 +1110,7 @@ export async function GET(req: NextRequest) {
         lineTotalPlan: '0 ea (해당 라인 수주 없음)',
         data: [],
         materials: [],
+        lineCounts: computeLineCounts(productMap),
       });
     }
 
@@ -1285,6 +1356,7 @@ export async function GET(req: NextRequest) {
       lineTotalPlan,
       data: tasks,
       materials: lineMaterials,
+      lineCounts: computeLineCounts(productMap),
     });
   } catch (error: any) {
     console.error('Work order API error:', error);

@@ -152,9 +152,15 @@ export async function buildOrderSheet(params?: {
       },
     });
 
+    const cutoffMs = new Date(`${checkDate}T00:00:00Z`).getTime() - 7 * 24 * 60 * 60 * 1000;
+    const pendingCutoffDate = Number.isFinite(cutoffMs)
+      ? new Date(cutoffMs).toISOString().slice(0, 10)
+      : '';
+
     for (const d of activePendingDetails) {
       const orderNo = d.purchaseOrder?.orderNo || '';
       const orderDate = normalizeDateYmd(d.purchaseOrder?.orderDate || '');
+      if (pendingCutoffDate && orderDate && orderDate < pendingCutoffDate) continue;
       const qty = d.remainQty > 0 ? d.remainQty : d.orderQty;
       const unit = d.unit || 'box';
       if (d.productId) addPending(pendingById, d.productId, qty, d.orderQty, unit, orderNo, orderDate);
@@ -282,6 +288,7 @@ export async function buildOrderSheet(params?: {
       itemId: code,
       status: p.status || '정상',
       orderCycle: p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : ''),
+      leadDays: p.partner?.leadTime || (String(p.orderCycle || '').includes('2') ? 2 : 1),
       discontinuedDate: discDate,
       isReplaced: isReplacedSpam,
       replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,

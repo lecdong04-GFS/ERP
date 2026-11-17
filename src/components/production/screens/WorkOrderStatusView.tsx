@@ -226,10 +226,18 @@ export const WorkOrderStatusView: React.FC = () => {
   const [autoCascadeTime, setAutoCascadeTime] = useState(true);
   const [autoCascadeOnReorder, setAutoCascadeOnReorder] = useState(true);
 
+  // 실시간 라인별 작업 건수 (API 응답 기반)
+  const [liveLineCounts, setLiveLineCounts] = useState<Record<string, number> | null>(null);
+
   // 활성 공정에 따른 라인/설비 목록
   const activeLineList = useMemo(() => {
-    return department === 'SEONGHYEONG' ? SEONGHYEONG_LINES : JEONCHEORI_EQUIPMENT;
-  }, [department]);
+    const base = department === 'SEONGHYEONG' ? SEONGHYEONG_LINES : JEONCHEORI_EQUIPMENT;
+    if (!liveLineCounts) return base;
+    return base.map((item) => ({
+      ...item,
+      count: liveLineCounts[item.id] ?? 0,
+    }));
+  }, [department, liveLineCounts]);
 
   // 공정 변경 핸들러
   const handleDepartmentChange = (dept: 'SEONGHYEONG' | 'JEONCHEORI') => {
@@ -293,6 +301,11 @@ export const WorkOrderStatusView: React.FC = () => {
         `/api/production/work-order?workDate=${date}&shift=${sft}&line=${encodeURIComponent(line)}${refreshParam}`
       );
       const json = await res.json();
+      if (json.success && json.lineCounts && typeof json.lineCounts === 'object') {
+        setLiveLineCounts(json.lineCounts);
+      } else {
+        setLiveLineCounts(null);
+      }
       if (json.success && Array.isArray(json.data) && (json.data.length > 0 || (json.totalOrdersCount || 0) > 0)) {
         setScheduleTasks(json.data);
         setMaterials(Array.isArray(json.materials) ? json.materials : []);
