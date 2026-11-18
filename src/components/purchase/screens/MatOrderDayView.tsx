@@ -75,6 +75,7 @@ import {
   WEEKDAY_DEMAND_FACTORS,
   addDaysYmd,
   getWeekdayCharYmd,
+  parseLeadTimeDays,
   calcRow,
   splitWeek,
   classifyPattern,
@@ -4261,19 +4262,27 @@ export const MatOrderDayView: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* 발주요일 · 보관창고 */}
+                          {/* 발주요일 · 입고예정 · 보관창고 */}
                           <td className="py-1.5 px-1 text-center">
                             <span className="inline-block px-1.5 py-0.5 rounded-full text-[11.5px] 2xl:text-[12px] font-bold border leading-tight bg-slate-100 text-slate-700 border-slate-200">
                               {pattern}
                             </span>
-                            {r.orderCycle && r.orderCycle !== pattern && (
-                              <span
-                                className="block text-[10.5px] font-bold text-slate-500 mt-0.5 truncate"
-                                title={r.orderCycle}
-                              >
-                                {r.orderCycle}
-                              </span>
-                            )}
+                            {(() => {
+                              const leadDays = r.leadDays && r.leadDays > 0 ? r.leadDays : parseLeadTimeDays(r.orderCycle);
+                              const baseYmd = m.targetDayDate || currentDayDate || kstToday();
+                              const expectedInYmd = addDaysYmd(baseYmd, leadDays);
+                              const [, mm, dd] = expectedInYmd.split('-');
+                              const dow = getWeekdayCharYmd(expectedInYmd);
+                              const shortIn = mm && dd ? `${Number(mm)}/${Number(dd)}(${dow})` : expectedInYmd;
+                              return (
+                                <span
+                                  className="block mt-0.5 px-1 py-[1px] rounded text-[10.5px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 whitespace-nowrap"
+                                  title={`${baseYmd} 발주 시 ${expectedInYmd}(${dow}) 입고 예정 (${r.orderCycle || `D+${leadDays}`})`}
+                                >
+                                  {r.orderCycle || `D+${leadDays}`} · {shortIn} 입고
+                                </span>
+                              );
+                            })()}
                             <span className="inline-block mt-0.5 px-1.5 py-[1px] rounded text-[11px] 2xl:text-[11.5px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/80">
                               {r.warehouse || '-'}
                             </span>
