@@ -4279,7 +4279,7 @@ export const MatOrderDayView: React.FC = () => {
                                   className="block mt-0.5 px-1 py-[1px] rounded text-[10.5px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 whitespace-nowrap"
                                   title={`${baseYmd} 발주 시 ${expectedInYmd}(${dow}) 입고 예정 (${r.orderCycle || `D+${leadDays}`})`}
                                 >
-                                  {r.orderCycle || `D+${leadDays}`} · {shortIn} 입고
+                                  {r.orderCycle || `D+${leadDays}`} · {shortIn} 입고예정
                                 </span>
                               );
                             })()}
