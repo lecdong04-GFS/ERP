@@ -76,6 +76,7 @@ import {
   addDaysYmd,
   getWeekdayCharYmd,
   parseLeadTimeDays,
+  parseDeliveryDays,
   calcRow,
   splitWeek,
   classifyPattern,
@@ -4270,16 +4271,40 @@ export const MatOrderDayView: React.FC = () => {
                             {(() => {
                               const leadDays = r.leadDays && r.leadDays > 0 ? r.leadDays : parseLeadTimeDays(r.orderCycle);
                               const baseYmd = m.targetDayDate || currentDayDate || kstToday();
-                              const expectedInYmd = addDaysYmd(baseYmd, leadDays);
+                              const allowedDays = parseDeliveryDays(r.supplier || '', r.orderDay);
+                              const monIdx = (new Date(`${baseYmd}T00:00:00+09:00`).getDay() + 6) % 7;
+                              let shiftDays = 0;
+                              if (allowedDays.some(Boolean) && !allowedDays[monIdx]) {
+                                for (let offset = 1; offset <= 7; offset++) {
+                                  if (allowedDays[(monIdx + offset) % 7]) {
+                                    shiftDays = offset;
+                                    break;
+                                  }
+                                }
+                              }
+                              const effectiveOrderYmd = shiftDays > 0 ? addDaysYmd(baseYmd, shiftDays) : baseYmd;
+                              const expectedInYmd = addDaysYmd(effectiveOrderYmd, leadDays);
                               const [, mm, dd] = expectedInYmd.split('-');
                               const dow = getWeekdayCharYmd(expectedInYmd);
                               const shortIn = mm && dd ? `${Number(mm)}/${Number(dd)}(${dow})` : expectedInYmd;
+                              const nextOrderDow = getWeekdayCharYmd(effectiveOrderYmd);
+                              const isNextOrderDay = shiftDays > 0;
                               return (
                                 <span
-                                  className="block mt-0.5 px-1 py-[1px] rounded text-[10.5px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 whitespace-nowrap"
-                                  title={`${baseYmd} 발주 시 ${expectedInYmd}(${dow}) 입고 예정 (${r.orderCycle || `D+${leadDays}`})`}
+                                  className={`block mt-0.5 px-1 py-[1px] rounded text-[10.5px] font-bold border whitespace-nowrap ${
+                                    isNextOrderDay
+                                      ? 'text-amber-800 bg-amber-50 border-amber-200/90'
+                                      : 'text-blue-700 bg-blue-50 border-blue-200/80'
+                                  }`}
+                                  title={
+                                    isNextOrderDay
+                                      ? `${baseYmd}은 발주 불가 요일(${pattern}) · 다음 발주일 ${effectiveOrderYmd}(${nextOrderDow}) 발주 시 ${expectedInYmd}(${dow}) 입고예정 (${r.orderCycle || `D+${leadDays}`})`
+                                      : `${baseYmd} 발주 시 ${expectedInYmd}(${dow}) 입고예정 (${r.orderCycle || `D+${leadDays}`})`
+                                  }
                                 >
-                                  {r.orderCycle || `D+${leadDays}`} · {shortIn} 입고예정
+                                  {isNextOrderDay
+                                    ? `${nextOrderDow}발주 · ${shortIn} 입고예정`
+                                    : `${r.orderCycle || `D+${leadDays}`} · ${shortIn} 입고예정`}
                                 </span>
                               );
                             })()}
