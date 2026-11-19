@@ -1466,12 +1466,23 @@ export const StockLookupView: React.FC = () => {
         }
 
         const startRow = headerIdx >= 0 ? headerIdx + 1 : 4;
+        const SHEET_MAX_ROW: Record<string, number> = {
+          부자재: 120,
+          냉장1: 52,
+          냉장2: 77,
+          냉동: 73,
+          상온: 88,
+        };
+        const maxRowLimit = SHEET_MAX_ROW[sheetName] || rows.length;
+        const effectiveEndRow = Math.min(rows.length, maxRowLimit);
+
         // 부자재 시트가 전량 0재고인 경우 기존 DB 부자재 재고 보존(A2 정책)
         let sheetHasNonZeroStock = false;
         if (sheetName === '부자재') {
-          for (let i = startRow; i < rows.length; i++) {
+          for (let i = startRow; i < effectiveEndRow; i++) {
             const r = rows[i];
             if (!r) continue;
+            if (r.some((c: any) => String(c ?? '').replace(/\s+/g, '') === '합계')) break;
             const nm = String(r[colMap.name] ?? '').trim();
             if (nm.length < 2 || nm === 'None' || nm === 'undefined' || /[\r\n]/.test(nm)) continue;
             const bx = colMap.box >= 0 ? Number(r[colMap.box]) || 0 : 0;
@@ -1489,9 +1500,10 @@ export const StockLookupView: React.FC = () => {
         }
         const preserveSheetStock = sheetName === '부자재' && !sheetHasNonZeroStock;
 
-        for (let i = startRow; i < rows.length; i++) {
+        for (let i = startRow; i < effectiveEndRow; i++) {
           const r = rows[i];
           if (!r) continue;
+          if (r.some((c: any) => String(c ?? '').replace(/\s+/g, '') === '합계')) break;
           const name = String(r[colMap.name] ?? '').trim();
           if (name.length < 2 || name === 'None' || name === 'undefined') continue;
           // 부자재 다중행 메뉴 라벨(줄바꿈 포함) 및 헤더 반복행 차단
