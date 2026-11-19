@@ -178,7 +178,8 @@ export const WorkOrderStatusView: React.FC = () => {
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);
   const lineDropdownRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'AUTO_5TAB' | 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('AUTO_5TAB');
+  const [activeTab, setActiveTab] = useState<'AUTO_5TAB' | 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('TIMETABLE');
+  const [isSimpleFieldView, setIsSimpleFieldView] = useState<boolean>(true);
   const [materialWhFilter, setMaterialWhFilter] = useState<string>('전체');
 
   // 큰 팝업 모달 상태
@@ -720,16 +721,14 @@ export const WorkOrderStatusView: React.FC = () => {
     }
   };
 
-  // 1. A4 가로 실시간 작업지시서 즉시 브라우저 인쇄 & PDF 저장 (실 수주량 반영)
+  // 1. A4 큰글씨·고대비 현장 작업지시서 즉시 브라우저 인쇄 & PDF 저장 (실 수주량 반영)
   const handlePrintLiveWorkOrder = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      // 팝업 차단된 경우 정본 PDF 열기
       window.open(currentLine.pdfUrl || `/reports/work-orders/${encodeURIComponent(selectedLine)}.pdf`, '_blank');
       return;
     }
 
-    // 작업일자 한글 요일 서식 포맷 (예: 2026년 11월 04일 (수요일))
     const safeWorkDate = workDate || kstToday();
     const dateParts = safeWorkDate.split('-');
     const year = dateParts[0] || safeWorkDate.slice(0, 4);
@@ -737,474 +736,375 @@ export const WorkOrderStatusView: React.FC = () => {
     const day = dateParts[2] || safeWorkDate.slice(8, 10);
     const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = isNaN(dateObj.getTime()) ? '수' : dayNames[dateObj.getDay()];
+    const dayOfWeek = isNaN(dateObj.getTime()) ? '목' : dayNames[dateObj.getDay()];
     const formattedDateKo = `${year}년 ${Number(month)}월 ${Number(day)}일 (${dayOfWeek}요일)`;
     const docNumber = `GFS-WO-${year}${month}${day}-${selectedLine.replace(/\s+/g, '')}`;
 
-    const shiftLabel =
-      shift === '전체'
-        ? '1편·2편 통합 전일 지시'
-        : shift === '2편'
-        ? '2편 주간 확정 (09:30 ~ 17:00)'
-        : '1편 야간 확정 (17:00 ~ 마감)';
+    const totalRunTimeStr =
+      filteredSchedule.length > 0
+        ? `${filteredSchedule[0].time.split('~')[0].trim()} ~ ${
+            filteredSchedule[filteredSchedule.length - 1].time.split('~')[1]?.trim() || '종료'
+          }`
+        : currentLine.totalTime;
 
-    // 타임테이블 행 렌더링
+    // 밥 종류별 생산 수량/건수 집계
+    let whiteRiceQty = 0;
+    let blackRiceQty = 0;
+    let redRiceQty = 0;
+    let prodTaskCount = 0;
+    let totalOrderQtyNum = 0;
+
+    filteredSchedule.forEach((t) => {
+      const q = typeof t.qty === 'number' ? t.qty : 0;
+      if (t.type === '생산' && q > 0) {
+        prodTaskCount += 1;
+        totalOrderQtyNum += q;
+        const rBadge = getRiceColorBadge(t.item);
+        if (rBadge?.label === '빨간밥') {
+          redRiceQty += q;
+        } else if (rBadge?.label?.includes('흑미')) {
+          blackRiceQty += q;
+        } else {
+          whiteRiceQty += q;
+        }
+      }
+    });
+
+    // 1부(2편 생산) / 2부(1편 생산) 섹션 헤더 자동 삽입 + 6열 큰글씨 행 렌더링
+    let lastSection: 'NONE' | 'S2' | 'S1' = 'NONE';
+    let prodSeq = 0;
+
     const rowsHtml = filteredSchedule
       .map((t, idx) => {
-        const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP');
-        const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식');
-        const isSupport = t.type === '지원' || t.shift.includes('지원');
-        const rowClass = isClean ? 'row-clean' : isMeal ? 'row-meal' : isSupport ? 'row-support' : idx % 2 === 1 ? 'row-alt' : '';
+        const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP') || t.item.includes('소독');
+        const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식') || t.item.includes('점심');
 
-        const shiftBadgeClass = t.shift.includes('2편')
-          ? 'badge-s2'
-          : t.shift.includes('1편')
-          ? 'badge-s1'
-          : 'badge-other';
+        let sectionBannerHtml = '';
+        if (!isClean && !isMeal) {
+          const curSec: 'S2' | 'S1' = t.shift.includes('1편') ? 'S1' : 'S2';
+          if (curSec !== lastSection) {
+            lastSection = curSec;
+            const secTitle =
+              curSec === 'S2'
+                ? '▶ 1부: 2편 생산 (당일 오후 출하 — 백미 ➔ 흑미 ➔ 빨간양념 순서 엄수)'
+                : '▶ 2부: 1편 생산 (익일 새벽 출하 — 품목 교체 시 알코올 소독 필수)';
+            sectionBannerHtml = `
+              <tr class="section-banner-row">
+                <td colspan="6" class="section-banner-cell">${escapeHtml(secTitle)}</td>
+              </tr>
+            `;
+          }
+        }
 
-        const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} ea` : t.qty || '-';
+        if (isClean || isMeal) {
+          const breakLabel = isMeal
+            ? `🍱 ${t.item || '중식 및 라인 세척·소독'} (${t.duration || '60분'})`
+            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'} (${t.duration || '30분'})`;
+          return `
+            ${sectionBannerHtml}
+            <tr class="row-break">
+              <td class="col-center col-seq">-</td>
+              <td class="col-center col-time">${escapeHtml(t.time)}</td>
+              <td class="col-center"><span class="rice-box rice-box-break">[휴게/세척]</span></td>
+              <td colspan="2" class="col-break-title">${escapeHtml(breakLabel)}</td>
+              <td class="col-center col-check-cell">□ 세척·소독 확인</td>
+            </tr>
+          `;
+        }
+
+        prodSeq += 1;
+        const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} 개` : t.qty || '-';
         const rBadge = getRiceColorBadge(t.item);
-        const rTag = rBadge && t.type === '생산'
-          ? `<span class="rice-tag ${rBadge.label === '빨간밥' ? 'rice-tag-red' : rBadge.label.includes('흑미') ? 'rice-tag-purple' : 'rice-tag-white'}">${escapeHtml(rBadge.label)}</span>`
-          : '';
-        const typeSafeClass = escapeHtml(t.type).replace(/[^a-zA-Z0-9가-힣_-]/g, '');
+        const riceLabel =
+          rBadge?.label === '빨간밥'
+            ? '볶음/양념'
+            : rBadge?.label?.includes('흑미')
+            ? '흑미/잡곡'
+            : rBadge?.label
+            ? '백미'
+            : t.type || '생산';
+        const riceBoxClass =
+          rBadge?.label === '빨간밥'
+            ? 'rice-box-red'
+            : rBadge?.label?.includes('흑미')
+            ? 'rice-box-purple'
+            : 'rice-box-white';
 
         return `
-          <tr class="${rowClass}">
-            <td class="col-center col-seq">${idx + 1}</td>
-            <td class="col-center"><span class="badge ${shiftBadgeClass}">${escapeHtml(t.shift)}</span></td>
+          ${sectionBannerHtml}
+          <tr class="${idx % 2 === 1 ? 'row-alt' : ''}">
+            <td class="col-center col-seq">${prodSeq}</td>
             <td class="col-center col-time">${escapeHtml(t.time)}</td>
-            <td class="col-center"><span class="type-pill type-${typeSafeClass}">${escapeHtml(t.type)}</span></td>
-            <td class="col-item">${rTag}${escapeHtml(t.item)}</td>
+            <td class="col-center">
+              <span class="rice-box ${riceBoxClass}">[${escapeHtml(riceLabel)}]</span>
+            </td>
+            <td class="col-item">
+              <div class="item-main-name">${escapeHtml(t.item)}</div>
+              ${
+                t.bom && t.bom !== '-'
+                  ? `<div class="item-sub-note">배합/규격: ${escapeHtml(t.bom)} | 소요: ${escapeHtml(t.duration)} (${escapeHtml(t.workers || currentLine.personnel.split('(')[0])})</div>`
+                  : `<div class="item-sub-note">소요시간: ${escapeHtml(t.duration)} | 투입인원: ${escapeHtml(t.workers || currentLine.personnel.split('(')[0])}</div>`
+              }
+            </td>
             <td class="col-right col-qty">${escapeHtml(formattedQty)}</td>
-            <td class="col-center col-duration">${escapeHtml(t.duration)}</td>
-            <td class="col-center col-workers">${escapeHtml(t.workers || '-')}</td>
-            <td class="col-bom">${escapeHtml(t.bom || '-')}</td>
-            <td class="col-ccp">${escapeHtml(t.ccp || '-')}</td>
-            <td class="col-center col-check"><div class="check-box"></div></td>
-            <td class="col-center col-assignee">${escapeHtml(t.assignee || '미지정')}</td>
+            <td class="col-center col-check-cell">
+              <span class="pen-check-box">□</span> 완료 (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+            </td>
           </tr>
         `;
       })
       .join('');
-
-    // 하단 소요 원부자재 불출 현황 행 렌더링
-    const materialRowsHtml =
-      materials && materials.length > 0
-        ? materials
-            .slice(0, 6)
-            .map((m, idx) => {
-              const isSufficient = m.currentStock >= m.requiredQty;
-              const whSafeClass = escapeHtml(m.warehouse).replace(/[^a-zA-Z0-9가-힣_-]/g, '');
-              return `
-              <tr>
-                <td class="col-center" style="font-weight:700;">${idx + 1}</td>
-                <td class="col-center"><span class="wh-tag wh-${whSafeClass}">${escapeHtml(m.warehouse)}</span></td>
-                <td style="font-weight:700; color:#0f172a;">${escapeHtml(m.name)} <span style="font-weight:normal; font-size:9px; color:#64748b;">${m.spec ? `(${escapeHtml(m.spec)})` : ''}</span></td>
-                <td class="col-right" style="font-family:monospace; font-weight:800; color:#1e3a8a;">${m.requiredQty.toLocaleString()} ${escapeHtml(m.unit)}</td>
-                <td class="col-right" style="font-family:monospace; color:#475569;">${m.currentStock.toLocaleString()} ${escapeHtml(m.unit)}</td>
-                <td class="col-center" style="font-weight:800; color:${isSufficient ? '#15803d' : '#b91c1c'};">${isSufficient ? '적합' : '부족'}</td>
-                <td class="col-center"><div class="mini-sign">불출확인</div></td>
-              </tr>
-            `;
-            })
-            .join('')
-        : `<tr><td colspan="7" class="col-center" style="color:#94a3b8; padding:8px;">등록된 소요 원부자재 배합 정보가 없습니다.</td></tr>`;
 
     const html = `
       <!DOCTYPE html>
       <html lang="ko">
       <head>
         <meta charset="UTF-8">
-        <title>[GFS] ${escapeHtml(selectedLine)}_일일작업지시서_${escapeHtml(safeWorkDate)}_${escapeHtml(shift)}</title>
+        <title>[GFS 현장큰글씨] ${escapeHtml(selectedLine)}_일일작업지시서_${escapeHtml(safeWorkDate)}</title>
         <style>
           @page {
-            size: A4 landscape;
-            margin: 6mm 8mm 6mm 8mm;
+            size: A4 portrait;
+            margin: 8mm 9mm 8mm 9mm;
           }
           * {
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+            font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
           }
           body {
             margin: 0;
             padding: 0;
-            color: #0f172a;
+            color: #000000;
             background: #ffffff;
-            font-size: 10px;
-            line-height: 1.25;
+            font-size: 13px;
+            line-height: 1.35;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .header-container {
-            border: 2px solid #0f172a;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-bottom: 7px;
-            background: #f8fafc;
+          .print-toolbar {
+            background: #0f172a;
+            color: #ffffff;
+            padding: 10px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
           }
-          .header-left {
-            flex: 1;
-            min-width: 0;
-          }
-          .company-badge {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-bottom: 2px;
-          }
-          .company-logo {
-            font-size: 11px;
-            font-weight: 900;
-            background: #1e40af;
-            color: #ffffff;
-            padding: 1px 6px;
-            border-radius: 3px;
-            letter-spacing: -0.5px;
-          }
-          .company-name {
-            font-size: 11px;
-            font-weight: 800;
-            color: #1e3a8a;
-          }
-          .haccp-pill {
-            font-size: 9px;
-            font-weight: 800;
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
-            padding: 0 5px;
-            border-radius: 3px;
-          }
-          .main-title {
-            font-size: 16px;
-            font-weight: 900;
-            color: #0f172a;
-            margin: 2px 0 3px 0;
-            letter-spacing: -0.5px;
-          }
-          .doc-meta {
-            font-size: 9px;
-            color: #475569;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            align-items: center;
-          }
-          .doc-meta .sep {
-            color: #cbd5e1;
-          }
-
-          /* 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 */
-          .date-plaque {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            border: 2px solid #d97706;
-            border-radius: 6px;
-            padding: 6px 14px;
-            text-align: center;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-            color: #ffffff;
-            min-width: 260px;
-            flex-shrink: 0;
-          }
-          .date-plaque-label {
-            font-size: 9px;
-            font-weight: 800;
-            letter-spacing: 1px;
-            color: #fde047;
-            text-transform: uppercase;
-            margin-bottom: 1px;
-          }
-          .date-plaque-val {
-            font-size: 16px;
-            font-weight: 900;
-            color: #ffffff;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-          }
-          .date-plaque-shift {
-            margin-top: 2px;
-          }
-          .shift-badge-pill {
-            display: inline-block;
-            background: rgba(56, 189, 248, 0.2);
-            color: #7dd3fc;
-            border: 1px solid rgba(56, 189, 248, 0.4);
-            padding: 1px 8px;
-            border-radius: 9999px;
-            font-size: 9px;
-            font-weight: 800;
-          }
-
-          .header-right {
-            flex-shrink: 0;
-          }
-          .approval-table {
-            border-collapse: collapse;
-            text-align: center;
-            font-size: 9.5px;
-          }
-          .approval-table th, .approval-table td {
-            border: 1px solid #475569;
-            padding: 2px 6px;
-          }
-          .approval-table th {
-            background: #e2e8f0;
-            font-weight: 700;
-            color: #1e293b;
-            font-size: 9px;
-          }
-          .approval-table .appr-title {
-            width: 24px;
-            background: #cbd5e1;
-            font-size: 9px;
-            font-weight: 800;
-          }
-          .approval-table td {
-            height: 34px;
-            min-width: 44px;
-            vertical-align: middle;
-          }
-          .sign-space {
-            font-size: 8.5px;
-            color: #94a3b8;
-          }
-
-          /* KPI 카드 5분할 (CSS Grid 비례 배분: 긴 상자 넓게, 짧은 상자 좁게) */
-          .kpi-row {
-            display: grid;
-            grid-template-columns: 2.2fr 1.1fr 2.2fr 1fr 1.3fr;
-            gap: 6px;
-            margin-bottom: 7px;
-            align-items: stretch;
-          }
-          .kpi-card {
-            min-width: 0;
+          /* 1. 상단 굵은 검정 테두리 헤더 박스 */
+          .top-header-box {
+            border: 3px solid #000000;
+            padding: 12px 16px;
+            margin-bottom: 10px;
             background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 5px;
-            padding: 5px 9px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-            overflow: hidden;
           }
-          .kpi-card.highlight {
-            background: #eff6ff;
-            border-color: #93c5fd;
-            border-left: 3px solid #2563eb;
+          .top-header-row1 {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 2px solid #000000;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
           }
-          .kpi-label {
-            font-size: 9px;
-            font-weight: 700;
-            color: #64748b;
-            margin-bottom: 2px;
-            white-space: nowrap;
-          }
-          .kpi-val {
+          .doc-kicker {
             font-size: 12px;
             font-weight: 900;
-            color: #0f172a;
-            font-family: monospace;
-            line-height: 1.25;
-            word-break: keep-all;
-            overflow-wrap: break-word;
+            color: #1e293b;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
           }
-          .kpi-sub {
-            font-size: 8.5px;
-            color: #64748b;
-            margin-top: 2px;
-            line-height: 1.25;
-            word-break: keep-all;
+          .doc-big-title {
+            font-size: 26px;
+            font-weight: 900;
+            color: #000000;
+            letter-spacing: -0.8px;
+            line-height: 1.15;
+          }
+          .sign-box {
+            border: 2px solid #000000;
+            padding: 8px 14px;
+            font-size: 15px;
+            font-weight: 900;
+            background: #f8fafc;
+            white-space: nowrap;
+            text-align: right;
+          }
+          .top-header-meta-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 1.1fr 1.2fr;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 900;
+          }
+          .meta-pill {
+            background: #f1f5f9;
+            border: 1.5px solid #334155;
+            padding: 6px 10px;
+            border-radius: 4px;
+          }
+          .meta-pill strong {
+            font-size: 15px;
+            color: #000000;
           }
 
-          /* 타임테이블 */
+          /* 2. 현장 큰글씨 6열 메인 작업지시 표 */
           .work-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 9.5px;
-            margin-bottom: 7px;
-          }
-          .work-table th, .work-table td {
-            border: 1px solid #cbd5e1;
-            padding: 3px 5px;
-            line-height: 1.25;
+            border: 2.5px solid #000000;
+            margin-bottom: 12px;
           }
           .work-table th {
             background: #0f172a;
             color: #ffffff;
-            font-weight: 800;
-            font-size: 9.5px;
+            font-weight: 900;
+            font-size: 14px;
             text-align: center;
-            padding: 5px 4px;
+            padding: 9px 6px;
+            border: 1.5px solid #000000;
+          }
+          .work-table td {
+            border: 1.5px solid #000000;
+            padding: 9px 8px;
+            vertical-align: middle;
           }
           .work-table tr.row-alt {
             background: #f8fafc;
           }
-          .work-table tr.row-clean {
-            background: #fef3c7 !important;
-            color: #92400e;
-            font-weight: 700;
+          .section-banner-row td.section-banner-cell {
+            background: #1e293b !important;
+            color: #ffffff !important;
+            font-size: 15px;
+            font-weight: 900;
+            padding: 8px 12px;
+            letter-spacing: -0.2px;
+            border: 2px solid #000000;
           }
-          .work-table tr.row-meal {
-            background: #f1f5f9 !important;
-            color: #475569;
-            font-weight: 700;
+          .row-break {
+            background: #e2e8f0 !important;
+            font-weight: 900;
           }
-          .work-table tr.row-support {
-            background: #ede9fe !important;
-            color: #5b21b6;
-            font-weight: 700;
+          .col-break-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0f172a;
+            text-align: center;
           }
           .col-center { text-align: center; }
           .col-right { text-align: right; }
-          .col-seq { font-family: monospace; font-weight: 800; width: 28px; }
-          .col-time { font-family: monospace; font-weight: 700; width: 85px; }
-          .col-item { font-weight: 800; color: #0f172a; font-size: 10px; }
-          .col-qty { font-family: monospace; font-weight: 900; color: #1e3a8a; width: 75px; }
-          .col-duration { font-family: monospace; font-weight: 600; width: 50px; }
-          .col-workers { font-weight: 700; width: 45px; }
-          .col-bom { font-size: 9px; color: #334155; line-height: 1.2; }
-          .col-ccp { font-size: 9px; color: #b91c1c; font-weight: 800; line-height: 1.2; width: 170px; }
-          .col-check { width: 34px; }
-          .col-assignee { font-weight: 700; width: 52px; font-size: 9px; }
-          .check-box {
-            width: 14px;
-            height: 14px;
-            border: 1.5px solid #94a3b8;
-            border-radius: 2px;
-            margin: auto;
-            background: #ffffff;
-          }
-
-          /* 뱃지 */
-          .badge {
-            display: inline-block;
-            padding: 1px 5px;
-            border-radius: 3px;
-            font-size: 8.5px;
-            font-weight: 800;
-          }
-          .badge-s2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-          .badge-s1 { background: #fce7f3; color: #9d174d; border: 1px solid #fbcfe8; }
-          .badge-other { background: #e2e8f0; color: #475569; border: 1px solid #cbd5e1; }
-          .type-pill {
-            display: inline-block;
-            padding: 1px 4px;
-            border-radius: 2px;
-            font-size: 8.5px;
-            font-weight: 700;
-          }
-          .type-생산 { background: #dcfce7; color: #166534; }
-          .type-청소 { background: #fef3c7; color: #92400e; }
-          .type-휴게 { background: #e2e8f0; color: #334155; }
-          .type-지원 { background: #ede9fe; color: #5b21b6; }
-
-          /* 하단 2열 그리드 */
-          .bottom-grid {
-            display: grid;
-            grid-template-columns: 58% 42%;
-            gap: 8px;
-            margin-bottom: 6px;
-          }
-          .bottom-card {
-            border: 1px solid #cbd5e1;
-            border-radius: 5px;
-            background: #ffffff;
-            padding: 6px 8px;
-          }
-          .bottom-title {
-            font-size: 10px;
+          .col-seq {
+            font-family: monospace;
+            font-size: 19px;
             font-weight: 900;
-            color: #0f172a;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1.5px solid #0f172a;
-            padding-bottom: 3px;
+            width: 48px;
           }
-          .mat-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 9px;
+          .col-time {
+            font-family: monospace;
+            font-size: 15px;
+            font-weight: 900;
+            width: 132px;
+            white-space: nowrap;
           }
-          .mat-table th, .mat-table td {
-            border: 1px solid #e2e8f0;
-            padding: 2.5px 4px;
+          .rice-box {
+            display: inline-block;
+            font-size: 13px;
+            font-weight: 900;
+            padding: 3px 6px;
+            border-radius: 4px;
+            border: 2px solid #000000;
+            white-space: nowrap;
           }
-          .mat-table th {
-            background: #f1f5f9;
+          .rice-box-white { background: #ffffff; color: #000000; }
+          .rice-box-purple { background: #f3e8ff; color: #3b0764; border-style: double; }
+          .rice-box-red { background: #ffe4e6; color: #881337; border-width: 2.5px; }
+          .rice-box-break { background: #cbd5e1; color: #0f172a; }
+          .col-item {
+            text-align: left;
+          }
+          .item-main-name {
+            font-size: 17px;
+            font-weight: 900;
+            color: #000000;
+            line-height: 1.25;
+            word-break: keep-all;
+          }
+          .item-sub-note {
+            font-size: 11.5px;
             font-weight: 700;
             color: #334155;
-            text-align: center;
+            margin-top: 2px;
           }
-          .wh-tag {
-            display: inline-block;
-            padding: 0.5px 4px;
-            border-radius: 2px;
-            font-size: 8px;
-            font-weight: 800;
+          .col-qty {
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: 900;
+            color: #000000;
+            width: 115px;
+            white-space: nowrap;
           }
-          .wh-상온 { background: #e2e8f0; color: #334155; }
-          .wh-냉장1, .wh-냉장2 { background: #cffafe; color: #155e75; }
-          .wh-냉동 { background: #dbeafe; color: #1e40af; }
-          .wh-부자재 { background: #fef3c7; color: #92400e; }
-          .rice-tag {
-            display: inline-block;
-            font-size: 8px;
-            font-weight: 800;
-            padding: 0.5px 3.5px;
-            border-radius: 2px;
-            margin-right: 3px;
+          .col-check-cell {
+            width: 145px;
+            font-size: 14px;
+            font-weight: 900;
+            color: #000000;
+            white-space: nowrap;
+          }
+          .pen-check-box {
+            font-size: 18px;
+            font-weight: 900;
             vertical-align: middle;
           }
-          .rice-tag-white { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
-          .rice-tag-purple { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
-          .rice-tag-red { background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3; }
-          .mini-sign {
-            border: 1px dashed #94a3b8;
-            padding: 1px 4px;
-            font-size: 8px;
-            color: #64748b;
-            border-radius: 2px;
-          }
-          .haccp-rules-list {
-            font-size: 9px;
-            line-height: 1.45;
-            color: #1e293b;
-            margin: 0;
-            padding-left: 14px;
-          }
-          .haccp-rules-list li {
-            margin-bottom: 3px;
-          }
-          .haccp-rules-list strong {
-            color: #b91c1c;
-          }
 
-          /* 푸터 */
-          .footer-box {
-            border-top: 1px solid #cbd5e1;
+          /* 3. 하단 필수 위생·CCP 확인 & 밥 구분별 요약 박스 */
+          .bottom-summary-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 10px;
+            margin-bottom: 8px;
+          }
+          .summary-box {
+            border: 2.5px solid #000000;
+            padding: 10px 12px;
+            background: #ffffff;
+          }
+          .summary-box-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #000000;
+            border-bottom: 2px solid #000000;
+            padding-bottom: 5px;
+            margin-bottom: 7px;
+          }
+          .ccp-check-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.55;
+          }
+          .rice-sum-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            font-size: 13.5px;
+            font-weight: 900;
+          }
+          .rice-sum-item {
+            border: 1.5px solid #334155;
+            padding: 5px 8px;
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-between;
+          }
+          .footer-line {
+            border-top: 1.5px solid #000000;
             padding-top: 5px;
             display: flex;
             justify-content: space-between;
-            font-size: 8.5px;
-            color: #64748b;
-          }
-
-          /* 인쇄 툴바 (화면 표시용) */
-          .print-toolbar {
-            background: #1e293b;
-            color: #ffffff;
-            padding: 8px 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
           }
           @media print {
             .no-print { display: none !important; }
@@ -1214,135 +1114,55 @@ export const WorkOrderStatusView: React.FC = () => {
         </style>
       </head>
       <body>
-        <!-- 인쇄 툴바 -->
         <div class="print-toolbar no-print">
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="font-weight:900; font-size:13px; color:#ffffff;">🖨️ A4 가로 인쇄 미리보기 (식약처 HACCP 공인 작업지시서)</span>
-            <span style="background:#0284c7; color:#fff; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:800;">
-              작업일자: ${formattedDateKo}
-            </span>
-            <span style="background:#334155; color:#cbd5e1; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700;">
-              라인: ${selectedLine} (${shift})
+            <span style="font-weight:900; font-size:14px;">🖨️ 현장 큰글씨·고대비 A4 작업지시서 인쇄 미리보기</span>
+            <span style="background:#0284c7; color:#fff; padding:3px 10px; border-radius:4px; font-size:12px; font-weight:800;">
+              ${escapeHtml(formattedDateKo)} · ${escapeHtml(selectedLine)}
             </span>
           </div>
           <div style="display:flex; gap:8px;">
-            <button onclick="window.print()" style="padding:6px 16px; background:#2563eb; color:#fff; border:none; border-radius:5px; font-weight:900; font-size:12px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
-              🖨️ 지금 인쇄 (PDF 저장)
+            <button onclick="window.print()" style="padding:7px 18px; background:#16a34a; color:#fff; border:none; border-radius:6px; font-weight:900; font-size:13px; cursor:pointer;">
+              🖨️ 지금 A4 인쇄 / PDF 저장
             </button>
-            <button onclick="window.close()" style="padding:6px 14px; background:#475569; color:#fff; border:none; border-radius:5px; font-weight:700; font-size:12px; cursor:pointer;">
+            <button onclick="window.close()" style="padding:7px 14px; background:#475569; color:#fff; border:none; border-radius:6px; font-weight:800; font-size:13px; cursor:pointer;">
               창 닫기
             </button>
           </div>
         </div>
 
-        <!-- 1. 헤더: 좌측 회사정보/문서명 + 🌟중앙 초강조 날짜 명판🌟 + 우측 결재란 -->
-        <div class="header-container">
-          <div class="header-left">
-            <div class="company-badge">
-              <span class="company-logo">GFS</span>
-              <span class="company-name">(주)지에프에스 스마트 ERP 생산관제 센터</span>
-              <span class="haccp-pill">식약처 HACCP 공인 생산전표</span>
+        <!-- 1. 상단 고대비 타이틀 & 반장 서명란 -->
+        <div class="top-header-box">
+          <div class="top-header-row1">
+            <div>
+              <div class="doc-kicker">GFS 스마트 생산관제 · 식약처 HACCP 현장 게시용 정본 (${escapeHtml(docNumber)})</div>
+              <div class="doc-big-title">[${escapeHtml(selectedLine)}] 일일 작업지시서</div>
             </div>
-            <div class="main-title">${department === 'SEONGHYEONG' ? '🍱 성형장' : '🍳 전처리실'}: ${selectedLine} 일일 생산 작업지시서</div>
-            <div class="doc-meta">
-              <span><strong>문서번호:</strong> ${escapeHtml(docNumber)}</span>
-              <span class="sep">|</span>
-              <span><strong>공정:</strong> ${department === 'SEONGHYEONG' ? '성형가공' : '원료전처리'}</span>
-              <span class="sep">|</span>
-              <span><strong>실수주 연동:</strong> ${
-                realOrderMeta && realOrderMeta.hasRealOrders
-                  ? `✅ ${realOrderMeta.totalDayQty.toLocaleString()} ea 확정`
-                  : '표준 템플릿'
-              }</span>
+            <div class="sign-box">
+              담당 반장 서명: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)
             </div>
           </div>
-
-          <!-- 🌟 중앙 초강조 날짜 명판 (Prominent Date Plaque) 🌟 -->
-          <div class="date-plaque">
-            <div class="date-plaque-label">📅 작업 지시일자 (PRODUCTION DATE)</div>
-            <div class="date-plaque-val">${escapeHtml(formattedDateKo)}</div>
-            <div class="date-plaque-shift">
-              <span class="shift-badge-pill">${escapeHtml(shiftLabel)}</span>
-            </div>
-          </div>
-
-          <!-- 우측 4단 결재란 -->
-          <div class="header-right">
-            <table class="approval-table">
-              <thead>
-                <tr>
-                  <th rowspan="2" class="appr-title">결<br/>재</th>
-                  <th style="width:48px;">작 성</th>
-                  <th style="width:48px;">검 토</th>
-                  <th style="width:52px;">승 인</th>
-                  <th style="width:56px;">공장장(전결)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><div class="sign-space">담당</div></td>
-                  <td><div class="sign-space">반장</div></td>
-                  <td><div class="sign-space">팀장</div></td>
-                  <td><div class="sign-space">전결</div></td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="top-header-meta-grid">
+            <div class="meta-pill">📅 작업일자: <strong>${escapeHtml(formattedDateKo)}</strong></div>
+            <div class="meta-pill">⏰ 가동시간: <strong>${escapeHtml(totalRunTimeStr)}</strong></div>
+            <div class="meta-pill">📦 총 지시량: <strong>${prodTaskCount}품목 / ${
+      totalOrderQtyNum > 0
+        ? `${totalOrderQtyNum.toLocaleString()} 개`
+        : escapeHtml(realOrderMeta?.lineTotalPlan || currentLine.totalPlan)
+    }</strong></div>
           </div>
         </div>
 
-        <!-- 2. 핵심 KPI 5분할 카드 (내용에 맞춘 비례 너비) -->
-        <div class="kpi-row">
-          <div class="kpi-card highlight">
-            <div class="kpi-label">일일 총 생산계획</div>
-            <div class="kpi-val" style="color:#1d4ed8;">${escapeHtml(realOrderMeta?.lineTotalPlan || currentLine.totalPlan)}</div>
-            <div class="kpi-sub">${
-              realOrderMeta?.hasRealOrders
-                ? `2편: ${(realOrderMeta.shift2Qty || 0).toLocaleString()} / 1편: ${(realOrderMeta.shift1Qty || 0).toLocaleString()}`
-                : '1일 2교대 편성'
-            }</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">라인 가동 시간대</div>
-            <div class="kpi-val">${escapeHtml(
-              scheduleTasks.length > 0
-                ? `${scheduleTasks[0].time.split('~')[0].trim()} ~ ${scheduleTasks[scheduleTasks.length - 1].time.split('~')[1]?.trim() || '종료'}`
-                : currentLine.totalTime
-            )}</div>
-            <div class="kpi-sub">총 소요 시간 관리</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">라인 생산속도 (UPH / 분당)</div>
-            <div class="kpi-val" style="color:#059669;">${escapeHtml(currentLine.speed)}</div>
-            <div class="kpi-sub">실측 목표 준수율 관리</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">소인화 투입인원</div>
-            <div class="kpi-val" style="color:#b45309;">${escapeHtml(currentLine.personnel)}</div>
-            <div class="kpi-sub">오퍼레이터·패커</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">공정 및 품질책임자</div>
-            <div class="kpi-val" style="color:#4f46e5;">${escapeHtml(currentLine.leadWorker)}</div>
-            <div class="kpi-sub">HACCP 안전 관리자</div>
-          </div>
-        </div>
-
-        <!-- 3. 실시간 제조 타임테이블 (식약처 HACCP 공인 규격) -->
+        <!-- 2. 6열 큰글씨 작업지시 표 (흑백 프린터 완벽 대비 + 볼펜 체크 공간) -->
         <table class="work-table">
           <thead>
             <tr>
-              <th style="width:30px;">NO</th>
-              <th style="width:45px;">구분</th>
-              <th style="width:85px;">작업시간</th>
-              <th style="width:40px;">유형</th>
-              <th>지시 제품명 (규격/스펙)</th>
-              <th style="width:75px;">지시수량</th>
-              <th style="width:52px;">소요시간</th>
-              <th style="width:45px;">작업인원</th>
-              <th style="width:230px;">주요 원부자재 배합 기준 (BOM)</th>
-              <th style="width:170px;">HACCP & CCP 핵심 관리기준</th>
-              <th style="width:36px;">확인</th>
-              <th style="width:50px;">담당자</th>
+              <th style="width:48px;">순서</th>
+              <th style="width:132px;">작업시간</th>
+              <th style="width:92px;">밥/공정 구분</th>
+              <th>지시 제품명 (배합·소요시간)</th>
+              <th style="width:115px;">지시수량</th>
+              <th style="width:145px;">현장 체크 (V)</th>
             </tr>
           </thead>
           <tbody>
@@ -1350,60 +1170,47 @@ export const WorkOrderStatusView: React.FC = () => {
           </tbody>
         </table>
 
-        <!-- 4. 하단 2열 그리드: 좌측 소요 원부자재 불출 현황표 + 우측 식약처 HACCP 4대 중점관리수칙 -->
-        <div class="bottom-grid">
-          <!-- 좌측: 소요 원부자재 창고별 불출 지시서 -->
-          <div class="bottom-card">
-            <div class="bottom-title">
-              <span>📦 소요 원부자재 창고별 불출 현황 (BOM 집계)</span>
-              <span style="font-size:8.5px; font-weight:normal; color:#64748b;">(WMS 자동 연동 불출 전표)</span>
-            </div>
-            <table class="mat-table">
-              <thead>
-                <tr>
-                  <th style="width:24px;">NO</th>
-                  <th style="width:42px;">창고</th>
-                  <th>원부자재명 (규격)</th>
-                  <th style="width:65px;">소요량</th>
-                  <th style="width:65px;">현재고</th>
-                  <th style="width:38px;">상태</th>
-                  <th style="width:48px;">확인</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${materialRowsHtml}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 우측: 식약처 HACCP 4대 중점관리수칙 및 현장 안전 점검표 -->
-          <div class="bottom-card">
-            <div class="bottom-title">
-              <span>🛡️ 식약처 HACCP 4대 중점관리수칙 및 현장 안전 점검</span>
-              <span style="font-size:8.5px; font-weight:normal; color:#dc2626;">(필수 엄수)</span>
-            </div>
-            <ul class="haccp-rules-list">
-              <li><strong>1. 가열공정 (CCP-1B):</strong> 가열육/패티 중심온도 85℃ 1분 이상 유지 (심온계 전수 측정 기록).</li>
-              <li><strong>2. 금속검출 (CCP-2P):</strong> 매 30분 주기 정상 작동 점검 (Fe 2.0mm, SUS 3.0mm 테스트피스).</li>
-              <li><strong>3. 교차오염 방지:</strong> 품목 교체 시 컨베이어 벨트 및 커터 칼날 70% 에탄올 소독 분무 필수.</li>
-              <li><strong>4. 공정환경 관리:</strong> 청결구역 실내온도 15℃ 이하 유지 및 바닥 낙하 원자재 전량 즉시 폐기.</li>
+        <!-- 3. 하단 필수 위생·CCP 확인 & 오늘 밥 구분별 요약 -->
+        <div class="bottom-summary-grid">
+          <div class="summary-box">
+            <div class="summary-box-title">⚠️ 필수 위생 · CCP 현장 볼펜 체크</div>
+            <ul class="ccp-check-list">
+              <li>□ 작업 시작 전 및 품목 교체 시 컨베이어·성형틀 70% 알코올 소독 완료</li>
+              <li>□ 금속검출기 테스트피스(Fe 2.0mm / SUS 3.0mm) 30분 주기 정상 통과</li>
+              <li>□ 백미 ➔ 흑미 ➔ 빨간양념밥 작업 순서 준수 및 알레르기 교차오염 차단</li>
             </ul>
-            <div style="margin-top:6px; padding-top:4px; border-top:1px dashed #cbd5e1; display:flex; justify-content:space-between; align-items:center; font-size:8.5px;">
-              <span style="color:#475569;">위생 및 안전 수칙 점검 완료:</span>
-              <span style="font-weight:700; color:#0f172a;">작업조장 서명: ________________ (인)</span>
+          </div>
+          <div class="summary-box">
+            <div class="summary-box-title">🍚 오늘 밥 구분별 생산 요약</div>
+            <div class="rice-sum-grid">
+              <div class="rice-sum-item">
+                <span>[백미 제품]</span>
+                <span>${whiteRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item">
+                <span>[흑미/잡곡]</span>
+                <span>${blackRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item">
+                <span>[볶음/양념]</span>
+                <span>${redRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item" style="background:#e2e8f0;">
+                <span>총 생산합계</span>
+                <span>${totalOrderQtyNum.toLocaleString()} 개</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 5. 법적 고지 및 푸터 -->
-        <div class="footer-box">
-          <div>* 본 작업지시서는 식품위생법 제48조(해썹) 및 식약처 위해요소중점관리기준을 준수하여 작성된 정본 전표입니다.</div>
-          <div>GFS 스마트 제조 생산관제 본부 (ERP Pipeline) | 인쇄일시: ${new Date().toLocaleDateString('ko-KR')} | 페이지 1 / 1</div>
+        <div class="footer-line">
+          <span>* 현장 반장님께서는 각 품목 완료 시 우측 [현장 체크(V)] 칸에 볼펜으로 체크(V) 및 완료 시각을 기입해 주십시오.</span>
+          <span>GFS ERP 현장 맞춤 큰글씨 양식 | 인쇄일: ${new Date().toLocaleDateString('ko-KR')}</span>
         </div>
 
         <script>
           window.onload = function() {
-            setTimeout(function() { window.print(); }, 400);
+            setTimeout(function() { window.print(); }, 350);
           };
         </script>
       </body>
@@ -1570,44 +1377,116 @@ export const WorkOrderStatusView: React.FC = () => {
     return 'text-xs';
   };
 
-  // ── 일일 작업지시서 세로 상세표 렌더러 (기본 뷰 & 큰 팝업 공용) ──
+  // 현장 전광판 원클릭 작업 완료 처리 (완료 후 다음 대기 작업을 자동으로 '진행중'으로 승격)
+  const completeFieldTask = (id: string) => {
+    setScheduleTasks((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      if (idx === -1) return prev;
+      const cur = prev[idx];
+      if (cur.status === '완료') {
+        // 다시 누르면 진행중으로 복구
+        return prev.map((t, i) => (i === idx ? { ...t, status: '진행중' } : t));
+      }
+      const nextList = prev.map((t, i) => (i === idx ? { ...t, status: '완료' as const } : { ...t }));
+      const hasAnyInProgress = nextList.some((t) => t.status === '진행중');
+      if (!hasAnyInProgress) {
+        const nextPendingIdx = nextList.findIndex(
+          (t, i) => i > idx && t.status === '대기' && t.type !== '휴게' && t.type !== '청소'
+        );
+        const fallbackIdx =
+          nextPendingIdx !== -1
+            ? nextPendingIdx
+            : nextList.findIndex((t) => t.status === '대기');
+        if (fallbackIdx !== -1) {
+          nextList[fallbackIdx] = { ...nextList[fallbackIdx], status: '진행중' };
+        }
+      }
+      return nextList;
+    });
+  };
+
+  // ── 일일 작업지시서 렌더러 (📋 현장 큰글씨 키오스크 모드 vs 📊 관리자 12열 상세 표 모드) ──
   const renderTimetableContent = (isModal: boolean = false) => {
+    // 현재 진행중 작업 & 다음 대기 작업 추출
+    const activeHeroIdx = (() => {
+      const progIdx = filteredSchedule.findIndex((t) => t.status === '진행중');
+      if (progIdx !== -1) return progIdx;
+      const pendProdIdx = filteredSchedule.findIndex(
+        (t) => t.status !== '완료' && t.type !== '휴게' && t.type !== '청소'
+      );
+      if (pendProdIdx !== -1) return pendProdIdx;
+      return filteredSchedule.findIndex((t) => t.status !== '완료');
+    })();
+
+    const activeHeroTask = activeHeroIdx !== -1 ? filteredSchedule[activeHeroIdx] : null;
+    const nextHeroTask =
+      activeHeroIdx !== -1
+        ? filteredSchedule
+            .slice(activeHeroIdx + 1)
+            .find((t) => t.status !== '완료' && t.type !== '휴게') ||
+          filteredSchedule[activeHeroIdx + 1] ||
+          null
+        : null;
+
     return (
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {/* 스마트 편집 상단 액션 바 */}
-        <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 flex items-center justify-between gap-3 flex-wrap shrink-0">
-          <div className="flex items-center gap-3 flex-wrap text-xs">
-            <div className="flex items-center gap-1.5 font-black text-slate-800">
-              <Sparkles size={16} className="text-blue-600" />
-              <span>스마트 지시서 편집</span>
+        {/* 상단 뷰 전환 & 스마트 편집 액션 바 */}
+        <div className="bg-slate-100 border-b border-slate-300 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* 🌟 현장 큰글씨 키오스크 모드 vs 관리자 상세 표 보기 토글 🌟 */}
+            <div className="inline-flex items-center bg-slate-200/90 p-1 rounded-xl border border-slate-300 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setIsSimpleFieldView(true)}
+                className={`px-3.5 py-1.5 rounded-lg font-black text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isSimpleFieldView
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-700 hover:text-slate-950 hover:bg-white/60'
+                }`}
+              >
+                <span>📋 현장 큰글씨 보기 (반장님용)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSimpleFieldView(false)}
+                className={`px-3.5 py-1.5 rounded-lg font-black text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer ${
+                  !isSimpleFieldView
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-700 hover:text-slate-950 hover:bg-white/60'
+                }`}
+              >
+                <span>📊 관리자 상세 표 보기 (12열)</span>
+              </button>
             </div>
-            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
-              <input
-                type="checkbox"
-                checked={autoCascadeTime}
-                onChange={(e) => setAutoCascadeTime(e.target.checked)}
-                className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
-              />
-              <span>⏱️ 시간 연쇄 자동 계산</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+
+            <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
               <input
                 type="checkbox"
                 checked={autoCascadeOnReorder}
                 onChange={(e) => setAutoCascadeOnReorder(e.target.checked)}
                 className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
               />
-              <span>🔄 순서 이동 시 시간 자동 연동</span>
+              <span>🔄 순서 이동 시 시간 자동 재계산</span>
             </label>
-            <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
-              💡 작업시간·소요시간 변경 시 다음 순서 시간들이 연속 자동 계산됩니다.
-            </span>
+
+            {!isSimpleFieldView && (
+              <label className="flex items-center gap-1.5 cursor-pointer font-bold text-xs text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs">
+                <input
+                  type="checkbox"
+                  checked={autoCascadeTime}
+                  onChange={(e) => setAutoCascadeTime(e.target.checked)}
+                  className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                />
+                <span>⏱️ 시간 수정 시 연쇄 계산</span>
+              </label>
+            )}
           </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => handleNudgeAll(-10)}
-              className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
               title="전체 스케줄 시간을 10분 앞당깁니다"
             >
               -10분
@@ -1615,7 +1494,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleNudgeAll(10)}
-              className="px-2.5 py-1 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs transition-colors cursor-pointer"
               title="전체 스케줄 시간을 10분 늦춥니다"
             >
               +10분
@@ -1623,36 +1502,387 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleRecalculateAll()}
-              className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               title="시작 시각부터 모든 작업을 5분 갭으로 순차 자동 정렬합니다"
             >
               <Clock size={13} />
-              <span>전체 순차 자동 정렬</span>
+              <span>시간 자동 정렬</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintLiveWorkOrder}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="현장 게시용 A4 큰글씨·고대비 작업지시서를 즉시 인쇄합니다"
+            >
+              <Printer size={13} />
+              <span>A4 큰글씨 인쇄</span>
             </button>
             <button
               type="button"
               onClick={handleSaveOrders}
               disabled={saving}
-              className="px-3.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
             >
               <Save size={13} />
-              <span>{saving ? '저장중...' : '지시 확정 저장'}</span>
+              <span>{saving ? '저장중...' : '순서·상태 저장'}</span>
             </button>
             {!isModal && (
               <button
                 type="button"
                 onClick={() => openLargeModal('TIMETABLE')}
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                title="작업지시서를 큰 팝업창으로 확대하여 편하게 편집합니다"
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                title="작업지시서를 큰 팝업창으로 확대하여 편하게 봅니다"
               >
                 <Maximize2 size={13} />
-                <span>큰 팝업으로 보기</span>
+                <span>큰 화면 확대</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* 스케줄 테이블 */}
+        {/* 🌟 모드 1: 현장 큰글씨 전광판 + 키오스크형 초간단 뷰 (60대 현장 반장님 맞춤) 🌟 */}
+        {isSimpleFieldView ? (
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 bg-slate-100/80 space-y-4">
+            {/* 상단 60:40 전광판 히어로 영역 (지금 진행 중 + 다음 작업 준비) */}
+            {activeHeroTask ? (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+                {/* 좌측 60% (7col): 🔥 지금 진행 중 카드 */}
+                <div className="lg:col-span-7 bg-white border-3 border-emerald-600 rounded-2xl p-4 sm:p-5 shadow-md flex flex-col justify-between gap-4 relative overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 text-white font-black text-sm sm:text-base shadow-2xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                        <span>🔥 지금 진행 중 ({activeHeroIdx + 1}번 작업)</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono font-black text-base sm:text-lg">
+                        ⏰ {activeHeroTask.time}
+                      </span>
+                    </div>
+                    <span className="text-sm font-black text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-300">
+                      {activeHeroTask.shift} · 소요 {activeHeroTask.duration}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-2 min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const rBadge = getRiceColorBadge(activeHeroTask.item);
+                          if (!rBadge) return null;
+                          return (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-lg text-sm sm:text-base font-black border-2 ${rBadge.bg}`}
+                            >
+                              {rBadge.label === '빨간밥'
+                                ? '🌶️ [볶음/빨간양념밥]'
+                                : rBadge.label.includes('흑미')
+                                ? '🌾 [흑미/잡곡밥]'
+                                : '🍚 [백미밥]'}
+                            </span>
+                          );
+                        })()}
+                        <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-black bg-amber-100 text-amber-900 border border-amber-300">
+                          👥 투입 {activeHeroTask.workers || currentLine.personnel.split('(')[0]}
+                        </span>
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight leading-snug break-keep">
+                        {activeHeroTask.item}
+                      </div>
+                      {activeHeroTask.bom && activeHeroTask.bom !== '-' && (
+                        <div className="text-sm sm:text-base font-bold text-slate-600">
+                          📌 핵심 배합/규격: <span className="text-slate-900">{activeHeroTask.bom}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 우측 초거대 수량 & 완료 버튼 */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0 bg-emerald-50/80 border-2 border-emerald-200 rounded-2xl px-4 py-3">
+                      <div className="text-right">
+                        <div className="text-xs font-black text-emerald-800">지시 수량</div>
+                        <div className="text-2xl sm:text-3xl font-mono font-black text-emerald-950">
+                          {typeof activeHeroTask.qty === 'number'
+                            ? `${activeHeroTask.qty.toLocaleString()} 개`
+                            : activeHeroTask.qty || '-'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => completeFieldTask(activeHeroTask.id)}
+                        className="h-13 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-base sm:text-lg shadow-md flex items-center gap-2 cursor-pointer transition-all whitespace-nowrap"
+                      >
+                        <CheckCircle2 size={22} />
+                        <span>작업 완료 누르기</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 우측 40% (5col): ⏭️ 다음 작업 준비 카드 */}
+                <div className="lg:col-span-5 bg-amber-50/90 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between gap-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-amber-200 pb-2.5">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-sm">
+                      ⏭️ 다음 작업 미리 준비
+                    </span>
+                    {nextHeroTask && (
+                      <span className="font-mono font-black text-sm sm:text-base text-amber-950 bg-white px-2.5 py-0.5 rounded-lg border border-amber-300">
+                        예정 {nextHeroTask.time}
+                      </span>
+                    )}
+                  </div>
+
+                  {nextHeroTask ? (
+                    <div className="space-y-2 my-auto">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const rBadge = getRiceColorBadge(nextHeroTask.item);
+                          if (!rBadge) return null;
+                          return (
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs sm:text-sm font-black border ${rBadge.bg}`}
+                            >
+                              {rBadge.label === '빨간밥'
+                                ? '🌶️ [빨간양념밥 준비]'
+                                : rBadge.label.includes('흑미')
+                                ? '🌾 [흑미밥 준비]'
+                                : '🍚 [백미밥 준비]'}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-xs sm:text-sm font-black text-amber-900">
+                          ({nextHeroTask.shift} · {nextHeroTask.duration})
+                        </span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-slate-900 leading-snug break-keep">
+                        {nextHeroTask.item}
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-sm font-bold text-slate-700">
+                          준비 수량:{' '}
+                          <strong className="text-lg font-mono font-black text-indigo-950">
+                            {typeof nextHeroTask.qty === 'number'
+                              ? `${nextHeroTask.qty.toLocaleString()} 개`
+                              : nextHeroTask.qty}
+                          </strong>
+                        </span>
+                        <span className="text-xs font-black text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200">
+                          ⚠️ 교체 전 알코올 소독
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="my-auto text-center py-6 text-slate-600 font-black text-base">
+                      🎉 오늘 예정된 다음 대기 작업이 없습니다!
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-600 text-white rounded-2xl p-5 text-center font-black text-xl shadow-sm">
+                🎉 오늘 [{selectedLine}] 라인의 모든 작업이 완료되었습니다! 수고하셨습니다.
+              </div>
+            )}
+
+            {/* 하단 시간순 큼직한 번호표 카드 리스트 (키오스크 스타일) */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between px-1">
+                <div className="text-sm sm:text-base font-black text-slate-800 flex items-center gap-2">
+                  <span>📋 오늘의 시간순 작업 목록 (총 {filteredSchedule.length}건)</span>
+                  <span className="text-xs font-bold text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-300">
+                    우측 [▲ 위로] [▼ 아래로] 버튼을 누르면 작업시간이 자동으로 다시 계산됩니다
+                  </span>
+                </div>
+              </div>
+
+              {filteredSchedule.map((task, idx) => {
+                const isDone = task.status === '완료';
+                const isHeroActive = idx === activeHeroIdx && !isDone;
+                const isClean =
+                  task.type === '청소' ||
+                  task.item.includes('세척') ||
+                  task.item.includes('소독') ||
+                  task.item.includes('CIP');
+                const isMeal =
+                  task.type === '휴게' ||
+                  task.item.includes('중식') ||
+                  task.item.includes('석식') ||
+                  task.item.includes('점심');
+
+                // 중식 / 세척·소독 구분 바
+                if (isClean || isMeal) {
+                  return (
+                    <div
+                      key={task.id}
+                      className="bg-slate-200/90 border-2 border-slate-400 rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 rounded-xl bg-slate-800 text-white font-black text-sm">
+                          {isMeal ? '🍱 휴게/식사' : '🧹 세척·소독'}
+                        </span>
+                        <span className="font-mono font-black text-base sm:text-lg text-slate-900">
+                          {task.time} ({task.duration})
+                        </span>
+                        <span className="text-base sm:text-lg font-black text-slate-900">
+                          {task.item}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => moveTask(idx, 'UP')}
+                          disabled={idx === 0}
+                          className="h-10 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-400 font-black text-xs sm:text-sm flex items-center gap-1 disabled:opacity-30 cursor-pointer"
+                        >
+                          <ArrowUp size={15} />
+                          <span>위로</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveTask(idx, 'DOWN')}
+                          disabled={idx === filteredSchedule.length - 1}
+                          className="h-10 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-400 font-black text-xs sm:text-sm flex items-center gap-1 disabled:opacity-30 cursor-pointer"
+                        >
+                          <ArrowDown size={15} />
+                          <span>아래로</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => completeFieldTask(task.id)}
+                          className={`h-10 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 cursor-pointer ${
+                            isDone
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white hover:bg-emerald-50 text-slate-800 border border-slate-400'
+                          }`}
+                        >
+                          <CheckCircle2 size={16} />
+                          <span>{isDone ? '확인 완료됨' : '확인 체크'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const rBadge = getRiceColorBadge(task.item);
+                const formattedQty =
+                  typeof task.qty === 'number' ? `${task.qty.toLocaleString()} 개` : task.qty || '-';
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`rounded-2xl px-4 sm:px-5 py-3.5 border-2 transition-all flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 ${
+                      isDone
+                        ? 'bg-slate-100/90 border-slate-300 opacity-70'
+                        : isHeroActive
+                        ? 'bg-emerald-50/70 border-emerald-600 ring-2 ring-emerald-200 shadow-sm'
+                        : 'bg-white border-slate-300 hover:border-blue-500 shadow-2xs'
+                    }`}
+                  >
+                    {/* 좌측: 큰 순번 배지 + 작업시간 + 시프트 + 밥종류 + 제품명 */}
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                      <div
+                        className={`px-3.5 py-2 rounded-xl font-black text-sm sm:text-base shrink-0 text-center min-w-[92px] ${
+                          isDone
+                            ? 'bg-slate-300 text-slate-700'
+                            : isHeroActive
+                            ? 'bg-emerald-600 text-white shadow-2xs'
+                            : 'bg-slate-900 text-white'
+                        }`}
+                      >
+                        {idx + 1}번 {isDone ? '완료' : isHeroActive ? '진행중' : '대기'}
+                      </div>
+
+                      <div className="font-mono font-black text-base sm:text-xl text-slate-900 shrink-0 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300">
+                        {task.time}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-black border ${
+                              task.shift.includes('2편')
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                : 'bg-pink-100 text-pink-900 border-pink-300'
+                            }`}
+                          >
+                            {task.shift}
+                          </span>
+                          {rBadge && (
+                            <span
+                              className={`px-2.5 py-0.5 rounded-md text-xs sm:text-sm font-black border ${rBadge.bg}`}
+                            >
+                              {rBadge.label === '빨간밥'
+                                ? '🌶️ [빨간양념]'
+                                : rBadge.label.includes('흑미')
+                                ? '🌾 [흑미/잡곡]'
+                                : '🍚 [백미]'}
+                            </span>
+                          )}
+                          <span className="text-xs font-bold text-slate-500">
+                            소요 {task.duration} · 인원 {task.workers || currentLine.personnel.split('(')[0]}
+                          </span>
+                        </div>
+                        <div
+                          className={`text-lg sm:text-xl font-black tracking-tight truncate ${
+                            isDone ? 'line-through text-slate-500' : 'text-slate-950'
+                          }`}
+                        >
+                          {task.item}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 우측: 큼직한 수량 + [▲ 위로] [▼ 아래로] + [완료] 버튼 */}
+                    <div className="flex items-center gap-2.5 shrink-0 ml-auto">
+                      <div className="text-right pr-2">
+                        <div className="text-[11px] font-bold text-slate-500">지시수량</div>
+                        <div className="text-lg sm:text-2xl font-mono font-black text-indigo-950">
+                          {formattedQty}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => moveTask(idx, 'UP')}
+                        disabled={idx === 0}
+                        title="순서를 한 칸 위로 올리고 시간을 다시 계산합니다"
+                        className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-100 text-slate-800 hover:text-blue-900 border-2 border-slate-300 font-black text-xs sm:text-sm flex items-center gap-1 disabled:opacity-25 cursor-pointer transition-colors"
+                      >
+                        <ArrowUp size={16} />
+                        <span>위로</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => moveTask(idx, 'DOWN')}
+                        disabled={idx === filteredSchedule.length - 1}
+                        title="순서를 한 칸 아래로 내리고 시간을 다시 계산합니다"
+                        className="h-11 px-3 rounded-xl bg-slate-100 hover:bg-blue-100 text-slate-800 hover:text-blue-900 border-2 border-slate-300 font-black text-xs sm:text-sm flex items-center gap-1 disabled:opacity-25 cursor-pointer transition-colors"
+                      >
+                        <ArrowDown size={16} />
+                        <span>아래로</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => completeFieldTask(task.id)}
+                        className={`h-11 px-4 rounded-xl font-black text-sm sm:text-base flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs ${
+                          isDone
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : isHeroActive
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-300'
+                            : 'bg-slate-900 text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        <CheckCircle2 size={17} />
+                        <span>{isDone ? '완료됨' : '작업완료'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+        /* 🌟 모드 2: 관리자용 12열 상세 편집 테이블 🌟 */
         <div className="flex-1 min-h-0 overflow-y-auto">
           <table className="w-full text-left border-collapse">
             <thead className={`bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center ${getFontClass('th', isModal)}`}>
@@ -1934,6 +2164,7 @@ export const WorkOrderStatusView: React.FC = () => {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     );
   };
@@ -2584,7 +2815,28 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 3. 4대 멀티 탭 네비게이션 (타임테이블 간트 vs 작업지시서 vs 소요 원부자재 vs 속도 시뮬레이터) */}
       <div className="px-6 pt-3 shrink-0 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* 기본 탭: 실별·시간대별 자동지시서 (5시트 · 10시 전/후) */}
+          {/* 기본 탭 1: 일일 작업지시서 (현장 큰글씨 전광판 & 상세표) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('TIMETABLE')}
+            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+              activeTab === 'TIMETABLE'
+                ? 'bg-white text-emerald-900 border-emerald-600 shadow-xs'
+                : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+            }`}
+          >
+            <FileText size={17} className={activeTab === 'TIMETABLE' ? 'text-emerald-600' : 'text-slate-400'} />
+            <span>📋 일일 작업지시서 (현장 큰글씨 & 순서편집)</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-black ${
+                activeTab === 'TIMETABLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-300 text-slate-700'
+              }`}
+            >
+              {filteredSchedule.length}건
+            </span>
+          </button>
+
+          {/* 탭 2: 실별·시간대별 자동지시서 (5시트 · 10시 전/후) */}
           <button
             type="button"
             onClick={() => setActiveTab('AUTO_5TAB')}
@@ -2598,7 +2850,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <span>실별·시간대별 자동지시서 (5시트)</span>
           </button>
 
-          {/* 탭 1: 10분 단위 타임테이블 간트 */}
+          {/* 탭 3: 10분 단위 타임테이블 간트 */}
           <button
             type="button"
             onClick={() => setActiveTab('GANTT')}
@@ -2616,27 +2868,6 @@ export const WorkOrderStatusView: React.FC = () => {
               }`}
             >
               30라인/설비
-            </span>
-          </button>
-
-          {/* 탭 2: 일일 작업지시서 스케줄 */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('TIMETABLE')}
-            className={`px-4 py-2.5 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
-              activeTab === 'TIMETABLE'
-                ? 'bg-white text-blue-900 border-blue-600 shadow-xs'
-                : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
-            }`}
-          >
-            <FileText size={17} className={activeTab === 'TIMETABLE' ? 'text-blue-600' : 'text-slate-400'} />
-            <span>📋 일일 작업지시서 (세로 상세표 & 드래그)</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full font-black ${
-                activeTab === 'TIMETABLE' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
-              }`}
-            >
-              {filteredSchedule.length}건
             </span>
           </button>
 
