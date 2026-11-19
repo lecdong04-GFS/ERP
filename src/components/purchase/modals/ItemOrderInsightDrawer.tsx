@@ -19,7 +19,7 @@ import {
   ArrowRight,
   Flame,
 } from 'lucide-react';
-import { DAY_CHARS, addDaysYmd, getWeekdayCharYmd } from '@/lib/gfs/orderCalc';
+import { DAY_CHARS, addDaysYmd, getWeekdayCharYmd, parseLeadTimeDays } from '@/lib/gfs/orderCalc';
 import { findNovLedgerRef } from '@/lib/gfs/novLedgerRef';
 
 export interface ItemOrderInsightTarget {
@@ -51,6 +51,8 @@ export interface ItemOrderInsightTarget {
   targetDayIdx: number;
   auditStatus: string;
   auditLabel: string;
+  orderCycle?: string;
+  leadDays?: number;
 }
 
 interface TimelinePoint {
@@ -224,18 +226,25 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
     // 오늘 기준 가용재고 (실재고 + 기발주 입고예정) vs 오늘 발주 추가 시
     const todayBaseStock = item.currentStock + item.incoming;
     const todayOrderBags = Math.max(0, item.dayQty) * pack;
+    const leadDays =
+      item.leadDays && item.leadDays > 0 ? item.leadDays : parseLeadTimeDays(item.orderCycle);
+    // 신선식품 실무 기준: 리드타임(D+1→2일, D+2→3일)까지만 집중 시뮬레이션
+    const forecastDays = Math.min(3, Math.max(2, leadDays + 1));
+    const baseDate = item.targetDayDate || refDate;
+    const arrivalYmd = addDaysYmd(baseDate, leadDays);
+    const arrivalLabel = `${Number(arrivalYmd.slice(5, 7))}/${Number(arrivalYmd.slice(8, 10))}(${getWeekdayCharYmd(arrivalYmd)})`;
 
     const futurePoints: typeof pastPoints = [];
     let stockWithOrder = todayBaseStock + todayOrderBags;
     let stockNoOrder = todayBaseStock;
     let stockoutDayNoOrder: string | null = null;
 
-    for (let d = 1; d <= 5; d++) {
-      const fDate = addDaysYmd(item.targetDayDate || refDate, d);
+    for (let d = 1; d <= forecastDays; d++) {
+      const fDate = addDaysYmd(baseDate, d);
       stockWithOrder = Math.max(0, stockWithOrder - baseDaily);
       stockNoOrder = Math.max(0, stockNoOrder - baseDaily);
       if (stockNoOrder <= 0 && !stockoutDayNoOrder && baseDaily > 0) {
-        stockoutDayNoOrder = `${fDate.slice(5)}(${getWeekdayCharYmd(fDate)})`;
+        stockoutDayNoOrder = `${Number(fDate.slice(5, 7))}/${Number(fDate.slice(8, 10))}(${getWeekdayCharYmd(fDate)})`;
       }
       futurePoints.push({
         date: fDate,
@@ -264,6 +273,9 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
       maxVal,
       stockoutDayNoOrder,
       baseDaily,
+      forecastDays,
+      arrivalLabel,
+      endStockNoOrder: Math.round(stockNoOrder),
     };
   }, [item, history, refDate]);
 
@@ -526,12 +538,12 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
             </div>
           )}
 
-          {/* 2. 과거 7일 실적 + 향후 5일 예상 재고 추이 차트 */}
+          {/* 2. 과거 7일 실적 + 다음 입고일까지(2~3일) 예상 재고 추이 차트 */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <div className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-blue-600" />
-                <span>최근 7일 재고 변화 & 향후 5일 발주 시뮬레이션</span>
+                <span>최근 7일 재고 변화 & 향후 {chartData?.forecastDays ?? 3}일 입고 시뮬레이션</span>
               </div>
               <div className="flex items-center gap-3 text-[10.5px] font-bold text-slate-500">
                 <span className="flex items-center gap-1">
@@ -746,6 +758,25 @@ export const ItemOrderInsightDrawer: React.FC<ItemOrderInsightDrawerProps> = ({
                     );
                   })}
                 </svg>
+
+                {/* 한 줄 결론 요약 배너 */}
+                {chartData && (
+                  <div
+                    className={`mt-2 px-3 py-2 rounded-xl border text-[11.5px] font-bold flex items-center justify-between gap-2 ${
+                      chartData.stockoutDayNoOrder
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    }`}
+                  >
+                    <span>
+                      {chartData.stockoutDayNoOrder
+                        ? `🔴 미발주 시 ${chartData.stockoutDayNoOrder} 재고 바닥 예상 · 오늘 ${
+                            item.dayQty > 0 ? `${item.dayQty}박스` : '추가'
+                          } 발주 시 안전`
+                        : `🟢 ${chartData.arrivalLabel} 입고예정까지 재고 여유 (미발주 시에도 +${chartData.endStockNoOrder.toLocaleString()}봉 잔여)`}
+                    </span>
+                  </div>
+                )}
 
                 {/* 호버 상세 툴팁 */}
                 {hoveredPoint && (

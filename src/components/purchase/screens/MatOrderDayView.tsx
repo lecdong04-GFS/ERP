@@ -6012,6 +6012,8 @@ export const MatOrderDayView: React.FC = () => {
           targetDayIdx: dayIdx,
           auditStatus: m.auditStatus,
           auditLabel: m.auditLabel,
+          orderCycle: targetRow.orderCycle,
+          leadDays: targetRow.leadDays,
         };
         return (
           <ItemOrderInsightDrawer
