@@ -370,48 +370,58 @@ export const Dashboard: React.FC = () => {
             </span>
           </div>
 
-          {/* 창고별 재고액 컴팩트 인라인 칩 */}
-          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-100">
-            {stats.warehouseStock.length > 0 ? (
-              stats.warehouseStock.slice(0, 5).map((w) => {
-                const whName = w.warehouse || '기타';
-                const dotColor =
-                  whName.includes('냉장1')
-                    ? 'bg-sky-500'
-                    : whName.includes('냉장2')
-                    ? 'bg-blue-600'
-                    : whName.includes('냉동')
-                    ? 'bg-cyan-500'
-                    : whName.includes('상온')
-                    ? 'bg-amber-500'
-                    : whName.includes('부자재')
-                    ? 'bg-purple-500'
-                    : 'bg-slate-400';
-                const amt = Math.round(w.amount || 0);
-                const compactAmt =
-                  amt >= 100000000
-                    ? `${(amt / 100000000).toFixed(2)}억`
-                    : amt >= 10000
-                    ? `${Math.round(amt / 10000).toLocaleString()}만`
-                    : `${amt.toLocaleString()}`;
-                return (
-                  <span
-                    key={whName}
-                    title={`${whName}: ₩${amt.toLocaleString()}원 (${w.items}개 품목)`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100/90 text-[10px] font-bold text-slate-700"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-                    <span>{whName}</span>
-                    <span className="font-mono font-black text-indigo-950">{compactAmt}</span>
-                  </span>
-                );
-              })
-            ) : (
-              <span className="text-[11px] text-slate-400">전 창고 실시간 재고 실사</span>
-            )}
+          <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
+            <span>총 보관재고액 · 실사 연동</span>
+            <span className="text-indigo-700 font-bold">전 창고 합계</span>
           </div>
         </div>
       </div>
+
+      {/* 2-1. 창고별 실시간 재고액 스트립 (냉장1 · 냉장2 · 냉동 · 상온 · 부자재 시원한 5열 뷰) */}
+      {stats.warehouseStock.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 shrink-0">
+          {stats.warehouseStock.slice(0, 5).map((w) => {
+            const whName = w.warehouse || '기타';
+            const theme = whName.includes('냉장1')
+              ? { border: 'border-sky-200', badge: 'bg-sky-50 text-sky-800 border-sky-200', bar: 'bg-sky-500', dot: 'bg-sky-500' }
+              : whName.includes('냉장2')
+              ? { border: 'border-blue-200', badge: 'bg-blue-50 text-blue-800 border-blue-200', bar: 'bg-blue-600', dot: 'bg-blue-600' }
+              : whName.includes('냉동')
+              ? { border: 'border-cyan-200', badge: 'bg-cyan-50 text-cyan-800 border-cyan-200', bar: 'bg-cyan-500', dot: 'bg-cyan-500' }
+              : whName.includes('상온')
+              ? { border: 'border-amber-200', badge: 'bg-amber-50 text-amber-800 border-amber-200', bar: 'bg-amber-500', dot: 'bg-amber-500' }
+              : whName.includes('부자재')
+              ? { border: 'border-purple-200', badge: 'bg-purple-50 text-purple-800 border-purple-200', bar: 'bg-purple-500', dot: 'bg-purple-500' }
+              : { border: 'border-slate-200', badge: 'bg-slate-50 text-slate-700 border-slate-200', bar: 'bg-slate-500', dot: 'bg-slate-400' };
+            const amt = Math.round(w.amount || 0);
+            const pct = warehouseTotal > 0 ? Math.min(100, Math.round((amt / warehouseTotal) * 100)) : 0;
+            return (
+              <div
+                key={whName}
+                onClick={() => navigate('inv-lookup')}
+                className={`bg-white hover:bg-slate-50/90 border ${theme.border} rounded-xl px-3.5 py-2.5 shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-sm cursor-pointer flex flex-col justify-between gap-1.5`}
+              >
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="flex items-center gap-1.5 text-[13px] font-black text-slate-800">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${theme.dot}`} />
+                    {whName}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded-md border text-[11px] font-bold font-mono ${theme.badge}`}>
+                    {w.items.toLocaleString()}종 · {pct}%
+                  </span>
+                </div>
+                <div className="text-[17px] sm:text-[18px] font-black font-mono tracking-tight text-slate-950 leading-none truncate">
+                  <span className="text-[13px] font-bold text-slate-500 mr-0.5">₩</span>
+                  {amt.toLocaleString()}
+                </div>
+                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${theme.bar}`} style={{ width: `${Math.max(4, pct)}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ===================================================================== */}
       {/* 3. GS25 완제품 수주 트렌드 & 1편(밤)/2편(낮) 수주편수 레이더 */}
