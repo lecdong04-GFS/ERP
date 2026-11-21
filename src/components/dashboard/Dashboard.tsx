@@ -185,9 +185,9 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ===================================================================== */}
-      {/* 2. 4대 실물 핵심 액션 카드 (초슬림 1화면 뷰: 수주 · 입고 · 예상발주 · 재고) */}
+      {/* 2. 상단 1행(일일 수주·입고·발주 3열) + 2행(실시간 재고 현황 통합 패널) */}
       {/* ===================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
         {/* 카드 1: [수주] 금일 GS25 완제품 수주 */}
         <div
           onClick={() => navigate('sales-order-summary-gsr')}
@@ -334,94 +334,110 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 카드 4: [재고현황] 전 창고 실시간 재고현황 + 창고별 요약 */}
-        <div
-          onClick={() => navigate('inv-lookup')}
-          className="bg-white hover:bg-slate-50/90 border border-indigo-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[12.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
-              <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0">
-                <Warehouse className="w-3.5 h-3.5" />
-              </span>
-              실시간 재고 현황
-            </span>
-            <span className="text-[11px] font-extrabold text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
-              실사재고 <ArrowRight className="w-3 h-3" />
-            </span>
-          </div>
+      </div>
 
-          <div className="flex items-baseline justify-between gap-2">
-            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
+      {/* 2-1. 실시간 재고 현황 통합 패널 (좌측 총괄 + 우측 하위 5개 창고별 재고액) */}
+      <div
+        onClick={() => navigate('inv-lookup')}
+        className="bg-white hover:bg-slate-50/60 border border-indigo-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs transition-all hover:shadow-md cursor-pointer group shrink-0"
+      >
+        <div className="flex flex-col xl:flex-row xl:items-center gap-3.5">
+          {/* 좌측: 실시간 재고 현황 총괄 */}
+          <div className="xl:w-[270px] shrink-0 xl:pr-4 xl:border-r border-slate-200 flex flex-col justify-between gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13.5px] font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0">
+                  <Warehouse className="w-3.5 h-3.5" />
+                </span>
+                실시간 재고 현황
+              </span>
+              <span className="text-[11px] font-extrabold text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0 xl:hidden">
+                실사재고 <ArrowRight className="w-3 h-3" />
+              </span>
+            </div>
+
+            <div className="text-[22px] sm:text-[24px] font-black font-mono tracking-tight leading-none truncate">
               {warehouseTotal > 0 ? (
                 <>
-                  <span className="text-sm font-bold text-indigo-600 mr-0.5">₩</span>
+                  <span className="text-base font-bold text-indigo-600 mr-0.5">₩</span>
                   <span className="text-indigo-950">{Math.round(warehouseTotal).toLocaleString()}</span>
                 </>
               ) : (
-                <span className="text-lg font-black font-mono text-slate-400">₩0</span>
+                <span className="text-xl font-black font-mono text-slate-400">₩0</span>
               )}
             </div>
-            <span className="px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100 text-[11.5px] font-black font-mono text-indigo-800 shrink-0">
-              {totalInvCount > 0 ? `${totalInvCount.toLocaleString()}개` : '정상'}
+
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <span className="text-[11.5px] font-bold text-slate-600">
+                총 보관재고액 · <strong className="text-indigo-800 font-mono">{totalInvCount.toLocaleString()}개</strong>
+              </span>
               {safetyShortage > 0 && (
-                <span className="text-rose-600 ml-1">· 주의{safetyShortage}</span>
+                <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10.5px] font-black">
+                  주의 {safetyShortage}건
+                </span>
               )}
-            </span>
+            </div>
           </div>
 
-          <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
-            <span>총 보관재고액 · 실사 연동</span>
-            <span className="text-indigo-700 font-bold">전 창고 합계</span>
+          {/* 우측: 하위 창고별 재고액 (냉장1 · 냉장2 · 냉동 · 상온 · 부자재) */}
+          <div className="flex-1 min-w-0 flex flex-col gap-2">
+            <div className="hidden xl:flex items-center justify-between">
+              <span className="text-[11.5px] font-extrabold text-slate-500">
+                보관창고별 재고 보유액 (클릭 시 실사재고 조회)
+              </span>
+              <span className="text-[11.5px] font-extrabold text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+
+            {stats.warehouseStock.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {stats.warehouseStock.slice(0, 5).map((w) => {
+                  const whName = w.warehouse || '기타';
+                  const theme = whName.includes('냉장1')
+                    ? { bg: 'bg-sky-50/50 border-sky-200', badge: 'bg-white text-sky-800 border-sky-200', bar: 'bg-sky-500', dot: 'bg-sky-500' }
+                    : whName.includes('냉장2')
+                    ? { bg: 'bg-blue-50/50 border-blue-200', badge: 'bg-white text-blue-800 border-blue-200', bar: 'bg-blue-600', dot: 'bg-blue-600' }
+                    : whName.includes('냉동')
+                    ? { bg: 'bg-cyan-50/50 border-cyan-200', badge: 'bg-white text-cyan-800 border-cyan-200', bar: 'bg-cyan-500', dot: 'bg-cyan-500' }
+                    : whName.includes('상온')
+                    ? { bg: 'bg-amber-50/50 border-amber-200', badge: 'bg-white text-amber-800 border-amber-200', bar: 'bg-amber-500', dot: 'bg-amber-500' }
+                    : whName.includes('부자재')
+                    ? { bg: 'bg-purple-50/50 border-purple-200', badge: 'bg-white text-purple-800 border-purple-200', bar: 'bg-purple-500', dot: 'bg-purple-500' }
+                    : { bg: 'bg-slate-50 border-slate-200', badge: 'bg-white text-slate-700 border-slate-200', bar: 'bg-slate-500', dot: 'bg-slate-400' };
+                  const amt = Math.round(w.amount || 0);
+                  const pct = warehouseTotal > 0 ? Math.min(100, Math.round((amt / warehouseTotal) * 100)) : 0;
+                  return (
+                    <div
+                      key={whName}
+                      className={`border ${theme.bg} rounded-xl px-3 py-2 flex flex-col justify-between gap-1`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="flex items-center gap-1.5 text-[12.5px] font-black text-slate-800 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${theme.dot}`} />
+                          {whName}
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded border text-[10.5px] font-bold font-mono shrink-0 ${theme.badge}`}>
+                          {w.items}종 · {pct}%
+                        </span>
+                      </div>
+                      <div className="text-[16px] sm:text-[17px] font-black font-mono tracking-tight text-slate-950 leading-tight truncate">
+                        <span className="text-[12px] font-bold text-slate-500 mr-0.5">₩</span>
+                        {amt.toLocaleString()}
+                      </div>
+                      <div className="w-full h-1.5 bg-white/80 rounded-full overflow-hidden border border-slate-200/60">
+                        <div className={`h-full rounded-full ${theme.bar}`} style={{ width: `${Math.max(4, pct)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-xs text-slate-400 py-2">창고별 재고 데이터를 불러오는 중입니다.</div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* 2-1. 창고별 실시간 재고액 스트립 (냉장1 · 냉장2 · 냉동 · 상온 · 부자재 시원한 5열 뷰) */}
-      {stats.warehouseStock.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 shrink-0">
-          {stats.warehouseStock.slice(0, 5).map((w) => {
-            const whName = w.warehouse || '기타';
-            const theme = whName.includes('냉장1')
-              ? { border: 'border-sky-200', badge: 'bg-sky-50 text-sky-800 border-sky-200', bar: 'bg-sky-500', dot: 'bg-sky-500' }
-              : whName.includes('냉장2')
-              ? { border: 'border-blue-200', badge: 'bg-blue-50 text-blue-800 border-blue-200', bar: 'bg-blue-600', dot: 'bg-blue-600' }
-              : whName.includes('냉동')
-              ? { border: 'border-cyan-200', badge: 'bg-cyan-50 text-cyan-800 border-cyan-200', bar: 'bg-cyan-500', dot: 'bg-cyan-500' }
-              : whName.includes('상온')
-              ? { border: 'border-amber-200', badge: 'bg-amber-50 text-amber-800 border-amber-200', bar: 'bg-amber-500', dot: 'bg-amber-500' }
-              : whName.includes('부자재')
-              ? { border: 'border-purple-200', badge: 'bg-purple-50 text-purple-800 border-purple-200', bar: 'bg-purple-500', dot: 'bg-purple-500' }
-              : { border: 'border-slate-200', badge: 'bg-slate-50 text-slate-700 border-slate-200', bar: 'bg-slate-500', dot: 'bg-slate-400' };
-            const amt = Math.round(w.amount || 0);
-            const pct = warehouseTotal > 0 ? Math.min(100, Math.round((amt / warehouseTotal) * 100)) : 0;
-            return (
-              <div
-                key={whName}
-                onClick={() => navigate('inv-lookup')}
-                className={`bg-white hover:bg-slate-50/90 border ${theme.border} rounded-xl px-3.5 py-2.5 shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-sm cursor-pointer flex flex-col justify-between gap-1.5`}
-              >
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="flex items-center gap-1.5 text-[13px] font-black text-slate-800">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${theme.dot}`} />
-                    {whName}
-                  </span>
-                  <span className={`px-1.5 py-0.5 rounded-md border text-[11px] font-bold font-mono ${theme.badge}`}>
-                    {w.items.toLocaleString()}종 · {pct}%
-                  </span>
-                </div>
-                <div className="text-[17px] sm:text-[18px] font-black font-mono tracking-tight text-slate-950 leading-none truncate">
-                  <span className="text-[13px] font-bold text-slate-500 mr-0.5">₩</span>
-                  {amt.toLocaleString()}
-                </div>
-                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${theme.bar}`} style={{ width: `${Math.max(4, pct)}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* ===================================================================== */}
       {/* 3. GS25 완제품 수주 트렌드 & 1편(밤)/2편(낮) 수주편수 레이더 */}
