@@ -2271,34 +2271,34 @@ export const MatOrderDayView: React.FC = () => {
       const shortageBoxes = Math.max(0, Math.round((targetBoxes - totalHoldBoxes) * 10) / 10);
       const stockDaysNum = Number.isFinite(m.stockDays) ? Number(m.stockDays.toFixed(1)) : 0;
 
-      // 왜 그렇게 판단했는지 산출 사유 생성
+      // 산출 근거 (이모지 없는 담백한 실무 전표 문구)
       const reasons: string[] = [];
       if (stockDaysNum > 0 && stockDaysNum < 1.5) {
-        reasons.push(`🚨 결품초임박(유지 ${stockDaysNum}일)`);
+        reasons.push(`[임박] 유지 ${stockDaysNum}일`);
       } else if (m.auditLabel && /미달|부족|긴급/.test(m.auditLabel)) {
-        reasons.push(`⚠️ ${m.auditLabel}(유지 ${stockDaysNum}일)`);
+        reasons.push(`[${m.auditLabel}] 유지 ${stockDaysNum}일`);
       } else if (m.dayQty === 0) {
-        reasons.push(`유지 ${stockDaysNum}일(보유재고 충분)`);
+        reasons.push(`유지 ${stockDaysNum}일 (재고충분)`);
       }
 
       if (m.targetDays > 0 && m.dailyUsage > 0) {
         if (m.dayQty > 0) {
           reasons.push(
-            `목표 ${m.targetDays}일분(${targetBoxes}박) - 보유 ${totalHoldBoxes}박 = ${shortageBoxes}박 부족`
+            `${m.targetDays}일분(${targetBoxes}) - 보유(${totalHoldBoxes}) = 부족 ${shortageBoxes}박`
           );
         } else {
-          reasons.push(`목표 ${m.targetDays}일분(${targetBoxes}박) ≤ 보유 ${totalHoldBoxes}박`);
+          reasons.push(`${m.targetDays}일분(${targetBoxes}) <= 보유(${totalHoldBoxes})`);
         }
       } else if (m.dailyUsage <= 0) {
-        reasons.push('일사용량 0 (수기/기준일 확인 필요)');
+        reasons.push('일사용량 0 (확인필요)');
       }
 
       if (m.dayQty > 0) {
         if (m.suggestedBoxes > 0 && m.dayQty !== m.suggestedBoxes) {
-          reasons.push(`주간 ${m.suggestedBoxes}박 중 ${DAY_CHARS[dayIdx]}요일 배분`);
+          reasons.push(`${pattern} 배분 (${DAY_CHARS[dayIdx]} ${m.dayQty}박 / 주간 ${m.suggestedBoxes}박)`);
         }
         if (r.manual && r.finalBoxes !== m.suggestedBoxes) {
-          reasons.push(`✏️ 수기조정(추천 ${m.suggestedBoxes}박 → ${m.dayQty}박)`);
+          reasons.push(`[수기조정] ${m.suggestedBoxes} -> ${m.dayQty}박`);
         }
       }
 
@@ -2324,7 +2324,7 @@ export const MatOrderDayView: React.FC = () => {
         amount: Math.round(m.amount),
         isUrgent: stockDaysNum > 0 && stockDaysNum < 1.5,
         isWarning: Boolean(m.auditLabel && /미달|부족|긴급/.test(m.auditLabel)),
-        reasonText: reasons.join(' · '),
+        reasonText: reasons.join(' / '),
       };
     });
 
@@ -2333,38 +2333,37 @@ export const MatOrderDayView: React.FC = () => {
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>[GFS] 일일 예상 발주 검토표_${esc(currentDayDate)}_${esc(DAY_CHARS[dayIdx])}요일</title>
+  <title>자재 발주 검토표_${esc(currentDayDate)}_${esc(DAY_CHARS[dayIdx])}</title>
   <style>
-    @page { size: A4 landscape; margin: 7mm 8mm; }
-    * { box-sizing: border-box; font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Pretendard", sans-serif; }
-    body { margin: 0; padding: 0; color: #0f172a; background: #fff; font-size: 11px; line-height: 1.3; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    .toolbar { background: #0f172a; color: #fff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; border-radius: 6px; flex-wrap: wrap; }
+    @page { size: A4 landscape; margin: 8mm 9mm; }
+    * { box-sizing: border-box; font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+    body { margin: 0; padding: 0; color: #111827; background: #fff; font-size: 10.5px; line-height: 1.3; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .toolbar { background: #1e293b; color: #fff; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
     .toolbar-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .btn { padding: 6px 12px; border: none; border-radius: 5px; font-weight: 800; font-size: 12px; cursor: pointer; background: #334155; color: #e2e8f0; }
-    .btn.active { background: #2563eb; color: #fff; }
-    .btn-print { background: #16a34a; color: #fff; padding: 7px 16px; }
-    .header-box { border: 2.5px solid #000; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 14px; background: #f8fafc; }
-    .doc-title { font-size: 20px; font-weight: 900; color: #000; margin: 0 0 4px 0; }
-    .doc-meta { font-size: 12px; font-weight: 700; color: #334155; display: flex; gap: 12px; flex-wrap: wrap; }
-    .kpi-pills { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-    .kpi-pill { background: #fff; border: 1.5px solid #000; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 900; }
-    .appr-table { border-collapse: collapse; text-align: center; font-size: 11px; }
-    .appr-table th, .appr-table td { border: 1.5px solid #000; padding: 3px 10px; }
-    .appr-table th { background: #e2e8f0; font-weight: 900; }
-    .appr-table td { height: 34px; min-width: 56px; color: #94a3b8; }
-    table.main-table { width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 10.5px; }
-    table.main-table th { background: #0f172a; color: #fff; font-weight: 900; padding: 6px 5px; border: 1px solid #000; text-align: center; white-space: nowrap; }
-    table.main-table td { border: 1px solid #475569; padding: 5px 6px; vertical-align: middle; }
-    table.main-table tr.alt { background: #f8fafc; }
-    table.main-table tr.urgent { background: #fff1f2 !important; }
-    table.main-table tr.group-row td { background: #e2e8f0 !important; font-weight: 900; font-size: 11.5px; color: #000; padding: 5px 8px; border-top: 2px solid #000; border-bottom: 1.5px solid #000; }
+    .btn { padding: 5px 11px; border: 1px solid #475569; border-radius: 3px; font-weight: 700; font-size: 11.5px; cursor: pointer; background: #334155; color: #e2e8f0; }
+    .btn.active { background: #ffffff; color: #0f172a; border-color: #ffffff; }
+    .btn-print { background: #0f172a; color: #fff; border-color: #94a3b8; padding: 6px 14px; }
+    .doc-top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 8px; gap: 16px; }
+    .doc-title { font-size: 20px; font-weight: 900; color: #111827; letter-spacing: 1px; margin: 0 0 6px 0; }
+    .doc-meta { font-size: 11px; color: #374151; display: flex; gap: 14px; flex-wrap: wrap; }
+    .doc-meta strong { color: #111827; }
+    .summary-bar { display: flex; gap: 18px; margin-top: 5px; font-size: 11.5px; font-weight: 700; color: #111827; }
+    .appr-table { border-collapse: collapse; text-align: center; font-size: 10.5px; flex-shrink: 0; }
+    .appr-table th, .appr-table td { border: 1px solid #111827; padding: 2px 10px; }
+    .appr-table th { background: #f3f4f6; font-weight: 700; color: #111827; }
+    .appr-table td { height: 34px; min-width: 54px; color: #9ca3af; }
+    table.main-table { width: 100%; border-collapse: collapse; border-top: 1.5px solid #111827; border-bottom: 1.5px solid #111827; font-size: 10px; }
+    table.main-table th { background: #f3f4f6; color: #111827; font-weight: 800; padding: 6px 5px; border: 1px solid #9ca3af; border-bottom: 1.5px solid #111827; text-align: center; white-space: nowrap; }
+    table.main-table td { border: 1px solid #d1d5db; padding: 4.5px 6px; vertical-align: middle; }
+    table.main-table tr.alt { background: #fafafa; }
+    table.main-table tr.group-row td { background: #f3f4f6 !important; font-weight: 800; font-size: 10.5px; color: #111827; padding: 5px 8px; border-top: 1.5px solid #374151; border-bottom: 1px solid #9ca3af; }
     .c { text-align: center; } .r { text-align: right; } .mono { font-family: monospace; }
-    .qty-cell { font-family: monospace; font-size: 14px; font-weight: 900; color: #1e3a8a; text-align: right; white-space: nowrap; background: #eff6ff; }
-    .reason-cell { font-size: 10px; font-weight: 700; color: #1e293b; line-height: 1.35; word-break: keep-all; }
-    .badge-urg { display: inline-block; background: #e11d48; color: #fff; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 900; margin-right: 3px; }
-    .badge-warn { display: inline-block; background: #f59e0b; color: #000; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 900; margin-right: 3px; }
-    .check-cell { width: 82px; text-align: center; font-weight: 800; color: #334155; white-space: nowrap; }
-    .footer-note { margin-top: 8px; border: 1.5px solid #000; padding: 7px 10px; font-size: 11px; display: flex; justify-content: space-between; }
+    .qty-cell { font-family: monospace; font-size: 12.5px; font-weight: 900; color: #111827; text-align: right; white-space: nowrap; background: #f8fafc; }
+    .reason-cell { font-size: 9.8px; color: #374151; line-height: 1.35; word-break: keep-all; }
+    .tag-urg { font-weight: 900; color: #b91c1c; margin-right: 4px; }
+    .tag-warn { font-weight: 800; color: #92400e; margin-right: 4px; }
+    .check-cell { width: 78px; text-align: center; color: #374151; white-space: nowrap; }
+    .footer-note { margin-top: 8px; padding-top: 6px; border-top: 1px solid #9ca3af; font-size: 10px; color: #4b5563; display: flex; justify-content: space-between; }
     @media print {
       .no-print { display: none !important; }
       tr { page-break-inside: avoid; }
@@ -2374,57 +2373,57 @@ export const MatOrderDayView: React.FC = () => {
 <body>
   <div class="toolbar no-print">
     <div class="toolbar-group">
-      <strong style="font-size:13px;">🖨️ 예상 발주 검토표 미리보기</strong>
-      <button class="btn active" id="btnOnlyPos" onclick="setFilter(true)">발주량(&gt;0)만 보기</button>
-      <button class="btn" id="btnAll" onclick="setFilter(false)">전체 품목 보기</button>
+      <strong style="font-size:12.5px;">발주 검토표 인쇄 미리보기</strong>
+      <button class="btn active" id="btnOnlyPos" onclick="setFilter(true)">발주대상(&gt;0)</button>
+      <button class="btn" id="btnAll" onclick="setFilter(false)">전체 품목</button>
       <span style="color:#64748b;">|</span>
-      <button class="btn active" id="btnSortScreen" onclick="setGroup('none')">화면순(긴급순)</button>
-      <button class="btn" id="btnSortVendor" onclick="setGroup('supplier')">거래처별 묶어보기</button>
-      <button class="btn" id="btnSortWh" onclick="setGroup('wh')">창고별 묶어보기</button>
+      <button class="btn active" id="btnSortScreen" onclick="setGroup('none')">긴급순</button>
+      <button class="btn" id="btnSortVendor" onclick="setGroup('supplier')">거래처별</button>
+      <button class="btn" id="btnSortWh" onclick="setGroup('wh')">창고별</button>
     </div>
     <div class="toolbar-group">
-      <button class="btn btn-print" onclick="window.print()">🖨️ 지금 인쇄 / PDF 저장</button>
-      <button class="btn" onclick="window.close()">창 닫기</button>
+      <button class="btn btn-print" onclick="window.print()">인쇄 / PDF 저장</button>
+      <button class="btn" onclick="window.close()">닫기</button>
     </div>
   </div>
 
-  <div class="header-box">
+  <div class="doc-top">
     <div>
-      <div class="doc-title">[GFS] 일일 예상 발주 검토표 (담당자 검토용)</div>
+      <h1 class="doc-title">자재 발주 검토표</h1>
       <div class="doc-meta">
-        <span>📅 발주 기준일: <strong>${esc(currentDayDate)} (${esc(DAY_CHARS[dayIdx])}요일)</strong></span>
-        <span>⚙️ 발주 전략: <strong>${esc(strategyLabel)}</strong></span>
-        <span>🏭 창고 필터: <strong>${esc(warehouseFilter)}</strong></span>
-        <span>📆 패턴: <strong>${esc(patternFilter)}</strong></span>
+        <span>발주일: <strong>${esc(currentDayDate)} (${esc(DAY_CHARS[dayIdx])})</strong></span>
+        <span>기준: <strong>${esc(strategyLabel)}</strong></span>
+        <span>창고: <strong>${esc(warehouseFilter)}</strong></span>
+        <span>패턴: <strong>${esc(patternFilter)}</strong></span>
       </div>
-      <div class="kpi-pills" id="kpiPills"></div>
+      <div class="summary-bar" id="kpiPills"></div>
     </div>
     <table class="appr-table">
-      <thead><tr><th rowspan="2" style="width:26px;">결<br/>재</th><th>담 당</th><th>검 토</th><th>승 인</th></tr></thead>
-      <tbody><tr><td>서명</td><td>서명</td><td>서명</td></tr></tbody>
+      <thead><tr><th rowspan="2" style="width:24px;">결<br/>재</th><th>담 당</th><th>검 토</th><th>승 인</th></tr></thead>
+      <tbody><tr><td></td><td></td><td></td></tr></tbody>
     </table>
   </div>
 
   <table class="main-table">
     <thead>
       <tr>
-        <th style="width:30px;">No</th>
-        <th style="width:125px;">창고 / 거래처</th>
-        <th style="width:210px;">품목명 (입수량)</th>
-        <th style="width:82px;">현재고+미입고</th>
-        <th style="width:80px;">일사용 / 유지일</th>
-        <th style="width:68px;">예상 발주량</th>
-        <th>판단 이유 (산출 근거)</th>
-        <th style="width:84px;">검토/수정(V)</th>
-        <th style="width:82px;">예상 금액</th>
+        <th style="width:28px;">No</th>
+        <th style="width:128px;">창고 / 거래처</th>
+        <th style="width:205px;">품목명 (입수량)</th>
+        <th style="width:80px;">현재고 / 미입고</th>
+        <th style="width:78px;">일소진 / 유지일</th>
+        <th style="width:66px;">예상발주</th>
+        <th>산출 근거</th>
+        <th style="width:78px;">검토 / 수정</th>
+        <th style="width:82px;">예상금액</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
   </table>
 
   <div class="footer-note">
-    <span>* 검토 메모: ___________________________________________________________________________________________</span>
-    <span>인쇄일시: ${esc(new Date().toLocaleString('ko-KR'))}</span>
+    <span>특이사항 / 메모:</span>
+    <span>출력일시: ${esc(new Date().toLocaleString('ko-KR'))}</span>
   </div>
 
   <script>
@@ -2458,9 +2457,9 @@ export const MatOrderDayView: React.FC = () => {
       const totalBoxes = list.reduce((s, x) => s + x.dayQty, 0);
       const totalAmt = list.reduce((s, x) => s + x.amount, 0);
       document.getElementById('kpiPills').innerHTML =
-        '<div class="kpi-pill">검토 품목: ' + list.length + '건</div>' +
-        '<div class="kpi-pill" style="color:#1e3a8a;">총 예상 발주량: ' + totalBoxes.toLocaleString() + ' 박스</div>' +
-        '<div class="kpi-pill" style="color:#065f46;">총 예상 발주금액: ₩' + totalAmt.toLocaleString() + '원</div>';
+        '<span>품목수: ' + list.length + '건</span>' +
+        '<span>총 발주량: ' + totalBoxes.toLocaleString() + '박스</span>' +
+        '<span>예상금액 합계: ' + totalAmt.toLocaleString() + '원</span>';
 
       let html = '';
       let lastGroup = '';
@@ -2472,30 +2471,30 @@ export const MatOrderDayView: React.FC = () => {
             const gItems = list.filter(x => (groupBy === 'supplier' ? x.supplier : x.wh) === gKey);
             const gBoxes = gItems.reduce((s, x) => s + x.dayQty, 0);
             const gAmt = gItems.reduce((s, x) => s + x.amount, 0);
-            html += '<tr class="group-row"><td colspan="9">▶ ' + escH(gKey) + ' (' + gItems.length + '건 · ' + gBoxes.toLocaleString() + '박 · ₩' + gAmt.toLocaleString() + '원)</td></tr>';
+            html += '<tr class="group-row"><td colspan="9">' + escH(gKey) + ' (' + gItems.length + '건 / ' + gBoxes.toLocaleString() + '박스 / ' + gAmt.toLocaleString() + '원)</td></tr>';
           }
         }
-        const cls = item.isUrgent ? 'urgent' : (i % 2 === 1 ? 'alt' : '');
-        const badge = item.isUrgent ? '<span class="badge-urg">임박</span>' : (item.isWarning ? '<span class="badge-warn">미달</span>' : '');
-        const expTxt = item.expectedDate ? ' · ' + item.expectedDate + '입고' : '';
+        const cls = i % 2 === 1 ? 'alt' : '';
+        const badge = item.isUrgent ? '<span class="tag-urg">[임박]</span>' : (item.isWarning ? '<span class="tag-warn">[미달]</span>' : '');
+        const expTxt = item.expectedDate ? ' (' + item.expectedDate + ' 입고)' : '';
         html += '<tr class="' + cls + '">' +
-          '<td class="c mono" style="font-weight:800;">' + (i + 1) + '</td>' +
-          '<td><div style="font-weight:900;color:#000;">[' + escH(item.wh) + '] ' + escH(item.supplier) + '</div>' +
-              '<div style="font-size:9.5px;color:#475569;">' + escH(item.pattern) + ' · ' + escH(item.inboundCycle) + escH(expTxt) + '</div></td>' +
-          '<td><div style="font-weight:900;color:#000;">' + badge + escH(item.name) + '</div>' +
-              '<div style="font-size:9.5px;color:#475569;">입수: ' + item.pack + '</div></td>' +
+          '<td class="c mono">' + (i + 1) + '</td>' +
+          '<td><div style="font-weight:700;color:#111827;">[' + escH(item.wh) + '] ' + escH(item.supplier) + '</div>' +
+              '<div style="font-size:9px;color:#6b7280;">' + escH(item.pattern) + ' / ' + escH(item.inboundCycle) + escH(expTxt) + '</div></td>' +
+          '<td><div style="font-weight:700;color:#111827;">' + badge + escH(item.name) + '</div>' +
+              '<div style="font-size:9px;color:#6b7280;">입수 ' + item.pack + '</div></td>' +
           '<td class="r mono"><div>' + item.curBoxes + '박</div>' +
-              (item.pendBoxes > 0 ? '<div style="font-size:9.5px;color:#0369a1;font-weight:800;">+' + item.pendBoxes + ' 미입고</div>' : '<div style="font-size:9.5px;color:#94a3b8;">미입고 0</div>') + '</td>' +
-          '<td class="r mono"><div>' + item.dailyBox + '박/일</div>' +
-              '<div style="font-weight:900;color:' + (item.stockDays < 1.5 ? '#be123c' : item.stockDays < 3 ? '#b45309' : '#1e40af') + ';">' + item.stockDays + '일분</div></td>' +
-          '<td class="qty-cell">' + item.dayQty.toLocaleString() + ' 박</td>' +
+              (item.pendBoxes > 0 ? '<div style="font-size:9px;color:#1d4ed8;">+' + item.pendBoxes + ' 미입고</div>' : '<div style="font-size:9px;color:#9ca3af;">-</div>') + '</td>' +
+          '<td class="r mono"><div>' + item.dailyBox + '박</div>' +
+              '<div style="font-weight:700;color:' + (item.stockDays < 1.5 ? '#b91c1c' : item.stockDays < 3 ? '#92400e' : '#374151') + ';">' + item.stockDays + '일</div></td>' +
+          '<td class="qty-cell">' + item.dayQty.toLocaleString() + '</td>' +
           '<td class="reason-cell">' + escH(item.reasonText) + '</td>' +
-          '<td class="check-cell">□ (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)박</td>' +
-          '<td class="r mono" style="font-weight:800;">₩' + item.amount.toLocaleString() + '</td>' +
+          '<td class="check-cell">□ (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</td>' +
+          '<td class="r mono" style="font-weight:700;">' + item.amount.toLocaleString() + '</td>' +
         '</tr>';
       });
       if (list.length === 0) {
-        html = '<tr><td colspan="9" class="c" style="padding:20px;color:#64748b;font-weight:800;">표시할 발주 품목이 없습니다.</td></tr>';
+        html = '<tr><td colspan="9" class="c" style="padding:20px;color:#6b7280;">표시할 발주 품목이 없습니다.</td></tr>';
       }
       document.getElementById('tableBody').innerHTML = html;
     }
