@@ -1398,6 +1398,7 @@ export const StockLookupView: React.FC = () => {
       let same = 0;
       let autoFilled = 0;
       let parsed = 0;
+      let skippedExcluded = 0;
       let tempId = -(Date.now() % 1000000) - 1;
       // 시트 감지: 표준 5개 창고 시트 우선, 없으면 주말 통합/단일 시트 자동 탐색
       const availableStandardSheets = AUDIT_SHEETS.filter((s) => wb.Sheets[s] != null);
@@ -1473,6 +1474,15 @@ export const StockLookupView: React.FC = () => {
           냉동: 73,
           상온: 88,
         };
+        // 창고별 발주대상 마지노선 품목 (해당 행까지 처리 후 이후 행은 자동 차단)
+        const SHEET_CUTOFF_KEYWORDS: Record<string, string> = {
+          상온: '곱창삼각김밥김소프트',
+          냉동: '홍피망슬라이스',
+          냉장2: '진미채무침(ff용)',
+          냉장1: '새콤한코울슬로우',
+          부자재: '7칸공용뚜껑',
+        };
+        const cutoffKeyword = SHEET_CUTOFF_KEYWORDS[sheetName] || '';
         const maxRowLimit = SHEET_MAX_ROW[sheetName] || rows.length;
         const effectiveEndRow = Math.min(rows.length, maxRowLimit);
 
@@ -1566,6 +1576,14 @@ export const StockLookupView: React.FC = () => {
 
           // 기존에 없는 0재고 삭제/부자재 라벨행은 신규 품목으로 생성하지 않음
           if (!exist && current <= 0 && (isDeletedRow || /^(내피|뚜껑|용기|필름|스티커|바코드|라벨)$/.test(expiry))) {
+            if (cutoffKeyword && norm.includes(normName(cutoffKeyword))) break;
+            continue;
+          }
+
+          // 발주대상(정상) 품목만 인식하고, 발주제외/미등록 품목은 자동 필터링
+          if (!exist || exist.productStatus === '발주제외') {
+            skippedExcluded += 1;
+            if (cutoffKeyword && norm.includes(normName(cutoffKeyword))) break;
             continue;
           }
 
@@ -1742,6 +1760,9 @@ export const StockLookupView: React.FC = () => {
             }
           }
           parsed += 1;
+          if (cutoffKeyword && norm.includes(normName(cutoffKeyword))) {
+            break;
+          }
         }
       }
       if (parsed === 0) {
@@ -1761,7 +1782,7 @@ export const StockLookupView: React.FC = () => {
       alert(
         `업로드 반영 완료 (${uploadTargetDate} 기준):\n` +
         `• 양식 구분: ${formatLabel}\n` +
-        `• 수집 품목: 총 ${parsed}건 (신규 ${added}건 · 변경 ${updated}건 · 동일 ${same}건)\n` +
+        `• 수집 품목: 총 ${parsed}건 (변경 ${updated}건 · 동일 ${same}건 · 발주제외 필터링 ${skippedExcluded}건)\n` +
         `• 안전재고 자동계산: ${autoFilled}건 · 수량 급변 확인필요: ${review.length}건\n\n` +
         `⚠️ 알림: 현재 화면 표에 임시 반영된 상태입니다.\n` +
         `반드시 상단의 [저장 (Ctrl+S)] 버튼을 누르셔야 데이터베이스에 [${uploadTargetDate} 확정 실사]로 영구 저장됩니다.`
