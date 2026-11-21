@@ -159,7 +159,7 @@ export const Dashboard: React.FC = () => {
   const safetyShortage = k.safetyShortageCount || 0;
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#f1f5f9] overflow-y-auto p-4 sm:p-5 gap-4 sm:gap-5">
+    <div className="flex flex-col w-full h-full bg-[#f1f5f9] overflow-y-auto p-3 sm:p-4 gap-3">
       {/* 1. 최상단 실시간 공장 관제 스트립 (KST 시계 + 3단계 실물 플로우 + 마감안내) */}
       <PipelineHero
         pipeline={stats.pipeline}
@@ -185,315 +185,230 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ===================================================================== */}
-      {/* 2. 4대 실물 핵심 액션 카드 (수주 ➔ 입고현황 ➔ 예상발주량 ➔ 재고현황) */}
+      {/* 2. 4대 실물 핵심 액션 카드 (초슬림 1화면 뷰: 수주 · 입고 · 예상발주 · 재고) */}
       {/* ===================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
         {/* 카드 1: [수주] 금일 GS25 완제품 수주 */}
         <div
           onClick={() => navigate('sales-order-summary-gsr')}
-          className="bg-white hover:bg-slate-50/90 border border-blue-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50/90 border border-blue-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[14px] font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
-              <span>🍱</span> 금일 수주 현황
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-3.5 h-3.5" />
+              </span>
+              금일 수주 현황
             </span>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              <TrendingUp className="w-5 h-5" />
-            </div>
+            <span className="text-[11px] font-extrabold text-blue-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
+              수주집계 <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
 
-          <div>
-            <div className="text-[11.5px] font-extrabold text-blue-700 uppercase tracking-wide flex items-center gap-1 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 inline-block" />
-              수주총액
-            </div>
-
-            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
               {actualSalesAmount > 0 ? (
                 <>
-                  <span className="text-xl sm:text-2xl font-bold text-blue-600 mr-1">₩</span>
+                  <span className="text-sm font-bold text-blue-600 mr-0.5">₩</span>
                   <span className="text-blue-950">{Math.round(actualSalesAmount).toLocaleString()}</span>
                 </>
               ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(수주 등록 대기)</span>
-                </div>
+                <span className="text-lg font-black font-mono text-slate-400">₩0</span>
               )}
             </div>
+            <span className="px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-100 text-[11.5px] font-black font-mono text-blue-800 shrink-0">
+              {actualOrderQty > 0 ? `${actualOrderQty.toLocaleString()} ea` : '등록 대기'}
+            </span>
+          </div>
 
-            {/* 수주받은 수량 */}
-            <div className="mt-2.5 px-3 py-2 rounded-xl bg-blue-50/80 border border-blue-100 flex items-center justify-between">
-              <span className="text-[12px] font-extrabold text-blue-900">수주수량</span>
-              {actualOrderQty > 0 ? (
-                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-blue-700 leading-none">
-                  {actualOrderQty.toLocaleString()}
-                  <span className="text-[13px] font-extrabold text-blue-900 ml-1">ea</span>
-                </span>
-              ) : (
-                <span className="text-[12.5px] font-bold text-slate-400">0 ea (등록 대기)</span>
-              )}
-            </div>
-
-            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-slate-500 font-medium truncate">완제품 생산 연동</span>
-              <span className="text-blue-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
-                수주집계 보기 <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
+          <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
+            <span>수주총액 · 완제품 생산 연동</span>
+            <span className="text-blue-700 font-bold">GS25 일일수주</span>
           </div>
         </div>
 
         {/* 카드 2: [입고현황] 금일 자재 입고현황 */}
         <div
           onClick={() => navigate('pur-receiving-status-edit')}
-          className="bg-white hover:bg-slate-50/90 border border-emerald-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50/90 border border-emerald-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[14px] font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
-              <span>📦</span> 금일 입고 현황
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0">
+                <PackageCheck className="w-3.5 h-3.5" />
+              </span>
+              금일 입고 현황
             </span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              <PackageCheck className="w-5 h-5" />
-            </div>
+            <span className="text-[11px] font-extrabold text-emerald-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
+              입고현황 <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
 
-          <div>
-            <div className="text-[11.5px] font-extrabold text-emerald-800 uppercase tracking-wide flex items-center gap-1 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
-              입고총액 (검수)
-            </div>
-
-            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
               {receivingAmount > 0 ? (
                 <>
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-600 mr-1">₩</span>
+                  <span className="text-sm font-bold text-emerald-600 mr-0.5">₩</span>
                   <span className="text-emerald-950">{Math.round(receivingAmount).toLocaleString()}</span>
                 </>
               ) : receivingTotal > 0 ? (
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-[28px] font-black font-mono text-emerald-800">
-                    {receivingDone}/{receivingTotal}
-                  </span>
-                  <span className="text-base font-bold text-emerald-700">건 완료</span>
-                </div>
-              ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(입고 대기)</span>
-                </div>
-              )}
-            </div>
-
-            {/* 입고/검수 건수 안내 */}
-            <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between">
-              <span className="text-[12px] font-extrabold text-emerald-900">검수현황</span>
-              {receivingTotal > 0 ? (
-                <span className="text-[17px] sm:text-[18px] font-black font-mono tracking-tight text-emerald-800 leading-none">
-                  완료 {receivingDone}건
-                  {receivingPending > 0 && (
-                    <span className="text-[12px] font-bold text-amber-700 ml-1.5">(대기 {receivingPending}건)</span>
-                  )}
+                <span className="text-lg font-black font-mono text-emerald-800">
+                  {receivingDone}/{receivingTotal}건 완료
                 </span>
               ) : (
-                <span className="text-[12.5px] font-bold text-slate-400">당일 입고 검수 대기</span>
+                <span className="text-lg font-black font-mono text-slate-400">₩0</span>
               )}
             </div>
+            <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11.5px] font-black font-mono text-emerald-800 shrink-0">
+              {receivingTotal > 0
+                ? `완료 ${receivingDone}${receivingPending > 0 ? ` · 대기 ${receivingPending}` : '건'}`
+                : '검수 대기'}
+            </span>
+          </div>
 
-            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-slate-500 font-medium truncate">협력사 자재 실시간 입고</span>
-              <span className="text-emerald-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
-                입고현황/수정 <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
+          <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
+            <span>입고총액(검수) · 실시간 입고</span>
+            <span className="text-emerald-700 font-bold">협력사 납품</span>
           </div>
         </div>
 
         {/* 카드 3: [예상발주량] 전일 17시 실사재고 기준 금일 발주 판단/확정 현황 */}
         <div
           onClick={() => navigate('pur-mat-order-day')}
-          className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[14px] font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
-              <span>🛒</span> 금일 예상 발주량
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                <ShoppingCart className="w-3.5 h-3.5" />
+              </span>
+              금일 예상 발주량
             </span>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
+            <span className="text-[11px] font-extrabold text-amber-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
+              자재발주 <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
 
-          <div>
-            <div className="text-[11.5px] font-extrabold text-amber-800 tracking-wide flex items-center justify-between gap-1 mb-1">
-              <span className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${actualPoAmount > 0 ? 'bg-emerald-600' : 'bg-amber-600'}`} />
-                {actualPoAmount > 0 ? '금일 확정 발주액' : `발주예정액 (${stockBasisLabel})`}
-              </span>
-              {actualPoAmount > 0 && expectedPoAmount > 0 && (
-                <span className="text-[10.5px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                  잔여예상 ₩{Math.round(expectedPoAmount).toLocaleString()}
-                </span>
-              )}
-            </div>
-
-            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
               {actualPoAmount > 0 ? (
                 <>
-                  <span className="text-xl sm:text-2xl font-bold text-emerald-600 mr-1">₩</span>
+                  <span className="text-sm font-bold text-emerald-600 mr-0.5">₩</span>
                   <span className="text-emerald-950">{Math.round(actualPoAmount).toLocaleString()}</span>
                 </>
               ) : expectedPoAmount > 0 ? (
                 <>
-                  <span className="text-xl sm:text-2xl font-bold text-amber-600 mr-1">₩</span>
+                  <span className="text-sm font-bold text-amber-600 mr-0.5">₩</span>
                   <span className="text-amber-950">{Math.round(expectedPoAmount).toLocaleString()}</span>
                 </>
               ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(발주 불필요)</span>
-                </div>
+                <span className="text-lg font-black font-mono text-slate-400">₩0</span>
               )}
             </div>
+            <span
+              className={`px-2 py-0.5 rounded-lg border text-[11.5px] font-black font-mono shrink-0 ${
+                actualPoAmount > 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}
+            >
+              {actualPoAmount > 0
+                ? `확정 ${actualPoItemCount}품목`
+                : expectedPoItemCount > 0
+                ? `${expectedPoItemCount}품목(${expectedPoPartnerCount}사)`
+                : '발주 불필요'}
+            </span>
+          </div>
 
-            {/* 발주 대상(확정/예정) 품목 및 협력사 */}
-            <div className={`mt-2.5 px-3 py-2 rounded-xl border flex items-center justify-between ${
-              actualPoAmount > 0
-                ? 'bg-emerald-50/80 border-emerald-200'
-                : 'bg-amber-50/80 border-amber-200'
-            }`}>
-              <span className={`text-[12px] font-extrabold ${actualPoAmount > 0 ? 'text-emerald-900' : 'text-amber-900'}`}>
-                {actualPoAmount > 0 ? '발주확정' : '발주대상'}
-              </span>
-              {actualPoAmount > 0 ? (
-                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-emerald-800 leading-none">
-                  {actualPoItemCount.toLocaleString()}
-                  <span className="text-[13px] font-extrabold text-emerald-900 ml-1">품목</span>
-                  {actualPoPartnerCount > 0 && (
-                    <span className="text-[11.5px] font-bold text-emerald-700 ml-1">({actualPoPartnerCount}개사)</span>
-                  )}
-                </span>
-              ) : expectedPoItemCount > 0 ? (
-                <span className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight text-amber-800 leading-none">
-                  {expectedPoItemCount.toLocaleString()}
-                  <span className="text-[13px] font-extrabold text-amber-900 ml-1">품목</span>
-                  {expectedPoPartnerCount > 0 && (
-                    <span className="text-[11.5px] font-bold text-amber-700 ml-1">({expectedPoPartnerCount}개사)</span>
-                  )}
-                </span>
-              ) : (
-                <span className="text-[12.5px] font-bold text-slate-400">금일 발주 필요 없음</span>
-              )}
-            </div>
-
-            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-slate-500 font-medium truncate">
-                {actualPoAmount > 0
-                  ? `${stockBasisLabel} 기준 확정완료`
-                  : `${stockBasisLabel} 기준 익일발주`}
-              </span>
-              <span className="text-amber-700 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
-                자재발주(요일별) <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
+          <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between gap-1 pt-1 border-t border-slate-100 truncate">
+            <span className="truncate">
+              {actualPoAmount > 0
+                ? `${stockBasisLabel} 확정완료`
+                : `${stockBasisLabel} 기준`}
+            </span>
+            {actualPoAmount > 0 && expectedPoAmount > 0 ? (
+              <span className="text-amber-700 font-bold shrink-0">잔여 ₩{Math.round(expectedPoAmount).toLocaleString()}</span>
+            ) : (
+              <span className="text-amber-700 font-bold shrink-0">요일별 자동배분</span>
+            )}
           </div>
         </div>
 
-        {/* 카드 4: [재고현황] 전 창고 실시간 재고현황 */}
+        {/* 카드 4: [재고현황] 전 창고 실시간 재고현황 + 창고별 요약 */}
         <div
           onClick={() => navigate('inv-lookup')}
-          className="bg-white hover:bg-slate-50/90 border border-indigo-200/90 rounded-2xl p-4.5 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between"
+          className="bg-white hover:bg-slate-50/90 border border-indigo-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[14px] font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
-              <span>🏢</span> 실시간 재고 현황
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12.5px] font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0">
+                <Warehouse className="w-3.5 h-3.5" />
+              </span>
+              실시간 재고 현황
             </span>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              <Warehouse className="w-5 h-5" />
-            </div>
+            <span className="text-[11px] font-extrabold text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
+              실사재고 <ArrowRight className="w-3 h-3" />
+            </span>
           </div>
 
-          <div>
-            <div className="text-[11.5px] font-extrabold text-indigo-700 uppercase tracking-wide flex items-center gap-1 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 inline-block" />
-              총 보관재고액
-            </div>
-
-            <div className="text-[26px] sm:text-[30px] xl:text-[27px] 2xl:text-[32px] font-black font-mono tracking-tight text-slate-900 leading-none truncate my-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
               {warehouseTotal > 0 ? (
                 <>
-                  <span className="text-xl sm:text-2xl font-bold text-indigo-600 mr-1">₩</span>
+                  <span className="text-sm font-bold text-indigo-600 mr-0.5">₩</span>
                   <span className="text-indigo-950">{Math.round(warehouseTotal).toLocaleString()}</span>
                 </>
               ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-[28px] font-black font-mono text-slate-400">₩0</span>
-                  <span className="text-[12px] font-bold text-slate-400">(실사재고 연동)</span>
-                </div>
+                <span className="text-lg font-black font-mono text-slate-400">₩0</span>
               )}
             </div>
+            <span className="px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100 text-[11.5px] font-black font-mono text-indigo-800 shrink-0">
+              {totalInvCount > 0 ? `${totalInvCount.toLocaleString()}개` : '정상'}
+              {safetyShortage > 0 && (
+                <span className="text-rose-600 ml-1">· 주의{safetyShortage}</span>
+              )}
+            </span>
+          </div>
 
-            {/* 총 보관 품목 및 안전재고 주의 */}
-            <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between">
-              <span className="text-[12px] font-extrabold text-indigo-900">보관품목</span>
-              <span className="text-[15px] sm:text-[16px] font-black font-mono tracking-tight text-indigo-700 leading-none">
-                {totalInvCount > 0 ? `${totalInvCount.toLocaleString()}개` : '정상 보관'}
-                {safetyShortage > 0 && (
-                  <span className="text-[11px] font-black text-rose-600 ml-1.5 bg-rose-100 px-1.5 py-0.5 rounded">
-                    주의 {safetyShortage}건
+          {/* 창고별 재고액 컴팩트 인라인 칩 */}
+          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-100">
+            {stats.warehouseStock.length > 0 ? (
+              stats.warehouseStock.slice(0, 5).map((w) => {
+                const whName = w.warehouse || '기타';
+                const dotColor =
+                  whName.includes('냉장1')
+                    ? 'bg-sky-500'
+                    : whName.includes('냉장2')
+                    ? 'bg-blue-600'
+                    : whName.includes('냉동')
+                    ? 'bg-cyan-500'
+                    : whName.includes('상온')
+                    ? 'bg-amber-500'
+                    : whName.includes('부자재')
+                    ? 'bg-purple-500'
+                    : 'bg-slate-400';
+                const amt = Math.round(w.amount || 0);
+                const compactAmt =
+                  amt >= 100000000
+                    ? `${(amt / 100000000).toFixed(2)}억`
+                    : amt >= 10000
+                    ? `${Math.round(amt / 10000).toLocaleString()}만`
+                    : `${amt.toLocaleString()}`;
+                return (
+                  <span
+                    key={whName}
+                    title={`${whName}: ₩${amt.toLocaleString()}원 (${w.items}개 품목)`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100/90 text-[10px] font-bold text-slate-700"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                    <span>{whName}</span>
+                    <span className="font-mono font-black text-indigo-950">{compactAmt}</span>
                   </span>
-                )}
-              </span>
-            </div>
-
-            {/* 창고별 재고액 요약 미니 그리드 */}
-            {stats.warehouseStock.length > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                {stats.warehouseStock.slice(0, 6).map((w) => {
-                  const whName = w.warehouse || '기타';
-                  const dotColor =
-                    whName.includes('냉장1')
-                      ? 'bg-sky-500'
-                      : whName.includes('냉장2')
-                      ? 'bg-blue-600'
-                      : whName.includes('냉동')
-                      ? 'bg-cyan-500'
-                      : whName.includes('상온')
-                      ? 'bg-amber-500'
-                      : whName.includes('부자재')
-                      ? 'bg-purple-500'
-                      : 'bg-slate-400';
-                  const amt = Math.round(w.amount || 0);
-                  const compactAmt =
-                    amt >= 100000000
-                      ? `${(amt / 100000000).toFixed(2)}억`
-                      : amt >= 10000
-                      ? `${Math.round(amt / 10000).toLocaleString()}만`
-                      : `${amt.toLocaleString()}원`;
-                  return (
-                    <div
-                      key={whName}
-                      title={`${whName}: ₩${amt.toLocaleString()}원 (${w.items}개 품목)`}
-                      className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-50/90 border border-slate-200/80 text-[11px]"
-                    >
-                      <span className="flex items-center gap-1 font-bold text-slate-700 truncate">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-                        <span className="truncate">{whName}</span>
-                      </span>
-                      <span className="font-mono font-black text-indigo-950 shrink-0">
-                        {compactAmt}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                );
+              })
+            ) : (
+              <span className="text-[11px] text-slate-400">전 창고 실시간 재고 실사</span>
             )}
-
-            <div className="text-[12px] font-semibold text-slate-600 mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
-              <span className="text-slate-500 font-medium truncate">전 창고 실시간 재고 실사</span>
-              <span className="text-indigo-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
-                실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
           </div>
         </div>
       </div>
