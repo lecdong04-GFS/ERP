@@ -433,19 +433,62 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* 총 보관 품목 및 안전재고 주의 */}
-            <div className="mt-2.5 px-3 py-2 rounded-xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between">
+            <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-indigo-50/80 border border-indigo-100 flex items-center justify-between">
               <span className="text-[12px] font-extrabold text-indigo-900">보관품목</span>
-              <span className="text-[17px] sm:text-[18px] font-black font-mono tracking-tight text-indigo-700 leading-none">
+              <span className="text-[15px] sm:text-[16px] font-black font-mono tracking-tight text-indigo-700 leading-none">
                 {totalInvCount > 0 ? `${totalInvCount.toLocaleString()}개` : '정상 보관'}
                 {safetyShortage > 0 && (
-                  <span className="text-[11.5px] font-black text-rose-600 ml-1.5 bg-rose-100 px-1.5 py-0.5 rounded">
+                  <span className="text-[11px] font-black text-rose-600 ml-1.5 bg-rose-100 px-1.5 py-0.5 rounded">
                     주의 {safetyShortage}건
                   </span>
                 )}
               </span>
             </div>
 
-            <div className="text-[12px] font-semibold text-slate-600 mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+            {/* 창고별 재고액 요약 미니 그리드 */}
+            {stats.warehouseStock.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                {stats.warehouseStock.slice(0, 6).map((w) => {
+                  const whName = w.warehouse || '기타';
+                  const dotColor =
+                    whName.includes('냉장1')
+                      ? 'bg-sky-500'
+                      : whName.includes('냉장2')
+                      ? 'bg-blue-600'
+                      : whName.includes('냉동')
+                      ? 'bg-cyan-500'
+                      : whName.includes('상온')
+                      ? 'bg-amber-500'
+                      : whName.includes('부자재')
+                      ? 'bg-purple-500'
+                      : 'bg-slate-400';
+                  const amt = Math.round(w.amount || 0);
+                  const compactAmt =
+                    amt >= 100000000
+                      ? `${(amt / 100000000).toFixed(2)}억`
+                      : amt >= 10000
+                      ? `${Math.round(amt / 10000).toLocaleString()}만`
+                      : `${amt.toLocaleString()}원`;
+                  return (
+                    <div
+                      key={whName}
+                      title={`${whName}: ₩${amt.toLocaleString()}원 (${w.items}개 품목)`}
+                      className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-50/90 border border-slate-200/80 text-[11px]"
+                    >
+                      <span className="flex items-center gap-1 font-bold text-slate-700 truncate">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+                        <span className="truncate">{whName}</span>
+                      </span>
+                      <span className="font-mono font-black text-indigo-950 shrink-0">
+                        {compactAmt}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="text-[12px] font-semibold text-slate-600 mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100">
               <span className="text-slate-500 font-medium truncate">전 창고 실시간 재고 실사</span>
               <span className="text-indigo-600 font-extrabold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 text-[12px] shrink-0">
                 실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
