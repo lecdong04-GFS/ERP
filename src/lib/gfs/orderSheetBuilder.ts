@@ -147,11 +147,12 @@ export async function buildOrderSheet(params?: {
         orderQty: true,
         remainQty: true,
         purchaseOrder: {
-          select: { orderNo: true, orderDate: true, status: true },
+          select: { orderNo: true, orderDate: true, deliveryDate: true, status: true },
         },
       },
     });
 
+    const latestSnapDate = normalizeDateYmd(dormantAnalysis?.latestSnapDate || '');
     const cutoffMs = new Date(`${checkDate}T00:00:00Z`).getTime() - 7 * 24 * 60 * 60 * 1000;
     const pendingCutoffDate = Number.isFinite(cutoffMs)
       ? new Date(cutoffMs).toISOString().slice(0, 10)
@@ -160,7 +161,10 @@ export async function buildOrderSheet(params?: {
     for (const d of activePendingDetails) {
       const orderNo = d.purchaseOrder?.orderNo || '';
       const orderDate = normalizeDateYmd(d.purchaseOrder?.orderDate || '');
+      const deliveryDate = normalizeDateYmd(d.purchaseOrder?.deliveryDate || '');
       if (pendingCutoffDate && orderDate && orderDate < pendingCutoffDate) continue;
+      // 매일 오후 5시 재고조사 정리 기준: 최신 재고조사일 당일까지 입고예정이었던 발주건은 이미 현재고에 반영된 것으로 간주
+      if (latestSnapDate && deliveryDate && deliveryDate <= latestSnapDate) continue;
       const qty = d.remainQty > 0 ? d.remainQty : d.orderQty;
       const unit = d.unit || 'box';
       if (d.productId) addPending(pendingById, d.productId, qty, d.orderQty, unit, orderNo, orderDate);
