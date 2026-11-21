@@ -118,6 +118,15 @@ export interface DemandTrendStats {
   dates14?: string[];
 }
 
+export interface OrderCutoffSlotStat {
+  slot: string;
+  label: string;
+  cutoffMinutes: number | null;
+  pendingCount: number;
+  pendingAmount: number;
+  doneCount: number;
+}
+
 export interface DashboardStats {
   sales: ChartSeries;
   purchase: ChartSeries;
@@ -133,6 +142,7 @@ export interface DashboardStats {
   stockDaysTop: StockDayRow[];
   warehouseStock: WarehouseStockRow[];
   warehouseStockTotal: number;
+  orderCutoffSlots?: OrderCutoffSlotStat[];
   spark: { sales: number[]; purchase: number[]; production: number[] };
   demandTrend: DemandTrendStats;
   fetchedAt: string;

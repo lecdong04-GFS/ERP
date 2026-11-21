@@ -13,12 +13,12 @@ import {
   ShoppingCart,
   ExternalLink,
   Warehouse,
+  CheckCircle2,
 } from 'lucide-react';
 import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { PipelineHero } from './PipelineHero';
 import { WatchList } from './WatchList';
-import { WarehouseStock } from './WarehouseStock';
 import { DemandTrendPanel } from './DemandTrendPanel';
 import { useDashboardStats } from './useDashboardStats';
 import type { ChartPoint } from './dashboardData';
@@ -381,10 +381,32 @@ export const Dashboard: React.FC = () => {
 
           {/* 우측: 하위 창고별 재고액 (냉장1 · 냉장2 · 냉동 · 상온 · 부자재) */}
           <div className="flex-1 min-w-0 flex flex-col gap-2">
-            <div className="hidden xl:flex items-center justify-between">
-              <span className="text-[11.5px] font-extrabold text-slate-500">
-                보관창고별 재고 보유액 (클릭 시 실사재고 조회)
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11.5px] font-extrabold text-slate-500">
+                  보관창고별 재고 보유액
+                </span>
+                {(() => {
+                  const nowKst = new Date(Date.now() + 9 * 3600 * 1000);
+                  const todayYmd = nowKst.toISOString().slice(0, 10);
+                  const kstHour = nowKst.getUTCHours();
+                  const isAfter17 = kstHour >= 17;
+                  const hasTodaySnap = expectedStockDate === todayYmd;
+                  const snapMmDd = expectedStockDate ? expectedStockDate.slice(5).replace('-', '/') : '';
+                  if (isAfter17 && !hasTodaySnap) {
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold">
+                        오늘({todayYmd.slice(5).replace('-', '/')}) 17시 실사 미등록 · 최종 {snapMmDd || '-'}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11px] font-bold">
+                      최종 실사 기준: {snapMmDd ? `${snapMmDd} (17시)` : '실시간'}
+                    </span>
+                  );
+                })()}
+              </div>
               <span className="text-[11.5px] font-extrabold text-indigo-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
                 실사재고 조회 <ArrowRight className="w-3.5 h-3.5" />
               </span>
@@ -445,7 +467,7 @@ export const Dashboard: React.FC = () => {
       <DemandTrendPanel trendData={stats.demandTrend} onNavigate={navigate} />
 
       {/* ===================================================================== */}
-      {/* 4. 실시간 긴급 관제 보드: 결품위험/FEFO(50%) + 창고별 실보유액(50%) 1:1 반반 분할 */}
+      {/* 4. 실시간 긴급 관제 보드: 결품위험/FEFO(50%) + 오늘 발주 마감 현황(50%) */}
       {/* ===================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
         <WatchList
@@ -453,11 +475,125 @@ export const Dashboard: React.FC = () => {
           fefoTop={stats.fefoTop}
           onNavigate={navigate}
         />
-        <WarehouseStock
-          rows={stats.warehouseStock}
-          total={stats.warehouseStockTotal}
-          onNavigate={navigate}
-        />
+
+        {/* 오늘 발주 마감 현황 & 카운트다운 패널 */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-[14px] font-black text-slate-900">오늘 발주 마감 현황</h3>
+                <p className="text-[11.5px] text-slate-500 font-medium">
+                  채널별 마감시각 기준 미발주 · 확정 진행률
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('pur-mat-order-day')}
+              className="text-[12px] font-extrabold text-amber-700 hover:text-amber-900 flex items-center gap-1 cursor-pointer"
+            >
+              발주하러 가기 <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="flex-1 flex flex-col gap-2">
+            {(stats.orderCutoffSlots || []).length > 0 ? (
+              (() => {
+                const nowKst = new Date(Date.now() + 9 * 3600 * 1000);
+                const nowMin = nowKst.getUTCHours() * 60 + nowKst.getUTCMinutes();
+                return (stats.orderCutoffSlots || []).map((slot) => {
+                  const total = slot.pendingCount + slot.doneCount;
+                  const pct = total > 0 ? Math.round((slot.doneCount / total) * 100) : 0;
+                  const isAllDone = slot.pendingCount === 0 && slot.doneCount > 0;
+                  const diffMin = slot.cutoffMinutes != null ? slot.cutoffMinutes - nowMin : null;
+                  const isUrgent = !isAllDone && diffMin != null && diffMin > 0 && diffMin <= 60;
+                  const isOverdue = !isAllDone && diffMin != null && diffMin <= 0;
+
+                  const statusLabel = isAllDone
+                    ? '발주완료'
+                    : isOverdue
+                    ? '마감경과'
+                    : isUrgent
+                    ? `${diffMin}분 남음`
+                    : diffMin != null
+                    ? `${Math.floor(diffMin / 60)}시간 ${diffMin % 60}분 남음`
+                    : '수시';
+
+                  const statusCls = isAllDone
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : isOverdue
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : isUrgent
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                  return (
+                    <div
+                      key={slot.slot}
+                      onClick={() => navigate('pur-mat-order-day')}
+                      className={`px-3 py-2 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 ${
+                        isUrgent
+                          ? 'bg-amber-50/60 border-amber-300 hover:bg-amber-50'
+                          : isOverdue
+                          ? 'bg-rose-50/40 border-rose-200 hover:bg-rose-50/70'
+                          : 'bg-slate-50/60 border-slate-200 hover:bg-slate-100/70'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[12.5px] font-extrabold text-slate-900 truncate">
+                            {slot.label}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded border text-[10.5px] font-black shrink-0 ${statusCls}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${isAllDone ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="text-[10.5px] font-mono font-bold text-slate-500 shrink-0">
+                            {slot.doneCount}/{total}건
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 pl-2">
+                        {slot.pendingCount > 0 ? (
+                          <>
+                            <div className="text-[12.5px] font-black font-mono text-amber-900">
+                              미발주 {slot.pendingCount}건
+                            </div>
+                            <div className="text-[11px] font-mono font-bold text-slate-500">
+                              ₩{slot.pendingAmount.toLocaleString()}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[12px] font-black text-emerald-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            완료
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center py-8 text-center text-slate-400">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
+                <div className="text-sm font-bold text-slate-600">금일 예정된 마감 발주가 없습니다</div>
+                <div className="text-xs text-slate-400 mt-0.5">모든 채널이 정상 발주 완료되었거나 휴무일입니다.</div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ===================================================================== */}

@@ -9,6 +9,7 @@ import {
   splitWeek,
 } from '@/lib/gfs/orderCalc';
 import { getProductLifecycleInfo } from '@/lib/gfs/productStatus';
+import { resolveOrderMethodInfo, getCutoffSlotKey } from '@/lib/gfs/orderMethodHelper';
 import {
   ActionItem,
   ChartPoint,
@@ -17,6 +18,7 @@ import {
   DemandTrendItem,
   DemandTrendStats,
   FefoRow,
+  OrderCutoffSlotStat,
   StockDayRow,
   WarehouseStockRow,
   emptyYear,
@@ -403,6 +405,15 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const expectedPurchaseStockDate =
       latestPreTodaySnap?.snapshotDate || orderSheetData?.dormantLatestSnapDate || '';
 
+    const cutoffBucketMap = new Map<string, OrderCutoffSlotStat>([
+      ['until11', { slot: 'until11', label: '11시 마감 (CJ전산 등)', cutoffMinutes: 11 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['12', { slot: '12', label: '12시 마감 (이메일 등)', cutoffMinutes: 12 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['13', { slot: '13', label: '13시 마감 (발주고·카톡)', cutoffMinutes: 13 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['14', { slot: '14', label: '14시 마감 (GS통합구매)', cutoffMinutes: 14 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['after15', { slot: 'after15', label: '15시~16시 (삼립·후마감)', cutoffMinutes: 16 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['none', { slot: 'none', label: '마감시간 미지정 (수시)', cutoffMinutes: null, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+    ]);
+
     if (orderSheetData && Array.isArray(orderSheetData.rows)) {
       const weekDateList = Array.from({ length: 7 }, (_, i) => kstDate(i - todayDowMon0));
 
@@ -415,7 +426,16 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         const pidDates = pid > 0 ? confirmedDatesByPid.get(pid) : undefined;
         const nameDates = nmKey ? confirmedDatesByName.get(nmKey) : undefined;
         const isConfirmedToday = Boolean(pidDates?.has(today) || nameDates?.has(today));
+        const methodInfo = resolveOrderMethodInfo({
+          orderMethod: r.orderMethod,
+          supplier: r.supplier,
+          warehouse: r.warehouse,
+          productName: r.name,
+        });
+        const slotKey = getCutoffSlotKey(methodInfo.cutoffMinutes);
+        const bucket = cutoffBucketMap.get(slotKey);
         if (isConfirmedToday) {
+          if (bucket) bucket.doneCount += 1;
           continue;
         }
         const scheduledExcl = getScheduledExclusion(r.name || '');
@@ -456,9 +476,14 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
         const todayBoxes = week[todayDowMon0] || 0;
         if (todayBoxes > 0) {
           const boxPrice = Number(r.boxPrice) || calcBoxPrice(Number(r.bagPrice) || 0, pack);
+          const estAmt = todayBoxes * boxPrice;
           expectedPurchaseItemCount += 1;
-          expectedPurchaseAmount += todayBoxes * boxPrice;
+          expectedPurchaseAmount += estAmt;
           if (r.supplier) expectedPartnersSet.add(r.supplier);
+          if (bucket) {
+            bucket.pendingCount += 1;
+            bucket.pendingAmount += Math.round(estAmt);
+          }
         }
       }
     }
@@ -732,6 +757,9 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
       stockDaysTop,
       warehouseStock,
       warehouseStockTotal,
+      orderCutoffSlots: Array.from(cutoffBucketMap.values()).filter(
+        (b) => b.pendingCount > 0 || b.doneCount > 0
+      ),
       spark,
       demandTrend,
       fetchedAt: new Date().toISOString(),
