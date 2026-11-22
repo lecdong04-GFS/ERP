@@ -1650,6 +1650,24 @@ export const WorkOrderStatusView: React.FC = () => {
                   )}
                 </div>
               </div>
+            ) : filteredSchedule.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-6 text-center space-y-2.5">
+                <div className="text-sm font-bold text-slate-600">
+                  [{selectedLine}] 라인에 해당 날짜의 배정된 수주 작업이 없습니다.
+                </div>
+                {currentLine.schedule.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
+                      setMaterials(currentLine.materials.map((m) => ({ ...m })));
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                  >
+                    표준 템플릿 불러오기 ({currentLine.schedule.length}건)
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="bg-emerald-600 text-white rounded-xl p-3 text-center font-bold text-sm shadow-xs">
                 오늘 [{selectedLine}] 라인의 모든 작업이 완료되었습니다.
@@ -2130,6 +2148,29 @@ export const WorkOrderStatusView: React.FC = () => {
                   </tr>
                 );
               })}
+              {filteredSchedule.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="py-12 text-center bg-slate-50/50">
+                    <div className="space-y-2.5">
+                      <div className="text-sm font-bold text-slate-600">
+                        [{selectedLine}] 라인에 해당 날짜의 배정된 수주 작업이 없습니다.
+                      </div>
+                      {currentLine.schedule.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScheduleTasks(currentLine.schedule.map((s) => ({ ...s })));
+                            setMaterials(currentLine.materials.map((m) => ({ ...m })));
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                        >
+                          표준 템플릿 불러오기 ({currentLine.schedule.length}건)
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
