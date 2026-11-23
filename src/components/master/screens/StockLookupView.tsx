@@ -653,6 +653,22 @@ export const StockLookupView: React.FC = () => {
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLiving, setIsLiving] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [addForm, setAddForm] = useState({
+    whName: '상온',
+    itemName: '',
+    vendor: '',
+    itemCode: '',
+    unit: 'kg',
+    packUnit: '1',
+    inboundDate: 'D+2',
+    dailyUsage: '0',
+    safetyStock: '0',
+    boxQty: '0',
+    pieceQty: '0',
+    unitPrice: '0',
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const justUploadedRef = useRef(false);
   // 빨간펜: 업로드 시 이상행(급변·신규) 목록 — 사람은 보고 판단, 저장은 직접
@@ -1152,6 +1168,177 @@ export const StockLookupView: React.FC = () => {
       alert('품목 복구 중 통신 오류: ' + (err?.message || String(err)));
     } finally {
       setRestoringProductId(null);
+    }
+  };
+
+  const openAddModal = () => {
+    setAddForm({
+      whName: selectedWh !== '전체' ? selectedWh : '상온',
+      itemName: '',
+      vendor: '',
+      itemCode: '',
+      unit: 'kg',
+      packUnit: '1',
+      inboundDate: 'D+2',
+      dailyUsage: '0',
+      safetyStock: '0',
+      boxQty: '0',
+      pieceQty: '0',
+      unitPrice: '0',
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleAddNewItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = addForm.itemName.trim();
+    if (!trimmedName) {
+      alert('품명을 입력해주세요.');
+      return;
+    }
+    const wh = addForm.whName || '상온';
+    const normNew = normName(trimmedName);
+    const dup = data.find((d) => d.whName === wh && normName(d.itemName) === normNew && d.productStatus !== '삭제');
+    if (dup) {
+      alert(`[${wh}] 창고에 동일한 품명(${dup.itemName})이 이미 등록되어 있습니다.`);
+      return;
+    }
+
+    const pack = Math.max(1, Number(addForm.packUnit) || 1);
+    const box = Math.max(0, Number(addForm.boxQty) || 0);
+    const piece = Math.max(0, Number(addForm.pieceQty) || 0);
+    const current = Math.round((box * pack + piece) * 100) / 100;
+    const daily = Math.max(0, Number(addForm.dailyUsage) || 0);
+    const uprice = Math.max(0, Number(addForm.unitPrice) || 0);
+    const inbound = normalizeOrderCycleText(addForm.inboundDate) || addForm.inboundDate || 'D+2';
+    const safety =
+      Number(addForm.safetyStock) > 0
+        ? Number(addForm.safetyStock)
+        : calcSafetyStock(daily, pack, parseLeadDays(inbound));
+
+    setIsAddingItem(true);
+    try {
+      const matRes = await fetch('/api/gfs/materialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [
+            {
+              productCode: addForm.itemCode.trim() || undefined,
+              name: trimmedName,
+              boxes: 1,
+              packUnit: pack,
+              bagPrice: uprice,
+              supplierHeader: addForm.vendor.trim() || undefined,
+              safetyStock: safety,
+            },
+          ],
+        }),
+      });
+      const matJson = await matRes.json();
+      if (!matJson.success) {
+        alert(`품목 기준정보 등록 실패: ${matJson.error || '알 수 없는 오류'}`);
+        return;
+      }
+
+      const matched = Array.isArray(matJson.data?.matched) ? matJson.data.matched[0] : null;
+      const resolvedCode = matched?.productCode || addForm.itemCode.trim() || '';
+      const resolvedProductId = matched?.productId || undefined;
+
+      const stockRes = await fetch('/api/inventory/stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          preserveZeroStock: true,
+          effectiveDate: targetDate,
+          items: [
+            {
+              productCode: resolvedCode || undefined,
+              productName: trimmedName,
+              warehouse: wh,
+              currentQty: current,
+              unitPrice: uprice,
+              priceEdited: uprice > 0,
+              vendor: addForm.vendor.trim(),
+              safetyStock: safety,
+              packUnit: pack,
+              orderCycle: inbound,
+              status: '정상',
+              isUsed: true,
+            },
+          ],
+        }),
+      });
+      const stockJson = await stockRes.json();
+      if (!stockJson.success) {
+        alert(`현재고 등록 실패: ${stockJson.error || '알 수 없는 오류'}`);
+        return;
+      }
+
+      const tempId = Date.now();
+      const newItem: StockItem = {
+        id: tempId,
+        snapId: 0,
+        whName: wh,
+        vendor: addForm.vendor.trim(),
+        orderSupplier: '',
+        orderDays: 0,
+        itemCode: resolvedCode,
+        lotNo: '',
+        lotDate: targetDate,
+        itemType: wh === '부자재' ? '부자재' : '원자재',
+        category: wh === '부자재' ? '부자재' : '원부자재',
+        itemName: trimmedName,
+        spec: '',
+        unit: addForm.unit || 'kg',
+        inboundDate: inbound,
+        expiryDate: '',
+        orderDay: '',
+        dailyUsage: daily,
+        usageSource: daily > 0 ? 'MASTER' : 'ESTIMATED',
+        actualDailyUsage: 0,
+        hasPrevStock: false,
+        estDailyUsage: daily,
+        packUnit: pack,
+        boxQty: box,
+        pieceQty: piece,
+        prevStock: current,
+        diffStock: 0,
+        inQty: 0,
+        outQty: 0,
+        currentStock: current,
+        safetyStock: safety,
+        shortage: current - safety,
+        status: calcStockStatus(current, safety),
+        stockDays: calcStockDays(current, daily),
+        gfsDays: calcStockDays(current, daily),
+        gfsAsOf: '',
+        burnRank: 0,
+        fefoWarn: false,
+        unitPrice: uprice,
+        boxPrice: calcBoxPrice(uprice, pack),
+        totalAmount: Math.round(current * uprice),
+        productId: resolvedProductId,
+        productStatus: '정상',
+        isUsed: true,
+        discontinuedDate: '',
+      };
+
+      setData((prev) => applyBurnRank([newItem, ...prev]));
+      setSelectedRowId(tempId);
+      if (snapshotMode) {
+        setDirtyRowIds((prev) => new Set(prev).add(tempId));
+        setNewRowIds((prev) => new Set(prev).add(tempId));
+      }
+      setIsAddModalOpen(false);
+      setSaveStatusMsg(`✅ [${trimmedName}] 신규 품목이 등록되었습니다.`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('gfs-product-lifecycle-changed'));
+      }
+    } catch (err: any) {
+      alert('신규 품목 등록 중 오류: ' + (err?.message || String(err)));
+    } finally {
+      setIsAddingItem(false);
     }
   };
 
@@ -2600,6 +2787,12 @@ export const StockLookupView: React.FC = () => {
         title="실시간 통합 재고조회 (실사 연동)"
         buttons={[
           {
+            key: 'add',
+            label: '품목 추가',
+            icon: 'new',
+            onClick: openAddModal,
+          },
+          {
             key: 'save',
             label: isSaving ? (saveStatusMsg || '저장 중...') : dirtyRowIds.size > 0 ? `저장 (${dirtyRowIds.size}건)` : '저장',
             icon: 'save',
@@ -3219,6 +3412,222 @@ export const StockLookupView: React.FC = () => {
         onDeleteProduct={handleDeleteProduct}
         onRestoreProduct={handleRestoreProduct}
       />
+
+      {/* 신규 품목 추가 모달 */}
+      {isAddModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => !isAddingItem && setIsAddModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black">신규 품목 추가</h3>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  기준정보(품목 마스터)와 현재고에 즉시 등록됩니다
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isAddingItem && setIsAddModalOpen(false)}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500 text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewItem} className="p-5 space-y-3.5 text-xs">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">창고 *</label>
+                  <select
+                    value={addForm.whName}
+                    onChange={(e) => setAddForm((f) => ({ ...f, whName: e.target.value }))}
+                    className="w-full h-9 px-2.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['상온', '냉장1', '냉장2', '냉동', '부자재'].map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">품명 *</label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="예: [상온] 신규 자재명 (규격)"
+                    value={addForm.itemName}
+                    onChange={(e) => setAddForm((f) => ({ ...f, itemName: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">거래처</label>
+                  <input
+                    type="text"
+                    placeholder="예: 삼양사"
+                    value={addForm.vendor}
+                    onChange={(e) => setAddForm((f) => ({ ...f, vendor: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">품번 (비우면 자동생성)</label>
+                  <input
+                    type="text"
+                    placeholder="자동 채번"
+                    value={addForm.itemCode}
+                    onChange={(e) => setAddForm((f) => ({ ...f, itemCode: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">단위</label>
+                  <select
+                    value={addForm.unit}
+                    onChange={(e) => setAddForm((f) => ({ ...f, unit: e.target.value }))}
+                    className="w-full h-9 px-2.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['kg', 'ea', '포', '봉', '박스', 'L', '롤'].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">입수량 (박스당)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={addForm.packUnit}
+                    onChange={(e) => setAddForm((f) => ({ ...f, packUnit: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">발주주기</label>
+                  <select
+                    value={addForm.inboundDate}
+                    onChange={(e) => setAddForm((f) => ({ ...f, inboundDate: e.target.value }))}
+                    className="w-full h-9 px-2.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {['D+1', 'D+2', 'D+3', 'D+4', 'D+5', 'D+7'].map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">일사용량</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={addForm.dailyUsage}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const suggested = calcSafetyStock(
+                        Number(val) || 0,
+                        Math.max(1, Number(addForm.packUnit) || 1),
+                        parseLeadDays(addForm.inboundDate)
+                      );
+                      setAddForm((f) => ({ ...f, dailyUsage: val, safetyStock: String(suggested) }));
+                    }}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">안전재고</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={addForm.safetyStock}
+                    onChange={(e) => setAddForm((f) => ({ ...f, safetyStock: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">봉단가 (원)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={addForm.unitPrice}
+                    onChange={(e) => setAddForm((f) => ({ ...f, unitPrice: e.target.value }))}
+                    className="w-full h-9 px-3 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">현재고 (박스)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={addForm.boxQty}
+                    onChange={(e) => setAddForm((f) => ({ ...f, boxQty: e.target.value }))}
+                    className="w-full h-8.5 px-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">현재고 (낱개)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={addForm.pieceQty}
+                    onChange={(e) => setAddForm((f) => ({ ...f, pieceQty: e.target.value }))}
+                    className="w-full h-8.5 px-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <span className="text-[11px] font-bold text-slate-500">총 현재고</span>
+                  <span className="h-8.5 flex items-center font-mono font-black text-sm text-blue-700">
+                    {(
+                      (Number(addForm.boxQty) || 0) * Math.max(1, Number(addForm.packUnit) || 1) +
+                      (Number(addForm.pieceQty) || 0)
+                    ).toLocaleString()}{' '}
+                    {addForm.unit}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isAddingItem}
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="h-9 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingItem}
+                  className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-black cursor-pointer shadow-xs"
+                >
+                  {isAddingItem ? '등록 중...' : '등록 및 저장'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
