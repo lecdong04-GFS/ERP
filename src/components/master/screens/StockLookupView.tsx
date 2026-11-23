@@ -843,7 +843,9 @@ export const StockLookupView: React.FC = () => {
           yesterdaySnapJson.data.rows.forEach((r: any) => {
             const nm = normName(r.productName || r.product?.name || '');
             const wh = r.warehouse || '상온';
-            const qty = Number(r.currentQty) || (Number(r.boxQty) * Number(r.packUnit || 1) + Number(r.pieceQty || 0));
+            const qty = r.currentQty != null
+              ? Number(r.currentQty)
+              : (Number(r.boxQty) * Number(r.packUnit || 1) + Number(r.pieceQty || 0));
             if (nm) {
               yesterdayMap.set(`${wh}|${nm}`, qty);
               prevKnownSet.add(`${wh}|${nm}`);
@@ -2344,7 +2346,7 @@ export const StockLookupView: React.FC = () => {
         const cur = Number(row.currentStock) || 0;
         const pack = Number(row.packUnit) || 1;
         const netConsumed = prev + inQ - cur;
-        const usage = Number(v) > 0 ? Number(v) : (netConsumed > 0 ? Math.round(netConsumed * 100) / 100 : 0);
+        const usage = netConsumed > 0 ? Math.round(netConsumed * 100) / 100 : 0;
         const prevLabel = row.prevSnapDate ? `${row.prevSnapDate.slice(5)} 대비 ` : '전일 대비 ';
 
         if (usage > 0) {

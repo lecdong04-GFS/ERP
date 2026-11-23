@@ -7,6 +7,7 @@ import {
   normalizePackUnit,
   pickLatestValidPurchasePrice,
   resolveBagPrice,
+  toBagQty,
 } from '@/lib/gfs/pricing';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -79,24 +80,63 @@ export async function GET(req: NextRequest) {
     if (!DATE_RE.test(date)) {
       return NextResponse.json({ success: false, error: 'date 파라미터가 필요합니다. (YYYY-MM-DD)' }, { status: 400 });
     }
-    const rows = await prisma.inventorySnapshot.findMany({
-      where: { snapshotDate: date },
-      include: {
-        product: {
-          include: {
-            partner: true,
-            prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+    const [rows, receivings] = await Promise.all([
+      prisma.inventorySnapshot.findMany({
+        where: { snapshotDate: date },
+        include: {
+          product: {
+            include: {
+              partner: true,
+              prices: { orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }], take: 10 },
+            },
           },
         },
-      },
-      orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
-    });
+        orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
+      }),
+      prisma.receiving.findMany({
+        where: {
+          receivingDate: date,
+          status: { not: '취소' },
+        },
+        select: {
+          details: {
+            select: {
+              productId: true,
+              warehouse: true,
+              receivedQty: true,
+              unit: true,
+              boxQty: true,
+              product: { select: { boxQty: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const inQtyByWhProd = new Map<string, number>();
+    const inQtyByProd = new Map<number, number>();
+    for (const rec of receivings) {
+      for (const d of rec.details) {
+        if (!d.productId) continue;
+        const pUnit = normalizePackUnit(d.product?.boxQty || d.boxQty);
+        const recvBags = toBagQty(Number(d.receivedQty) || 0, d.unit, pUnit);
+        const whKey = `${d.productId}_${d.warehouse || ''}`;
+        inQtyByWhProd.set(whKey, (inQtyByWhProd.get(whKey) || 0) + recvBags);
+        inQtyByProd.set(d.productId, (inQtyByProd.get(d.productId) || 0) + recvBags);
+      }
+    }
+
     const enrichedRows = rows.map((r) => {
       const packUnit = normalizePackUnit(r.packUnit || r.product?.boxQty);
       const bagPrice = resolveBagPrice({
         snapshotUnitPrice: r.unitPrice,
         masterBagPrice: pickLatestValidPurchasePrice(r.product?.prices),
       });
+      const inQty = r.productId
+        ? (inQtyByWhProd.get(`${r.productId}_${r.warehouse || ''}`) ??
+           inQtyByProd.get(r.productId) ??
+           0)
+        : 0;
       return {
         ...r,
         packUnit,
@@ -104,6 +144,7 @@ export async function GET(req: NextRequest) {
         unitPrice: bagPrice,
         bagPrice,
         boxPrice: calcBoxPrice(bagPrice, packUnit),
+        inQty,
       };
     });
     return NextResponse.json({ success: true, data: { date, exists: enrichedRows.length > 0, rows: enrichedRows } });
