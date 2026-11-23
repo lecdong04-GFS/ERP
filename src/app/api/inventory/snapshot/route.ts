@@ -55,7 +55,14 @@ export async function GET(req: NextRequest) {
       if (prevDateRow?.snapshotDate) {
         const rows = await prisma.inventorySnapshot.findMany({
           where: { snapshotDate: prevDateRow.snapshotDate },
-          include: { product: { include: { partner: true } } },
+          select: {
+            productName: true,
+            warehouse: true,
+            currentQty: true,
+            boxQty: true,
+            packUnit: true,
+            pieceQty: true,
+          },
           orderBy: [{ warehouse: 'asc' }, { productName: 'asc' }],
         });
         return NextResponse.json({

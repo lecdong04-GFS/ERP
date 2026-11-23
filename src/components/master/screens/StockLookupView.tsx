@@ -808,31 +808,56 @@ export const StockLookupView: React.FC = () => {
     byKeyOnly: Record<string, { estDailyUsage: number; estDailyBox: number; sampleCount: number }>;
   }>({ byWhAndKey: {}, byKeyOnly: {} });
 
-  const loadStockData = (baseRows?: any[] | null, snapDate?: string, discOverride?: boolean) => {
+  const loadStockData = (
+    baseRows?: any[] | null,
+    snapDate?: string,
+    discOverride?: boolean,
+    prefetched?: {
+      snapPromise?: Promise<any>;
+      estPromise?: Promise<any>;
+      prevPromise?: Promise<any>;
+      livePromise?: Promise<any>;
+    }
+  ) => {
     const isSnap = !!snapDate && !!baseRows;
     const showDisc = discOverride ?? includeDiscontinued;
     const targetDay = snapDate || targetDate || kstToday();
-    const d = new Date(targetDay + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - 1);
-    const yesterdayStr = d.toISOString().slice(0, 10);
 
     setMergeInfo('불러오는 중...');
+    const estPromise =
+      prefetched?.estPromise ||
+      fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null);
+
+    // 20일 추정사용량(보조지표)이 메인 표 렌더링을 막지 않도록 백그라운드 반영
+    estPromise.then((estJson) => {
+      if (estJson?.success && estJson.data) {
+        estMapRef.current = {
+          byWhAndKey: estJson.data.byWhAndKey || {},
+          byKeyOnly: estJson.data.byKeyOnly || {},
+        };
+        setData((prev) =>
+          prev.map((row) => {
+            if (row.estDailyUsage && row.estDailyUsage > 0) return row;
+            const nk = normName(row.itemName);
+            const ent = estMapRef.current.byWhAndKey[`${row.whName}|${nk}`] || estMapRef.current.byKeyOnly[nk];
+            if (!ent) return row;
+            const estD = Math.round((Number(ent.estDailyUsage) || 0) * 100) / 100;
+            return estD > 0 ? { ...row, estDailyUsage: estD } : row;
+          })
+        );
+      }
+    });
+
     Promise.all([
       baseRows
         ? Promise.resolve({ success: true, data: baseRows })
         : fetch(`/api/inventory/stock?targetDate=${targetDay}${showDisc ? '&includeDiscontinued=true' : ''}`).then((res) => res.json()),
-      fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
-      fetch(`/api/inventory/estimated-usage?days=20&targetDate=${targetDay}`).then((res) => res.json()).catch(() => null),
-      fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
-      fetch(`/api/gfs/live-usage?date=${targetDay}`).then((res) => res.json()).catch(() => null),
+      prefetched?.snapPromise || fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
+      prefetched?.prevPromise || fetch(`/api/inventory/snapshot?prevTo=${targetDay}`).then((res) => res.json()).catch(() => null),
+      prefetched?.livePromise || fetch(`/api/gfs/live-usage?date=${targetDay}`).then((res) => res.json()).catch(() => null),
     ])
-      .then(([json, snapJson, estJson, yesterdaySnapJson, liveUsageJson]) => {
-        if (estJson?.success && estJson.data) {
-          estMapRef.current = {
-            byWhAndKey: estJson.data.byWhAndKey || {},
-            byKeyOnly: estJson.data.byKeyOnly || {},
-          };
-        }
+      .then(([json, snapJson, yesterdaySnapJson, liveUsageJson]) => {
+        const estJson: any = null;
         const lookupEst = (wh: string, normKey: string) => {
           if (!normKey) return null;
           return estMapRef.current.byWhAndKey[`${wh}|${normKey}`] || estMapRef.current.byKeyOnly[normKey] || null;
@@ -1055,20 +1080,26 @@ export const StockLookupView: React.FC = () => {
       });
   };
 
-  // 날짜별 로드: 해당 날짜 스냅샷이 있으면 확정분, 없으면 현재고 LIVE
+  // 날짜별 로드: 해당 날짜 스냅샷이 있으면 확정분, 없으면 현재고 LIVE (병렬 프리페치로 워터폴 제거)
   const loadByDate = async (date: string, discOverride?: boolean) => {
     const showDisc = discOverride ?? includeDiscontinued;
+    const prefetched = {
+      snapPromise: fetch('/api/gfs/snapshot').then((res) => res.json()).catch(() => null),
+      estPromise: fetch(`/api/inventory/estimated-usage?days=20&targetDate=${date}`).then((res) => res.json()).catch(() => null),
+      prevPromise: fetch(`/api/inventory/snapshot?prevTo=${date}`).then((res) => res.json()).catch(() => null),
+      livePromise: fetch(`/api/gfs/live-usage?date=${date}`).then((res) => res.json()).catch(() => null),
+    };
     try {
       const res = await fetch(`/api/inventory/snapshot?date=${date}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success && json.data?.exists && Array.isArray(json.data.rows)) {
-        loadStockData(json.data.rows, date, showDisc);
+        loadStockData(json.data.rows, date, showDisc, prefetched);
         return;
       }
     } catch {
       /* 스냅샷 조회 실패 시 현재고로 폴백 */
     }
-    loadStockData(null, date, showDisc);
+    loadStockData(null, date, showDisc, prefetched);
   };
 
   // DB에 보관된 전체 실사 일자 목록 로드

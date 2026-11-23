@@ -14,6 +14,10 @@ import {
   normalizeForBom,
 } from '@/lib/gfs/bomMatch';
 
+// 60초 메모리 TTL 캐시 (재고조회/발주시트 연속 조회 고속화)
+const liveUsageCache = new Map<string, { payload: any; cachedAt: number }>();
+const LIVE_USAGE_TTL_MS = 60_000;
+
 // GET /api/gfs/live-usage?date=YYYY-MM-DD
 // ERP 자체 계산: 금일 완제품 수주량 x 정본 BOM = 자재별 live 일사용량 (PostgreSQL 단일 진실 공급원)
 export async function GET(req: NextRequest) {
@@ -23,7 +27,15 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const reqDate = searchParams.get('date') || '';
+    const forceRefresh = searchParams.get('refresh') === '1';
     const exclusionDate = reqDate || kstToday();
+
+    if (!forceRefresh) {
+      const hit = liveUsageCache.get(exclusionDate);
+      if (hit && Date.now() - hit.cachedAt < LIVE_USAGE_TTL_MS) {
+        return NextResponse.json(hit.payload);
+      }
+    }
 
     const resolveLatestOrderDate = async (lteDate?: string) => {
       if (lteDate) {
@@ -267,7 +279,7 @@ export async function GET(req: NextRequest) {
 
     const distinctMenuKeys = new Set(orderItems.map((it) => normalizeForBom(it.name)).filter(Boolean));
 
-    return NextResponse.json({
+    const payload = {
       success: true,
       data: {
         asOf: date,
@@ -276,7 +288,9 @@ export async function GET(req: NextRequest) {
         rowCount: rows.length,
         rows,
       },
-    });
+    };
+    liveUsageCache.set(exclusionDate, { payload, cachedAt: Date.now() });
+    return NextResponse.json(payload);
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'live-usage 계산 실패' },
