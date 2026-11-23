@@ -483,60 +483,61 @@ export function StockItemDetailModal({
               )}
             </div>
           </div>
+        </div>
 
-          {/* 4) 미사용 품목 삭제 확인 영역 (열렸을 때만 표시) */}
-          {confirmDeleteOpen && !isDeletedRow && (
-            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                <div className="text-[13.5px] text-rose-900 space-y-1">
-                  <div className="font-black text-[15px]">정말 이 품목을 미사용(삭제) 처리하시겠습니까?</div>
-                  <p className="text-rose-800">
-                    소프트 삭제 처리되어 재고조회·자재발주 목록에서 즉시 숨겨지며, 상단{' '}
-                    <strong>[삭제·이관 포함]</strong> 체크 후 언제든 복구할 수 있습니다.
-                  </p>
-                  {safetyWarnings.length > 0 ? (
-                    <ul className="mt-1.5 list-disc list-inside font-bold text-rose-700 space-y-0.5">
-                      {safetyWarnings.map((w) => (
-                        <li key={w}>{w}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="mt-1 inline-flex items-center gap-1.5 text-emerald-700 font-bold">
-                      <CheckCircle2 className="w-4 h-4" />
-                      현재고 0 · 미입고 발주 0 · 일소진 0 — 안전하게 정리 가능한 품목입니다.
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={deleteReason}
-                  onChange={(e) => setDeleteReason(e.target.value)}
-                  placeholder="삭제 사유 (선택사항: 예) 단종, 미사용 자재 정리"
-                  className="flex-1 px-3 py-2 text-[13.5px] bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteOpen(false)}
-                  disabled={isSubmitting}
-                  className="px-3.5 py-2 text-[13px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-[13px] font-black text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting ? '처리 중...' : '미사용 삭제 확정'}
-                </button>
+        {/* 4) 미사용 품목 삭제 확인 영역 (고정 하단 영역에 즉시 표시) */}
+        {confirmDeleteOpen && !isDeletedRow && (
+          <div className="px-6 py-4 bg-rose-50 border-t border-rose-200 space-y-3 shrink-0">
+            <div className="flex items-start gap-2.5">
+              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="text-[13.5px] text-rose-900 space-y-1">
+                <div className="font-black text-[15px]">정말 이 품목을 미사용(삭제) 처리하시겠습니까?</div>
+                <p className="text-rose-800">
+                  소프트 삭제 처리되어 재고조회·자재발주 목록에서 즉시 숨겨지며, 상단{' '}
+                  <strong>[삭제·이관 포함]</strong> 체크 후 언제든 복구할 수 있습니다.
+                </p>
+                {safetyWarnings.length > 0 ? (
+                  <ul className="mt-1.5 list-disc list-inside font-bold text-rose-700 space-y-0.5">
+                    {safetyWarnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="mt-1 inline-flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <CheckCircle2 className="w-4 h-4" />
+                    현재고 0 · 미입고 발주 0 · 일소진 0 — 안전하게 정리 가능한 품목입니다.
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                autoFocus
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="삭제 사유 (선택사항: 예) 단종, 미사용 자재 정리"
+                className="flex-1 px-3 py-2 text-[13.5px] bg-white border border-rose-200 rounded-lg focus:outline-none focus:border-rose-400"
+              />
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteOpen(false)}
+                disabled={isSubmitting}
+                className="px-3.5 py-2 text-[13px] font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isSubmitting}
+                className="px-4 py-2 text-[13px] font-black text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? '처리 중...' : '미사용 삭제 확정'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── 하단 푸터 ── */}
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
