@@ -5,6 +5,7 @@ import { useTabs } from '@/context/TabContext';
 import { getMenuItemById } from '@/config/menuConfig';
 import { exportGridToExcel } from '@/lib/excelExport';
 import { readJsonSafe } from '@/lib/http';
+import { escapeHtml } from '@/lib/sanitize';
 import {
   calcBagPriceFromBox,
   calcBoxPrice,
@@ -39,6 +40,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Upload,
+  Printer,
 } from 'lucide-react';
 import { ReceivingUploadModal } from '../modals/ReceivingUploadModal';
 import { ProductLifecycleBadge } from '@/components/common/ProductLifecycleBadge';
@@ -113,8 +115,39 @@ interface ReceivingRow {
   };
 }
 
+interface PendingInboundRow {
+  id: number;
+  purchaseOrderId: number;
+  orderNo: string;
+  orderDate: string;
+  expectedDeliveryDate: string;
+  orderCycle: string;
+  leadDays: number;
+  partnerName: string;
+  productId: number;
+  productCode: string;
+  productName: string;
+  productStatus?: string;
+  discontinuedDate?: string;
+  isUsed?: boolean;
+  warehouse: string;
+  unit: string;
+  packUnit: number;
+  orderQty: number;
+  remainQty: number;
+  unitPrice: number;
+  bagPrice: number;
+  boxPrice: number;
+  expectedAmt: number;
+}
+
 export const ReceivingStatusEditView: React.FC = () => {
   const { openTab } = useTabs();
+
+  // 뷰 모드 ('history': 입고 확정 이력 | 'expected': 금일 입고예정)
+  const [viewMode, setViewMode] = useState<'history' | 'expected'>('history');
+  const [pendingRows, setPendingRows] = useState<PendingInboundRow[]>([]);
+  const [pendingDateFilter, setPendingDateFilter] = useState<'today' | 'all'>('today');
 
   // 검색 및 필터 상태
   const [startDate, setStartDate] = useState<string>(kstDaysAgo(7));
@@ -164,8 +197,47 @@ export const ReceivingStatusEditView: React.FC = () => {
       if (supplierFilter !== 'ALL') params.set('partnerId', supplierFilter);
       if (keyword.trim()) params.set('search', keyword.trim());
 
-      const res = await fetch(`/api/purchase/receiving?${params.toString()}`, { cache: 'no-store' });
-      const json = await res.json();
+      const [res, pendingRes] = await Promise.all([
+        fetch(`/api/purchase/receiving?${params.toString()}`, { cache: 'no-store' }),
+        fetch('/api/purchase/receiving?type=pending_orders', { cache: 'no-store' }),
+      ]);
+      const [json, pendingJson] = await Promise.all([res.json(), pendingRes.json()]);
+
+      if (pendingJson?.success && Array.isArray(pendingJson.data)) {
+        const mappedPending: PendingInboundRow[] = pendingJson.data.map((dt: any) => {
+          const remain = Number(dt.remainQty || 0);
+          const uPrice = Number(dt.unitPrice || 0);
+          const pUnit = normalizePackUnit(dt.packUnit || dt.product?.boxQty);
+          return {
+            id: dt.id,
+            purchaseOrderId: dt.purchaseOrderId,
+            orderNo: dt.purchaseOrder?.orderNo || `PO-${dt.purchaseOrderId}`,
+            orderDate: dt.orderDate || dt.purchaseOrder?.orderDate || '',
+            expectedDeliveryDate: dt.expectedDeliveryDate || dt.purchaseOrder?.deliveryDate || '',
+            orderCycle: dt.orderCycle || dt.product?.orderCycle || '',
+            leadDays: Number(dt.leadDays || 0),
+            partnerName: dt.purchaseOrder?.partnerName || dt.purchaseOrder?.partner?.name || '공급사',
+            productId: dt.productId || 0,
+            productCode: dt.productCode || dt.product?.productCode || '',
+            productName: dt.productName || dt.product?.name || '',
+            productStatus: dt.product?.status || '정상',
+            discontinuedDate: dt.product?.discontinuedDate || '',
+            isUsed: dt.product?.isUsed !== false,
+            warehouse: dt.warehouse || dt.product?.warehouse || '상온',
+            unit: dt.unit || dt.product?.unit || 'box',
+            packUnit: pUnit,
+            orderQty: Number(dt.orderQty || 0),
+            remainQty: remain,
+            unitPrice: uPrice,
+            bagPrice: Number(dt.bagPrice || 0),
+            boxPrice: Number(dt.boxPrice || 0),
+            expectedAmt: Math.round(remain * uPrice),
+          };
+        });
+        setPendingRows(mappedPending);
+      } else {
+        setPendingRows([]);
+      }
 
       if (json.success && Array.isArray(json.data)) {
         const loaded: ReceivingRow[] = [];
@@ -298,8 +370,37 @@ export const ReceivingStatusEditView: React.FC = () => {
     rows.forEach((r) => {
       if (r.partnerName) map.set(r.partnerName, r.partnerName);
     });
+    pendingRows.forEach((p) => {
+      if (p.partnerName) map.set(p.partnerName, p.partnerName);
+    });
     return Array.from(map.keys());
-  }, [rows]);
+  }, [rows, pendingRows]);
+
+  const todayStr = kstToday();
+
+  const todayExpectedCount = useMemo(() => {
+    return pendingRows.filter((p) => p.expectedDeliveryDate === todayStr).length;
+  }, [pendingRows, todayStr]);
+
+  const filteredPendingRows = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return pendingRows
+      .filter((p) => {
+        if (pendingDateFilter === 'today' && p.expectedDeliveryDate !== todayStr) return false;
+        if (supplierFilter !== 'ALL' && p.partnerName !== supplierFilter) return false;
+        if (kw) {
+          const hit =
+            p.productName.toLowerCase().includes(kw) ||
+            p.productCode.toLowerCase().includes(kw) ||
+            p.orderNo.toLowerCase().includes(kw) ||
+            p.partnerName.toLowerCase().includes(kw) ||
+            p.warehouse.toLowerCase().includes(kw);
+          if (!hit) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (a.expectedDeliveryDate || '').localeCompare(b.expectedDeliveryDate || '') || a.partnerName.localeCompare(b.partnerName));
+  }, [pendingRows, pendingDateFilter, todayStr, supplierFilter, keyword]);
 
   // ── 3. 필터링된 행 목록 ──
   const filteredRows = useMemo(() => {
@@ -586,6 +687,48 @@ export const ReceivingStatusEditView: React.FC = () => {
 
   // ── 12. 엑셀 내보내기 ──
   const handleExportExcel = () => {
+    if (viewMode === 'expected') {
+      if (filteredPendingRows.length === 0) {
+        alert('내보낼 입고 예정 데이터가 없습니다.');
+        return;
+      }
+      exportGridToExcel({
+        filename: `GFS_입고예정_${todayStr}`,
+        sheetName: '입고예정',
+        columns: [
+          { key: '구분', label: '구분' },
+          { key: '입고예정일', label: '입고예정일' },
+          { key: '발주번호', label: '발주번호' },
+          { key: '발주일', label: '발주일' },
+          { key: '매입처', label: '매입처' },
+          { key: '창고', label: '창고' },
+          { key: '품번', label: '품번' },
+          { key: '품명', label: '품명' },
+          { key: '단위', label: '단위' },
+          { key: '발주수량', label: '발주수량', format: 'number' },
+          { key: '입고예정잔량', label: '입고예정잔량', format: 'number' },
+          { key: '적용단가', label: '적용단가', format: 'currency' },
+          { key: '예정금액', label: '예정금액', format: 'currency' },
+        ],
+        data: filteredPendingRows.map((p) => ({
+          구분: p.expectedDeliveryDate === todayStr ? '금일입고' : p.expectedDeliveryDate < todayStr ? '입고지연' : '입고예정',
+          입고예정일: p.expectedDeliveryDate || '-',
+          발주번호: p.orderNo,
+          발주일: p.orderDate,
+          매입처: p.partnerName,
+          창고: p.warehouse,
+          품번: p.productCode,
+          품명: p.productName,
+          단위: p.unit,
+          발주수량: p.orderQty,
+          입고예정잔량: p.remainQty,
+          적용단가: p.unitPrice,
+          예정금액: p.expectedAmt,
+        })),
+      });
+      return;
+    }
+
     if (filteredRows.length === 0) {
       alert('내보낼 입고 데이터가 없습니다.');
       return;
@@ -641,6 +784,146 @@ export const ReceivingStatusEditView: React.FC = () => {
       ],
       data: exportData,
     });
+  };
+
+  // ── 12-1. A4 출력 (입고예정 검수표 / 입고현황 명세표) ──
+  const handlePrintSheet = () => {
+    const isExpected = viewMode === 'expected';
+    const targetList = isExpected ? filteredPendingRows : filteredRows;
+    if (targetList.length === 0) {
+      alert(isExpected ? '출력할 입고 예정 품목이 없습니다.' : '출력할 입고 현황 데이터가 없습니다.');
+      return;
+    }
+
+    const win = window.open('', '_blank', 'width=1200,height=820');
+    if (!win) {
+      alert('팝업 차단을 해제한 뒤 다시 시도해 주세요.');
+      return;
+    }
+
+    const titleText = isExpected
+      ? `입고 예정 및 현장 검수표 (${pendingDateFilter === 'today' ? `${todayStr} 금일` : '전체 미입고'})`
+      : `입고 현황 명세표 (${startDate} ~ ${endDate})`;
+
+    const totalAmt = isExpected
+      ? filteredPendingRows.reduce((s, r) => s + r.expectedAmt, 0)
+      : filteredRows.filter((r) => r.status !== '취소').reduce((s, r) => s + r.recvAmt, 0);
+
+    const rowsHtml = isExpected
+      ? filteredPendingRows
+          .map((r, i) => {
+            const isOverdue = r.expectedDeliveryDate && r.expectedDeliveryDate < todayStr;
+            const statusLabel = r.expectedDeliveryDate === todayStr ? '금일입고' : isOverdue ? '지연' : '예정';
+            return `<tr>
+              <td class="c">${i + 1}</td>
+              <td class="c">${escapeHtml(statusLabel)}</td>
+              <td class="c mono">${escapeHtml(r.expectedDeliveryDate || '-')}</td>
+              <td class="c mono">${escapeHtml(r.orderNo)}</td>
+              <td>${escapeHtml(r.partnerName)}</td>
+              <td class="c">${escapeHtml(r.warehouse)}</td>
+              <td><strong>${escapeHtml(r.productName)}</strong><div class="sub">${escapeHtml(r.productCode)}</div></td>
+              <td class="r mono">${r.remainQty.toLocaleString()} ${escapeHtml(r.unit)}</td>
+              <td class="r mono">₩${r.unitPrice.toLocaleString()}</td>
+              <td class="r mono">₩${r.expectedAmt.toLocaleString()}</td>
+              <td class="c check-box"></td>
+              <td class="c check-box"></td>
+              <td class="c check-box"></td>
+            </tr>`;
+          })
+          .join('')
+      : filteredRows
+          .map((r, i) => `<tr>
+            <td class="c">${i + 1}</td>
+            <td class="c">${escapeHtml(r.status)}</td>
+            <td class="c mono">${escapeHtml(r.receivingDate)}</td>
+            <td class="c mono">${escapeHtml(r.receivingNo)}</td>
+            <td>${escapeHtml(r.partnerName)}</td>
+            <td class="c">${escapeHtml(r.warehouse)}</td>
+            <td><strong>${escapeHtml(r.productName)}</strong><div class="sub">${escapeHtml(r.productCode)}</div></td>
+            <td class="r mono">${r.recvQty.toLocaleString()} ${escapeHtml(r.unit)}</td>
+            <td class="r mono">₩${r.buyPrice.toLocaleString()}</td>
+            <td class="r mono">₩${r.recvAmt.toLocaleString()}</td>
+            <td class="c mono">${escapeHtml(r.expiryDate || '-')}</td>
+            <td class="c">${escapeHtml(r.totalJudge)}</td>
+            <td>${escapeHtml(r.remark || '')}</td>
+          </tr>`)
+          .join('');
+
+    const headerCols = isExpected
+      ? `<th style="width:32px">No</th>
+         <th style="width:58px">구분</th>
+         <th style="width:78px">입고예정일</th>
+         <th style="width:105px">발주번호</th>
+         <th style="width:120px">매입처</th>
+         <th style="width:58px">창고</th>
+         <th>품명 / 품번</th>
+         <th style="width:80px">입고예정량</th>
+         <th style="width:74px">단가</th>
+         <th style="width:86px">예정금액</th>
+         <th style="width:68px">실입고량</th>
+         <th style="width:62px">품온/상태</th>
+         <th style="width:56px">검수확인</th>`
+      : `<th style="width:32px">No</th>
+         <th style="width:58px">상태</th>
+         <th style="width:78px">입고일자</th>
+         <th style="width:105px">전표번호</th>
+         <th style="width:120px">매입처</th>
+         <th style="width:58px">창고</th>
+         <th>품명 / 품번</th>
+         <th style="width:80px">입고수량</th>
+         <th style="width:74px">단가</th>
+         <th style="width:86px">입고금액</th>
+         <th style="width:78px">유통기한</th>
+         <th style="width:54px">HACCP</th>
+         <th style="width:90px">비고</th>`;
+
+    win.document.write(`<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(titleText)}</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; color: #111827; margin: 0; font-size: 11px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #111827; padding-bottom: 8px; margin-bottom: 10px; }
+  .head h1 { margin: 0; font-size: 17px; font-weight: 800; }
+  .meta { font-size: 11px; color: #4b5563; text-align: right; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #9ca3af; padding: 5px 6px; word-break: keep-all; overflow-wrap: break-word; }
+  th { background: #f3f4f6; font-weight: 800; text-align: center; font-size: 10.5px; }
+  .c { text-align: center; }
+  .r { text-align: right; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .sub { font-size: 9.5px; color: #6b7280; font-family: ui-monospace, monospace; }
+  .check-box { height: 22px; background: #fafafa; }
+  .foot { margin-top: 8px; display: flex; justify-content: space-between; font-weight: 700; font-size: 11.5px; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <h1>GFS ${escapeHtml(titleText)}</h1>
+      <div style="margin-top:3px;color:#4b5563">출력일시: ${escapeHtml(todayStr)} · 총 ${targetList.length}건</div>
+    </div>
+    <div class="meta">
+      <div>합계 금액: <strong>₩${totalAmt.toLocaleString()}</strong></div>
+      <div>담당자 확인: _______________</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr>${headerCols}</tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="foot">
+    <span>※ 현장 입고 검수 시 차량온도·유통기한·외관상태 확인 후 서명해 주세요.</span>
+    <span>총 ${targetList.length}품목 / 합계 ₩${totalAmt.toLocaleString()}</span>
+  </div>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 250); };</script>
+</body>
+</html>`);
+    win.document.close();
   };
 
   // ── 13. 파이프라인 탭 이동 ──
@@ -755,11 +1038,22 @@ export const ReceivingStatusEditView: React.FC = () => {
             <button
               type="button"
               onClick={handleExportExcel}
-              disabled={filteredRows.length === 0}
-              className="h-11 px-4 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+              disabled={viewMode === 'expected' ? filteredPendingRows.length === 0 : filteredRows.length === 0}
+              className="h-11 px-4 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors disabled:opacity-40"
             >
               <FileSpreadsheet size={16} className="text-emerald-700" />
               <span>엑셀 다운로드</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintSheet}
+              disabled={viewMode === 'expected' ? filteredPendingRows.length === 0 : filteredRows.length === 0}
+              className="h-11 px-4 rounded-xl border border-indigo-300 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm flex items-center gap-2 shadow-xs cursor-pointer transition-colors disabled:opacity-40"
+              title="현재 화면(입고 예정 또는 입고 현황)을 A4 가로 명세표로 즉시 인쇄합니다"
+            >
+              <Printer size={16} />
+              <span>A4 인쇄</span>
             </button>
 
             <button
@@ -1102,6 +1396,215 @@ export const ReceivingStatusEditView: React.FC = () => {
             </div>
           )}
 
+          {/* 뷰 모드 전환 바 (입고 확정 이력 vs 금일 입고예정) */}
+          <div className="px-6 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('history')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'history'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>입고 확정 이력</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono ${
+                  viewMode === 'history' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {filteredRows.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('expected')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'expected'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Truck size={13} />
+                <span>입고 예정 (발주 대기)</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono ${
+                  viewMode === 'expected'
+                    ? 'bg-white/20 text-white'
+                    : todayExpectedCount > 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-slate-200 text-slate-700'
+                }`}>
+                  금일 {todayExpectedCount} · 전체 {pendingRows.length}
+                </span>
+              </button>
+            </div>
+
+            {viewMode === 'expected' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPendingDateFilter('today')}
+                    className={`px-2.5 py-1 rounded-md font-bold cursor-pointer transition ${
+                      pendingDateFilter === 'today' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    금일 예정 ({todayExpectedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingDateFilter('all')}
+                    className={`px-2.5 py-1 rounded-md font-bold cursor-pointer transition ${
+                      pendingDateFilter === 'all' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    미입고 전체 ({pendingRows.length})
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => openPipelineTab('pur-receiving-reg')}
+                  className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-black flex items-center gap-1 cursor-pointer"
+                >
+                  <span>입고등록(GSR) 처리</span>
+                  <ExternalLink size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {viewMode === 'expected' ? (
+            <>
+              <div className="flex-1 overflow-auto">
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-slate-500 gap-3">
+                    <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+                    <span className="font-bold text-sm">입고 예정 발주 내역을 불러오는 중입니다...</span>
+                  </div>
+                ) : filteredPendingRows.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2.5">
+                    <Truck className="w-12 h-12 opacity-30" />
+                    <span className="font-bold text-base text-slate-600">
+                      {pendingDateFilter === 'today'
+                        ? `금일(${todayStr}) 입고 예정인 미입고 발주 품목이 없습니다.`
+                        : '현재 미입고 상태의 발주 품목이 없습니다.'}
+                    </span>
+                    {pendingDateFilter === 'today' && pendingRows.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingDateFilter('all')}
+                        className="mt-1 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                      >
+                        미입고 전체 ({pendingRows.length}건) 보기
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse min-w-[1100px]">
+                    <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-300 text-[12px] font-black text-slate-700">
+                      <tr>
+                        <th className="py-2.5 px-3 text-center w-12">No</th>
+                        <th className="py-2.5 px-3 text-center w-24">구분</th>
+                        <th className="py-2.5 px-3 text-center w-28">입고예정일</th>
+                        <th className="py-2.5 px-3 text-center w-36">발주번호 / 발주일</th>
+                        <th className="py-2.5 px-3 w-36">매입처</th>
+                        <th className="py-2.5 px-3 text-center w-20">창고</th>
+                        <th className="py-2.5 px-3 min-w-[220px]">품명 / 품번</th>
+                        <th className="py-2.5 px-3 text-right w-24">발주수량</th>
+                        <th className="py-2.5 px-3 text-right w-28">입고예정 잔량</th>
+                        <th className="py-2.5 px-3 text-right w-24">적용단가</th>
+                        <th className="py-2.5 px-3 text-right w-28">예정금액</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 text-[13px]">
+                      {filteredPendingRows.map((p, idx) => {
+                        const isToday = p.expectedDeliveryDate === todayStr;
+                        const isOverdue = Boolean(p.expectedDeliveryDate && p.expectedDeliveryDate < todayStr);
+                        const boxEst = p.packUnit > 1 ? Math.round((p.remainQty / p.packUnit) * 10) / 10 : 0;
+                        return (
+                          <tr key={p.id} className="hover:bg-blue-50/40 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono text-xs text-slate-500">{idx + 1}</td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-black border ${
+                                  isToday
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : isOverdue
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                                }`}
+                              >
+                                {isToday ? '금일입고' : isOverdue ? '입고지연' : '입고예정'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center font-mono font-bold text-slate-900">
+                              {p.expectedDeliveryDate || '-'}
+                              {p.orderCycle && (
+                                <span className="ml-1 text-[10px] text-slate-500">({p.orderCycle})</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <div className="font-mono text-xs font-bold text-slate-800">{p.orderNo}</div>
+                              <div className="font-mono text-[10.5px] text-slate-400">{p.orderDate}</div>
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800 truncate max-w-[160px]" title={p.partnerName}>
+                              {p.partnerName}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
+                                {p.warehouse}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900">{p.productName}</span>
+                                <ProductLifecycleBadge
+                                  status={p.productStatus}
+                                  discontinuedDate={p.discontinuedDate}
+                                  isUsed={p.isUsed}
+                                  name={p.productName}
+                                />
+                              </div>
+                              <div className="font-mono text-[11px] text-slate-400">{p.productCode}</div>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-600">
+                              {p.orderQty.toLocaleString()} {p.unit}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <div className="font-mono font-black text-blue-700">
+                                {p.remainQty.toLocaleString()} {p.unit}
+                              </div>
+                              {boxEst > 0 && (
+                                <div className="text-[10.5px] text-slate-500">약 {boxEst}박스</div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-700">
+                              ₩{p.unitPrice.toLocaleString()}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-black text-indigo-700">
+                              ₩{p.expectedAmt.toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 font-bold text-xs text-slate-700">
+                <div className="flex items-center gap-4">
+                  <span>입고 예정 품목: <strong className="text-blue-700">{filteredPendingRows.length}</strong>건</span>
+                  <span className="text-slate-300">|</span>
+                  <span>총 예정금액 합계: <strong className="text-indigo-700 font-mono text-base font-black">₩{filteredPendingRows.reduce((s, r) => s + r.expectedAmt, 0).toLocaleString()}</strong></span>
+                </div>
+                <div className="text-slate-500 font-medium">
+                  상단 <span className="text-indigo-700 font-bold">[A4 인쇄]</span>를 누르면 현장 검수용 입고예정 명세표를 출력할 수 있습니다.
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
           {/* 테이블 상단 정보 요약 행 */}
           <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-sm font-bold text-slate-700">
             <div className="flex items-center gap-3.5">
@@ -1568,6 +2071,8 @@ export const ReceivingStatusEditView: React.FC = () => {
               💡 실시간 수정 후 상단의 <span className="text-emerald-700 font-bold">[변경사항 일괄저장]</span>을 누르면 창고 실재고와 수불부에 즉시 원자적 반영됩니다.
             </div>
           </div>
+            </>
+          )}
         </div>
       </main>
 
