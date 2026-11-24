@@ -76,11 +76,10 @@ import {
   WEEKDAY_DEMAND_FACTORS,
   addDaysYmd,
   getWeekdayCharYmd,
-  parseLeadTimeDays,
-  parseDeliveryDays,
   calcRow,
   splitWeek,
   classifyPattern,
+  getExpectedArrivalSchedule,
   getScheduledExclusion,
   calcStrategyOrderDays,
   type SheetRowInput,
@@ -882,7 +881,10 @@ export const MatOrderDayView: React.FC = () => {
   const computeRowAutoPlan = useCallback(
     (r: SheetRow, targetDayIdx: number, mode: StrategyMode) => {
       const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 1;
-      const totalStock = (r.incoming || 0) + (r.currentStock || 0);
+      const totalStock = Math.max(
+        0,
+        (r.incoming || 0) + (r.currentStock || 0) - (Number(r.consumedSinceSnap) || 0)
+      );
       const dailyUsage = r.dailyUsage || 0;
       const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : totalStock > 0 ? 99 : 0;
 
@@ -2302,8 +2304,15 @@ export const MatOrderDayView: React.FC = () => {
         }
       }
 
-      const leadDays = r.leadDays && r.leadDays > 0 ? r.leadDays : parseLeadTimeDays(r.orderCycle);
-      const expectedYmd = addDaysYmd(currentDayDate, leadDays);
+      const sched = getExpectedArrivalSchedule({
+        baseOrderYmd: currentDayDate,
+        supplier: r.supplier || '',
+        orderDay: r.orderDay,
+        orderCycle: r.orderCycle,
+        leadDays: r.leadDays,
+      });
+      const leadDays = sched.leadDays;
+      const expectedYmd = sched.expectedInYmd;
 
       return {
         idx: idx + 1,
@@ -3653,7 +3662,7 @@ export const MatOrderDayView: React.FC = () => {
                   type="button"
                   onClick={() => setShowBatchDispatchModal(true)}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-bold transition cursor-pointer border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 whitespace-nowrap"
-                  title="오늘 발주할 거래처들을 발주방법(카톡·발주고·통합구매·이메일 등)별로 모아 한 번에 복사·전송합니다."
+                  title="오늘 발주할 거래처들을 발주방법(카톡·발주고(GS)·발주고(네트웍스)·이메일 등)별로 모아 한 번에 복사·전송합니다."
                 >
                   <Send className="w-4 h-4 text-slate-600" />
                   <span>발주 전송 모음</span>
@@ -4546,26 +4555,23 @@ export const MatOrderDayView: React.FC = () => {
                               {pattern}
                             </span>
                             {(() => {
-                              const leadDays = r.leadDays && r.leadDays > 0 ? r.leadDays : parseLeadTimeDays(r.orderCycle);
                               const baseYmd = m.targetDayDate || currentDayDate || kstToday();
-                              const allowedDays = parseDeliveryDays(r.supplier || '', r.orderDay);
-                              const monIdx = (new Date(`${baseYmd}T00:00:00+09:00`).getDay() + 6) % 7;
-                              let shiftDays = 0;
-                              if (allowedDays.some(Boolean) && !allowedDays[monIdx]) {
-                                for (let offset = 1; offset <= 7; offset++) {
-                                  if (allowedDays[(monIdx + offset) % 7]) {
-                                    shiftDays = offset;
-                                    break;
-                                  }
-                                }
-                              }
-                              const effectiveOrderYmd = shiftDays > 0 ? addDaysYmd(baseYmd, shiftDays) : baseYmd;
-                              const expectedInYmd = addDaysYmd(effectiveOrderYmd, leadDays);
+                              const {
+                                effectiveOrderYmd,
+                                expectedInYmd,
+                                leadDays,
+                                isNextOrderDay,
+                              } = getExpectedArrivalSchedule({
+                                baseOrderYmd: baseYmd,
+                                supplier: r.supplier || '',
+                                orderDay: r.orderDay,
+                                orderCycle: r.orderCycle,
+                                leadDays: r.leadDays,
+                              });
                               const [, mm, dd] = expectedInYmd.split('-');
                               const dow = getWeekdayCharYmd(expectedInYmd);
                               const shortIn = mm && dd ? `${Number(mm)}/${Number(dd)}(${dow})` : expectedInYmd;
                               const nextOrderDow = getWeekdayCharYmd(effectiveOrderYmd);
-                              const isNextOrderDay = shiftDays > 0;
                               return (
                                 <span
                                   className={`block mt-0.5 px-1 py-[1px] rounded text-[10.5px] font-bold border whitespace-nowrap ${
@@ -4971,7 +4977,11 @@ export const MatOrderDayView: React.FC = () => {
                                   <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-700">
                                     <div className="font-bold text-slate-900">① 현장 총 가용재고</div>
                                     <div className="text-[11.5px] text-slate-600 font-mono mt-0.5">
-                                      실재고 {r.currentStock}봉 + 입고예정 {r.incoming}봉 = <strong>{m.totalStock.toLocaleString()}봉</strong>
+                                      실재고 {r.currentStock}봉 + 입고예정 {r.incoming}봉
+                                      {(Number(r.consumedSinceSnap) || 0) > 0
+                                        ? ` - 당일예상소진 ${Number(r.consumedSinceSnap).toLocaleString()}봉`
+                                        : ''}{' '}
+                                      = <strong>{m.totalStock.toLocaleString()}봉</strong>
                                       <span className="ml-1 text-blue-700 font-bold">(Runway: {m.stockDays.toFixed(1)}일치)</span>
                                     </div>
                                   </div>

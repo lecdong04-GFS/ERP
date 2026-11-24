@@ -247,6 +247,7 @@ export async function getLiveBomUsageMap(targetDate?: string): Promise<LiveBomUs
   '30003109': [
     { targetCode: 'PM-00005', ratio: 0.45, divisor: 4000 }, // 60*35 적색(도시락)
     { targetCode: 'PM-00006', ratio: 0.55, divisor: 4000 }, // 60*35 청색(도시락)
+    { targetCode: 'PM-00007', ratio: 1.03, divisor: 5000 }, // 에코피드수축필름 (도시락*1.03)
   ],
 };
 

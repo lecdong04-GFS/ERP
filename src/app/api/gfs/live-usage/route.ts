@@ -5,6 +5,7 @@ import { kstToday } from '@/lib/kst';
 import { CANONICAL_DAILY_REPORTS } from '@/components/production/data/dailyProductionReportData';
 import { isExcludedFromOrder } from '@/lib/gfs/orderCalc';
 import { isTerminalProductStatus } from '@/lib/gfs/productStatus';
+import { getLiveBomUsageMap } from '@/lib/gfs/liveUsage';
 import {
   calcDailyUsageFromParams,
   dedupSalesOrders,
@@ -252,16 +253,20 @@ export async function GET(req: NextRequest) {
     });
     const invMap = new Map(invSums.map((r) => [r.productId, Number(r._sum.currentQty) || 0]));
 
+    const liveBom = await getLiveBomUsageMap(reqDate || undefined);
+
     const rows: any[] = [];
+    const seenPid = new Set<number>();
     for (const [pid, v] of acc.entries()) {
       const p = v.child;
       const div = Number(p.bomDivisor) > 0 ? Number(p.bomDivisor) : 1000;
       const mult = Number(p.bomMultiplier) > 0 ? Number(p.bomMultiplier) : 1;
       const digits = Number.isFinite(Number(p.bomRoundDigits)) ? Number(p.bomRoundDigits) : 1;
-      const daily = calcDailyUsageFromParams(v.rawTotalBuffered, div, mult, 1, digits);
+      const daily = liveBom.byProductId.get(pid) ?? calcDailyUsageFromParams(v.rawTotalBuffered, div, mult, 1, digits);
       const total = invMap.get(pid) || 0;
       const nm = p.name || '';
       if (nm) {
+        seenPid.add(pid);
         rows.push({
           productId: pid,
           productCode: p.productCode || '',
@@ -272,6 +277,32 @@ export async function GET(req: NextRequest) {
           liveDays: daily > 0 ? total / daily : null,
           menuCount: v.menus.length,
           menus: v.menus.slice(0, 5),
+          source: 'DB_BOM',
+        });
+      }
+    }
+
+    // 바코드 분리/수축필름 등 파생 자재(getLiveBomUsageMap 전용 확장)도 동일하게 반영
+    const extraPids = Array.from(liveBom.byProductId.keys()).filter((pid) => !seenPid.has(pid));
+    if (extraPids.length > 0) {
+      const extraProds = await prisma.product.findMany({
+        where: { id: { in: extraPids }, isUsed: true },
+        select: { id: true, productCode: true, name: true, warehouse: true },
+      });
+      for (const p of extraProds) {
+        const daily = liveBom.byProductId.get(p.id) || 0;
+        if (!(daily > 0) || !p.name) continue;
+        const total = invMap.get(p.id) || 0;
+        rows.push({
+          productId: p.id,
+          productCode: p.productCode || '',
+          productName: p.name,
+          warehouse: p.warehouse || '',
+          liveDaily: daily,
+          liveTotal: total,
+          liveDays: total / daily,
+          menuCount: 0,
+          menus: [],
           source: 'DB_BOM',
         });
       }

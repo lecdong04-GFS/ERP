@@ -648,6 +648,7 @@ export const StockLookupView: React.FC = () => {
   const [detailItem, setDetailItem] = useState<StockItem | null>(null);
   const [dirtyRowIds, setDirtyRowIds] = useState<Set<number>>(new Set());
   const [priceEditedIds, setPriceEditedIds] = useState<Set<number>>(new Set());
+  const [manualPriceEditedIds, setManualPriceEditedIds] = useState<Set<number>>(new Set());
   const [newRowIds, setNewRowIds] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
@@ -1290,6 +1291,7 @@ export const StockLookupView: React.FC = () => {
               currentQty: current,
               unitPrice: uprice,
               priceEdited: uprice > 0,
+              priceSource: 'manual',
               vendor: addForm.vendor.trim(),
               safetyStock: safety,
               packUnit: pack,
@@ -1503,6 +1505,7 @@ export const StockLookupView: React.FC = () => {
     setDirtyRowIds((prev) => new Set(prev).add(Number(rowId)));
     if (columnKey === 'unitPrice' || columnKey === 'boxPrice') {
       setPriceEditedIds((prev) => new Set(prev).add(Number(rowId)));
+      setManualPriceEditedIds((prev) => new Set(prev).add(Number(rowId)));
     }
   };
 
@@ -1973,7 +1976,6 @@ export const StockLookupView: React.FC = () => {
             seenInUpload.set(row.id, { code: cleanItemId, isTerminal: isDeletedRow, qty: current });
             freshIds.add(row.id);
             dirtyIds.add(row.id);
-            if (price > 0) priceEdited.add(row.id);
             added += 1;
             if (current > 0) {
               review.push({ id: row.id, name, kind: '신규', oldQty: 0, curQty: current });
@@ -2145,7 +2147,13 @@ export const StockLookupView: React.FC = () => {
               warehouse: d.whName,
               currentQty: d.currentStock,
               dailyUsage: d.dailyUsage,
-              ...(priceEditedIds.has(d.id) ? { unitPrice: d.unitPrice, priceEdited: true } : { priceEdited: false }),
+              ...(priceEditedIds.has(d.id)
+                ? {
+                    unitPrice: d.unitPrice,
+                    priceEdited: true,
+                    priceSource: (manualPriceEditedIds.has(d.id) ? 'manual' : 'upload') as 'manual' | 'upload',
+                  }
+                : { priceEdited: false }),
               stockAmount: d.totalAmount,
               safetyStock: d.safetyStock,
               expiryDate: d.expiryDate,
@@ -2174,7 +2182,17 @@ export const StockLookupView: React.FC = () => {
             productName: d.itemName,
             warehouse: d.whName,
             currentQty: d.currentStock,
-            ...(priceEditedIds.has(d.id) ? { unitPrice: d.unitPrice, priceEdited: true } : { priceEdited: false }),
+            ...(priceEditedIds.has(d.id)
+              ? {
+                  unitPrice: d.unitPrice,
+                  priceEdited: true,
+                  priceSource: (manualPriceEditedIds.has(d.id) ? 'manual' : 'upload') as 'manual' | 'upload',
+                }
+              : {
+                  ...(d.unitPrice > 0 ? { unitPrice: d.unitPrice } : {}),
+                  priceEdited: false,
+                  priceSource: 'upload' as const,
+                }),
             expiryDate: d.expiryDate,
             vendor: d.vendor,
             safetyStock: d.safetyStock,
@@ -2208,6 +2226,7 @@ export const StockLookupView: React.FC = () => {
       justUploadedRef.current = false;
       setDirtyRowIds(new Set());
       setPriceEditedIds(new Set());
+      setManualPriceEditedIds(new Set());
       setNewRowIds(new Set());
       alert(
         `저장 완료 (${targetDate} 실사 확정 ${snapJson.count}건 저장됨${

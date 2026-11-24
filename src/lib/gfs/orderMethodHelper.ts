@@ -3,6 +3,8 @@
  */
 
 export type OrderChannelKind =
+  | '발주고(GS)'
+  | '발주고(네트웍스)'
   | '발주고'
   | '통합구매'
   | '자사전산'
@@ -13,7 +15,7 @@ export type OrderChannelKind =
 
 export interface ResolvedOrderMethod {
   channel: OrderChannelKind;
-  /** 표에 표시할 짧은 채널명 (예: '발주고', '자사전산', '카톡', '통합구매', '이메일') */
+  /** 표에 표시할 짧은 채널명 (예: '발주고(GS)', '발주고(네트웍스)', '자사전산', '카톡', '이메일') */
   channelLabel: string;
   /** 'HH:MM' (24시간 표기) 또는 null */
   cutoffTime: string | null;
@@ -93,7 +95,17 @@ function extractTimeTokens(text: string): ParsedTimeToken[] {
 
 function detectChannel(raw: string, supplier: string): { kind: OrderChannelKind; label: string } {
   const s = `${raw} ${supplier}`.trim();
-  if (/발주고/.test(raw)) return { kind: '발주고', label: '발주고' };
+  if (/발주고\s*\(?\s*GS\s*\)?|GS\s*전용\s*발주고/i.test(raw)) {
+    return { kind: '발주고(GS)', label: '발주고(GS)' };
+  }
+  if (/발주고\s*\(?\s*(네트웍스|네트워크|NW)\s*\)?|네트웍스\s*발주고/i.test(raw)) {
+    return { kind: '발주고(네트웍스)', label: '발주고(네트웍스)' };
+  }
+  if (/발주고/.test(raw)) {
+    if (/네트웍스/.test(supplier)) return { kind: '발주고(네트웍스)', label: '발주고(네트웍스)' };
+    if (/리테일|직배|DS유통/.test(supplier)) return { kind: '발주고(GS)', label: '발주고(GS)' };
+    return { kind: '발주고', label: '발주고' };
+  }
   if (/통합구매|GS통합/i.test(raw)) return { kind: '통합구매', label: '통합구매' };
   if (/카톡|카카오/i.test(raw)) return { kind: '카톡', label: '카톡' };
   if (/이메일|메일|email/i.test(raw)) return { kind: '이메일', label: '이메일' };
@@ -329,6 +341,32 @@ export function buildOrderMethodGuide(params: {
       ]
         .filter((line, idx, arr) => !(line === '' && arr[idx - 1] === ''))
         .join('\n'),
+    };
+  }
+
+  if (info.channel === '발주고(GS)') {
+    return {
+      title: '발주고(GS리테일) 발주 진행 안내',
+      steps: [
+        `1. 발주고 사이트 > GS리테일(전용) 로그인 후 거래처 '${supplier}'를 선택합니다.`,
+        `2. 아래 품목 및 박스 수량을 입력하고 납품일을 확인합니다.`,
+        `3. 마감(${cutoffDesc}) 전 최종 전송 완료 후 ERP에서 전표 확정을 진행하세요.`,
+      ],
+      copyLabel: '발주고(GS) 입력용 품목·수량 복사',
+      copyText: `[발주고(GS)] ${supplier} (${orderDate})\n${itemLines}`,
+    };
+  }
+
+  if (info.channel === '발주고(네트웍스)') {
+    return {
+      title: '발주고(GS네트웍스) 발주 진행 안내',
+      steps: [
+        `1. 발주고 사이트 > GS네트웍스 로그인 후 거래처 '${supplier}'를 선택합니다.`,
+        `2. 아래 품목 및 박스 수량을 입력하고 납품일을 확인합니다.`,
+        `3. 마감(${cutoffDesc}) 전 최종 전송 완료 후 ERP에서 전표 확정을 진행하세요.`,
+      ],
+      copyLabel: '발주고(네트웍스) 입력용 품목·수량 복사',
+      copyText: `[발주고(네트웍스)] ${supplier} (${orderDate})\n${itemLines}`,
     };
   }
 

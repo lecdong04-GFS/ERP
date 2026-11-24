@@ -229,6 +229,7 @@ export async function PUT(req: NextRequest) {
       isUsed?: boolean;
       effectiveDate?: string;
       priceEdited?: boolean;
+      priceSource?: 'manual' | 'upload';
     }> = body.updates || (body.id ? [body] : []);
 
     if (!updates || updates.length === 0) {
@@ -245,10 +246,32 @@ export async function PUT(req: NextRequest) {
 
     const existingInvs = await prisma.inventory.findMany({
       where: { id: { in: candidateIds } },
-      select: { id: true, productId: true },
+      select: { id: true, productId: true, unitPrice: true, currentQty: true },
     });
     const existingIdSet = new Set(existingInvs.map((x) => x.id));
     const prodIdMap = new Map(existingInvs.map((x) => [x.id, x.productId]));
+    const invInfoMap = new Map(existingInvs.map((x) => [x.id, x]));
+
+    const putPidsForPrice = [
+      ...new Set(
+        updates
+          .filter((u) => u.unitPrice !== undefined || u.priceEdited === true)
+          .map((u) => u.productId || prodIdMap.get(Number(u.id)))
+          .filter((n): n is number => Number(n) > 0)
+      ),
+    ];
+    const putExistingPrices = putPidsForPrice.length
+      ? await prisma.productPrice.findMany({
+          where: { productId: { in: putPidsForPrice } },
+          orderBy: [{ effectiveDate: 'desc' }, { id: 'desc' }],
+        })
+      : [];
+    const putPricesByPid = new Map<number, typeof putExistingPrices>();
+    for (const pr of putExistingPrices) {
+      const list = putPricesByPid.get(pr.productId) || [];
+      list.push(pr);
+      putPricesByPid.set(pr.productId, list);
+    }
 
     // 2) 실제 존재하는 ID만 50개 단위 청크 트랜잭션으로 안전하게 갱신 (대용량 락 및 타임아웃 방지)
     const validUpdates = updates.filter((u) => existingIdSet.has(Number(u.id)));
@@ -261,13 +284,27 @@ export async function PUT(req: NextRequest) {
         const chunkResults = await prisma.$transaction(
           slice.map((item) => {
             const data: any = {};
+            const invInfo = invInfoMap.get(Number(item.id));
+            const pId = item.productId || invInfo?.productId || 0;
+            const latestMaster = pId ? pickLatestValidPrice((putPricesByPid.get(pId) || []) as any) : null;
+            const existingMasterPrice = Number(latestMaster?.purchasePrice) || 0;
+            const existingInvPrice = Number(invInfo?.unitPrice) || 0;
+            const canOverwritePrice =
+              (item.priceSource === 'manual' && item.priceEdited === true) ||
+              (existingMasterPrice <= 0 && existingInvPrice <= 0);
+
             if (item.currentQty !== undefined) data.currentQty = Number(item.currentQty);
             if (item.dailyUsage !== undefined) data.dailyUsage = Number(item.dailyUsage);
-            if (item.unitPrice !== undefined) data.unitPrice = Number(item.unitPrice);
-            if (item.stockAmount !== undefined) {
+            if (item.unitPrice !== undefined && canOverwritePrice && Number(item.unitPrice) > 0) {
+              data.unitPrice = Number(item.unitPrice);
+            }
+            if (canOverwritePrice && item.stockAmount !== undefined) {
               data.stockAmount = Number(item.stockAmount);
-            } else if (item.currentQty !== undefined && item.unitPrice !== undefined) {
-              data.stockAmount = Number(item.currentQty) * Number(item.unitPrice);
+            } else if (item.currentQty !== undefined) {
+              const effPrice = data.unitPrice ?? (existingMasterPrice || existingInvPrice || 0);
+              data.stockAmount = Math.round(Number(item.currentQty) * effPrice);
+            } else if (data.unitPrice !== undefined && invInfo) {
+              data.stockAmount = Math.round((Number(invInfo.currentQty) || 0) * data.unitPrice);
             }
             if (item.warehouse !== undefined) data.warehouse = String(item.warehouse);
             if (item.expiryDate !== undefined) data.expiryDate = String(item.expiryDate);
@@ -370,6 +407,11 @@ export async function PUT(req: NextRequest) {
           if (u.priceEdited === true && nextPrice > 0) {
             const pPrices = pricesByPid.get(pId) || [];
             const latestValid = pickLatestValidPrice(pPrices as any);
+            const existingMasterPrice = Number(latestValid?.purchasePrice) || 0;
+            const allowMasterPriceSync = u.priceSource === 'manual' || existingMasterPrice <= 0;
+            if (!allowMasterPriceSync) {
+              return;
+            }
             const effDate = u.effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(u.effectiveDate) ? u.effectiveDate : todayKst;
             if ((Number(latestValid?.purchasePrice) || 0) !== nextPrice) {
               const sameDay = pPrices.find((pr) => normalizeDateYmd(pr.effectiveDate) === effDate);
@@ -461,6 +503,7 @@ export async function POST(req: NextRequest) {
       effectiveDate?: string;
       preserveZeroStock?: boolean;
       priceEdited?: boolean;
+      priceSource?: 'manual' | 'upload';
     }>;
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: '생성할 재고 내역이 없습니다.' }, { status: 400 });
@@ -615,13 +658,17 @@ export async function POST(req: NextRequest) {
       const pPrices = pricesByPid.get(product.id) || [];
       const latestValid = pickLatestValidPrice(pPrices as any);
       const existingMasterPrice = Number(latestValid?.purchasePrice) || 0;
-      const shouldUpdatePrice = Boolean(it.priceEdited) || (existingMasterPrice <= 0 && (Number(existInv?.unitPrice) || 0) <= 0);
+      const existingInvPrice = Number(existInv?.unitPrice) || 0;
+      const isManualPriceEdit = (it.priceSource || body.priceSource) === 'manual' && Boolean(it.priceEdited);
+      const shouldUpdatePrice =
+        isManualPriceEdit ||
+        (priceInput > 0 && existingMasterPrice <= 0 && existingInvPrice <= 0);
 
       const finalQty = it.preserveZeroStock && qty === 0 && existInv ? existInv.currentQty : qty;
       const finalPrice =
         priceInput > 0 && shouldUpdatePrice
           ? priceInput
-          : (existingMasterPrice || existInv?.unitPrice || 0);
+          : (existingMasterPrice || existingInvPrice || 0);
 
       if (priceInput > 0 && shouldUpdatePrice && existingMasterPrice !== priceInput) {
         priceSyncTargets.push({

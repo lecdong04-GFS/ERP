@@ -137,6 +137,8 @@ export interface SheetRowInput {
   status?: string;
   orderCycle?: string;
   leadDays?: number;
+  consumedSinceSnap?: number;
+  snapAsOfDate?: string;
   discontinuedDate?: string;
   isDormant?: boolean;
   dormantTier?: 'active' | 'dormant' | 'unlinked_dormant';
@@ -190,11 +192,12 @@ export function calcRow(r: SheetRowInput): CalcResult {
   const pack = r.packUnit > 0 ? r.packUnit : r.packUnitAudit > 0 ? r.packUnitAudit : 0;
   const incoming = Number(r.incoming) || 0;
   const currentStock = Number(r.currentStock) || 0;
+  const consumedSinceSnap = Math.max(0, Number(r.consumedSinceSnap) || 0);
   const dailyUsage = Math.max(0, Number(r.dailyUsage) || 0);
   const days = Math.max(0, Number(r.days) || 0);
   const bagPrice = Math.max(0, Number(r.bagPrice) || 0);
 
-  const totalStock = incoming + currentStock;
+  const totalStock = Math.max(0, incoming + currentStock - consumedSinceSnap);
   const required = dailyUsage * days;
   const diff = totalStock - required;
   const stockDays = dailyUsage > 0 ? totalStock / dailyUsage : NaN;
@@ -210,7 +213,9 @@ export function calcRow(r: SheetRowInput): CalcResult {
 /** 거래처 헤더 및 DB orderDay 에서 납품요일 파싱 (월~일 순서 boolean) */
 export function parseDeliveryDays(header: string, orderDay?: string): boolean[] {
   const h = (orderDay || header || '').replace(/\s+/g, '');
-  if (/월화수목금토|월~토/.test(h)) return [true, true, true, true, true, true, false];
+  if (/월화수목금토|월~토/.test(h) || (/월수금/.test(h) && /화목토/.test(h))) {
+    return [true, true, true, true, true, true, false];
+  }
   // '매일' 단독 키워드만 매칭 (매일유업/일미 등 오매칭 방지)
   if (/^매일$/.test(h)) return [true, true, true, true, true, true, false];
   if (/월화수목금|주5일|월~금/.test(h)) return [true, true, true, true, true, false, false];
@@ -231,10 +236,107 @@ export interface SplitWeekOptions {
   weekendRelief?: boolean;
 }
 
+function isFlexibleAdvanceOrder(header: string, orderDay?: string, leadDays?: number): boolean {
+  if (leadDays && leadDays >= 7) return true;
+  const h = (orderDay || header || '').replace(/\s+/g, '');
+  return /미리발주|수시/.test(h);
+}
+
 /**
- * 확정량을 납품요일별 수요 가중치(화:1.09, 월:1.08 ... 금:0.88)에 따라 비례 분할 (해밀턴 최대잔여법)
- * activeDayMask 전달 시 해당 주에서 실제 발주/납품 가능한 요일(예: 오늘 이후)에만 100% 배분
- * options.weekendRelief: 토요일 입고 현장 작업자의 노동강도를 낮추기 위해 토요일 비중을 20% 경감(0.8x)하고 주중으로 분산
+ * 발주 요일(0=월..6=일)에서 리드타임과 휴무일(일요일, 토요 미납품 거래처의 토요일)을 건너뛴 예상 입고 요일(0=월..6=일) 및 실제 일수 오프셋 산출
+ */
+export function advanceOrderToArrivalDow(
+  orderDowMon0: number,
+  leadDays: number,
+  arrivalDays: boolean[]
+): { arrDow: number | null; calendarShift: number } {
+  const skipSun = !arrivalDays[6];
+  const skipSat = !arrivalDays[5];
+  if (orderDowMon0 === 6 && skipSun) return { arrDow: null, calendarShift: 0 };
+  if (orderDowMon0 === 5 && skipSat) return { arrDow: null, calendarShift: 0 };
+
+  let d = orderDowMon0;
+  let calendarShift = 0;
+  let remaining = Math.max(1, Math.min(21, Math.round(leadDays || 1)));
+  while (remaining > 0 && calendarShift < 28) {
+    d = (d + 1) % 7;
+    calendarShift++;
+    if ((d === 6 && skipSun) || (d === 5 && skipSat)) continue;
+    remaining--;
+  }
+  return { arrDow: d, calendarShift };
+}
+
+/** 거래처 헤더·입고요일·리드타임 기준 실제 발주 가능 요일(0=월..6=일 boolean) 산출 */
+export function getOrderAllowedDays(
+  header: string,
+  orderDay?: string,
+  orderCycle?: string,
+  leadDaysInput?: number
+): boolean[] {
+  const arrivalDays = parseDeliveryDays(header, orderDay);
+  const resolvedLead = leadDaysInput && leadDaysInput > 0 ? leadDaysInput : parseLeadTimeDays(orderCycle);
+  if (isFlexibleAdvanceOrder(header, orderDay, resolvedLead)) {
+    return [true, true, true, true, true, false, false];
+  }
+  return arrivalDays.map((_, d) => {
+    const { arrDow } = advanceOrderToArrivalDow(d, resolvedLead, arrivalDays);
+    return arrDow !== null && Boolean(arrivalDays[arrDow]);
+  });
+}
+
+/** 기준 발주일 기준 다음 유효 발주일 및 리드타임·휴무 반영 입고예정일 계산 */
+export function getExpectedArrivalSchedule(params: {
+  baseOrderYmd: string;
+  supplier?: string;
+  orderDay?: string;
+  orderCycle?: string;
+  leadDays?: number;
+}): {
+  effectiveOrderYmd: string;
+  expectedInYmd: string;
+  shiftDays: number;
+  leadDays: number;
+  isNextOrderDay: boolean;
+} {
+  const leadDays =
+    params.leadDays && params.leadDays > 0 ? params.leadDays : parseLeadTimeDays(params.orderCycle);
+  const baseYmd = params.baseOrderYmd;
+  const arrivalDays = parseDeliveryDays(params.supplier || '', params.orderDay);
+  const allowedOrderDays = getOrderAllowedDays(
+    params.supplier || '',
+    params.orderDay,
+    params.orderCycle,
+    leadDays
+  );
+  const monIdx = (new Date(`${baseYmd}T00:00:00+09:00`).getDay() + 6) % 7;
+  let shiftDays = 0;
+  if (allowedOrderDays.some(Boolean) && !allowedOrderDays[monIdx]) {
+    for (let offset = 1; offset <= 7; offset++) {
+      if (allowedOrderDays[(monIdx + offset) % 7]) {
+        shiftDays = offset;
+        break;
+      }
+    }
+  }
+  const effectiveOrderYmd = shiftDays > 0 ? addDaysYmd(baseYmd, shiftDays) : baseYmd;
+  const effMonIdx = (monIdx + shiftDays) % 7;
+  const calendarShift = isFlexibleAdvanceOrder(params.supplier || '', params.orderDay, leadDays)
+    ? leadDays
+    : advanceOrderToArrivalDow(effMonIdx, leadDays, arrivalDays).calendarShift || leadDays;
+  const expectedInYmd = addDaysYmd(effectiveOrderYmd, calendarShift);
+  return {
+    effectiveOrderYmd,
+    expectedInYmd,
+    shiftDays,
+    leadDays,
+    isNextOrderDay: shiftDays > 0,
+  };
+}
+
+/**
+ * 확정량을 실제 발주 가능 요일(입고요일 - 리드타임)과 목표재고일수 창 내 입고 횟수에 맞춰 비례 분할 (해밀턴 최대잔여법)
+ * activeDayMask 전달 시 해당 주에서 실제 발주 가능한 요일에만 배분하며, 주 후반부 몰림 방지를 위해 차주 입고 슬롯까지 분할 모수에 반영
  */
 export function splitWeek(
   r: SheetRowInput,
@@ -242,43 +344,62 @@ export function splitWeek(
   activeDayMask?: boolean[],
   options?: SplitWeekOptions
 ): number[] {
-  const days = parseDeliveryDays(r.supplier || '', r.orderDay);
+  const arrivalDays = parseDeliveryDays(r.supplier || '', r.orderDay);
+  const resolvedLead =
+    r.leadDays && r.leadDays > 0 ? r.leadDays : parseLeadTimeDays(r.orderCycle);
+  const days = getOrderAllowedDays(r.supplier || '', r.orderDay, r.orderCycle, resolvedLead);
   const eligible = activeDayMask ? days.map((on, i) => Boolean(on && activeDayMask[i])) : days;
   const idx = eligible.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
   const out = [0, 0, 0, 0, 0, 0, 0];
   if (finalBoxes <= 0 || idx.length === 0) return out;
 
-  if (idx.length === 1) {
-    out[idx[0]] = finalBoxes;
+  const targetDays = Number(r.targetOrderDays ?? r.days) || 0;
+  const flexible = isFlexibleAdvanceOrder(r.supplier || '', r.orderDay, resolvedLead);
+
+  let winDelivs = idx.length;
+  if (!flexible && targetDays > 0) {
+    const firstArr = advanceOrderToArrivalDow(idx[0], resolvedLead, arrivalDays).arrDow;
+    if (firstArr !== null) {
+      const horizon = Math.min(7, Math.max(1, Math.round(targetDays)));
+      let cnt = 0;
+      for (let off = 0; off < horizon; off++) {
+        if (arrivalDays[(firstArr + off) % 7]) cnt++;
+      }
+      winDelivs = Math.max(1, cnt);
+    }
+  }
+
+  const activeSlots = idx.slice(0, Math.max(1, winDelivs));
+  const overflowCount = Math.max(0, winDelivs - activeSlots.length);
+
+  if (activeSlots.length === 1 && overflowCount === 0) {
+    out[activeSlots[0]] = finalBoxes;
     return out;
   }
 
   const applyWeekendRelief = options?.weekendRelief === true;
 
-  // 1. 활성 납품 요일들의 가중치 맵 구성
+  // 1. 금주 활성 발주 요일 가중치 맵 구성
   const weights: Record<number, number> = {};
-  idx.forEach((i) => {
+  activeSlots.forEach((i) => {
     weights[i] = WEEKDAY_DEMAND_FACTORS[i]?.factor || 1.0;
   });
 
-  // 토요 입고배려: 토요일(5) 납품일이 포함되어 있고, 함께 배분받을 주중 납품일(0~4)이 존재하는 경우
-  if (applyWeekendRelief && idx.includes(5)) {
-    const weekdayIndices = idx.filter((i) => i < 5);
+  // 토요 입고배려: 토요일(5)이 포함되어 있고 주중 활성 요일(0~4)이 존재하는 경우
+  if (applyWeekendRelief && activeSlots.includes(5)) {
+    const weekdayIndices = activeSlots.filter((i) => i < 5);
     if (weekdayIndices.length > 0) {
       const pat = classifyPattern(r.supplier || '', r.orderDay);
       const isTueThuSat =
         pat === '화목토' ||
-        (idx.includes(1) && idx.includes(3) && idx.includes(5)) ||
-        (idx.length === 2 && (idx.includes(1) || idx.includes(3)) && idx.includes(5));
+        (activeSlots.includes(1) && activeSlots.includes(3) && activeSlots.includes(5)) ||
+        (activeSlots.length === 2 && (activeSlots.includes(1) || activeSlots.includes(3)) && activeSlots.includes(5));
 
       if (isTueThuSat) {
-        // 화목토 패턴: 화 1.1 : 목 1.1 : 토 0.8 (합 3.0) 완벽 적용
         if (weights[1] !== undefined) weights[1] = 1.1;
         if (weights[3] !== undefined) weights[3] = 1.1;
         weights[5] = 0.8;
       } else {
-        // 기타 토요일 포함 패턴(매일, 수토 등):
-        // 토요일 가중치를 20% 경감(x 0.8)하고, 절감분(20%)을 주중 활성 납품일에 균등 가산
         const origSatWeight = weights[5];
         const reliefSatWeight = origSatWeight * 0.8;
         const savedWeight = origSatWeight - reliefSatWeight;
@@ -291,38 +412,66 @@ export function splitWeek(
     }
   }
 
-  // 2. 활성 납품 요일들의 가중치 합산
-  const totalWeight = idx.reduce((acc, i) => acc + (weights[i] || 1.0), 0);
+  // 차주 이월 슬롯(가상 분할 모수) 구성: 금주 말에 전체 부족분을 한 번에 몰지 않음
+  const weeklyOrderIndices = days.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
+  const allSlots: Array<{ dow: number; weight: number; isOverflow: boolean; slotPos: number }> = [];
+  activeSlots.forEach((dow, pos) => {
+    allSlots.push({ dow, weight: weights[dow] || 1.0, isOverflow: false, slotPos: pos });
+  });
+  for (let k = 0; k < overflowCount; k++) {
+    const nextDow = weeklyOrderIndices.length > 0 ? weeklyOrderIndices[k % weeklyOrderIndices.length] : k % 7;
+    allSlots.push({
+      dow: nextDow,
+      weight: WEEKDAY_DEMAND_FACTORS[nextDow]?.factor || 1.0,
+      isOverflow: true,
+      slotPos: activeSlots.length + k,
+    });
+  }
+
+  // 2. 전체 분할 모수(금주 + 차주 이월 슬롯) 기준 가중치 합산
+  const totalWeight = allSlots.reduce((acc, s) => acc + s.weight, 0);
   if (totalWeight <= 0) {
-    const base = Math.floor(finalBoxes / idx.length);
-    let rem = finalBoxes - base * idx.length;
-    idx.forEach((i) => {
-      out[i] = base + (rem > 0 ? 1 : 0);
+    const base = Math.floor(finalBoxes / allSlots.length);
+    let rem = finalBoxes - base * allSlots.length;
+    allSlots.forEach((s) => {
+      const qty = base + (rem > 0 ? 1 : 0);
       if (rem > 0) rem -= 1;
+      if (!s.isOverflow) out[s.dow] += qty;
     });
     return out;
   }
 
   // 3. 가중치 비례 실수 배분 및 기초 정수 할당
   let allocatedSum = 0;
-  const fractions: { index: number; remainder: number; weight: number }[] = [];
+  const fractions: { dow: number; isOverflow: boolean; remainder: number; weight: number; slotPos: number }[] = [];
 
-  idx.forEach((i) => {
-    const w = weights[i] || 1.0;
-    const exact = (finalBoxes * w) / totalWeight;
+  allSlots.forEach((s) => {
+    const exact = (finalBoxes * s.weight) / totalWeight;
     const floor = Math.floor(exact);
-    out[i] = floor;
+    if (!s.isOverflow) out[s.dow] += floor;
     allocatedSum += floor;
-    fractions.push({ index: i, remainder: exact - floor, weight: w });
+    fractions.push({
+      dow: s.dow,
+      isOverflow: s.isOverflow,
+      remainder: exact - floor,
+      weight: s.weight,
+      slotPos: s.slotPos,
+    });
   });
 
-  // 4. 남은 잔여 박스를 잔여 소수점이 가장 큰 요일(동률 시 가중치 우선)부터 1박스씩 배정
-  let remainder = finalBoxes - allocatedSum;
-  fractions.sort((a, b) => b.remainder - a.remainder || b.weight - a.weight);
+  // 4. 남은 잔여 박스는 금주 슬롯(결품 방지 우선) → 잔여 소수점 큰 순 → 가중치/이른 요일 순 배정
+  const remainder = finalBoxes - allocatedSum;
+  fractions.sort(
+    (a, b) =>
+      (a.isOverflow ? 1 : 0) - (b.isOverflow ? 1 : 0) ||
+      b.remainder - a.remainder ||
+      b.weight - a.weight ||
+      a.slotPos - b.slotPos
+  );
 
   for (let k = 0; k < remainder; k++) {
-    const targetIdx = fractions[k % fractions.length].index;
-    out[targetIdx] += 1;
+    const target = fractions[k % fractions.length];
+    if (!target.isOverflow) out[target.dow] += 1;
   }
 
   return out;

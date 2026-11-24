@@ -28,6 +28,8 @@ export interface OrderSheetBuildResult {
   unlinkedDormantCount: number;
   dormantLatestOrderDate: string;
   dormantLatestSnapDate: string;
+  latestSnapDate: string;
+  elapsedProdDays: number;
   orderFile: string;
   masterSource: string;
   auditFile: null;
@@ -131,6 +133,23 @@ export async function buildOrderSheet(params?: {
     m.set(key, cur);
   };
 
+  const latestSnapDate = normalizeDateYmd(dormantAnalysis?.latestSnapDate || '');
+  let elapsedProdDays = 0;
+  if (latestSnapDate && checkDate && latestSnapDate < checkDate) {
+    try {
+      const postSnapOrders = await prisma.salesOrder.findMany({
+        where: { orderDate: { gt: latestSnapDate, lte: checkDate }, status: { not: '취소' } },
+        select: { orderDate: true },
+      });
+      const distinctOrderDays = new Set(
+        postSnapOrders.map((o) => normalizeDateYmd(o.orderDate)).filter(Boolean)
+      );
+      elapsedProdDays = Math.min(2, distinctOrderDays.size);
+    } catch (snapLagErr: any) {
+      errors.push(`경과 생산일수 조회 실패: ${snapLagErr?.message || snapLagErr}`);
+    }
+  }
+
   try {
     const activePendingDetails = await prisma.purchaseOrderDetail.findMany({
       where: {
@@ -152,7 +171,6 @@ export async function buildOrderSheet(params?: {
       },
     });
 
-    const latestSnapDate = normalizeDateYmd(dormantAnalysis?.latestSnapDate || '');
     const cutoffMs = new Date(`${checkDate}T00:00:00Z`).getTime() - 7 * 24 * 60 * 60 * 1000;
     const pendingCutoffDate = Number.isFinite(cutoffMs)
       ? new Date(cutoffMs).toISOString().slice(0, 10)
@@ -294,10 +312,15 @@ export async function buildOrderSheet(params?: {
       orderCycle: p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : ''),
       leadDays: (() => {
         const cycle = p.orderCycle || (p.partner?.leadTime ? `D+${p.partner.leadTime}` : '');
-        if (cycle.includes('2')) return 2;
-        if (cycle.includes('1')) return 1;
+        const m = cycle.match(/(\d+)/);
+        if (m) return Number(m[1]) || 1;
         return p.partner?.leadTime || 1;
       })(),
+      consumedSinceSnap:
+        elapsedProdDays > 0 && effectiveDailyUsage > 0
+          ? Math.round(effectiveDailyUsage * elapsedProdDays * 100) / 100
+          : 0,
+      snapAsOfDate: latestSnapDate,
       discontinuedDate: discDate,
       isReplaced: isReplacedSpam,
       replacementNote: isReplacedSpam ? '고미트햄(한성) 대체 완료 (스팸 발주 영구 중단)' : undefined,
@@ -324,6 +347,8 @@ export async function buildOrderSheet(params?: {
     unlinkedDormantCount,
     dormantLatestOrderDate: dormantAnalysis?.latestOrderDate || '',
     dormantLatestSnapDate: dormantAnalysis?.latestSnapDate || '',
+    latestSnapDate,
+    elapsedProdDays,
     orderFile: 'PostgreSQL DB + 완제품 수주 x BOM 실시간 일사용량',
     masterSource: 'db_live_bom',
     auditFile: null,

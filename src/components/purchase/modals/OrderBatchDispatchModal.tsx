@@ -34,8 +34,10 @@ interface Props {
 
 const CHANNEL_TABS: Array<{ key: 'ALL' | OrderChannelKind; label: string }> = [
   { key: 'ALL', label: '전체' },
+  { key: '발주고(GS)', label: '발주고(GS)' },
+  { key: '발주고(네트웍스)', label: '발주고(네트웍스)' },
+  { key: '발주고', label: '발주고(기타)' },
   { key: '카톡', label: '카톡' },
-  { key: '발주고', label: '발주고' },
   { key: '통합구매', label: '통합구매' },
   { key: '자사전산', label: '자사전산' },
   { key: '이메일', label: '이메일' },
