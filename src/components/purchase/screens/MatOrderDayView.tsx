@@ -3378,21 +3378,21 @@ export const MatOrderDayView: React.FC = () => {
                   <>
                     <div
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600 text-white border border-blue-700 shadow-2xs whitespace-nowrap"
-                      title={`체크 선택된 ${currentDayStaged.count}개 품목의 발주 예정총액 (추천 전체: ₩${Math.round(dayTotals.amt).toLocaleString()})`}
+                      title={`체크 선택된 ${currentDayStaged.count}개 품목의 발주총액 (전체 발주총액: ₩${Math.round(dayTotals.amt).toLocaleString()})`}
                     >
-                      <span className="text-[11.5px] font-bold text-blue-100">선택 예정총액</span>
+                      <span className="text-[11.5px] font-bold text-blue-100">발주총액(선택)</span>
                       <span className="font-mono font-black text-[14px] text-white">
                         ₩{Math.round(currentDayStaged.amt).toLocaleString()}
                       </span>
                       <span className="text-[10.5px] font-mono font-bold text-blue-100/90 border-l border-blue-400/50 pl-1.5">
-                        추천 {formatCompactWon(dayTotals.amt)}
+                        전체 {formatCompactWon(dayTotals.amt)}
                       </span>
                     </div>
                     <div
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 border border-blue-300 whitespace-nowrap"
                       title={`체크 선택된 ${currentDayStaged.count}건 / 총 ${dayRows.length}건`}
                     >
-                      <span className="text-[11.5px] font-bold text-blue-700">선택박스</span>
+                      <span className="text-[11.5px] font-bold text-blue-700">발주수량(선택)</span>
                       <span className="font-mono font-black text-[14px] text-blue-950">
                         {currentDayStaged.boxes.toLocaleString()} box
                       </span>
@@ -3405,15 +3405,15 @@ export const MatOrderDayView: React.FC = () => {
                   <>
                     <div
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50/70 border border-indigo-200/80 whitespace-nowrap"
-                      title="체크한 품목이 없을 때는 현재 화면 추천 전체 합계를 표시합니다. 품목을 체크하면 선택 금액만 따로 집계됩니다."
+                      title="오늘 화면에서 발주해야 할 전체 발주총액입니다. 품목을 체크하면 선택한 품목의 합계만 표시됩니다."
                     >
-                      <span className="text-[11.5px] font-bold text-indigo-700">추천 예정총액</span>
+                      <span className="text-[11.5px] font-bold text-indigo-700">발주총액</span>
                       <span className="font-mono font-black text-[14px] text-indigo-950">
                         ₩{Math.round(dayTotals.amt).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50/70 border border-blue-200/80 whitespace-nowrap">
-                      <span className="text-[11.5px] font-bold text-blue-700">발주박스</span>
+                      <span className="text-[11.5px] font-bold text-blue-700">발주수량</span>
                       <span className="font-mono font-black text-[14px] text-blue-950">
                         {dayTotals.boxes.toLocaleString()} box
                       </span>
@@ -5414,26 +5414,26 @@ export const MatOrderDayView: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-blue-700 text-xs font-black">선택 예정총액</span>
+                      <span className="text-blue-700 text-xs font-black">발주총액(선택)</span>
                       <span className="font-mono font-black text-blue-900 text-lg sm:text-xl">
                         ₩{Math.round(currentDayStaged.amt).toLocaleString()}
                       </span>
                       <span className="text-[11px] font-mono font-bold text-slate-400">
-                        (추천전체 ₩{Math.round(dayTotals.amt).toLocaleString()})
+                        (전체 ₩{Math.round(dayTotals.amt).toLocaleString()})
                       </span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-slate-500 text-xs">{DAY_CHARS[dayIdx]}요일 추천 박스</span>
+                      <span className="text-slate-500 text-xs">{DAY_CHARS[dayIdx]}요일 발주수량</span>
                       <span className="font-mono font-black text-blue-700 text-base">
                         {dayTotals.boxes.toLocaleString()}{' '}
                         <span className="text-xs font-sans">box</span>
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-slate-500 text-xs">추천 예정총액</span>
+                      <span className="text-slate-500 text-xs">발주총액</span>
                       <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl">
                         ₩{Math.round(dayTotals.amt).toLocaleString()}
                       </span>
