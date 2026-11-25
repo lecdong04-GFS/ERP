@@ -283,6 +283,10 @@ export interface SplitWeekOptions {
    * true이면 주중 분할 없이 해당 발주일(idx[0])에 전량 배정
    */
   singleOrderCoverage?: boolean;
+  /**
+   * 365일 가동 기준 특정 발주일(dow)에 다음 발주 입고일 전날까지 결품이 나지 않도록 보장하는 최소 박스 수
+   */
+  minDayCoverage?: { dow: number; boxes: number };
 }
 
 function isFlexibleAdvanceOrder(header: string, orderDay?: string, leadDays?: number): boolean {
@@ -569,6 +573,14 @@ export function splitWeek(
   for (let k = 0; k < remainder; k++) {
     const target = fractions[k % fractions.length];
     if (!target.isOverflow) out[target.dow] += 1;
+  }
+
+  // 5. 365일 가동 기준 당일 최소 결품 방어선(다음 발주 입고일 전날까지 부족분) 보장
+  if (options?.minDayCoverage && options.minDayCoverage.boxes > 0) {
+    const { dow, boxes } = options.minDayCoverage;
+    if (eligible[dow] && boxes > out[dow]) {
+      out[dow] = Math.min(finalBoxes, boxes);
+    }
   }
 
   return out;

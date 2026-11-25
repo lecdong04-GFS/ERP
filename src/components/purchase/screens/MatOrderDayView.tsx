@@ -967,10 +967,22 @@ export const MatOrderDayView: React.FC = () => {
       const itemDayMask = weekDates.map(
         (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
       );
+      const minTodayBoxes =
+        itemTargetDaysOverrides[r.id] === undefined && strategyCalc.calendarCoverageDays > 0 && pack > 0
+          ? Math.ceil(
+              Math.max(
+                0,
+                Math.round(dailyUsage * strategyCalc.calendarCoverageDays * strategyCalc.lossRate) -
+                  totalStock
+              ) / pack
+            )
+          : 0;
       const week = splitWeek(r, suggestedBoxes, itemDayMask, {
         weekendRelief: false,
         singleOrderCoverage:
           itemTargetDaysOverrides[r.id] === undefined && strategyCalc.isSingleOrderCoverage,
+        minDayCoverage:
+          minTodayBoxes > 0 ? { dow: targetDayIdx, boxes: minTodayBoxes } : undefined,
       });
       const targetDayConfirm = getRowDayConfirmStatus(targetDayDate, r);
       const boxPrice = calcBoxPrice(r.bagPrice, pack);

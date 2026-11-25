@@ -479,8 +479,16 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
           if (i < todayDowMon0) return false;
           return !(pidDates?.has(dStr) || nameDates?.has(dStr));
         });
+        const minTodayBoxes =
+          strategy.calendarCoverageDays > 0
+            ? Math.ceil(
+                Math.max(0, Math.round(dailyUsage * strategy.calendarCoverageDays) - totalStock) / pack
+              )
+            : 0;
         const week = splitWeek(r, suggestedBoxes, itemDayMask, {
           singleOrderCoverage: strategy.isSingleOrderCoverage,
+          minDayCoverage:
+            minTodayBoxes > 0 ? { dow: todayDowMon0, boxes: minTodayBoxes } : undefined,
         });
         const todayBoxes = week[todayDowMon0] || 0;
         if (todayBoxes > 0) {
