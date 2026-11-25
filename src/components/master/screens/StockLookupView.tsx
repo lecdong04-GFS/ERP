@@ -2153,7 +2153,10 @@ export const StockLookupView: React.FC = () => {
                     priceEdited: true,
                     priceSource: (manualPriceEditedIds.has(d.id) ? 'manual' : 'upload') as 'manual' | 'upload',
                   }
-                : { priceEdited: false }),
+                : {
+                    priceEdited: false,
+                    priceSource: (justUploadedRef.current ? 'upload' : 'manual') as 'manual' | 'upload',
+                  }),
               stockAmount: d.totalAmount,
               safetyStock: d.safetyStock,
               expiryDate: d.expiryDate,

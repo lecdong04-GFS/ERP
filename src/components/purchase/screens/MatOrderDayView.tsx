@@ -4623,14 +4623,19 @@ export const MatOrderDayView: React.FC = () => {
                                   {m.dailyUsage.toLocaleString()}
                                   <span className="text-[11.5px] text-slate-500 font-sans ml-0.5">봉</span>
                                 </span>
-                                {r.isBomDriven && (
-                                  <span
-                                    className="mt-0.5 text-[10.5px] px-1 py-[1px] rounded bg-slate-100 text-slate-600 border border-slate-200 font-sans font-bold tracking-tight"
-                                    title={`오늘 GS25 수주 x 레시피 BOM 실시간 소요량: ${r.liveBomUsage?.toLocaleString()}봉/일 (엑셀 기준치: ${r.surveyDailyUsage?.toLocaleString()}봉/일)`}
-                                  >
-                                    BOM
+                                <div className="mt-0.5 flex items-center justify-end gap-1">
+                                  {r.isBomDriven && (
+                                    <span
+                                      className="text-[10.5px] px-1 py-[1px] rounded bg-slate-100 text-slate-600 border border-slate-200 font-sans font-bold tracking-tight"
+                                      title={`오늘 GS25 수주 x 레시피 BOM 실시간 소요량: ${r.liveBomUsage?.toLocaleString()}봉/일 (엑셀 기준치: ${r.surveyDailyUsage?.toLocaleString()}봉/일)`}
+                                    >
+                                      BOM
+                                    </span>
+                                  )}
+                                  <span className="text-[10.5px] text-slate-500 font-sans font-semibold tabular-nums whitespace-nowrap">
+                                    ({(Math.round((m.dailyUsage / (m.pack > 0 ? m.pack : 1)) * 10) / 10).toLocaleString()}박스)
                                   </span>
-                                )}
+                                </div>
                               </div>
                             ) : (r.suppressedSurveyDailyUsage || 0) > 0 ? (
                               <div

@@ -360,21 +360,35 @@ export async function PUT(req: NextRequest) {
         pricesByPid.set(pr.productId, list);
       }
 
+      const existingProds = targetPids.length
+        ? await prisma.product.findMany({
+            where: { id: { in: targetPids } },
+            select: { id: true, orderCycle: true, targetOrderDays: true },
+          })
+        : [];
+      const prodMasterMap = new Map(existingProds.map((ep) => [ep.id, ep]));
+
       await Promise.all(
         masterSyncUpdates.map(async (u) => {
           const pId = u.productId || prodIdMap.get(Number(u.id));
           if (!pId) return;
+          const existingMaster = prodMasterMap.get(pId);
+          const isUploadSync = u.priceSource === 'upload';
           const pData: any = {};
           if (u.safetyStock !== undefined) pData.safetyStockQty = Number(u.safetyStock);
           const nextBoxQty = Number(u.packUnit ?? u.boxQty ?? 0);
           if (nextBoxQty > 0 && !(pId === 265 && nextBoxQty === 30)) pData.boxQty = nextBoxQty;
           if (u.orderCycle !== undefined) {
             const normCycle = normalizeOrderCycleText(u.orderCycle);
-            if (normCycle || u.orderCycle === '') pData.orderCycle = normCycle;
+            const allowCycleSync = !isUploadSync || !String(existingMaster?.orderCycle || '').trim();
+            if (allowCycleSync && (normCycle || u.orderCycle === '')) {
+              pData.orderCycle = normCycle;
+            }
           }
           if (u.targetOrderDays !== undefined) {
             const nextDays = Number(u.targetOrderDays);
-            if (Number.isFinite(nextDays) && nextDays >= 0) {
+            const allowDaysSync = !isUploadSync || !(Number(existingMaster?.targetOrderDays) > 0);
+            if (allowDaysSync && Number.isFinite(nextDays) && nextDays >= 0) {
               pData.targetOrderDays = Math.round(nextDays * 100) / 100;
             }
           }
@@ -613,15 +627,18 @@ export async function POST(req: NextRequest) {
           product.boxQty = wantBoxQty;
         }
       }
-      // 발주주기(E열) 반영
+      // 발주주기(E열) 반영 — 엑셀 업로드 시 기존 마스터 값이 있으면 덮어쓰지 않음
+      const isUploadItem = (it.priceSource || body.priceSource) === 'upload';
       const wantCycle = normalizeOrderCycleText(it.orderCycle);
-      if (wantCycle && wantCycle !== product.orderCycle) {
+      const allowCycle = !isUploadItem || !String(product.orderCycle || '').trim();
+      if (allowCycle && wantCycle && wantCycle !== product.orderCycle) {
         patch.orderCycle = wantCycle;
         product.orderCycle = wantCycle;
       }
       if (it.targetOrderDays !== undefined) {
         const wantDays = Math.round(Number(it.targetOrderDays) * 100) / 100;
-        if (Number.isFinite(wantDays) && wantDays > 0 && wantDays !== Number(product.targetOrderDays || 0)) {
+        const allowDays = !isUploadItem || !(Number(product.targetOrderDays) > 0);
+        if (allowDays && Number.isFinite(wantDays) && wantDays > 0 && wantDays !== Number(product.targetOrderDays || 0)) {
           patch.targetOrderDays = wantDays;
           product.targetOrderDays = wantDays;
         }
