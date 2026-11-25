@@ -897,6 +897,10 @@ export const MatOrderDayView: React.FC = () => {
         pattern,
         orderCycle: r.orderCycle,
         strategyMode: mode,
+        orderDowMon0: targetDayIdx,
+        supplier: r.supplier,
+        orderDay: r.orderDay,
+        leadDays: r.leadDays,
       });
       const baseTargetDays =
         itemTargetDaysOverrides[r.id] !== undefined
@@ -963,7 +967,11 @@ export const MatOrderDayView: React.FC = () => {
       const itemDayMask = weekDates.map(
         (dStr, i) => Boolean(baseMask[i]) && !getRowDayConfirmStatus(dStr, r)
       );
-      const week = splitWeek(r, suggestedBoxes, itemDayMask, { weekendRelief: false });
+      const week = splitWeek(r, suggestedBoxes, itemDayMask, {
+        weekendRelief: false,
+        singleOrderCoverage:
+          itemTargetDaysOverrides[r.id] === undefined && strategyCalc.isSingleOrderCoverage,
+      });
       const targetDayConfirm = getRowDayConfirmStatus(targetDayDate, r);
       const boxPrice = calcBoxPrice(r.bagPrice, pack);
 

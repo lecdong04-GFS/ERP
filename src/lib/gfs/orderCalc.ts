@@ -65,33 +65,71 @@ export function calcExpectedDeliveryInfo(params: {
 
 /**
  * 3대 발주 전략 모드(타이트/표준/안전)별 적용 발주일수 및 로스 버퍼 산출
- * - 표준: 마스터(DB) 발주일수 100% 그대로
- * - 타이트: 리드타임·납품주기별 결품 방어 하한선(minFloorDays)을 유지하면서 전 패턴 여유일 압축
- * - 안전: 발주일수 +1.0일 및 공정 감모 버퍼 +5% 가산 (0일 미설정 품목은 0 유지)
+ * - 365일 가동(토·일 포함 매일 소진) 기준: orderDowMon0 전달 시 오늘 발주분이 다음 발주 입고일 전날까지 버텨야 하는
+ *   실제 달력 일수(calendarCoverageDays)를 하한으로 자동 보장 (예: 목요일 발주 → 월요일 입고)
+ * - 표준: max(마스터 발주일수, 365일 기준 실제 커버 일수)
+ * - 타이트: 리드타임·납품주기·365일 커버 일수 하한선을 유지하면서 여유일 압축
+ * - 안전: 기준 일수 +1.0일 및 공정 감모 버퍼 +5% 가산 (0일 미설정 품목은 0 유지)
  */
 export function calcStrategyOrderDays(params: {
   masterOrderDays: number;
   pattern: string;
   orderCycle?: string;
   strategyMode: StrategyMode;
-}): { effectiveDays: number; lossRate: number; minFloorDays: number } {
+  orderDowMon0?: number;
+  supplier?: string;
+  orderDay?: string;
+  leadDays?: number;
+}): {
+  effectiveDays: number;
+  lossRate: number;
+  minFloorDays: number;
+  calendarCoverageDays: number;
+  isSingleOrderCoverage: boolean;
+} {
   const master = Number(params.masterOrderDays) || 0;
   if (master <= 0) {
-    return { effectiveDays: 0, lossRate: 1.0, minFloorDays: 0 };
-  }
-  if (params.strategyMode === 'standard') {
-    return { effectiveDays: master, lossRate: 1.0, minFloorDays: master };
-  }
-  if (params.strategyMode === 'safety') {
     return {
-      effectiveDays: Math.round((master + 1.0) * 100) / 100,
-      lossRate: 1.05,
-      minFloorDays: master,
+      effectiveDays: 0,
+      lossRate: 1.0,
+      minFloorDays: 0,
+      calendarCoverageDays: 0,
+      isSingleOrderCoverage: false,
     };
   }
 
-  // 타이트 모드: 리드타임 + 납품주기 기반 최소 방어 하한선 아래로는 절대 내리지 않음
-  const leadDays = parseLeadTimeDays(params.orderCycle);
+  const calendarCoverageDays = calcCalendarCoverageDays365({
+    orderDowMon0: params.orderDowMon0,
+    supplier: params.supplier,
+    orderDay: params.orderDay,
+    orderCycle: params.orderCycle,
+    leadDays: params.leadDays,
+  });
+  const baseDays = Math.max(master, calendarCoverageDays);
+  const isSingleOrderCoverage = calendarCoverageDays > 0 && calendarCoverageDays >= master;
+
+  if (params.strategyMode === 'standard') {
+    return {
+      effectiveDays: baseDays,
+      lossRate: 1.0,
+      minFloorDays: baseDays,
+      calendarCoverageDays,
+      isSingleOrderCoverage,
+    };
+  }
+  if (params.strategyMode === 'safety') {
+    return {
+      effectiveDays: Math.round((baseDays + 1.0) * 100) / 100,
+      lossRate: 1.05,
+      minFloorDays: baseDays,
+      calendarCoverageDays,
+      isSingleOrderCoverage,
+    };
+  }
+
+  // 타이트 모드: 리드타임 + 납품주기 + 365일 실제 커버 일수 기반 최소 방어 하한선 아래로는 절대 내리지 않음
+  const leadDays =
+    params.leadDays && params.leadDays > 0 ? params.leadDays : parseLeadTimeDays(params.orderCycle);
   const isDaily = params.pattern === '매일';
   const isTwiceWeekly = params.pattern === '수금' || params.pattern === '화금';
   const rawFloor = isDaily
@@ -99,11 +137,17 @@ export function calcStrategyOrderDays(params: {
     : isTwiceWeekly
     ? Math.max(4.0, leadDays + 2.0)
     : Math.max(3.0, leadDays + 1.0);
-  const minFloorDays = Math.min(master, rawFloor);
+  const minFloorDays = Math.max(calendarCoverageDays, Math.min(baseDays, rawFloor));
   const ratio = isDaily ? 0.7 : 0.8;
-  const compressed = Math.round(master * ratio * 2) / 2;
-  const effectiveDays = Math.min(master, Math.max(minFloorDays, compressed));
-  return { effectiveDays, lossRate: 1.0, minFloorDays };
+  const compressed = Math.round(baseDays * ratio * 2) / 2;
+  const effectiveDays = Math.min(baseDays, Math.max(minFloorDays, compressed));
+  return {
+    effectiveDays,
+    lossRate: 1.0,
+    minFloorDays,
+    calendarCoverageDays,
+    isSingleOrderCoverage,
+  };
 }
 
 // GFS 발주시트 공용 계산 (일반/요일별 화면 공용, 클라이언트 안전)
@@ -234,6 +278,11 @@ export interface SplitWeekOptions {
    * 예: 화목토 패턴 시 1:1:1 대신 1.1 : 1.1 : 0.8 비율 적용
    */
   weekendRelief?: boolean;
+  /**
+   * 365일 가동 기준 단일 발주 사이클 커버 (오늘 발주분이 다음 발주 입고일 전날까지 1회분 전체인 경우)
+   * true이면 주중 분할 없이 해당 발주일(idx[0])에 전량 배정
+   */
+  singleOrderCoverage?: boolean;
 }
 
 function isFlexibleAdvanceOrder(header: string, orderDay?: string, leadDays?: number): boolean {
@@ -335,6 +384,50 @@ export function getExpectedArrivalSchedule(params: {
 }
 
 /**
+ * 365일 가동(토·일 포함 매일 소진) 기준 발주일(0=월..6=일)에서의 실제 커버 필요 일수 산출
+ * - 오늘 발주분이 "다음 발주일의 입고일" 전날까지 버텨야 하는 달력 일수
+ * - 예) 목요일(3) 발주 → 월요일 입고, 다음 월요일(0) 발주 → 수요일 입고(D+2)라면 총 6일(목~화)
+ */
+export function calcCalendarCoverageDays365(params: {
+  orderDowMon0?: number;
+  supplier?: string;
+  orderDay?: string;
+  orderCycle?: string;
+  leadDays?: number;
+}): number {
+  const dow = params.orderDowMon0;
+  if (dow === undefined || dow === null || dow < 0 || dow > 6) return 0;
+
+  const supplier = params.supplier || '';
+  const orderDay = params.orderDay;
+  const resolvedLead =
+    params.leadDays && params.leadDays > 0
+      ? params.leadDays
+      : parseLeadTimeDays(params.orderCycle);
+
+  if (isFlexibleAdvanceOrder(supplier, orderDay, resolvedLead)) return 0;
+
+  const arrivalDays = parseDeliveryDays(supplier, orderDay);
+  const allowedOrderDays = getOrderAllowedDays(supplier, orderDay, params.orderCycle, resolvedLead);
+  if (!allowedOrderDays[dow]) return 0;
+
+  let nextOrderOffset = 0;
+  for (let off = 1; off <= 7; off++) {
+    if (allowedOrderDays[(dow + off) % 7]) {
+      nextOrderOffset = off;
+      break;
+    }
+  }
+  if (nextOrderOffset <= 0) return 0;
+
+  const nextOrderDow = (dow + nextOrderOffset) % 7;
+  const nextArr = advanceOrderToArrivalDow(nextOrderDow, resolvedLead, arrivalDays);
+  if (nextArr.arrDow === null || nextArr.calendarShift <= 0) return 0;
+
+  return nextOrderOffset + nextArr.calendarShift;
+}
+
+/**
  * 확정량을 실제 발주 가능 요일(입고요일 - 리드타임)과 목표재고일수 창 내 입고 횟수에 맞춰 비례 분할 (해밀턴 최대잔여법)
  * activeDayMask 전달 시 해당 주에서 실제 발주 가능한 요일에만 배분하며, 주 후반부 몰림 방지를 위해 차주 입고 슬롯까지 분할 모수에 반영
  */
@@ -352,6 +445,10 @@ export function splitWeek(
   const idx = eligible.map((on, i) => (on ? i : -1)).filter((i) => i >= 0);
   const out = [0, 0, 0, 0, 0, 0, 0];
   if (finalBoxes <= 0 || idx.length === 0) return out;
+  if (options?.singleOrderCoverage) {
+    out[idx[0]] = finalBoxes;
+    return out;
+  }
 
   const targetDays = Number(r.targetOrderDays ?? r.days) || 0;
   const flexible = isFlexibleAdvanceOrder(r.supplier || '', r.orderDay, resolvedLead);

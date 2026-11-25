@@ -462,6 +462,10 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
           pattern,
           orderCycle: r.orderCycle,
           strategyMode: 'standard',
+          orderDowMon0: todayDowMon0,
+          supplier: r.supplier || '',
+          orderDay: r.orderDay,
+          leadDays: r.leadDays,
         });
         if (strategy.effectiveDays <= 0) continue;
 
@@ -475,7 +479,9 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
           if (i < todayDowMon0) return false;
           return !(pidDates?.has(dStr) || nameDates?.has(dStr));
         });
-        const week = splitWeek(r, suggestedBoxes, itemDayMask);
+        const week = splitWeek(r, suggestedBoxes, itemDayMask, {
+          singleOrderCoverage: strategy.isSingleOrderCoverage,
+        });
         const todayBoxes = week[todayDowMon0] || 0;
         if (todayBoxes > 0) {
           const boxPrice = Number(r.boxPrice) || calcBoxPrice(Number(r.bagPrice) || 0, pack);
