@@ -272,7 +272,7 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 카드 3: [발주현황] 자재발주 화면과 1:1 일치하는 금일 발주할 금액 */}
+        {/* 카드 3: [발주현황] 자재발주 화면과 1:1 일치하는 금일 발주 총액 (기발주 + 미발주 합계) */}
         <div
           onClick={() => navigate('pur-mat-order-day')}
           className="bg-white hover:bg-slate-50/90 border border-amber-200/90 rounded-xl px-3.5 py-2.5 shadow-xs transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group flex flex-col justify-between gap-1.5"
@@ -282,7 +282,7 @@ export const Dashboard: React.FC = () => {
               <span className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
                 <ShoppingCart className="w-3.5 h-3.5" />
               </span>
-              금일 발주할 금액
+              금일 발주 총액
             </span>
             <span className="text-[11px] font-extrabold text-amber-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 shrink-0">
               자재발주 <ArrowRight className="w-3 h-3" />
@@ -290,18 +290,12 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="flex items-baseline justify-between gap-2">
-            {expectedPoAmount > 0 ? (
-              <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
-                <span className="text-sm font-bold text-amber-600 mr-0.5">₩</span>
-                <span className="text-slate-900">
-                  {Math.round(expectedPoAmount).toLocaleString()}
-                </span>
-              </div>
-            ) : (
-              <div className="text-lg font-black font-mono text-emerald-700">
-                {actualPoAmount > 0 ? '발주 완료 (₩0)' : '₩0'}
-              </div>
-            )}
+            <div className="text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-none truncate">
+              <span className="text-sm font-bold text-amber-600 mr-0.5">₩</span>
+              <span className="text-slate-900">
+                {Math.round(actualPoAmount + expectedPoAmount).toLocaleString()}
+              </span>
+            </div>
             <span
               className={`px-2 py-0.5 rounded-lg border text-[11.5px] font-black font-mono shrink-0 ${
                 expectedPoAmount === 0 && actualPoAmount > 0
@@ -309,23 +303,17 @@ export const Dashboard: React.FC = () => {
                   : 'bg-amber-50 border-amber-200 text-amber-900'
               }`}
             >
-              {expectedPoItemCount > 0
-                ? `${expectedPoItemCount}품목(${expectedPoPartnerCount}사)`
-                : actualPoAmount > 0
-                ? `완료 ${actualPoItemCount}품목`
+              {actualPoAmount + expectedPoAmount > 0
+                ? expectedPoAmount === 0
+                  ? '발주 완료'
+                  : '당일 총액'
                 : '발주 불필요'}
             </span>
           </div>
 
           <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100 truncate">
             <span className="truncate">{stockBasisLabel} 기준</span>
-            {actualPoAmount > 0 ? (
-              <span className="text-emerald-700 font-bold shrink-0">
-                기발주 ₩{Math.round(actualPoAmount).toLocaleString()}
-              </span>
-            ) : (
-              <span className="text-amber-700 font-bold shrink-0">자재발주 총액 동일</span>
-            )}
+            <span className="text-amber-700 font-bold shrink-0">자재발주 총액 동일</span>
           </div>
         </div>
 

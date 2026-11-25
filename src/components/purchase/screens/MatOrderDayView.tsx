@@ -3378,14 +3378,11 @@ export const MatOrderDayView: React.FC = () => {
                   <>
                     <div
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600 text-white border border-blue-700 shadow-2xs whitespace-nowrap"
-                      title={`체크 선택된 ${currentDayStaged.count}개 품목의 발주총액 (전체 발주총액: ₩${Math.round(dayTotals.amt).toLocaleString()})`}
+                      title={`체크 선택된 ${currentDayStaged.count}개 품목의 발주총액`}
                     >
                       <span className="text-[11.5px] font-bold text-blue-100">발주총액(선택)</span>
                       <span className="font-mono font-black text-[14px] text-white">
                         ₩{Math.round(currentDayStaged.amt).toLocaleString()}
-                      </span>
-                      <span className="text-[10.5px] font-mono font-bold text-blue-100/90 border-l border-blue-400/50 pl-1.5">
-                        전체 {formatCompactWon(dayTotals.amt)}
                       </span>
                     </div>
                     <div
@@ -3405,11 +3402,11 @@ export const MatOrderDayView: React.FC = () => {
                   <>
                     <div
                       className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50/70 border border-indigo-200/80 whitespace-nowrap"
-                      title="오늘 화면에서 발주해야 할 전체 발주총액입니다. 품목을 체크하면 선택한 품목의 합계만 표시됩니다."
+                      title="해당 일자에 넣을 총 발주 금액(기발주 확정 + 미발주 예정 합계)입니다."
                     >
                       <span className="text-[11.5px] font-bold text-indigo-700">발주총액</span>
                       <span className="font-mono font-black text-[14px] text-indigo-950">
-                        ₩{Math.round(dayTotals.amt).toLocaleString()}
+                        ₩{Math.round(totalConfirmedPoAmount + dayTotals.amt).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50/70 border border-blue-200/80 whitespace-nowrap">
@@ -5418,9 +5415,6 @@ export const MatOrderDayView: React.FC = () => {
                       <span className="font-mono font-black text-blue-900 text-lg sm:text-xl">
                         ₩{Math.round(currentDayStaged.amt).toLocaleString()}
                       </span>
-                      <span className="text-[11px] font-mono font-bold text-slate-400">
-                        (전체 ₩{Math.round(dayTotals.amt).toLocaleString()})
-                      </span>
                     </div>
                   </>
                 ) : (
@@ -5435,7 +5429,7 @@ export const MatOrderDayView: React.FC = () => {
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-slate-500 text-xs">발주총액</span>
                       <span className="font-mono font-black text-emerald-800 text-lg sm:text-xl">
-                        ₩{Math.round(dayTotals.amt).toLocaleString()}
+                        ₩{Math.round(totalConfirmedPoAmount + dayTotals.amt).toLocaleString()}
                       </span>
                     </div>
                   </>
