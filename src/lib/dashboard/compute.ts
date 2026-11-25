@@ -408,7 +408,7 @@ export async function computeDashboardStats(): Promise<DashboardStats> {
     const cutoffBucketMap = new Map<string, OrderCutoffSlotStat>([
       ['until11', { slot: 'until11', label: '11시 마감 (CJ전산 등)', cutoffMinutes: 11 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
       ['12', { slot: '12', label: '12시 마감 (이메일 등)', cutoffMinutes: 12 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
-      ['13', { slot: '13', label: '13시 마감 (발주고·카톡)', cutoffMinutes: 13 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
+      ['13', { slot: '13', label: '13시 마감 (네트웍스·GS·카톡)', cutoffMinutes: 13 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
       ['14', { slot: '14', label: '14시 마감 (발주고(GS)·전산)', cutoffMinutes: 14 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
       ['after15', { slot: 'after15', label: '15시~16시 (삼립·후마감)', cutoffMinutes: 16 * 60, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
       ['none', { slot: 'none', label: '마감시간 미지정 (수시)', cutoffMinutes: null, pendingCount: 0, pendingAmount: 0, doneCount: 0 }],
