@@ -389,9 +389,9 @@ export function getExpectedArrivalSchedule(params: {
 }
 
 /**
- * 365일 가동(토·일 포함 매일 소진) 기준 발주일(0=월..6=일)에서의 실제 커버 필요 일수 산출
- * - 오늘 발주분이 "다음 발주일의 입고일" 전날까지 버텨야 하는 달력 일수
- * - 예) 목요일(3) 발주 → 월요일 입고, 다음 월요일(0) 발주 → 수요일 입고(D+2)라면 총 6일(목~화)
+ * 365일 가동(토·일 포함 매일 소진) + 평일(월~금) 발주 + 오후 도착 기준 실제 커버 필요 일수 산출
+ * - 오늘 발주분이 "다음 발주일의 오후 입고"까지(입고 당일 낮 생산 포함) 버텨야 하는 달력 일수 (+1일)
+ * - 예) 목요일(3) 발주 → 토요일 오후 입고, 다음 화요일(1) 발주 → 목요일 오후 입고라면 총 8일(목~차주목)
  */
 export function calcCalendarCoverageDays365(params: {
   orderDowMon0?: number;
@@ -429,7 +429,8 @@ export function calcCalendarCoverageDays365(params: {
   const nextArr = advanceOrderToArrivalDow(nextOrderDow, resolvedLead, arrivalDays);
   if (nextArr.arrDow === null || nextArr.calendarShift <= 0) return 0;
 
-  return nextOrderOffset + nextArr.calendarShift;
+  // 오후 도착 가정: 다음 물건 도착 당일 낮 생산(+1일)까지 버텨야 함
+  return nextOrderOffset + nextArr.calendarShift + 1;
 }
 
 /**
