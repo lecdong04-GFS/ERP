@@ -3586,7 +3586,7 @@ export const MatOrderDayView: React.FC = () => {
                   title="발주량이 잡힌 품목만 보기 or 전체 품목 탐색하기"
                 >
                   <Package className="w-4 h-4" />
-                  <span>{showOnlyOrderable && !showOnlyUrgentUnallocated ? '발주대상만' : '전체품목'}</span>
+                  <span>{showOnlyOrderable && !showOnlyUrgentUnallocated ? '오늘 발주만' : '전체품목'}</span>
                   <span
                     className={`text-[12px] font-mono px-1.5 rounded-full font-bold whitespace-nowrap ${
                       showOnlyOrderable && !showOnlyUrgentUnallocated ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
@@ -4178,8 +4178,8 @@ export const MatOrderDayView: React.FC = () => {
                       <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">기준일수·목표재고</span>
                     </th>
                     <th className="py-2.5 px-1.5 text-right bg-slate-100 text-slate-900 border-x border-slate-200">
-                      {DAY_CHARS[dayIdx]}요일 발주(✏️)
-                      <span className="block text-[10.5px] 2xl:text-[11px] text-slate-500 font-bold leading-tight">추천·확정</span>
+                      {DAY_CHARS[dayIdx]}요일 발주수량
+                      <span className="block text-[10.5px] 2xl:text-[11px] text-blue-700 font-bold leading-tight">자동계산(박스)</span>
                     </th>
                     <th className="py-2.5 px-1.5 text-right">
                       단가·입수
@@ -4847,9 +4847,9 @@ export const MatOrderDayView: React.FC = () => {
                                 >
                                   ✅ 기발주 {r.pendingBoxes}b
                                 </span>
-                              ) : m.week[dayIdx] > 0 ? (
-                                <span className="text-[11px] 2xl:text-[11.5px] font-bold text-amber-800 bg-amber-100 px-1.5 py-[1px] rounded font-mono leading-tight">
-                                  추천 {m.week[dayIdx]}b
+                              ) : m.week[dayIdx] > 0 && m.dayQty !== m.week[dayIdx] ? (
+                                <span className="text-[11px] 2xl:text-[11.5px] font-bold text-slate-600 bg-slate-100 px-1.5 py-[1px] rounded font-mono leading-tight">
+                                  자동계산 {m.week[dayIdx]}b
                                 </span>
                               ) : null}
                               <div className="inline-flex items-center justify-end bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs gap-0.5">
