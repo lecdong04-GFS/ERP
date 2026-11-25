@@ -320,7 +320,7 @@ export function advanceOrderToArrivalDow(
   return { arrDow: d, calendarShift };
 }
 
-/** 거래처 헤더·입고요일·리드타임 기준 실제 발주 가능 요일(0=월..6=일 boolean) 산출 */
+/** 거래처 헤더·입고요일·리드타임 기준 실제 발주 가능 요일(0=월..6=일 boolean) 산출 (발주 업무는 월~금만 수행) */
 export function getOrderAllowedDays(
   header: string,
   orderDay?: string,
@@ -333,6 +333,7 @@ export function getOrderAllowedDays(
     return [true, true, true, true, true, false, false];
   }
   return arrivalDays.map((_, d) => {
+    if (d >= 5) return false; // 토·일요일에는 발주하지 않음 (월~금만 발주)
     const { arrDow } = advanceOrderToArrivalDow(d, resolvedLead, arrivalDays);
     return arrDow !== null && Boolean(arrivalDays[arrDow]);
   });
