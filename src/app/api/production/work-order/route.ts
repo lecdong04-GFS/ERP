@@ -147,10 +147,10 @@ function resolveLineRouting(lineName: string): LineRoutingDef {
   // 성형 9개 라인 (엑셀 타임테이블 및 참고자료 시트 100% 반영)
   if (l.includes('도시락') || l === 'ALL_SEONGHYEONG') {
     return {
-      key: '도시락',
-      label: '도시락 1',
+      key: l === 'ALL_SEONGHYEONG' ? '전체성형' : '도시락',
+      label: l === 'ALL_SEONGHYEONG' ? '전체 성형장' : '도시락 1',
       kind: 'FORMING',
-      keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥', '정찬', '찬또', '스파게티', '파스타', '돈까스', '치킨까스'],
+      keywords: ['도시락', '한상', '제육', '혜자', '다넣어', '비빔밥', '정찬', '찬또', '스파게티', '파스타', '돈까스', '치킨까스', '덮밥', '마파두부'],
       gyeIds: ['GFS004'],
       defaultTimeStart: '09:30',
       speedUph: 1400,
@@ -1005,38 +1005,46 @@ export async function GET(req: NextRequest) {
         for (const dt of so.details) {
           if (!dt.product) continue;
           const cleanName = dt.product.name.replace(/^\(주문\)\s*/, '').trim();
-
-          // 시프트 판별 (제품명 끝 '2편'/'2' 또는 orderQty2/1)
-          const isItemShift2 = cleanName.endsWith('2편') || cleanName.endsWith('2') || (dt.orderQty2 || 0) > 0;
-          const isItemShift1 = cleanName.endsWith('1편') || cleanName.endsWith('1') || (dt.orderQty1 || 0) > 0;
-          const itemShift: '1편' | '2편' = isItemShift2 ? '2편' : isItemShift1 ? '1편' : '2편';
-
-          let effectiveQty = 0;
-          if (isShift2Filter) {
-            if (!isItemShift2 && (dt.orderQty2 || 0) <= 0) continue;
-            effectiveQty = (dt.orderQty2 || 0) > 0 ? (dt.orderQty2 || 0) : (dt.totalQty || 0);
-          } else if (isShift1Filter) {
-            if (!isItemShift1 && (dt.orderQty1 || 0) <= 0) continue;
-            effectiveQty = (dt.orderQty1 || 0) > 0 ? (dt.orderQty1 || 0) : (dt.totalQty || 0);
-          } else {
-            effectiveQty = dt.totalQty || ((dt.orderQty1 || 0) + (dt.orderQty2 || 0));
-          }
-
-          if (effectiveQty <= 0) continue;
-
           const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
-          const existing = productMap.get(cleanName) || {
-            cleanName,
-            baseName,
-            shift: itemShift,
-            qty: 0,
-            product: dt.product,
-            unitPrice: Number(dt.unitPrice) || 0,
-            amount: 0,
+          const unitPrice = Number(dt.unitPrice) || 0;
+
+          const pushOrderBucket = (itemShift: '1편' | '2편', qty: number) => {
+            if (qty <= 0) return;
+            const key = `${cleanName}::${itemShift}`;
+            const existing = productMap.get(key) || {
+              cleanName,
+              baseName,
+              shift: itemShift,
+              qty: 0,
+              product: dt.product,
+              unitPrice,
+              amount: 0,
+            };
+            existing.qty += qty;
+            existing.amount = (existing.amount || 0) + qty * (existing.unitPrice || 0);
+            productMap.set(key, existing);
           };
-          existing.qty += effectiveQty;
-          existing.amount = (existing.amount || 0) + effectiveQty * (existing.unitPrice || 0);
-          productMap.set(cleanName, existing);
+
+          const q2 = dt.orderQty2 || 0;
+          const q1 = dt.orderQty1 || 0;
+          const isNameShift2 = cleanName.endsWith('2편') || cleanName.endsWith('2');
+          const isNameShift1 = cleanName.endsWith('1편') || cleanName.endsWith('1');
+
+          if (isShift2Filter) {
+            const eff = q2 > 0 ? q2 : (isNameShift2 ? (dt.totalQty || 0) : 0);
+            pushOrderBucket('2편', eff);
+          } else if (isShift1Filter) {
+            const eff = q1 > 0 ? q1 : (isNameShift1 ? (dt.totalQty || 0) : 0);
+            pushOrderBucket('1편', eff);
+          } else {
+            if (q2 > 0 || q1 > 0) {
+              pushOrderBucket('2편', q2);
+              pushOrderBucket('1편', q1);
+            } else {
+              const fallbackShift: '1편' | '2편' = isNameShift1 && !isNameShift2 ? '1편' : '2편';
+              pushOrderBucket(fallbackShift, dt.totalQty || 0);
+            }
+          }
         }
       }
     } else {
@@ -1095,21 +1103,15 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 해당 라인/공정 키워드 매칭 품목 필터링
-    let matchedProducts = Array.from(productMap.values()).filter((p) =>
-      routing.keywords.some((kw) => p.cleanName.includes(kw))
-    );
+    const allOrdersTotalQty = Array.from(productMap.values()).reduce((sum, p) => sum + p.qty, 0);
 
-    // ALL_SEONGHYEONG / ALL_JEONCHEORI 통합 조회일 때만 미매칭 성형 품목 포괄 (개별 라인에 타 라인 품목 혼입 금지)
-    if (
-      matchedProducts.length === 0 &&
-      routing.kind === 'FORMING' &&
-      (line === 'ALL_SEONGHYEONG' || line === 'ALL_JEONCHEORI')
-    ) {
-      matchedProducts = Array.from(productMap.values()).filter((p) =>
-        p.cleanName.includes('도시락') || p.cleanName.includes('혜자') || p.cleanName.includes('김밥') || p.cleanName.includes('삼각')
-      );
-    }
+    // ALL_SEONGHYEONG / ALL_JEONCHEORI / ALL 통합 조회는 해당 일자·시프트 전체 수주 품목 표시
+    let matchedProducts =
+      line === 'ALL_SEONGHYEONG' || line === 'ALL_JEONCHEORI' || line === 'ALL'
+        ? Array.from(productMap.values())
+        : Array.from(productMap.values()).filter((p) =>
+            routing.keywords.some((kw) => p.cleanName.includes(kw))
+          );
 
     if (matchedProducts.length === 0) {
       return NextResponse.json({
@@ -1119,6 +1121,7 @@ export async function GET(req: NextRequest) {
         shift,
         hasRealOrders: false,
         totalOrdersCount,
+        allOrdersTotalQty,
         totalDayQty: 0,
         distinctItemCount: 0,
         lineTotalPlan: '0 ea (해당 라인 수주 없음)',
@@ -1362,6 +1365,7 @@ export async function GET(req: NextRequest) {
       shift,
       hasRealOrders: true,
       totalOrdersCount,
+      allOrdersTotalQty,
       totalDayQty,
       totalDayAmount,
       shift2Qty,

@@ -306,7 +306,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [workDate, setWorkDate] = useState(kstToday() || '2026-11-06');
   const [shift, setShift] = useState<'전체' | '1편' | '2편'>('전체');
   const [department, setDepartment] = useState<'SEONGHYEONG' | 'JEONCHEORI'>('SEONGHYEONG');
-  const [selectedLine, setSelectedLine] = useState<string>('도시락 1');
+  const [selectedLine, setSelectedLine] = useState<string>('ALL_SEONGHYEONG');
   const [isLineDropdownOpen, setIsLineDropdownOpen] = useState(false);
   const lineDropdownRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -392,6 +392,7 @@ export const WorkOrderStatusView: React.FC = () => {
   const [realOrderMeta, setRealOrderMeta] = useState<{
     hasRealOrders: boolean;
     totalOrdersCount: number;
+    allOrdersTotalQty?: number;
     totalDayQty: number;
     totalDayAmount?: number;
     shift2Qty?: number;
@@ -445,6 +446,7 @@ export const WorkOrderStatusView: React.FC = () => {
         setRealOrderMeta({
           hasRealOrders: Boolean(json.hasRealOrders),
           totalOrdersCount: json.totalOrdersCount || 0,
+          allOrdersTotalQty: json.allOrdersTotalQty || json.totalDayQty || 0,
           totalDayQty: json.totalDayQty || 0,
           totalDayAmount: json.totalDayAmount || 0,
           shift2Qty: json.shift2Qty || 0,
@@ -3066,6 +3068,11 @@ export const WorkOrderStatusView: React.FC = () => {
                 <PackageCheck size={13} className="text-blue-400 shrink-0" />
                 <span className="text-slate-300">계획:</span>
                 <span className="text-white font-mono font-bold">{realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</span>
+                {realOrderMeta?.allOrdersTotalQty && realOrderMeta.allOrdersTotalQty > realOrderMeta.totalDayQty ? (
+                  <span className="text-[11px] text-sky-300 font-bold">
+                    (전체 수주 {realOrderMeta.allOrdersTotalQty.toLocaleString()}ea)
+                  </span>
+                ) : null}
                 {realOrderMeta?.totalDayAmount ? (
                   <span className="text-[11.5px] text-emerald-400 font-bold hidden xl:inline">
                     (₩{realOrderMeta.totalDayAmount.toLocaleString()})
