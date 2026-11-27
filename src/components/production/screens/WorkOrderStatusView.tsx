@@ -1251,6 +1251,450 @@ export const WorkOrderStatusView: React.FC = () => {
     printWindow.document.close();
   };
 
+  // 1-2. 전부서(성형장 + 전처리실) 모든 가동 라인/설비 일괄 PDF 인쇄 (라인 PDF 양식 동일)
+  const buildLiveWorkOrderPageSection = (opts: {
+    lineId: string;
+    deptLabel: string;
+    tasks: ScheduleTask[];
+    lineDef: LineWorkOrderDef;
+    year: string;
+    month: string;
+    day: string;
+    formattedDateKo: string;
+    lineTotalPlan?: string;
+  }) => {
+    const { lineId, deptLabel, tasks, lineDef, year, month, day, formattedDateKo, lineTotalPlan } = opts;
+    const docNumber = `GFS-WO-${year}${month}${day}-${lineId.replace(/\s+/g, '')}`;
+    const totalRunTimeStr =
+      tasks.length > 0
+        ? `${tasks[0].time.split('~')[0].trim()} ~ ${
+            tasks[tasks.length - 1].time.split('~')[1]?.trim() || '종료'
+          }`
+        : lineDef.totalTime;
+
+    let whiteRiceQty = 0;
+    let blackRiceQty = 0;
+    let redRiceQty = 0;
+    let prodTaskCount = 0;
+    let totalOrderQtyNum = 0;
+
+    tasks.forEach((t) => {
+      const q = typeof t.qty === 'number' ? t.qty : 0;
+      if (t.type === '생산' && q > 0) {
+        prodTaskCount += 1;
+        totalOrderQtyNum += q;
+        const rBadge = getRiceColorBadge(t.item);
+        if (rBadge?.label === '빨간밥') {
+          redRiceQty += q;
+        } else if (rBadge?.label?.includes('흑미')) {
+          blackRiceQty += q;
+        } else {
+          whiteRiceQty += q;
+        }
+      }
+    });
+
+    const firstProdTask = tasks.find((t) => {
+      const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP') || t.item.includes('소독');
+      const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식') || t.item.includes('점심');
+      return !isClean && !isMeal;
+    });
+    const initialSec: 'NONE' | 'S2' | 'S1' = firstProdTask
+      ? firstProdTask.shift.includes('1편')
+        ? 'S1'
+        : 'S2'
+      : 'NONE';
+    const topSectionTitle =
+      initialSec === 'S2'
+        ? '▶ 1부: 2편 생산 (당일 오후 출하 — 백미 ➔ 흑미 ➔ 빨간양념 순서 엄수)'
+        : initialSec === 'S1'
+        ? '▶ 2부: 1편 생산 (익일 새벽 출하 — 품목 교체 시 알코올 소독 필수)'
+        : '';
+
+    let lastSection: 'NONE' | 'S2' | 'S1' = initialSec;
+    let prodSeq = 0;
+
+    const rowsHtml = tasks
+      .map((t, idx) => {
+        const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP') || t.item.includes('소독');
+        const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식') || t.item.includes('점심');
+
+        let sectionBannerHtml = '';
+        if (!isClean && !isMeal) {
+          const curSec: 'S2' | 'S1' = t.shift.includes('1편') ? 'S1' : 'S2';
+          if (curSec !== lastSection) {
+            lastSection = curSec;
+            const secTitle =
+              curSec === 'S2'
+                ? '▶ 1부: 2편 생산 (당일 오후 출하 — 백미 ➔ 흑미 ➔ 빨간양념 순서 엄수)'
+                : '▶ 2부: 1편 생산 (익일 새벽 출하 — 품목 교체 시 알코올 소독 필수)';
+            sectionBannerHtml = `
+              <tr class="section-banner-row">
+                <td colspan="6" class="section-banner-cell ${curSec === 'S1' ? 'section-s1' : 'section-s2'}">${escapeHtml(secTitle)}</td>
+              </tr>
+            `;
+          }
+        }
+
+        if (isClean || isMeal) {
+          const breakLabel = isMeal
+            ? `🍱 ${t.item || '중식 및 라인 세척·소독'} (${t.duration || '60분'})`
+            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'} (${t.duration || '30분'})`;
+          return `
+            ${sectionBannerHtml}
+            <tr class="row-break">
+              <td class="col-center col-seq">-</td>
+              <td class="col-center col-time">${escapeHtml(t.time)}</td>
+              <td class="col-center"><span class="rice-box rice-box-break">[휴게/세척]</span></td>
+              <td colspan="2" class="col-break-title">${escapeHtml(breakLabel)}</td>
+              <td class="col-center col-check-cell">□ 세척·소독 확인</td>
+            </tr>
+          `;
+        }
+
+        prodSeq += 1;
+        const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} 개` : t.qty || '-';
+        const rBadge = getRiceColorBadge(t.item);
+        const riceLabel =
+          rBadge?.label === '빨간밥'
+            ? '볶음/양념'
+            : rBadge?.label?.includes('흑미')
+            ? '흑미/잡곡'
+            : rBadge?.label
+            ? '백미'
+            : t.type || '생산';
+        const riceBoxClass =
+          rBadge?.label === '빨간밥'
+            ? 'rice-box-red'
+            : rBadge?.label?.includes('흑미')
+            ? 'rice-box-purple'
+            : 'rice-box-white';
+
+        return `
+          ${sectionBannerHtml}
+          <tr class="${idx % 2 === 1 ? 'row-alt' : ''}">
+            <td class="col-center col-seq">${prodSeq}</td>
+            <td class="col-center col-time">${escapeHtml(t.time)}</td>
+            <td class="col-center">
+              <span class="rice-box ${riceBoxClass}">[${escapeHtml(riceLabel)}]</span>
+            </td>
+            <td class="col-item">
+              <div class="item-main-name">${escapeHtml(t.item)}</div>
+              ${
+                t.bom && t.bom !== '-'
+                  ? `<div class="item-sub-note">배합/규격: ${escapeHtml(t.bom)} | 소요: ${escapeHtml(t.duration)} (${escapeHtml(t.workers || lineDef.personnel.split('(')[0])})</div>`
+                  : `<div class="item-sub-note">소요시간: ${escapeHtml(t.duration)} | 투입인원: ${escapeHtml(t.workers || lineDef.personnel.split('(')[0])}</div>`
+              }
+            </td>
+            <td class="col-right col-qty">${escapeHtml(formattedQty)}</td>
+            <td class="col-center col-check-cell">
+              <span class="pen-check-box">□</span> 완료 (&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    return `
+      <section class="wo-page">
+        <div class="top-header-box">
+          <div class="top-header-row1">
+            <div>
+              <div class="doc-kicker">GFS 스마트 생산관제 · ${escapeHtml(deptLabel)} · 식약처 HACCP 현장 게시용 정본 (${escapeHtml(docNumber)})</div>
+              <div class="doc-big-title">[${escapeHtml(lineId)}] 일일 작업지시서</div>
+            </div>
+            <div class="sign-box">
+              담당 반장 서명: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)
+            </div>
+          </div>
+          <div class="top-header-meta-grid">
+            <div class="meta-pill">📅 작업일자: <strong>${escapeHtml(formattedDateKo)}</strong></div>
+            <div class="meta-pill">⏰ 가동시간: <strong>${escapeHtml(totalRunTimeStr)}</strong></div>
+            <div class="meta-pill">📦 총 지시량: <strong>${prodTaskCount}품목 / ${
+              totalOrderQtyNum > 0
+                ? `${totalOrderQtyNum.toLocaleString()} 개`
+                : escapeHtml(lineTotalPlan || lineDef.totalPlan)
+            }</strong></div>
+          </div>
+        </div>
+
+        <table class="work-table">
+          <thead>
+            ${
+              topSectionTitle
+                ? `<tr class="section-banner-row">
+                    <td colspan="6" class="section-banner-cell ${initialSec === 'S1' ? 'section-s1' : 'section-s2'}">${escapeHtml(topSectionTitle)}</td>
+                  </tr>`
+                : ''
+            }
+            <tr>
+              <th style="width:48px;">순서</th>
+              <th style="width:132px;">작업시간</th>
+              <th style="width:92px;">밥/공정 구분</th>
+              <th>지시 제품명 (배합·소요시간)</th>
+              <th style="width:115px;">지시수량</th>
+              <th style="width:145px;">현장 체크 (V)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="bottom-summary-grid">
+          <div class="summary-box">
+            <div class="summary-box-title">⚠️ 필수 위생 · CCP 현장 볼펜 체크</div>
+            <ul class="ccp-check-list">
+              <li>□ 작업 시작 전 및 품목 교체 시 컨베이어·성형틀 70% 알코올 소독 완료</li>
+              <li>□ 금속검출기 테스트피스(Fe 2.0mm / SUS 3.0mm) 30분 주기 정상 통과</li>
+              <li>□ 백미 ➔ 흑미 ➔ 빨간양념밥 작업 순서 준수 및 알레르기 교차오염 차단</li>
+            </ul>
+          </div>
+          <div class="summary-box">
+            <div class="summary-box-title">🍚 오늘 밥 구분별 생산 요약</div>
+            <div class="rice-sum-grid">
+              <div class="rice-sum-item">
+                <span>[백미 제품]</span>
+                <span>${whiteRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item">
+                <span>[흑미/잡곡]</span>
+                <span>${blackRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item">
+                <span>[볶음/양념]</span>
+                <span>${redRiceQty.toLocaleString()} 개</span>
+              </div>
+              <div class="rice-sum-item" style="background:#e2e8f0;">
+                <span>총 생산합계</span>
+                <span>${totalOrderQtyNum.toLocaleString()} 개</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer-line">
+          <span>* 현장 반장님께서는 각 품목 완료 시 우측 [현장 체크(V)] 칸에 볼펜으로 체크(V) 및 완료 시각을 기입해 주십시오.</span>
+          <span>GFS ERP 현장 맞춤 큰글씨 양식 | 인쇄일: ${new Date().toLocaleDateString('ko-KR')}</span>
+        </div>
+      </section>
+    `;
+  };
+
+  const handlePrintAllLinesPdf = async () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('팝업이 차단되어 일괄 PDF 인쇄 창을 열 수 없습니다. 브라우저 팝업 차단을 해제해 주세요.');
+      return;
+    }
+
+    const safeWorkDate = workDate || kstToday();
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>전부서 일괄 작업지시서 생성 중...</title></head>
+      <body style="font-family:'Malgun Gothic',sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#1e293b;">
+        <div style="text-align:center;">
+          <div style="font-size:19px;font-weight:900;margin-bottom:8px;">🖨️ 성형장 · 전처리실 전체 작업지시서(라인 PDF 양식) 생성 중...</div>
+          <div style="font-size:13px;color:#64748b;">${escapeHtml(safeWorkDate)} 기준 모든 가동 라인·설비 데이터를 수집하고 있습니다. 잠시만 기다려 주세요.</div>
+        </div>
+      </body></html>
+    `);
+    printWindow.document.close();
+
+    try {
+      const targets = [
+        ...SEONGHYEONG_LINES.slice(1).map((x) => ({ id: x.id, deptLabel: '성형장' })),
+        ...JEONCHEORI_EQUIPMENT.slice(1).map((x) => ({ id: x.id, deptLabel: '전처리실' })),
+      ];
+
+      const results: Array<{
+        id: string;
+        deptLabel: string;
+        tasks: ScheduleTask[];
+        lineTotalPlan?: string;
+      }> = [];
+
+      for (let i = 0; i < targets.length; i += 6) {
+        const batch = targets.slice(i, i + 6);
+        const batchRes = await Promise.all(
+          batch.map(async (t) => {
+            try {
+              const res = await fetch(
+                `/api/production/work-order?workDate=${encodeURIComponent(safeWorkDate)}&shift=${encodeURIComponent(shift)}&line=${encodeURIComponent(t.id)}`
+              );
+              const json = await res.json();
+              const hasAnyOrder = (json.totalOrdersCount || 0) > 0;
+              const rawTasks: ScheduleTask[] =
+                json.success && Array.isArray(json.data) && json.data.length > 0
+                  ? json.data
+                  : !hasAnyOrder
+                  ? getLineDef(t.id).schedule
+                  : [];
+              return {
+                id: t.id,
+                deptLabel: t.deptLabel,
+                tasks: rawTasks,
+                lineTotalPlan: json.lineTotalPlan as string | undefined,
+              };
+            } catch {
+              return { id: t.id, deptLabel: t.deptLabel, tasks: [] as ScheduleTask[] };
+            }
+          })
+        );
+        results.push(...batchRes);
+      }
+
+      const activePages = results.filter((r) => r.tasks.length > 0);
+      if (activePages.length === 0) {
+        printWindow.document.open();
+        printWindow.document.write(
+          `<div style="font-family:sans-serif;padding:40px;text-align:center;"><h3>${escapeHtml(safeWorkDate)} 일자에 출력할 가동 라인·설비 작업지시서가 없습니다.</h3></div>`
+        );
+        printWindow.document.close();
+        return;
+      }
+
+      const dateParts = safeWorkDate.split('-');
+      const year = dateParts[0] || safeWorkDate.slice(0, 4);
+      const month = dateParts[1] || safeWorkDate.slice(5, 7);
+      const day = dateParts[2] || safeWorkDate.slice(8, 10);
+      const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+      const dayOfWeek = isNaN(dateObj.getTime()) ? '목' : dayNames[dateObj.getDay()];
+      const formattedDateKo = `${year}년 ${Number(month)}월 ${Number(day)}일 (${dayOfWeek}요일)`;
+
+      const pagesHtml = activePages
+        .map((p) =>
+          buildLiveWorkOrderPageSection({
+            lineId: p.id,
+            deptLabel: p.deptLabel,
+            tasks: p.tasks,
+            lineDef: getLineDef(p.id),
+            year,
+            month,
+            day,
+            formattedDateKo,
+            lineTotalPlan: p.lineTotalPlan,
+          })
+        )
+        .join('');
+
+      const html = `
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head>
+          <meta charset="UTF-8" />
+          <title>[GFS 전부서 일괄 작업지시서] (${escapeHtml(safeWorkDate)})</title>
+          <style>
+            @page { size: A4 landscape; margin: 7mm 8mm; }
+            * {
+              box-sizing: border-box;
+              font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body { margin: 0; padding: 10px; color: #000000; background: #ffffff; }
+            .wo-page { page-break-after: always; }
+            .wo-page:last-of-type { page-break-after: auto; }
+            .no-print-bar {
+              display: flex; justify-content: space-between; align-items: center;
+              background: #0f172a; color: #ffffff; padding: 10px 16px; border-radius: 8px;
+              margin-bottom: 12px; font-size: 13px; font-weight: 700;
+            }
+            .no-print-btn { padding: 7px 15px; border: none; border-radius: 6px; font-weight: 900; font-size: 13px; cursor: pointer; }
+            .top-header-box { border: 2.5px solid #000000; padding: 10px 14px; margin-bottom: 10px; background: #ffffff; }
+            .top-header-row1 {
+              display: flex; justify-content: space-between; align-items: center;
+              border-bottom: 2px solid #000000; padding-bottom: 8px; margin-bottom: 8px;
+            }
+            .doc-kicker { font-size: 11px; font-weight: 900; color: #334155; letter-spacing: 0.3px; margin-bottom: 2px; }
+            .doc-big-title { font-size: 26px; font-weight: 900; color: #000000; letter-spacing: -0.8px; line-height: 1.15; }
+            .sign-box { border: 2px solid #000000; padding: 8px 14px; font-size: 15px; font-weight: 900; background: #f8fafc; white-space: nowrap; text-align: right; }
+            .top-header-meta-grid { display: grid; grid-template-columns: 1.3fr 1.1fr 1.2fr; gap: 8px; font-size: 14px; font-weight: 900; }
+            .meta-pill { background: #f1f5f9; border: 1.5px solid #334155; padding: 6px 10px; border-radius: 4px; }
+            .meta-pill strong { font-size: 15px; color: #000000; }
+            .work-table { width: 100%; border-collapse: collapse; border: 2.5px solid #000000; margin-bottom: 12px; }
+            .work-table th {
+              background: #e2e8f0; color: #000000; font-weight: 900; font-size: 14px;
+              text-align: center; padding: 9px 6px; border: 1.5px solid #000000;
+            }
+            .work-table td { border: 1.5px solid #000000; padding: 9px 8px; vertical-align: middle; }
+            .work-table tr.row-alt { background: #f8fafc; }
+            .section-banner-row td.section-banner-cell {
+              background: #1d4ed8 !important; color: #ffffff !important; font-size: 15px; font-weight: 900;
+              padding: 9px 12px; letter-spacing: -0.2px; border: 2px solid #000000; text-align: left;
+            }
+            .section-banner-row td.section-banner-cell.section-s1 { background: #6d28d9 !important; }
+            .row-break { background: #e2e8f0 !important; font-weight: 900; }
+            .col-break-title { font-size: 15px; font-weight: 900; color: #0f172a; text-align: center; }
+            .col-center { text-align: center; }
+            .col-right { text-align: right; }
+            .col-seq { font-family: monospace; font-size: 19px; font-weight: 900; width: 48px; }
+            .col-time { font-family: monospace; font-size: 15px; font-weight: 900; width: 132px; white-space: nowrap; }
+            .rice-box {
+              display: inline-block; font-size: 13px; font-weight: 900; padding: 3px 6px;
+              border-radius: 4px; border: 2px solid #000000; white-space: nowrap;
+            }
+            .rice-box-white { background: #ffffff; color: #000000; }
+            .rice-box-purple { background: #f3e8ff; color: #3b0764; border-style: double; }
+            .rice-box-red { background: #ffe4e6; color: #881337; border-width: 2.5px; }
+            .rice-box-break { background: #cbd5e1; color: #0f172a; }
+            .col-item { text-align: left; }
+            .item-main-name { font-size: 17px; font-weight: 900; color: #000000; line-height: 1.25; word-break: keep-all; }
+            .item-sub-note { font-size: 11.5px; font-weight: 700; color: #334155; margin-top: 2px; }
+            .col-qty { font-family: monospace; font-size: 18px; font-weight: 900; color: #000000; width: 115px; white-space: nowrap; }
+            .col-check-cell { width: 145px; font-size: 14px; font-weight: 900; color: #000000; white-space: nowrap; }
+            .pen-check-box { font-size: 18px; font-weight: 900; vertical-align: middle; }
+            .bottom-summary-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 10px; margin-bottom: 8px; }
+            .summary-box { border: 2.5px solid #000000; padding: 10px 12px; background: #ffffff; }
+            .summary-box-title {
+              font-size: 14px; font-weight: 900; color: #000000;
+              border-bottom: 1.5px solid #000000; padding-bottom: 5px; margin-bottom: 7px;
+            }
+            .ccp-check-list { margin: 0; padding-left: 0; list-style: none; font-size: 12.5px; font-weight: 800; line-height: 1.65; }
+            .rice-sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13.5px; font-weight: 900; }
+            .rice-sum-item { border: 1.5px solid #334155; padding: 5px 8px; display: flex; justify-content: space-between; background: #f8fafc; }
+            .footer-line {
+              display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #334155;
+              border-top: 1px solid #94a3b8; padding-top: 5px;
+            }
+            @media print {
+              .no-print-bar { display: none !important; }
+              body { padding: 0; }
+              tr { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print-bar">
+            <div>🖨️ 성형장 · 전처리실 전체 일괄 작업지시서 (${escapeHtml(safeWorkDate)} · 총 ${activePages.length}개 라인/설비)</div>
+            <div style="display:flex;gap:8px;">
+              <button class="no-print-btn" style="background:#2563eb;color:#fff;" onclick="window.print()">전체 인쇄 / PDF 저장</button>
+              <button class="no-print-btn" style="background:#475569;color:#fff;" onclick="window.close()">닫기</button>
+            </div>
+          </div>
+          ${pagesHtml}
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 450);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+    } catch (err: any) {
+      printWindow.document.open();
+      printWindow.document.write(
+        `<div style="font-family:sans-serif;padding:40px;color:#b91c1c;"><h3>일괄 PDF 생성 실패</h3><p>${escapeHtml(err?.message || '오류가 발생했습니다.')}</p></div>`
+      );
+      printWindow.document.close();
+    }
+  };
+
   // 전체 통합 마스터 종합본 PDF 인쇄 (작업지시서 & 취반 타임테이블과 100% 동일한 라인·작업장별 집계)
   const handleOpenMasterPdf = async () => {
     const printWindow = window.open('', '_blank');
@@ -2446,6 +2890,16 @@ export const WorkOrderStatusView: React.FC = () => {
               <Printer size={14} />
               <span>라인 PDF</span>
               <ExternalLink size={11} className="opacity-80" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintAllLinesPdf}
+              title="성형장·전처리실의 모든 가동 라인·설비 작업지시서를 라인 PDF 양식 그대로 한 번에 일괄 인쇄/PDF 저장합니다."
+              className="h-8.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[13px] transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <Printer size={14} />
+              <span>전부서 일괄 PDF</span>
             </button>
 
             <button
