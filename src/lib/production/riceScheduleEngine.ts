@@ -140,14 +140,50 @@ export interface RiceWorkOrderResult {
 }
 
 export const LINE_UPH_MAP: Record<FormingLineName, number> = {
-  '도시락 1라인': 1500,
-  '김밥 성형': 1600,
-  '김밥 포장': 2700,
-  '더큰 삼각라인': 2200,
-  '삼각 1호기': 2400,
-  '삼각 2호기': 2400,
-  '커플 포장기': 2400,
+  '도시락 1라인': 1600,
+  '김밥 성형': 1800,
+  '김밥 포장': 2200,
+  '더큰 삼각라인': 2400,
+  '삼각 1호기': 2500,
+  '삼각 2호기': 2500,
+  '커플 포장기': 2500,
 };
+
+/** 현장 실측 기반 품목별 RPM(UPH) 보정 */
+export function resolveItemUph(lineName: FormingLineName, baseProductName: string): number {
+  const name = baseProductName || '';
+  if (lineName === '도시락 1라인') {
+    if (/자투리/.test(name)) return 1000;
+    if (/꼬마김밥/.test(name)) return 1500;
+    if (/반반제육|갈비양념제육|두부김치제육/.test(name)) return 1800;
+    return 1600;
+  }
+  if (lineName === '김밥 포장') {
+    if (/꼬마김밥/.test(name)) return 1200;
+    return 2200;
+  }
+  return LINE_UPH_MAP[lineName];
+}
+
+/** 현장 배치 기준: 특수/자투리 품목은 동일 색상 내 후반부 배치 */
+function getSpecialTailOrder(baseProductName: string): number {
+  const name = baseProductName || '';
+  if (/자투리/.test(name)) return 3;
+  if (/꼬마김밥/.test(name)) return 2;
+  if (/이달의도시락/.test(name)) return 1;
+  return 0;
+}
+
+/** 현장 실측 기준: 품목 간 기본 전환 리더타임(분) */
+function getItemChangeLeadMin(lineName: FormingLineName, nextProductName: string): number {
+  if (lineName === '더큰 삼각라인') return 10;
+  if (lineName === '도시락 1라인') {
+    if (/자투리/.test(nextProductName)) return 10;
+    if (/돈까스|꼬마김밥/.test(nextProductName)) return 7;
+    return 5;
+  }
+  return 5;
+}
 
 const COLOR_SORT_ORDER: Record<RiceColorCode, number> = {
   '1': 1,
@@ -286,6 +322,7 @@ function scheduleFormingLine(
       .sort(
         (a, b) =>
           COLOR_SORT_ORDER[a.riceColorCode] - COLOR_SORT_ORDER[b.riceColorCode] ||
+          getSpecialTailOrder(a.baseProductName) - getSpecialTailOrder(b.baseProductName) ||
           b.eaQty - a.eaQty ||
           a.baseProductName.localeCompare(b.baseProductName, 'ko')
       );
@@ -366,28 +403,29 @@ function scheduleFormingLine(
           cursor += 40;
           dinnerTaken = true;
         } else if (isColorChange) {
-          // 밥 색상 전환 간이세척 (+15분)
+          // 밥 색상 전환 간이세척 (현장 실측: 10분, 단 김밥/주먹밥 2호기 등 기본 5~10분)
+          const colorCleanMin = lineName === '김밥 성형' || lineName === '김밥 포장' ? 5 : 10;
           rows.push({
             id: `${lineName}-color-${shift}-${i}`,
             lineName,
             shiftType: shift,
             seq: seq++,
             startMin: cursor,
-            endMin: cursor + 15,
-            timeRange: formatTimeRange(cursor, cursor + 15),
-            durationMin: 15,
+            endMin: cursor + colorCleanMin,
+            timeRange: formatTimeRange(cursor, cursor + colorCleanMin),
+            durationMin: colorCleanMin,
             rowType: '세척/전환',
             baseProductName: `밥 색상 전환(${prev.riceColorBadge}→${item.riceColorBadge}) 간이세척`,
             eaQty: 0,
             uph,
             riceColorLabel: '색전환 세척',
             riceColorBadge: '세척/전환',
-            note: '호퍼 잔밥 제거 및 간이세척 (+15분)',
+            note: `호퍼 잔밥 제거 및 간이세척 (+${colorCleanMin}분)`,
           });
-          cursor += 15;
+          cursor += colorCleanMin;
         } else {
-          // 동일 밥 색상 내 품목 변경 (+5분)
-          cursor += 5;
+          // 동일 밥 색상 내 품목 변경 리더타임 (현장 실측: 기본 5분, 더큰 10분, 도시락 5~10분)
+          cursor += getItemChangeLeadMin(lineName, item.baseProductName);
         }
       }
 
@@ -414,7 +452,8 @@ function scheduleFormingLine(
         lunchTaken = true;
       }
 
-      const durationMin = Math.max(1, Math.ceil((item.eaQty / uph) * 60));
+      const itemUph = resolveItemUph(lineName, item.baseProductName);
+      const durationMin = Math.max(1, Math.ceil((item.eaQty / itemUph) * 60));
       rows.push({
         id: `${lineName}-${shift}-${i}`,
         lineName,
@@ -428,12 +467,12 @@ function scheduleFormingLine(
         baseProductName: item.baseProductName,
         eaQty: item.eaQty,
         diffEa: item.diffEa,
-        uph,
+        uph: itemUph,
         riceColorCode: item.riceColorCode,
         riceColorLabel: item.riceColorLabel,
         riceColorBadge: item.riceColorBadge,
         workers: DEFAULT_LINE_WORKERS[lineName] || '-',
-        note: i === 0 ? '동일색상 최우선 대량 배치' : '',
+        note: i === 0 ? '동일색상 최우선 배치' : '',
       });
       cursor += durationMin;
     }
@@ -525,6 +564,7 @@ export function generateRiceWorkOrder(params: {
     (a, b) =>
       (a.shiftType === b.shiftType ? 0 : a.shiftType === '2편' ? -1 : 1) ||
       COLOR_SORT_ORDER[a.riceColorCode] - COLOR_SORT_ORDER[b.riceColorCode] ||
+      getSpecialTailOrder(a.baseProductName) - getSpecialTailOrder(b.baseProductName) ||
       b.eaQty - a.eaQty ||
       a.baseProductName.localeCompare(b.baseProductName, 'ko')
   );
@@ -536,7 +576,7 @@ export function generateRiceWorkOrder(params: {
   );
   const gimbapItems = tab1Master.filter((i) => i.primaryLine === '김밥 성형');
   const gimbapMoldRows = scheduleFormingLine('김밥 성형', gimbapItems, 0);
-  const gimbapPackRows = scheduleFormingLine('김밥 포장', gimbapItems, 10); // +10분 후 시작
+  const gimbapPackRows = scheduleFormingLine('김밥 포장', gimbapItems, 40); // 성형 개시(09:30) 후 10:10 포장 개시
 
   const deokunRows = scheduleFormingLine(
     '더큰 삼각라인',

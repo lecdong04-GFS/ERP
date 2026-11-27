@@ -185,11 +185,11 @@ export const WorkOrderStatusView: React.FC = () => {
   // 큰 팝업 모달 상태
   const [isLargeModalOpen, setIsLargeModalOpen] = useState(false);
   const [modalFontSize, setModalFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
-  const [modalActiveTab, setModalActiveTab] = useState<'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('TIMETABLE');
+  const [modalActiveTab, setModalActiveTab] = useState<'AUTO_5TAB' | 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR'>('TIMETABLE');
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
-  const openLargeModal = (tab?: 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR') => {
-    setModalActiveTab(tab || (activeTab === 'AUTO_5TAB' ? 'TIMETABLE' : activeTab));
+  const openLargeModal = (tab?: 'AUTO_5TAB' | 'GANTT' | 'TIMETABLE' | 'MATERIALS' | 'SIMULATOR') => {
+    setModalActiveTab(tab || activeTab);
     setIsLargeModalOpen(true);
   };
 
@@ -770,8 +770,26 @@ export const WorkOrderStatusView: React.FC = () => {
       }
     });
 
+    // 첫 번째 생산 품목 기준으로 표 맨 위(<thead> 첫 줄) 섹션 배너 결정
+    const firstProdTask = filteredSchedule.find((t) => {
+      const isClean = t.type === '청소' || t.item.includes('세척') || t.item.includes('CIP') || t.item.includes('소독');
+      const isMeal = t.type === '휴게' || t.item.includes('중식') || t.item.includes('석식') || t.item.includes('점심');
+      return !isClean && !isMeal;
+    });
+    const initialSec: 'NONE' | 'S2' | 'S1' = firstProdTask
+      ? firstProdTask.shift.includes('1편')
+        ? 'S1'
+        : 'S2'
+      : 'NONE';
+    const topSectionTitle =
+      initialSec === 'S2'
+        ? '▶ 1부: 2편 생산 (당일 오후 출하 — 백미 ➔ 흑미 ➔ 빨간양념 순서 엄수)'
+        : initialSec === 'S1'
+        ? '▶ 2부: 1편 생산 (익일 새벽 출하 — 품목 교체 시 알코올 소독 필수)'
+        : '';
+
     // 1부(2편 생산) / 2부(1편 생산) 섹션 헤더 자동 삽입 + 6열 큰글씨 행 렌더링
-    let lastSection: 'NONE' | 'S2' | 'S1' = 'NONE';
+    let lastSection: 'NONE' | 'S2' | 'S1' = initialSec;
     let prodSeq = 0;
 
     const rowsHtml = filteredSchedule
@@ -790,7 +808,7 @@ export const WorkOrderStatusView: React.FC = () => {
                 : '▶ 2부: 1편 생산 (익일 새벽 출하 — 품목 교체 시 알코올 소독 필수)';
             sectionBannerHtml = `
               <tr class="section-banner-row">
-                <td colspan="6" class="section-banner-cell">${escapeHtml(secTitle)}</td>
+                <td colspan="6" class="section-banner-cell ${curSec === 'S1' ? 'section-s1' : 'section-s2'}">${escapeHtml(secTitle)}</td>
               </tr>
             `;
           }
@@ -955,8 +973,8 @@ export const WorkOrderStatusView: React.FC = () => {
             margin-bottom: 12px;
           }
           .work-table th {
-            background: #0f172a;
-            color: #ffffff;
+            background: #e2e8f0;
+            color: #000000;
             font-weight: 900;
             font-size: 14px;
             text-align: center;
@@ -972,13 +990,17 @@ export const WorkOrderStatusView: React.FC = () => {
             background: #f8fafc;
           }
           .section-banner-row td.section-banner-cell {
-            background: #1e293b !important;
+            background: #1d4ed8 !important;
             color: #ffffff !important;
             font-size: 15px;
             font-weight: 900;
-            padding: 8px 12px;
+            padding: 9px 12px;
             letter-spacing: -0.2px;
             border: 2px solid #000000;
+            text-align: left;
+          }
+          .section-banner-row td.section-banner-cell.section-s1 {
+            background: #6d28d9 !important;
           }
           .row-break {
             background: #e2e8f0 !important;
@@ -1156,6 +1178,13 @@ export const WorkOrderStatusView: React.FC = () => {
         <!-- 2. 6열 큰글씨 작업지시 표 (흑백 프린터 완벽 대비 + 볼펜 체크 공간) -->
         <table class="work-table">
           <thead>
+            ${
+              topSectionTitle
+                ? `<tr class="section-banner-row">
+                    <td colspan="6" class="section-banner-cell ${initialSec === 'S1' ? 'section-s1' : 'section-s2'}">${escapeHtml(topSectionTitle)}</td>
+                  </tr>`
+                : ''
+            }
             <tr>
               <th style="width:48px;">순서</th>
               <th style="width:132px;">작업시간</th>
@@ -1349,11 +1378,11 @@ export const WorkOrderStatusView: React.FC = () => {
   // ── 글자 크기 유틸 ──
   const getFontClass = (type: 'th' | 'td' | 'input' | 'badge' | 'sub', isModal: boolean) => {
     if (!isModal) {
-      if (type === 'th') return 'py-2 px-1.5 text-[11.5px]';
-      if (type === 'td') return 'py-1.5 px-1.5 text-xs';
-      if (type === 'input') return 'text-xs';
-      if (type === 'badge') return 'text-[11px] px-1.5 py-0.5';
-      return 'text-[11px]';
+      if (type === 'th') return 'py-2.5 px-2 text-[13.5px]';
+      if (type === 'td') return 'py-2 px-2 text-[13.5px]';
+      if (type === 'input') return 'text-[13.5px]';
+      if (type === 'badge') return 'text-[12.5px] px-2 py-0.5';
+      return 'text-[12.5px]';
     }
     if (modalFontSize === 'xlarge') {
       if (type === 'th') return 'py-4 px-3 text-base sm:text-lg';
@@ -1431,14 +1460,14 @@ export const WorkOrderStatusView: React.FC = () => {
     return (
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* 상단 뷰 전환 & 스마트 편집 액션 바 */}
-        <div className="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="bg-slate-50 border-b border-slate-200 px-3.5 py-2 flex items-center justify-between gap-2.5 flex-wrap shrink-0">
+          <div className="flex items-center gap-2.5 flex-wrap">
             {/* 표 보기 vs 큰글씨(현장) 토글 */}
             <div className="inline-flex items-center bg-slate-200/80 p-0.5 rounded-lg border border-slate-300">
               <button
                 type="button"
                 onClick={() => setIsSimpleFieldView(false)}
-                className={`px-2.5 py-1 rounded-md font-bold text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md font-bold text-[13px] flex items-center gap-1 transition-all cursor-pointer ${
                   !isSimpleFieldView
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -1449,7 +1478,7 @@ export const WorkOrderStatusView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsSimpleFieldView(true)}
-                className={`px-2.5 py-1 rounded-md font-bold text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md font-bold text-[13px] flex items-center gap-1 transition-all cursor-pointer ${
                   isSimpleFieldView
                     ? 'bg-emerald-600 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -1459,23 +1488,23 @@ export const WorkOrderStatusView: React.FC = () => {
               </button>
             </div>
 
-            <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-[11.5px] text-slate-600 bg-white px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors">
+            <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-[13px] text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors">
               <input
                 type="checkbox"
                 checked={autoCascadeOnReorder}
                 onChange={(e) => setAutoCascadeOnReorder(e.target.checked)}
-                className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                className="w-4 h-4 text-blue-600 rounded cursor-pointer"
               />
               <span>순서이동 연쇄</span>
             </label>
 
             {!isSimpleFieldView && (
-              <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-[11.5px] text-slate-600 bg-white px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors">
+              <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-[13px] text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors">
                 <input
                   type="checkbox"
                   checked={autoCascadeTime}
                   onChange={(e) => setAutoCascadeTime(e.target.checked)}
-                  className="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer"
+                  className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                 />
                 <span>시간수정 연쇄</span>
               </label>
@@ -1486,7 +1515,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleNudgeAll(-10)}
-              className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-bold text-[11.5px] transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-bold text-[13px] transition-colors cursor-pointer"
               title="전체 스케줄 시간을 10분 앞당깁니다"
             >
               -10분
@@ -1494,7 +1523,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleNudgeAll(10)}
-              className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-bold text-[11.5px] transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-md font-bold text-[13px] transition-colors cursor-pointer"
               title="전체 스케줄 시간을 10분 늦춥니다"
             >
               +10분
@@ -1502,38 +1531,38 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleRecalculateAll()}
-              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-md font-bold text-[11.5px] flex items-center gap-1 transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-md font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer"
               title="시작 시각부터 모든 작업을 5분 갭으로 순차 자동 정렬합니다"
             >
-              <Clock size={12} />
+              <Clock size={14} />
               <span>시간 자동정렬</span>
             </button>
             <button
               type="button"
               onClick={handlePrintLiveWorkOrder}
-              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[11.5px] flex items-center gap-1 transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer"
               title="현장 게시용 A4 큰글씨·고대비 작업지시서를 즉시 인쇄합니다"
             >
-              <Printer size={12} />
+              <Printer size={14} />
               <span>A4 인쇄</span>
             </button>
             <button
               type="button"
               onClick={handleSaveOrders}
               disabled={saving}
-              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-bold text-[11.5px] flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Save size={12} />
+              <Save size={14} />
               <span>{saving ? '저장중...' : '저장'}</span>
             </button>
             {!isModal && (
               <button
                 type="button"
                 onClick={() => openLargeModal('TIMETABLE')}
-                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md font-bold text-[11.5px] flex items-center gap-1 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="작업지시서를 큰 팝업창으로 확대하여 편하게 봅니다"
               >
-                <Maximize2 size={12} />
+                <Maximize2 size={14} />
                 <span>확대</span>
               </button>
             )}
@@ -1870,7 +1899,7 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         ) : (
         /* 🌟 모드 2: 관리자용 12열 상세 편집 테이블 🌟 */
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-left border-collapse">
             <thead className={`bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center ${getFontClass('th', isModal)}`}>
               <tr>
@@ -2028,7 +2057,7 @@ export const WorkOrderStatusView: React.FC = () => {
                           const rBadge = getRiceColorBadge(task.item);
                           if (!rBadge || task.type !== '생산') return null;
                           return (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-black border shrink-0 ${rBadge.bg}`}>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[12px] font-black border shrink-0 ${rBadge.bg}`}>
                               {rBadge.label === '빨간밥' ? '🌶️' : rBadge.label.includes('흑미') ? '🌾' : '🍚'} {rBadge.label}
                             </span>
                           );
@@ -2182,7 +2211,7 @@ export const WorkOrderStatusView: React.FC = () => {
   // ── 소요 원부자재 불출·계량표 렌더러 (기본 뷰 & 큰 팝업 공용) ──
   const renderMaterialsContent = (isModal: boolean = false) => {
     return (
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-left border-collapse">
           <thead className={`bg-slate-100 text-slate-800 font-black sticky top-0 z-10 border-b-2 border-slate-300 text-center ${getFontClass('th', isModal)}`}>
             <tr>
@@ -2287,11 +2316,11 @@ export const WorkOrderStatusView: React.FC = () => {
       )}
 
       {/* 0. 상단 마스터 헤더 바 */}
-      <div className="h-[38px] bg-[#1e293b] text-white px-3.5 flex items-center justify-between border-b border-slate-900 select-none shrink-0">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-2 h-3.5 bg-[#3b82f6] rounded-2xs" />
-          <h1 className="text-sm font-black tracking-tight text-white">작업지시현황</h1>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30 font-bold">
+      <div className="h-[44px] bg-[#1e293b] text-white px-4 flex items-center justify-between border-b border-slate-900 select-none shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="w-2 h-4 bg-[#3b82f6] rounded-2xs" />
+          <h1 className="text-base font-black tracking-tight text-white">작업지시현황</h1>
+          <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30 font-bold">
             생산·제조
           </span>
         </div>
@@ -2305,27 +2334,27 @@ export const WorkOrderStatusView: React.FC = () => {
           const headcountMain = currentLine.personnel.split('(')[0].trim();
 
           return (
-            <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] py-0.5 scrollbar-none">
+            <div className="flex items-center gap-2 overflow-x-auto text-[12.5px] py-0.5 scrollbar-none">
               <div
                 onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
                 title="클릭 시 최신 수주 재동기화"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-950/80 hover:bg-blue-900 border border-blue-500/40 text-blue-200 transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-950/80 hover:bg-blue-900 border border-blue-500/40 text-blue-200 transition cursor-pointer"
               >
-                <PackageCheck size={12} className="text-blue-400 shrink-0" />
+                <PackageCheck size={13} className="text-blue-400 shrink-0" />
                 <span className="text-slate-300">계획:</span>
                 <span className="text-white font-mono font-bold">{realOrderMeta?.lineTotalPlan || currentLine.totalPlan}</span>
                 {realOrderMeta?.totalDayAmount ? (
-                  <span className="text-[10px] text-emerald-400 font-bold hidden xl:inline">
+                  <span className="text-[11.5px] text-emerald-400 font-bold hidden xl:inline">
                     (₩{realOrderMeta.totalDayAmount.toLocaleString()})
                   </span>
                 ) : null}
               </div>
 
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
-                <Clock size={12} className="text-slate-400 shrink-0" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/90 border border-slate-700 text-slate-200">
+                <Clock size={13} className="text-slate-400 shrink-0" />
                 <span className="text-slate-400">가동:</span>
                 <span className="text-white font-mono font-bold">{startTime}~{endTime}</span>
-                <span className={`text-[10px] px-1 rounded font-bold ${
+                <span className={`text-[11px] px-1.5 rounded font-bold ${
                   progressPct > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-300'
                 }`}>
                   {progressPct}%
@@ -2335,23 +2364,23 @@ export const WorkOrderStatusView: React.FC = () => {
               <div
                 onClick={() => setIsConfigModalOpen(true)}
                 title="클릭 시 기준정보 설정"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-200 transition cursor-pointer"
               >
-                <Gauge size={12} className="text-emerald-400 shrink-0" />
+                <Gauge size={13} className="text-emerald-400 shrink-0" />
                 <span className="text-emerald-300">속도:</span>
                 <span className="text-emerald-100 font-mono font-bold">{speedMain}</span>
               </div>
 
-              <div className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/40 text-amber-200">
-                <Users size={12} className="text-amber-400 shrink-0" />
+              <div className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-950/80 border border-amber-500/40 text-amber-200">
+                <Users size={13} className="text-amber-400 shrink-0" />
                 <span className="text-amber-300">인원:</span>
                 <span className="text-amber-100 font-bold">{headcountMain}</span>
               </div>
 
-              <div className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-950/80 border border-indigo-500/40 text-indigo-200">
-                <ShieldCheck size={12} className="text-indigo-400 shrink-0" />
+              <div className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-950/80 border border-indigo-500/40 text-indigo-200">
+                <ShieldCheck size={13} className="text-indigo-400 shrink-0" />
                 <span className="text-indigo-300">책임:</span>
-                <span className="text-indigo-100 font-bold truncate max-w-[100px]">{currentLine.leadWorker}</span>
+                <span className="text-indigo-100 font-bold truncate max-w-[110px]">{currentLine.leadWorker}</span>
               </div>
             </div>
           );
@@ -2359,14 +2388,14 @@ export const WorkOrderStatusView: React.FC = () => {
       </div>
 
       {/* 1. 상단 공정 대분류 스위처 및 작업 조건 바 */}
-      <div className="bg-white border-b border-slate-200 px-4 py-1.5 shrink-0 space-y-1.5">
+      <div className="bg-white border-b border-slate-200 px-4 py-2 shrink-0 space-y-2">
         {/* 1행: 공정 대분류 토글 + 인쇄/저장 핵심 액션 */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
             <button
               type="button"
               onClick={() => handleDepartmentChange('SEONGHYEONG')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-[13.5px] transition-all cursor-pointer whitespace-nowrap ${
                 department === 'SEONGHYEONG'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -2374,7 +2403,7 @@ export const WorkOrderStatusView: React.FC = () => {
             >
               <span>🍱 성형장</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[11.5px] px-1.5 py-0.2 rounded-full font-bold ${
                   department === 'SEONGHYEONG'
                     ? 'bg-white/15 text-white'
                     : 'bg-slate-200 text-slate-600'
@@ -2387,7 +2416,7 @@ export const WorkOrderStatusView: React.FC = () => {
             <button
               type="button"
               onClick={() => handleDepartmentChange('JEONCHEORI')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-bold text-[13.5px] transition-all cursor-pointer whitespace-nowrap ${
                 department === 'JEONCHEORI'
                   ? 'bg-slate-900 text-white shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -2395,7 +2424,7 @@ export const WorkOrderStatusView: React.FC = () => {
             >
               <span>🍳 전처리실</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                className={`text-[11.5px] px-1.5 py-0.2 rounded-full font-bold ${
                   department === 'JEONCHEORI'
                     ? 'bg-white/15 text-white'
                     : 'bg-slate-200 text-slate-600'
@@ -2407,25 +2436,25 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
 
           {/* 인쇄 및 저장 버튼 그룹 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrintLiveWorkOrder}
               title="현재 선택된 날짜와 시프트, 실 수주 수량이 반영된 A4 가로 작업지시서를 새 창으로 열어 즉시 인쇄 및 PDF로 저장합니다."
-              className="h-7.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="h-8.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[13px] transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
-              <Printer size={13} />
+              <Printer size={14} />
               <span>라인 PDF</span>
-              <ExternalLink size={10} className="opacity-80" />
+              <ExternalLink size={11} className="opacity-80" />
             </button>
 
             <button
               type="button"
               onClick={handleOpenMasterPdf}
               title="전라인 종합본 PDF를 인쇄합니다."
-              className="h-7.5 px-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="h-8.5 px-3 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-[13px] transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
-              <Printer size={13} />
+              <Printer size={14} />
               <span>종합본 인쇄</span>
             </button>
 
@@ -2433,9 +2462,9 @@ export const WorkOrderStatusView: React.FC = () => {
               type="button"
               onClick={handleSaveOrders}
               disabled={saving}
-              className="h-7.5 px-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-lg font-bold text-xs transition-all flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="h-8.5 px-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-lg font-bold text-[13px] transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
-              <Save size={13} />
+              <Save size={14} />
               <span>{saving ? '저장 중...' : '순서 저장'}</span>
             </button>
 
@@ -2444,32 +2473,32 @@ export const WorkOrderStatusView: React.FC = () => {
               onClick={() => void fetchServerWorkOrders(workDate, shift, selectedLine, true)}
               disabled={loading}
               title="최신 수주 데이터를 불러와 작업지시서를 새로고침합니다."
-              className="h-7.5 w-7.5 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+              className="h-8.5 w-8.5 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
             >
-              <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
+              <RotateCcw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
 
         {/* 2행: 날짜 · 수주연동 · 기준정보 · 시프트 · 검색 */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-600 flex items-center gap-1 whitespace-nowrap">
-              <Calendar size={13} className="text-slate-500" /> 작업일:
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-bold text-slate-600 flex items-center gap-1 whitespace-nowrap">
+              <Calendar size={14} className="text-slate-500" /> 작업일:
             </span>
             <input
               type="date"
               value={workDate}
               onChange={(e) => setWorkDate(e.target.value)}
-              className="h-7.5 bg-slate-50 border border-slate-300 px-2 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
+              className="h-8.5 bg-slate-50 border border-slate-300 px-2.5 rounded-lg text-[13px] font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
             />
             {realOrderMeta && realOrderMeta.hasRealOrders ? (
-              <span className="h-7.5 inline-flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 <span>실 수주 연동 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)</span>
               </span>
             ) : (
-              <span className="h-7.5 inline-flex items-center gap-1 px-2.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+              <span className="h-8.5 inline-flex items-center gap-1 px-3 rounded-lg text-[13px] font-bold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
                 표준 템플릿
               </span>
             )}
@@ -2478,32 +2507,32 @@ export const WorkOrderStatusView: React.FC = () => {
               onClick={() => fetchServerWorkOrders(workDate, shift, selectedLine, true)}
               disabled={loading}
               title="수주 물량이 입력/변경되었을 때 최신 수주 데이터를 즉시 반영하여 작업지시서를 재계산합니다."
-              className="h-7.5 inline-flex items-center gap-1 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
             >
-              <RotateCcw size={12} className={loading ? 'animate-spin' : ''} />
+              <RotateCcw size={13} className={loading ? 'animate-spin' : ''} />
               <span>수주 동기화</span>
             </button>
             <button
               type="button"
               onClick={() => setIsConfigModalOpen(true)}
-              className="h-7.5 inline-flex items-center gap-1 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 transition-all cursor-pointer whitespace-nowrap"
+              className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 transition-all cursor-pointer whitespace-nowrap"
               title="기준값(UPH 속도, 09:25 선가동, 취반/전처리 역산 시간) 수정"
             >
-              <Gauge size={12} className="text-slate-600" />
+              <Gauge size={13} className="text-slate-600" />
               <span>기준정보 설정</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {/* 시프트 필터 */}
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-bold text-slate-500">시프트:</span>
-              <div className="h-7.5 flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-bold text-slate-500">시프트:</span>
+              <div className="h-8.5 flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                 {(['전체', '2편', '1편'] as const).map((s) => (
                   <button
                     key={s}
                     onClick={() => setShift(s)}
-                    className={`h-6.5 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                    className={`h-7 px-3 rounded-md text-[13px] font-bold transition-all cursor-pointer ${
                       shift === s
                         ? 'bg-slate-900 text-white shadow-2xs'
                         : 'text-slate-600 hover:text-slate-950'
@@ -2516,14 +2545,14 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
 
             {/* 검색창 */}
-            <div className="relative pl-2 border-l border-slate-200">
-              <Search size={13} className="absolute left-4 top-2 text-slate-400" />
+            <div className="relative pl-2.5 border-l border-slate-200">
+              <Search size={14} className="absolute left-5 top-2.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="품목명, BOM, CCP 검색..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-7.5 pl-7 pr-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 w-44"
+                className="h-8.5 pl-8 pr-3 bg-slate-50 border border-slate-300 rounded-lg text-[13px] text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 w-52"
               />
             </div>
           </div>
@@ -2603,9 +2632,9 @@ export const WorkOrderStatusView: React.FC = () => {
 
           return (
             <>
-              <div className="flex items-center justify-between gap-2 min-h-[32px] flex-nowrap">
-                <div className="flex items-center gap-1.5 min-w-0 flex-nowrap">
-                  <span className="text-xs font-bold text-slate-600 whitespace-nowrap shrink-0">
+              <div className="flex items-center justify-between gap-2 min-h-[36px] flex-nowrap">
+                <div className="flex items-center gap-2 min-w-0 flex-nowrap">
+                  <span className="text-[13px] font-bold text-slate-600 whitespace-nowrap shrink-0">
                     {isSeong ? '성형 라인:' : '전처리 설비:'}
                   </span>
 
@@ -2613,15 +2642,15 @@ export const WorkOrderStatusView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsLineDropdownOpen((v) => !v)}
-                    className="h-7.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-bold border transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-white border-slate-900 whitespace-nowrap shrink-0"
+                    className="h-8.5 inline-flex items-center gap-1.5 px-3.5 rounded-lg text-[13px] font-bold border transition cursor-pointer bg-slate-900 hover:bg-slate-800 text-white border-slate-900 whitespace-nowrap shrink-0"
                   >
                     <span>{activeItem?.icon}</span>
                     <span>{activeItem?.name || selectedLine}</span>
-                    <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono">
+                    <span className="text-[12px] px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono">
                       {activeItem?.count ?? 0}
                     </span>
                     <ChevronDown
-                      size={14}
+                      size={15}
                       className={`transition-transform duration-150 ${
                         isLineDropdownOpen ? 'rotate-180' : ''
                       }`}
@@ -2636,7 +2665,7 @@ export const WorkOrderStatusView: React.FC = () => {
                         setSelectedLine(allItem.id);
                         setIsLineDropdownOpen(false);
                       }}
-                      className="h-7.5 inline-flex items-center gap-1 px-2.5 rounded-lg text-xs font-bold bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-300 transition cursor-pointer whitespace-nowrap shrink-0"
+                      className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-300 transition cursor-pointer whitespace-nowrap shrink-0"
                     >
                       <span>{allItem.icon}</span>
                       <span>{isSeong ? '성형장 전체' : '전처리 전체'}</span>
@@ -2644,7 +2673,7 @@ export const WorkOrderStatusView: React.FC = () => {
                   )}
 
                   {/* 자주 쓰는 대표 빠른 선택 칩 */}
-                  <div className="hidden xl:flex items-center gap-1 pl-1.5 border-l border-slate-300 overflow-hidden">
+                  <div className="hidden xl:flex items-center gap-1.5 pl-2 border-l border-slate-300 overflow-hidden">
                     {(isSeong
                       ? ['도시락 1', '김밥성형', '삼각김밥 1호기', '삼각김밥(더큰)']
                       : ['취반실', '스팀솥 1번', '샐러드실(믹서1)', '계량실(계량)']
@@ -2660,7 +2689,7 @@ export const WorkOrderStatusView: React.FC = () => {
                             setSelectedLine(qItem.id);
                             setIsLineDropdownOpen(false);
                           }}
-                          className={`h-7 inline-flex items-center gap-1 px-2.5 rounded-md text-xs font-semibold transition cursor-pointer border whitespace-nowrap shrink-0 ${
+                          className={`h-8 inline-flex items-center gap-1 px-3 rounded-md text-[13px] font-semibold transition cursor-pointer border whitespace-nowrap shrink-0 ${
                             isSel
                               ? 'bg-slate-900 text-white border-slate-900'
                               : 'bg-white/80 hover:bg-white text-slate-700 border-slate-300'
@@ -2677,7 +2706,7 @@ export const WorkOrderStatusView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsLineDropdownOpen((v) => !v)}
-                  className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  className="text-[13px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <span>
                     {isLineDropdownOpen
@@ -2813,22 +2842,22 @@ export const WorkOrderStatusView: React.FC = () => {
       </div>
 
       {/* 3. 멀티 탭 네비게이션 */}
-      <div className="px-4 pt-1.5 shrink-0 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1 flex-wrap">
+      <div className="px-4 pt-2 shrink-0 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {/* 탭 1: 일일 작업지시서 */}
           <button
             type="button"
             onClick={() => setActiveTab('TIMETABLE')}
-            className={`px-3 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
+            className={`px-3.5 py-2 rounded-t-lg font-bold text-[13.5px] flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
               activeTab === 'TIMETABLE'
                 ? 'bg-white text-emerald-900 border-emerald-600 shadow-2xs'
                 : 'bg-slate-200/70 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <FileText size={14} className={activeTab === 'TIMETABLE' ? 'text-emerald-600' : 'text-slate-400'} />
+            <FileText size={15} className={activeTab === 'TIMETABLE' ? 'text-emerald-600' : 'text-slate-400'} />
             <span>일일 작업지시서</span>
             <span
-              className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+              className={`text-[12px] px-1.5 py-0.2 rounded-full font-bold ${
                 activeTab === 'TIMETABLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -2840,13 +2869,13 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('AUTO_5TAB')}
-            className={`px-3 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
+            className={`px-3.5 py-2 rounded-t-lg font-bold text-[13.5px] flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
               activeTab === 'AUTO_5TAB'
                 ? 'bg-white text-slate-900 border-slate-900 shadow-2xs'
                 : 'bg-slate-200/70 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Sparkles size={14} className={activeTab === 'AUTO_5TAB' ? 'text-slate-900' : 'text-slate-400'} />
+            <Sparkles size={15} className={activeTab === 'AUTO_5TAB' ? 'text-slate-900' : 'text-slate-400'} />
             <span>실별·시간대별 자동지시서 (5시트)</span>
           </button>
 
@@ -2854,16 +2883,16 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('GANTT')}
-            className={`px-3 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
+            className={`px-3.5 py-2 rounded-t-lg font-bold text-[13.5px] flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
               activeTab === 'GANTT'
                 ? 'bg-white text-blue-900 border-blue-600 shadow-2xs'
                 : 'bg-slate-200/70 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Clock size={14} className={activeTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
+            <Clock size={15} className={activeTab === 'GANTT' ? 'text-blue-600' : 'text-slate-400'} />
             <span>타임테이블 간트</span>
             <span
-              className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+              className={`text-[12px] px-1.5 py-0.2 rounded-full font-bold ${
                 activeTab === 'GANTT' ? 'bg-blue-100 text-blue-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -2875,16 +2904,16 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('MATERIALS')}
-            className={`px-3 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
+            className={`px-3.5 py-2 rounded-t-lg font-bold text-[13.5px] flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
               activeTab === 'MATERIALS'
                 ? 'bg-white text-indigo-900 border-indigo-600 shadow-2xs'
                 : 'bg-slate-200/70 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Layers size={14} className={activeTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
+            <Layers size={15} className={activeTab === 'MATERIALS' ? 'text-indigo-600' : 'text-slate-400'} />
             <span>소요 원부자재</span>
             <span
-              className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+              className={`text-[12px] px-1.5 py-0.2 rounded-full font-bold ${
                 activeTab === 'MATERIALS' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -2896,16 +2925,16 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('SIMULATOR')}
-            className={`px-3 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
+            className={`px-3.5 py-2 rounded-t-lg font-bold text-[13.5px] flex items-center gap-1.5 transition-all cursor-pointer border-t-2 ${
               activeTab === 'SIMULATOR'
                 ? 'bg-white text-purple-900 border-purple-600 shadow-2xs'
                 : 'bg-slate-200/70 text-slate-600 hover:bg-slate-200 border-transparent'
             }`}
           >
-            <Gauge size={14} className={activeTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
+            <Gauge size={15} className={activeTab === 'SIMULATOR' ? 'text-purple-600' : 'text-slate-400'} />
             <span>속도 시뮬레이터</span>
             <span
-              className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+              className={`text-[12px] px-1.5 py-0.2 rounded-full font-bold ${
                 activeTab === 'SIMULATOR' ? 'bg-purple-100 text-purple-800' : 'bg-slate-300 text-slate-700'
               }`}
             >
@@ -2917,13 +2946,13 @@ export const WorkOrderStatusView: React.FC = () => {
         <div className="flex items-center gap-2.5">
           {/* 창고별 필터 버튼 */}
           {activeTab === 'MATERIALS' && (
-            <div className="flex items-center gap-1 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200 text-[11px] font-bold">
+            <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-lg border border-slate-200 text-[12.5px] font-bold">
               <span className="text-slate-500">창고:</span>
               {['전체', '상온', '냉장1', '냉장2', '냉동', '부자재'].map((wh) => (
                 <button
                   key={wh}
                   onClick={() => setMaterialWhFilter(wh)}
-                  className={`px-1.5 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                  className={`px-2 py-0.5 rounded font-bold transition-colors cursor-pointer ${
                     materialWhFilter === wh ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
@@ -2935,17 +2964,17 @@ export const WorkOrderStatusView: React.FC = () => {
 
           {/* 완료 카운트 표시 */}
           {activeTab === 'TIMETABLE' && (
-            <div className="flex items-center gap-3 text-[11.5px] font-bold text-slate-600">
+            <div className="flex items-center gap-3 text-[13px] font-bold text-slate-600">
               <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                 <span>완료 <strong className="text-emerald-700 font-mono">{stats.completedCount}</strong></span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
                 <span>진행 <strong className="text-blue-700 font-mono">{stats.inProgressCount}</strong></span>
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
                 <span>대기 <strong className="text-slate-700 font-mono">{stats.pendingCount}</strong></span>
               </span>
             </div>
@@ -2955,10 +2984,10 @@ export const WorkOrderStatusView: React.FC = () => {
           <button
             type="button"
             onClick={() => openLargeModal()}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11.5px] font-bold transition cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[13px] font-bold transition cursor-pointer shrink-0"
             title="큰 팝업창으로 확대"
           >
-            <Maximize2 className="w-3 h-3" />
+            <Maximize2 className="w-3.5 h-3.5" />
             <span>확대 팝업</span>
           </button>
         </div>
@@ -3006,7 +3035,7 @@ export const WorkOrderStatusView: React.FC = () => {
           {activeTab === 'MATERIALS' && renderMaterialsContent(false)}
 
           {/* 테이블 하단 푸터 바 (현장 필수 준수사항 및 발행 정보) */}
-          <div className="bg-slate-50 px-6 py-2.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-xs text-slate-600 font-medium">
+          <div className="bg-slate-50 px-6 py-2.5 border-t border-slate-300 flex flex-wrap items-center justify-between text-[13px] text-slate-600 font-medium">
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-800 bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
                 현장 필수 준수
@@ -3023,7 +3052,7 @@ export const WorkOrderStatusView: React.FC = () => {
       {/* 5. 큰 팝업 모달 (다른 페이지의 [큰 팝업으로 보기] 패턴 100% 계승) */}
       {isLargeModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-[250] bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
           onClick={() => setIsLargeModalOpen(false)}
         >
           <div
@@ -3175,6 +3204,19 @@ export const WorkOrderStatusView: React.FC = () => {
 
                 <button
                   type="button"
+                  onClick={() => setModalActiveTab('AUTO_5TAB')}
+                  className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
+                    modalActiveTab === 'AUTO_5TAB'
+                      ? 'bg-white text-slate-900 border-slate-900 shadow-xs'
+                      : 'bg-slate-200/80 text-slate-600 hover:bg-slate-200 border-transparent'
+                  }`}
+                >
+                  <Sparkles size={16} className={modalActiveTab === 'AUTO_5TAB' ? 'text-slate-900' : 'text-slate-400'} />
+                  <span>실별·시간대별 자동지시서 (5시트)</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setModalActiveTab('MATERIALS')}
                   className={`px-4 py-2 rounded-t-xl font-black text-sm flex items-center gap-2 transition-all cursor-pointer border-t-2 ${
                     modalActiveTab === 'MATERIALS'
@@ -3257,6 +3299,11 @@ export const WorkOrderStatusView: React.FC = () => {
             {/* 팝업 콘텐츠 본체 */}
             <div className="flex-1 min-h-0 bg-white overflow-hidden flex flex-col">
               {modalActiveTab === 'TIMETABLE' && renderTimetableContent(true)}
+              {modalActiveTab === 'AUTO_5TAB' && (
+                <div className="flex-1 min-h-0 p-3 bg-slate-50/40 overflow-hidden flex flex-col">
+                  <RiceWorkOrderTabsPanel workDate={workDate} />
+                </div>
+              )}
               {modalActiveTab === 'MATERIALS' && renderMaterialsContent(true)}
               {modalActiveTab === 'GANTT' && (
                 <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
@@ -3277,7 +3324,7 @@ export const WorkOrderStatusView: React.FC = () => {
               )}
               {modalActiveTab === 'SIMULATOR' && (
                 <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-slate-50/40">
-                  <SpeedSimulatorView />
+                  <SpeedSimulatorView workDate={workDate} />
                 </div>
               )}
             </div>

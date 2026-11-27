@@ -48,6 +48,13 @@ function parseWorkerCount(workers?: string): number {
   return m ? Number(m[0]) : 0;
 }
 
+function formatDurationHm(totalMin: number): string {
+  const m = Math.max(0, Math.round(totalMin));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h}:${String(mm).padStart(2, '0')}`;
+}
+
 export interface MasterPrintOptions {
   scope?: 'ALL' | 'SEONGHYEONG' | 'JEONCHEORI';
 }
@@ -193,6 +200,12 @@ export function buildMasterWorkOrderPrintHtml(
           const lineEa = prodRows.reduce((s, r) => s + r.eaQty, 0);
           const firstT = rows[0]?.timeRange?.split('~')[0]?.trim() || '-';
           const lastT = rows[rows.length - 1]?.timeRange?.split('~')[1]?.trim() || '-';
+          const firstProdT = prodRows[0]?.timeRange?.split('~')[0]?.trim() || firstT;
+          const lastProdT = prodRows[prodRows.length - 1]?.timeRange?.split('~')[1]?.trim() || lastT;
+          const totalProdMin = prodRows.reduce((s, r) => s + r.durationMin, 0);
+          const firstProdStart = prodRows[0]?.startMin ?? 0;
+          const lastProdEnd = prodRows[prodRows.length - 1]?.endMin ?? firstProdStart;
+          const totalLeadMin = Math.max(0, lastProdEnd - firstProdStart - totalProdMin);
           const lineWorkers = prodRows[0]?.workers || rows[0]?.workers || '-';
 
           // 해당 라인 소요 원물 합산
@@ -254,8 +267,11 @@ export function buildMasterWorkOrderPrintHtml(
                   <td class="col-right mono qty-cell">${r.eaQty > 0 ? `${r.eaQty.toLocaleString()} ea` : '-'}</td>
                   <td class="col-center bold">${esc(r.workers || lineWorkers)}</td>
                   <td class="col-right mono">${r.uph > 0 ? r.uph.toLocaleString() : '-'}</td>
-                  <td class="ellipsis-cell" style="max-width:190px;font-size:11.5px;color:#334155;">${esc(bomSummary)}</td>
-                  <td class="ellipsis-cell" style="max-width:95px;font-size:11.5px;color:#475569;">${esc(r.note)}</td>
+                  <td class="ellipsis-cell" style="max-width:170px;font-size:11px;color:#334155;">${esc(bomSummary)}</td>
+                  <td class="col-center mono" style="min-width:54px;"></td>
+                  <td class="col-center mono" style="min-width:48px;"></td>
+                  <td style="min-width:72px;"></td>
+                  <td class="ellipsis-cell" style="max-width:85px;font-size:11px;color:#475569;">${esc(r.note)}</td>
                   <td class="col-center"><div class="check-box"></div></td>
                 </tr>
               `;
@@ -312,11 +328,25 @@ export function buildMasterWorkOrderPrintHtml(
                     <th>인원</th>
                     <th>UPH</th>
                     <th>BOM 주요 투입원물</th>
+                    <th>실종료</th>
+                    <th>발생차이</th>
+                    <th>차이발생원인</th>
                     <th>비고</th>
                     <th>확인</th>
                   </tr>
                 </thead>
                 <tbody>${bodyRows}</tbody>
+                <tfoot>
+                  <tr style="background:#f1f5f9;font-weight:900;">
+                    <td colspan="2" class="col-center">${prodRows.length} Unit</td>
+                    <td class="col-center mono">${esc(firstProdT)} ~ ${esc(lastProdT)}</td>
+                    <td class="col-center mono">${formatDurationHm(totalProdMin)}</td>
+                    <td colspan="3" class="col-right" style="padding-right:6px;">리더타임 합계: <span class="mono">${formatDurationHm(totalLeadMin)}</span></td>
+                    <td class="col-right mono bold-blue">${lineEa.toLocaleString()} ea</td>
+                    <td class="col-center">${esc(lineWorkers)}</td>
+                    <td colspan="7" style="font-size:11px;color:#475569;padding-left:8px;">* 실종료·발생차이·원인은 현장 반장 수기 기록용</td>
+                  </tr>
+                </tfoot>
               </table>
 
               ${
