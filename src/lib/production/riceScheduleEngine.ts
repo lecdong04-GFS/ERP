@@ -667,15 +667,15 @@ export function generateRiceWorkOrder(params: {
       else if (room === '취반기') leadMin = 90;
       else if (room === '로터리 믹서') leadMin = 40;
 
-      let startMin = Math.max(6 * 60, formRow.startMin - leadMin);
+      let startMin = Math.max(7 * 60 + 30, formRow.startMin - leadMin);
       let endMin = Math.max(startMin + 20, formRow.startMin - Math.max(10, leadMin - 30));
 
-      // 전주비빔 나물 & 깍두기 찹핑 06:00~07:30 최우선 배치
+      // 전주비빔 나물 & 깍두기 찹핑 07:30~08:45 최우선 배치
       const isPriorityVeg =
         room === '채소·커팅실' && /시금치|도라지|콩나물|깍두기/.test(mat.materialName);
       if (isPriorityVeg) {
-        startMin = 6 * 60;
-        endMin = 7 * 60 + 30;
+        startMin = 7 * 60 + 30;
+        endMin = 8 * 60 + 45;
       }
 
       if (mode === 'pre10' && startMin > 10 * 60 + 30) continue;
@@ -697,7 +697,7 @@ export function generateRiceWorkOrder(params: {
         riceColorBadge: master.riceColorBadge,
         workers: DEFAULT_ROOM_WORKERS[room] || '-',
         note: isPriorityVeg
-          ? '06:00~07:30 최우선 데침/찹핑'
+          ? '07:30~08:45 최우선 데침/찹핑'
           : room === '계량실·냉동실' && formRow.shiftType === '1편'
           ? '10:30 본발주 확정 직후 일괄 계량'
           : '',
