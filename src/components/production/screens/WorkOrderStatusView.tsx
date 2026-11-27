@@ -1104,20 +1104,32 @@ export const WorkOrderStatusView: React.FC = () => {
           }
           .top-header-meta-grid {
             display: grid;
-            grid-template-columns: 1.3fr 1.1fr 1.2fr;
+            grid-template-columns: 1.35fr 0.95fr 1.2fr;
             gap: 8px;
-            font-size: 14px;
-            font-weight: 900;
           }
           .meta-pill {
-            background: #f1f5f9;
+            background: #f8fafc;
             border: 1.5px solid #334155;
             padding: 6px 10px;
-            border-radius: 4px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
           }
-          .meta-pill strong {
-            font-size: 15px;
+          .meta-label {
+            font-size: 10.5px;
+            font-weight: 800;
+            color: #475569;
+            line-height: 1.1;
+            white-space: nowrap;
+          }
+          .meta-value {
+            font-size: 14.5px;
+            font-weight: 900;
             color: #000000;
+            line-height: 1.25;
+            white-space: nowrap;
+            letter-spacing: -0.3px;
           }
 
           /* 2. 현장 큰글씨 6열 메인 작업지시 표 */
@@ -1393,13 +1405,22 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
           </div>
           <div class="top-header-meta-grid">
-            <div class="meta-pill">📅 작업일자: <strong>${escapeHtml(formattedDateKo)}</strong></div>
-            <div class="meta-pill">⏰ 가동시간: <strong>${escapeHtml(totalRunTimeStr)}</strong></div>
-            <div class="meta-pill">📦 총 지시량: <strong>${prodTaskCount}품목 / ${
+            <div class="meta-pill">
+              <span class="meta-label">📅 작업일자</span>
+              <span class="meta-value">${escapeHtml(formattedDateKo)}</span>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">⏰ 가동시간</span>
+              <span class="meta-value">${escapeHtml(totalRunTimeStr)}</span>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">📦 총 지시량</span>
+              <span class="meta-value">${prodTaskCount}품목 · ${
       totalOrderQtyNum > 0
         ? `${totalOrderQtyNum.toLocaleString()} 개`
         : escapeHtml(realOrderMeta?.lineTotalPlan || currentLine.totalPlan)
-    }</strong></div>
+    }</span>
+            </div>
           </div>
         </div>
 
@@ -1657,13 +1678,22 @@ export const WorkOrderStatusView: React.FC = () => {
             </div>
           </div>
           <div class="top-header-meta-grid">
-            <div class="meta-pill">📅 작업일자: <strong>${escapeHtml(formattedDateKo)}</strong></div>
-            <div class="meta-pill">⏰ 가동시간: <strong>${escapeHtml(totalRunTimeStr)}</strong></div>
-            <div class="meta-pill">📦 총 지시량: <strong>${prodTaskCount}품목 / ${
+            <div class="meta-pill">
+              <span class="meta-label">📅 작업일자</span>
+              <span class="meta-value">${escapeHtml(formattedDateKo)}</span>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">⏰ 가동시간</span>
+              <span class="meta-value">${escapeHtml(totalRunTimeStr)}</span>
+            </div>
+            <div class="meta-pill">
+              <span class="meta-label">📦 총 지시량</span>
+              <span class="meta-value">${prodTaskCount}품목 · ${
               totalOrderQtyNum > 0
                 ? `${totalOrderQtyNum.toLocaleString()} 개`
                 : escapeHtml(lineTotalPlan || lineDef.totalPlan)
-            }</strong></div>
+            }</span>
+            </div>
           </div>
         </div>
 
@@ -1874,9 +1904,10 @@ export const WorkOrderStatusView: React.FC = () => {
             .doc-kicker { font-size: 10px; font-weight: 900; color: #334155; letter-spacing: 0.2px; margin-bottom: 2px; }
             .doc-big-title { font-size: 21px; font-weight: 900; color: #000000; letter-spacing: -0.6px; line-height: 1.15; }
             .sign-box { border: 1.5px solid #000000; padding: 6px 10px; font-size: 13px; font-weight: 900; background: #f8fafc; white-space: nowrap; text-align: right; }
-            .top-header-meta-grid { display: grid; grid-template-columns: 1.25fr 1fr 1.15fr; gap: 6px; font-size: 12px; font-weight: 900; }
-            .meta-pill { background: #f1f5f9; border: 1px solid #334155; padding: 4px 8px; border-radius: 4px; }
-            .meta-pill strong { font-size: 12.5px; color: #000000; }
+            .top-header-meta-grid { display: grid; grid-template-columns: 1.35fr 0.95fr 1.2fr; gap: 6px; }
+            .meta-pill { background: #f8fafc; border: 1.5px solid #334155; padding: 5px 9px; border-radius: 5px; display: flex; flex-direction: column; gap: 2px; }
+            .meta-label { font-size: 9.5px; font-weight: 800; color: #475569; line-height: 1.1; white-space: nowrap; }
+            .meta-value { font-size: 13px; font-weight: 900; color: #000000; line-height: 1.2; white-space: nowrap; letter-spacing: -0.3px; }
             .work-table { width: 100%; border-collapse: collapse; border: 2px solid #000000; margin-bottom: 10px; table-layout: fixed; }
             .work-table thead { display: table-header-group; }
             .work-table th {
