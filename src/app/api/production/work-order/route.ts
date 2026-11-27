@@ -999,9 +999,32 @@ export async function GET(req: NextRequest) {
     }>();
 
     let totalOrdersCount = salesOrders.length;
+    let isBaselineFallback = false;
+    let orderSourceDate = targetDate;
+    let sourceOrders = salesOrders;
 
-    if (salesOrders.length > 0) {
-      for (const so of salesOrders) {
+    if (sourceOrders.length === 0) {
+      // 당일 수주 미등록 시: 고정 더미(11/8) 대신 DB의 직전 실수주 일자를 선행 참고용으로 조회
+      const latestPrev = await prisma.salesOrder.findFirst({
+        where: { orderDate: { lt: targetDate }, status: { not: '취소' } },
+        orderBy: { orderDate: 'desc' },
+        select: { orderDate: true },
+      });
+      if (latestPrev?.orderDate) {
+        sourceOrders = await prisma.salesOrder.findMany({
+          where: { orderDate: latestPrev.orderDate, status: { not: '취소' } },
+          include: { details: { include: { product: true } } },
+        });
+        if (sourceOrders.length > 0) {
+          isBaselineFallback = true;
+          orderSourceDate = latestPrev.orderDate;
+          totalOrdersCount = sourceOrders.length;
+        }
+      }
+    }
+
+    if (sourceOrders.length > 0) {
+      for (const so of sourceOrders) {
         for (const dt of so.details) {
           if (!dt.product) continue;
           const cleanName = dt.product.name.replace(/^\(주문\)\s*/, '').trim();
@@ -1044,43 +1067,6 @@ export async function GET(req: NextRequest) {
               const fallbackShift: '1편' | '2편' = isNameShift1 && !isNameShift2 ? '1편' : '2편';
               pushOrderBucket(fallbackShift, dt.totalQty || 0);
             }
-          }
-        }
-      }
-    } else {
-      // SalesOrder가 DB에 없는 일자(예: 11월 7일, 8일 등)는 생산일보 정본 데이터셋(Canonical Daily Report)에서 동적 로드
-      const canonical = getCanonicalDailyReport(targetDate);
-      if (canonical && canonical.items && canonical.items.length > 0) {
-        totalOrdersCount = canonical.items.length;
-        for (const item of canonical.items) {
-          const cleanName = item.productName.trim();
-          const baseName = cleanName.replace(/[12]편$/, '').replace(/[12]$/, '').trim();
-
-          // 2편 물량 등록
-          if (!isShift1Filter && item.shift2Qty > 0) {
-            const key2 = `${cleanName} 2편`;
-            productMap.set(key2, {
-              cleanName,
-              baseName,
-              shift: '2편',
-              qty: item.shift2Qty,
-              unitPrice: item.deliveryPrice,
-              amount: item.shift2Amount || item.shift2Qty * item.deliveryPrice,
-              product: { name: cleanName, spec: '1ea', unit: 'ea', unitPrice: item.deliveryPrice },
-            });
-          }
-          // 1편 물량 등록
-          if (!isShift2Filter && item.shift1Qty > 0) {
-            const key1 = `${cleanName} 1편`;
-            productMap.set(key1, {
-              cleanName,
-              baseName,
-              shift: '1편',
-              qty: item.shift1Qty,
-              unitPrice: item.deliveryPrice,
-              amount: item.shift1Amount || item.shift1Qty * item.deliveryPrice,
-              product: { name: cleanName, spec: '1ea', unit: 'ea', unitPrice: item.deliveryPrice },
-            });
           }
         }
       }
@@ -1363,7 +1349,9 @@ export async function GET(req: NextRequest) {
       workDate: targetDate,
       line,
       shift,
-      hasRealOrders: true,
+      hasRealOrders: !isBaselineFallback,
+      isBaselineFallback,
+      orderSourceDate,
       totalOrdersCount,
       allOrdersTotalQty,
       totalDayQty,

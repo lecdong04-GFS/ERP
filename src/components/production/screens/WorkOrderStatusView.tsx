@@ -391,6 +391,8 @@ export const WorkOrderStatusView: React.FC = () => {
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [realOrderMeta, setRealOrderMeta] = useState<{
     hasRealOrders: boolean;
+    isBaselineFallback?: boolean;
+    orderSourceDate?: string;
     totalOrdersCount: number;
     allOrdersTotalQty?: number;
     totalDayQty: number;
@@ -445,6 +447,8 @@ export const WorkOrderStatusView: React.FC = () => {
         setMaterials(Array.isArray(json.materials) ? json.materials : []);
         setRealOrderMeta({
           hasRealOrders: Boolean(json.hasRealOrders),
+          isBaselineFallback: Boolean(json.isBaselineFallback),
+          orderSourceDate: json.orderSourceDate,
           totalOrdersCount: json.totalOrdersCount || 0,
           allOrdersTotalQty: json.allOrdersTotalQty || json.totalDayQty || 0,
           totalDayQty: json.totalDayQty || 0,
@@ -3232,7 +3236,17 @@ export const WorkOrderStatusView: React.FC = () => {
               onChange={(e) => setWorkDate(e.target.value)}
               className="h-8.5 bg-slate-50 border border-slate-300 px-2.5 rounded-lg text-[13px] font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer"
             />
-            {realOrderMeta && realOrderMeta.hasRealOrders ? (
+            {realOrderMeta && realOrderMeta.isBaselineFallback ? (
+              <span
+                className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-amber-50 text-amber-800 border border-amber-300 whitespace-nowrap"
+                title={`금일(${workDate}) 수주가 아직 업로드되지 않아 직전 실수주(${realOrderMeta.orderSourceDate}) 기준으로 선행 참고 중입니다.`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span>
+                  금일 수주 미등록 · 직전일({realOrderMeta.orderSourceDate?.slice(5)}) 선행 참고 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)
+                </span>
+              </span>
+            ) : realOrderMeta && realOrderMeta.hasRealOrders ? (
               <span className="h-8.5 inline-flex items-center gap-1.5 px-3 rounded-lg text-[13px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 <span>실 수주 연동 ({realOrderMeta.totalDayQty.toLocaleString()} ea / {realOrderMeta.distinctItemCount}품목)</span>
