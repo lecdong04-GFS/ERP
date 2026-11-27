@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSession } from '@/lib/apiAuth';
 import { kstToday } from '@/lib/kst';
+import { menuKey } from '@/lib/gfs/bomMatch';
 import {
   generateRiceWorkOrder,
   normalizeBaseProductName,
@@ -62,11 +63,16 @@ async function loadBomByNormName(): Promise<Map<string, BomMaterialInput[]>> {
 
   const map = new Map<string, BomMaterialInput[]>();
   for (const h of headers) {
-    const parentNorm = normalizeBaseProductName(h.parentProduct?.name || '').replace(/\s+/g, '');
-    if (!parentNorm) continue;
+    const rawParentName = h.parentProduct?.name || '';
+    const parentNorm = normalizeBaseProductName(rawParentName).replace(/\s+/g, '');
+    const mk = menuKey(rawParentName);
+    if (!parentNorm && !mk) continue;
     const mats = expandDetails(h.details, 1, new Set([h.parentProductId]));
-    if (!map.has(parentNorm) || mats.length > (map.get(parentNorm)?.length || 0)) {
-      map.set(parentNorm, mats);
+    for (const k of [parentNorm, mk]) {
+      if (!k) continue;
+      if (!map.has(k) || mats.length > (map.get(k)?.length || 0)) {
+        map.set(k, mats);
+      }
     }
   }
   return map;

@@ -6,6 +6,8 @@
  * - 10시 이전(선행) / 10시 이후(본수주 확정) 2종 모드 및 증감 비교 지원
  */
 
+import { menuKey } from '@/lib/gfs/bomMatch';
+
 export type ShiftType = '2편' | '1편';
 export type WorkOrderWindowMode = 'pre10' | 'post10';
 
@@ -537,7 +539,8 @@ export function generateRiceWorkOrder(params: {
   const tab1Master: AggregatedOrderItem[] = [];
   for (const [key, entry] of mainMap.entries()) {
     const normKey = entry.baseProductName.replace(/\s+/g, '');
-    const bomMaterials = bomByNormName.get(normKey) || [];
+    const mk = menuKey(entry.baseProductName);
+    const bomMaterials = bomByNormName.get(mk) || bomByNormName.get(normKey) || [];
     const color = classifyRiceColor(entry.baseProductName, bomMaterials);
     const primaryLine = assignPrimaryLine(entry.baseProductName);
     const pre10Ea = pre10Map.get(key)?.eaQty;
