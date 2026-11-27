@@ -164,6 +164,115 @@ function getRiceColorBadge(name: string, bomText?: string) {
 }
 
 /**
+ * 작업시간 셀 HTML (작업시간대 + 아래 소요시간·소요인원 배지)
+ */
+function buildTimeCellHtml(
+  timeStr: string,
+  durationStr: string,
+  workersStr: string,
+  isBreak: boolean,
+  escapeFn: (v: unknown) => string,
+): string {
+  const dur = (durationStr || '').trim() || (isBreak ? '30분' : '-');
+  const wk = (workersStr || '').trim();
+  return `
+    <div class="time-range">${escapeFn(timeStr || '-')}</div>
+    <div class="time-meta-row">
+      <span class="time-pill time-pill-dur">⏱ ${escapeFn(dur)}</span>
+      ${!isBreak && wk ? `<span class="time-pill time-pill-workers">👤 ${escapeFn(wk)}</span>` : ''}
+    </div>
+  `;
+}
+
+/**
+ * 부서별 현장 작업자용 핵심 가이드 1줄 요약 (긴 원자재 나열 대신 용기/필름·핵심토핑·전환주의 표시)
+ */
+function buildDeptGuidanceHtml(
+  bomText: string | undefined,
+  lineId: string,
+  deptLabel: string,
+  riceTransitionNote: string,
+  escapeFn: (v: unknown) => string,
+): string {
+  const raw = (bomText || '').trim();
+  const isDefaultPlaceholder = !raw || raw === '-' || raw === 'BOM 정본 배합 규격';
+  const parts: string[] = [];
+
+  if (!isDefaultPlaceholder) {
+    const tokens = raw
+      .split(/[,·/]+/)
+      .map((s) => s.replace(/^\[[^\]]+\]\s*/, '').replace(/\([^)]*\)/g, '').trim())
+      .filter((s) => s.length >= 2);
+
+    const pkgRe = /용기|뚜껑|필름|바코드|스티커|라벨|스푼|젓가락|트레이|포장/;
+    const riceRe = /백미|흑미|찹쌀|조미식초|식초|참기름|정제염|소금|볶음참깨|김밥김|김\b/;
+
+    const isForming =
+      deptLabel.includes('성형') ||
+      /도시락|김밥|삼각|햄버거|샌드위치|커플/.test(lineId);
+    const isRice = deptLabel.includes('취반') || /취반/.test(lineId);
+
+    if (isForming) {
+      const pkg = tokens.filter((t) => pkgRe.test(t)).slice(0, 2);
+      const core = tokens.filter((t) => !pkgRe.test(t)).slice(0, 2);
+      if (pkg.length > 0) parts.push(`<span class="guide-chip guide-pkg">📦 포장: ${escapeFn(pkg.join(' · '))}</span>`);
+      if (core.length > 0) parts.push(`<span class="guide-chip guide-core">🥢 핵심: ${escapeFn(core.join(', '))}</span>`);
+    } else if (isRice) {
+      const riceItems = tokens.filter((t) => riceRe.test(t) || !pkgRe.test(t)).slice(0, 3);
+      if (riceItems.length > 0) parts.push(`<span class="guide-chip guide-core">🍚 배합: ${escapeFn(riceItems.join(', '))}</span>`);
+    } else {
+      const prepItems = tokens.filter((t) => !pkgRe.test(t)).slice(0, 3);
+      if (prepItems.length > 0) parts.push(`<span class="guide-chip guide-core">🔪 원물: ${escapeFn(prepItems.join(', '))}</span>`);
+    }
+  }
+
+  if (riceTransitionNote) {
+    parts.push(`<span class="guide-chip guide-warn">⚠️ ${escapeFn(riceTransitionNote)}</span>`);
+  }
+
+  if (parts.length === 0) return '';
+  return `<div class="item-guide-row">${parts.join('')}</div>`;
+}
+
+/**
+ * 하단 오늘의 자재 불출(피킹) 총량 요약 박스 HTML
+ */
+function buildPickingChecklistHtml(
+  mats: MaterialRequirement[],
+  escapeFn: (v: unknown) => string,
+): string {
+  const valid = (mats || []).filter((m) => m && m.name && Number(m.requiredQty) > 0);
+  if (valid.length === 0) return '';
+  const shown = valid.slice(0, 18);
+  const extraCount = valid.length - shown.length;
+  const itemsHtml = shown
+    .map((m) => {
+      const cleanName = m.name.replace(/^\[[^\]]+\]\s*/, '').trim();
+      const qtyNum = Number(m.requiredQty);
+      const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toLocaleString() : qtyNum.toFixed(1);
+      return `
+        <div class="pick-item">
+          <span class="pick-name">□ ${escapeFn(cleanName)}</span>
+          <span class="pick-qty">${escapeFn(qtyStr)} ${escapeFn(m.unit || '')}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="summary-box picking-box">
+      <div class="summary-box-title">
+        <span>📦 오늘 자재 불출(피킹) 총량 요약 (${valid.length}종)</span>
+        ${extraCount > 0 ? `<span style="font-size:10.5px;font-weight:700;color:#475569;">외 ${extraCount}종 ERP 자재표 참조</span>` : ''}
+      </div>
+      <div class="pick-grid">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
  * 시간 및 소요시간 파싱/연산 헬퍼 (스마트 연쇄 재계산)
  */
 function parseTimeStr(t: string): { start: string; end: string; startMin: number; endMin: number } {
@@ -813,6 +922,7 @@ export const WorkOrderStatusView: React.FC = () => {
 
     // 1부(2편 생산) / 2부(1편 생산) 섹션 헤더 자동 삽입 + 6열 큰글씨 행 렌더링
     let lastSection: 'NONE' | 'S2' | 'S1' = initialSec;
+    let lastRiceLabel = '';
     let prodSeq = 0;
 
     const rowsHtml = filteredSchedule
@@ -837,15 +947,17 @@ export const WorkOrderStatusView: React.FC = () => {
           }
         }
 
+        const rowWorkers = t.workers || currentLine.personnel.split('(')[0].trim();
+
         if (isClean || isMeal) {
           const breakLabel = isMeal
-            ? `🍱 ${t.item || '중식 및 라인 세척·소독'} (${t.duration || '60분'})`
-            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'} (${t.duration || '30분'})`;
+            ? `🍱 ${t.item || '중식 및 라인 세척·소독'}`
+            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'}`;
           return `
             ${sectionBannerHtml}
             <tr class="row-break">
               <td class="col-center col-seq">-</td>
-              <td class="col-center col-time">${escapeHtml(t.time)}</td>
+              <td class="col-center col-time">${buildTimeCellHtml(t.time, t.duration, rowWorkers, true, escapeHtml)}</td>
               <td class="col-center"><span class="rice-box rice-box-break">[휴게/세척]</span></td>
               <td colspan="2" class="col-break-title">${escapeHtml(breakLabel)}</td>
               <td class="col-center col-check-cell">□ 세척·소독 확인</td>
@@ -871,21 +983,33 @@ export const WorkOrderStatusView: React.FC = () => {
             ? 'rice-box-purple'
             : 'rice-box-white';
 
+        const riceTransitionNote =
+          lastRiceLabel && lastRiceLabel !== riceLabel && ['백미', '흑미/잡곡', '볶음/양념'].includes(riceLabel)
+            ? `밥 전환(${lastRiceLabel}→${riceLabel}) 세척·필름 교체`
+            : '';
+        if (['백미', '흑미/잡곡', '볶음/양념'].includes(riceLabel)) {
+          lastRiceLabel = riceLabel;
+        }
+
+        const guideHtml = buildDeptGuidanceHtml(
+          t.bom,
+          selectedLine,
+          selectedLine,
+          riceTransitionNote,
+          escapeHtml,
+        );
+
         return `
           ${sectionBannerHtml}
           <tr class="${idx % 2 === 1 ? 'row-alt' : ''}">
             <td class="col-center col-seq">${prodSeq}</td>
-            <td class="col-center col-time">${escapeHtml(t.time)}</td>
+            <td class="col-center col-time">${buildTimeCellHtml(t.time, t.duration, rowWorkers, false, escapeHtml)}</td>
             <td class="col-center">
               <span class="rice-box ${riceBoxClass}">[${escapeHtml(riceLabel)}]</span>
             </td>
             <td class="col-item">
               <div class="item-main-name">${escapeHtml(t.item)}</div>
-              ${
-                t.bom && t.bom !== '-'
-                  ? `<div class="item-sub-note">배합/규격: ${escapeHtml(t.bom)} | 소요: ${escapeHtml(t.duration)} (${escapeHtml(t.workers || currentLine.personnel.split('(')[0])})</div>`
-                  : `<div class="item-sub-note">소요시간: ${escapeHtml(t.duration)} | 투입인원: ${escapeHtml(t.workers || currentLine.personnel.split('(')[0])}</div>`
-              }
+              ${guideHtml}
             </td>
             <td class="col-right col-qty">${escapeHtml(formattedQty)}</td>
             <td class="col-center col-check-cell">
@@ -895,6 +1019,8 @@ export const WorkOrderStatusView: React.FC = () => {
         `;
       })
       .join('');
+
+    const pickingHtml = buildPickingChecklistHtml(materials, escapeHtml);
 
     const html = `
       <!DOCTYPE html>
@@ -1044,12 +1170,85 @@ export const WorkOrderStatusView: React.FC = () => {
             width: 48px;
           }
           .col-time {
-            font-family: monospace;
-            font-size: 15px;
-            font-weight: 900;
-            width: 132px;
+            width: 136px;
             white-space: nowrap;
+            padding: 5px 6px !important;
           }
+          .time-range {
+            font-family: monospace;
+            font-size: 14.5px;
+            font-weight: 900;
+            color: #000000;
+            line-height: 1.2;
+            letter-spacing: -0.3px;
+          }
+          .time-meta-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            margin-top: 3px;
+            flex-wrap: wrap;
+          }
+          .time-pill {
+            display: inline-block;
+            font-size: 10.5px;
+            font-weight: 900;
+            padding: 1.5px 5px;
+            border-radius: 3px;
+            line-height: 1.25;
+            border: 1px solid #334155;
+          }
+          .time-pill-dur {
+            background: #f1f5f9;
+            color: #0f172a;
+          }
+          .time-pill-workers {
+            background: #eef2ff;
+            color: #1e1b4b;
+            border-color: #4f46e5;
+          }
+          .item-guide-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+          }
+          .guide-chip {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #cbd5e1;
+            line-height: 1.25;
+          }
+          .guide-pkg { background: #f8fafc; color: #0f172a; border-color: #475569; }
+          .guide-core { background: #f1f5f9; color: #1e293b; border-color: #94a3b8; }
+          .guide-warn { background: #fef2f2; color: #991b1b; border-color: #dc2626; font-weight: 900; }
+          .picking-box { margin-bottom: 8px; }
+          .picking-box .summary-box-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .pick-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 10px;
+            font-size: 11.5px;
+            font-weight: 800;
+          }
+          .pick-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px dashed #cbd5e1;
+            padding: 2px 2px;
+            gap: 6px;
+          }
+          .pick-name { color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .pick-qty { font-family: monospace; font-weight: 900; color: #000000; white-space: nowrap; }
           .rice-box {
             display: inline-block;
             font-size: 13px;
@@ -1210,9 +1409,9 @@ export const WorkOrderStatusView: React.FC = () => {
             }
             <tr>
               <th style="width:34px;">순서</th>
-              <th style="width:92px;">작업시간</th>
+              <th style="width:136px;">작업시간 / 소요·인원</th>
               <th style="width:70px;">밥/공정</th>
-              <th>지시 제품명 (배합·소요시간)</th>
+              <th>지시 제품명 · 현장 핵심 포인트</th>
               <th style="width:98px;">지시수량</th>
               <th style="width:94px;">현장 체크 (V)</th>
             </tr>
@@ -1255,6 +1454,9 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
 
+        <!-- 4. 오늘 자재 불출(피킹) 총량 요약 -->
+        ${pickingHtml}
+
         <div class="footer-line">
           <span>* 현장 반장님께서는 각 품목 완료 시 우측 [현장 체크(V)] 칸에 볼펜으로 체크(V) 및 완료 시각을 기입해 주십시오.</span>
           <span>GFS ERP 현장 맞춤 큰글씨 양식 | 인쇄일: ${new Date().toLocaleDateString('ko-KR')}</span>
@@ -1280,13 +1482,14 @@ export const WorkOrderStatusView: React.FC = () => {
     deptLabel: string;
     tasks: ScheduleTask[];
     lineDef: LineWorkOrderDef;
+    materials?: MaterialRequirement[];
     year: string;
     month: string;
     day: string;
     formattedDateKo: string;
     lineTotalPlan?: string;
   }) => {
-    const { lineId, deptLabel, tasks, lineDef, year, month, day, formattedDateKo, lineTotalPlan } = opts;
+    const { lineId, deptLabel, tasks, lineDef, materials: lineMats, year, month, day, formattedDateKo, lineTotalPlan } = opts;
     const docNumber = `GFS-WO-${year}${month}${day}-${lineId.replace(/\s+/g, '')}`;
     const totalRunTimeStr =
       tasks.length > 0
@@ -1335,6 +1538,7 @@ export const WorkOrderStatusView: React.FC = () => {
         : '';
 
     let lastSection: 'NONE' | 'S2' | 'S1' = initialSec;
+    let lastRiceLabel = '';
     let prodSeq = 0;
 
     const rowsHtml = tasks
@@ -1359,15 +1563,17 @@ export const WorkOrderStatusView: React.FC = () => {
           }
         }
 
+        const rowWorkers = t.workers || lineDef.personnel.split('(')[0].trim();
+
         if (isClean || isMeal) {
           const breakLabel = isMeal
-            ? `🍱 ${t.item || '중식 및 라인 세척·소독'} (${t.duration || '60분'})`
-            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'} (${t.duration || '30분'})`;
+            ? `🍱 ${t.item || '중식 및 라인 세척·소독'}`
+            : `🧹 ${t.item || '작업장 세척·소독 및 금속검출기 점검'}`;
           return `
             ${sectionBannerHtml}
             <tr class="row-break">
               <td class="col-center col-seq">-</td>
-              <td class="col-center col-time">${escapeHtml(t.time)}</td>
+              <td class="col-center col-time">${buildTimeCellHtml(t.time, t.duration, rowWorkers, true, escapeHtml)}</td>
               <td class="col-center"><span class="rice-box rice-box-break">[휴게/세척]</span></td>
               <td colspan="2" class="col-break-title">${escapeHtml(breakLabel)}</td>
               <td class="col-center col-check-cell">□ 세척·소독 확인</td>
@@ -1393,21 +1599,33 @@ export const WorkOrderStatusView: React.FC = () => {
             ? 'rice-box-purple'
             : 'rice-box-white';
 
+        const riceTransitionNote =
+          lastRiceLabel && lastRiceLabel !== riceLabel && ['백미', '흑미/잡곡', '볶음/양념'].includes(riceLabel)
+            ? `밥 전환(${lastRiceLabel}→${riceLabel}) 세척·필름 교체`
+            : '';
+        if (['백미', '흑미/잡곡', '볶음/양념'].includes(riceLabel)) {
+          lastRiceLabel = riceLabel;
+        }
+
+        const guideHtml = buildDeptGuidanceHtml(
+          t.bom,
+          lineId,
+          deptLabel,
+          riceTransitionNote,
+          escapeHtml,
+        );
+
         return `
           ${sectionBannerHtml}
           <tr class="${idx % 2 === 1 ? 'row-alt' : ''}">
             <td class="col-center col-seq">${prodSeq}</td>
-            <td class="col-center col-time">${escapeHtml(t.time)}</td>
+            <td class="col-center col-time">${buildTimeCellHtml(t.time, t.duration, rowWorkers, false, escapeHtml)}</td>
             <td class="col-center">
               <span class="rice-box ${riceBoxClass}">[${escapeHtml(riceLabel)}]</span>
             </td>
             <td class="col-item">
               <div class="item-main-name">${escapeHtml(t.item)}</div>
-              ${
-                t.bom && t.bom !== '-'
-                  ? `<div class="item-sub-note">배합/규격: ${escapeHtml(t.bom)} | 소요: ${escapeHtml(t.duration)} (${escapeHtml(t.workers || lineDef.personnel.split('(')[0])})</div>`
-                  : `<div class="item-sub-note">소요시간: ${escapeHtml(t.duration)} | 투입인원: ${escapeHtml(t.workers || lineDef.personnel.split('(')[0])}</div>`
-              }
+              ${guideHtml}
             </td>
             <td class="col-right col-qty">${escapeHtml(formattedQty)}</td>
             <td class="col-center col-check-cell">
@@ -1417,6 +1635,8 @@ export const WorkOrderStatusView: React.FC = () => {
         `;
       })
       .join('');
+
+    const pickingHtml = buildPickingChecklistHtml(lineMats || lineDef.materials || [], escapeHtml);
 
     return `
       <section class="wo-page">
@@ -1452,9 +1672,9 @@ export const WorkOrderStatusView: React.FC = () => {
             }
             <tr>
               <th style="width:34px;">순서</th>
-              <th style="width:92px;">작업시간</th>
+              <th style="width:136px;">작업시간 / 소요·인원</th>
               <th style="width:70px;">밥/공정</th>
-              <th>지시 제품명 (배합·소요시간)</th>
+              <th>지시 제품명 · 현장 핵심 포인트</th>
               <th style="width:98px;">지시수량</th>
               <th style="width:94px;">현장 체크 (V)</th>
             </tr>
@@ -1496,6 +1716,9 @@ export const WorkOrderStatusView: React.FC = () => {
           </div>
         </div>
 
+        <!-- 4. 오늘 자재 불출(피킹) 총량 요약 -->
+        ${pickingHtml}
+
         <div class="footer-line">
           <span>* 현장 반장님께서는 각 품목 완료 시 우측 [현장 체크(V)] 칸에 볼펜으로 체크(V) 및 완료 시각을 기입해 주십시오.</span>
           <span>GFS ERP 현장 맞춤 큰글씨 양식 | 인쇄일: ${new Date().toLocaleDateString('ko-KR')}</span>
@@ -1534,6 +1757,7 @@ export const WorkOrderStatusView: React.FC = () => {
         id: string;
         deptLabel: string;
         tasks: ScheduleTask[];
+        materials: MaterialRequirement[];
         lineTotalPlan?: string;
       }> = [];
 
@@ -1553,14 +1777,21 @@ export const WorkOrderStatusView: React.FC = () => {
                   : !hasAnyOrder
                   ? getLineDef(t.id).schedule
                   : [];
+              const rawMats: MaterialRequirement[] =
+                json.success && Array.isArray(json.materials)
+                  ? json.materials
+                  : !hasAnyOrder
+                  ? getLineDef(t.id).materials
+                  : [];
               return {
                 id: t.id,
                 deptLabel: t.deptLabel,
                 tasks: rawTasks,
+                materials: rawMats,
                 lineTotalPlan: json.lineTotalPlan as string | undefined,
               };
             } catch {
-              return { id: t.id, deptLabel: t.deptLabel, tasks: [] as ScheduleTask[] };
+              return { id: t.id, deptLabel: t.deptLabel, tasks: [] as ScheduleTask[], materials: [] as MaterialRequirement[] };
             }
           })
         );
@@ -1593,6 +1824,7 @@ export const WorkOrderStatusView: React.FC = () => {
             deptLabel: p.deptLabel,
             tasks: p.tasks,
             lineDef: getLineDef(p.id),
+            materials: p.materials,
             year,
             month,
             day,
@@ -1658,7 +1890,23 @@ export const WorkOrderStatusView: React.FC = () => {
             .col-center { text-align: center; }
             .col-right { text-align: right; }
             .col-seq { font-family: monospace; font-size: 14px; font-weight: 900; width: 34px; }
-            .col-time { font-family: monospace; font-size: 12px; font-weight: 900; width: 92px; white-space: nowrap; }
+            .col-time { width: 136px; white-space: nowrap; padding: 4px 5px !important; }
+            .time-range { font-family: monospace; font-size: 12.5px; font-weight: 900; color: #000000; line-height: 1.2; letter-spacing: -0.3px; }
+            .time-meta-row { display: flex; justify-content: center; align-items: center; gap: 3px; margin-top: 2px; flex-wrap: wrap; }
+            .time-pill { display: inline-block; font-size: 9.5px; font-weight: 900; padding: 1px 4px; border-radius: 3px; line-height: 1.2; border: 1px solid #334155; }
+            .time-pill-dur { background: #f1f5f9; color: #0f172a; }
+            .time-pill-workers { background: #eef2ff; color: #1e1b4b; border-color: #4f46e5; }
+            .item-guide-row { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+            .guide-chip { display: inline-block; font-size: 9.8px; font-weight: 800; padding: 1.5px 5px; border-radius: 3px; border: 1px solid #cbd5e1; line-height: 1.2; }
+            .guide-pkg { background: #f8fafc; color: #0f172a; border-color: #475569; }
+            .guide-core { background: #f1f5f9; color: #1e293b; border-color: #94a3b8; }
+            .guide-warn { background: #fef2f2; color: #991b1b; border-color: #dc2626; font-weight: 900; }
+            .picking-box { margin-bottom: 6px; }
+            .picking-box .summary-box-title { display: flex; justify-content: space-between; align-items: center; }
+            .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 10.5px; font-weight: 800; }
+            .pick-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding: 1.5px 2px; gap: 5px; }
+            .pick-name { color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .pick-qty { font-family: monospace; font-weight: 900; color: #000000; white-space: nowrap; }
             .rice-box {
               display: inline-block; font-size: 11px; font-weight: 900; padding: 2px 4px;
               border-radius: 3px; border: 1.5px solid #000000; white-space: nowrap;
