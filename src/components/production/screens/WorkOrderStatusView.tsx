@@ -1297,12 +1297,15 @@ export const WorkOrderStatusView: React.FC = () => {
             margin-top: 2px;
           }
           .col-qty {
-            font-family: monospace;
-            font-size: 18px;
+            font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Arial Black", sans-serif;
+            font-variant-numeric: tabular-nums;
+            font-size: 19px;
             font-weight: 900;
+            -webkit-text-stroke: 0.45px #000000;
             color: #000000;
-            width: 115px;
+            width: 118px;
             white-space: nowrap;
+            letter-spacing: -0.3px;
           }
           .col-check-cell {
             width: 145px;
@@ -1955,7 +1958,7 @@ export const WorkOrderStatusView: React.FC = () => {
             .col-item { text-align: left; word-break: keep-all; overflow-wrap: anywhere; }
             .item-main-name { font-size: 13.5px; font-weight: 900; color: #000000; line-height: 1.25; word-break: keep-all; }
             .item-sub-note { font-size: 10px; font-weight: 700; color: #334155; margin-top: 2px; line-height: 1.25; }
-            .col-qty { font-family: monospace; font-size: 17.5px; font-weight: 900; color: #000000; width: 98px; white-space: nowrap; letter-spacing: -0.3px; }
+            .col-qty { font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Arial Black", sans-serif; font-variant-numeric: tabular-nums; font-size: 18.5px; font-weight: 900; -webkit-text-stroke: 0.45px #000000; color: #000000; width: 102px; white-space: nowrap; letter-spacing: -0.3px; }
             .col-check-cell { width: 94px; font-size: 11px; font-weight: 900; color: #000000; white-space: nowrap; }
             .pen-check-box { font-size: 14px; font-weight: 900; vertical-align: middle; }
             .bottom-summary-grid {
