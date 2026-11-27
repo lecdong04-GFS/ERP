@@ -88,18 +88,50 @@ const JEONCHEORI_EQUIPMENT = [
 ];
 
 /**
- * 밥 색상 식별 헬퍼 (백미 ➔ 흑미 ➔ 빨간 볶음밥 시퀀싱 표시)
+ * 밥 색상 식별 헬퍼 (BOM 원재료 우선 + 품목명 보조 — 백미 ➔ 흑미 ➔ 빨간 볶음밥 시퀀싱 표시)
  */
-function getRiceColorBadge(name: string) {
+function getRiceColorBadge(name: string, bomText?: string) {
   const n = (name || '').toLowerCase();
+  const b = (bomText || '').toLowerCase();
+
+  // 1. BOM 원재료 기반 우선 판별 (riceScheduleEngine.classifyRiceColor와 동일 기준)
+  if (b && b !== '-') {
+    if (/김치볶음밥용소스|뉴비빔밥용고추장소스|파프리카소스|비빔밥용고추장/.test(b)) {
+      return { label: '빨간밥', bg: 'bg-rose-100 text-rose-800 border-rose-300' };
+    }
+    if (/흑미|잡곡|보리|현미/.test(b)) {
+      return { label: '흑미/잡곡', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
+    }
+    if (/백미|쌀|초밥|스시|김밥/.test(b)) {
+      return { label: '백미', bg: 'bg-slate-100 text-slate-800 border-slate-300' };
+    }
+  }
+
+  // 2. 품목명 기반 흑미 도시락 예외 우선 (반반제육/두부김치제육/갈비양념제육 등은 흑미밥)
   if (
-    n.includes('김치') ||
+    n.includes('흑미') ||
+    n.includes('잡곡') ||
+    n.includes('보리') ||
+    n.includes('현미') ||
+    n.includes('옥수수') ||
+    n.includes('파프리카') ||
+    n.includes('반반제육') ||
+    n.includes('두부김치제육') ||
+    n.includes('갈비양념제육') ||
+    n.includes('순창제육')
+  ) {
+    return { label: '흑미/잡곡', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
+  }
+
+  // 3. 품목명 기반 빨간밥(볶음/양념)
+  if (
+    n.includes('김치볶음') ||
+    n.includes('전주비빔') ||
+    n.includes('떡갈비김밥') ||
     n.includes('비빔') ||
     n.includes('고추장') ||
-    n.includes('제육') ||
     n.includes('불닭') ||
     n.includes('빨간') ||
-    n.includes('양념') ||
     n.includes('감자탕') ||
     n.includes('팔도') ||
     n.includes('매콤') ||
@@ -111,16 +143,7 @@ function getRiceColorBadge(name: string) {
     }
     return { label: '빨간밥', bg: 'bg-rose-100 text-rose-800 border-rose-300' };
   }
-  if (
-    n.includes('흑미') ||
-    n.includes('잡곡') ||
-    n.includes('보리') ||
-    n.includes('현미') ||
-    n.includes('옥수수') ||
-    n.includes('파프리카')
-  ) {
-    return { label: '흑미/잡곡', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
-  }
+
   if (
     n.includes('도시락') ||
     n.includes('김밥') ||
@@ -759,7 +782,7 @@ export const WorkOrderStatusView: React.FC = () => {
       if (t.type === '생산' && q > 0) {
         prodTaskCount += 1;
         totalOrderQtyNum += q;
-        const rBadge = getRiceColorBadge(t.item);
+        const rBadge = getRiceColorBadge(t.item, t.bom);
         if (rBadge?.label === '빨간밥') {
           redRiceQty += q;
         } else if (rBadge?.label?.includes('흑미')) {
@@ -832,7 +855,7 @@ export const WorkOrderStatusView: React.FC = () => {
 
         prodSeq += 1;
         const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} 개` : t.qty || '-';
-        const rBadge = getRiceColorBadge(t.item);
+        const rBadge = getRiceColorBadge(t.item, t.bom);
         const riceLabel =
           rBadge?.label === '빨간밥'
             ? '볶음/양념'
@@ -1283,7 +1306,7 @@ export const WorkOrderStatusView: React.FC = () => {
       if (t.type === '생산' && q > 0) {
         prodTaskCount += 1;
         totalOrderQtyNum += q;
-        const rBadge = getRiceColorBadge(t.item);
+        const rBadge = getRiceColorBadge(t.item, t.bom);
         if (rBadge?.label === '빨간밥') {
           redRiceQty += q;
         } else if (rBadge?.label?.includes('흑미')) {
@@ -1354,7 +1377,7 @@ export const WorkOrderStatusView: React.FC = () => {
 
         prodSeq += 1;
         const formattedQty = typeof t.qty === 'number' ? `${t.qty.toLocaleString()} 개` : t.qty || '-';
-        const rBadge = getRiceColorBadge(t.item);
+        const rBadge = getRiceColorBadge(t.item, t.bom);
         const riceLabel =
           rBadge?.label === '빨간밥'
             ? '볶음/양념'
@@ -2048,7 +2071,7 @@ export const WorkOrderStatusView: React.FC = () => {
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {(() => {
-                          const rBadge = getRiceColorBadge(activeHeroTask.item);
+                          const rBadge = getRiceColorBadge(activeHeroTask.item, activeHeroTask.bom);
                           if (!rBadge) return null;
                           return (
                             <span
@@ -2232,7 +2255,7 @@ export const WorkOrderStatusView: React.FC = () => {
                   );
                 }
 
-                const rBadge = getRiceColorBadge(task.item);
+                const rBadge = getRiceColorBadge(task.item, task.bom);
                 const formattedQty =
                   typeof task.qty === 'number' ? `${task.qty.toLocaleString()}개` : task.qty || '-';
 
@@ -2506,7 +2529,7 @@ export const WorkOrderStatusView: React.FC = () => {
                     <td className={`px-3 ${getFontClass('td', isModal)}`}>
                       <div className="flex items-center gap-1.5 min-w-[200px]">
                         {(() => {
-                          const rBadge = getRiceColorBadge(task.item);
+                          const rBadge = getRiceColorBadge(task.item, task.bom);
                           if (!rBadge || task.type !== '생산') return null;
                           return (
                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[12px] font-black border shrink-0 ${rBadge.bg}`}>
