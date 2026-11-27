@@ -1186,12 +1186,12 @@ export const WorkOrderStatusView: React.FC = () => {
                 : ''
             }
             <tr>
-              <th style="width:48px;">순서</th>
-              <th style="width:132px;">작업시간</th>
-              <th style="width:92px;">밥/공정 구분</th>
+              <th style="width:34px;">순서</th>
+              <th style="width:96px;">작업시간</th>
+              <th style="width:74px;">밥/공정</th>
               <th>지시 제품명 (배합·소요시간)</th>
-              <th style="width:115px;">지시수량</th>
-              <th style="width:145px;">현장 체크 (V)</th>
+              <th style="width:78px;">지시수량</th>
+              <th style="width:102px;">현장 체크 (V)</th>
             </tr>
           </thead>
           <tbody>
@@ -1428,12 +1428,12 @@ export const WorkOrderStatusView: React.FC = () => {
                 : ''
             }
             <tr>
-              <th style="width:48px;">순서</th>
-              <th style="width:132px;">작업시간</th>
-              <th style="width:92px;">밥/공정 구분</th>
+              <th style="width:34px;">순서</th>
+              <th style="width:96px;">작업시간</th>
+              <th style="width:74px;">밥/공정</th>
               <th>지시 제품명 (배합·소요시간)</th>
-              <th style="width:115px;">지시수량</th>
-              <th style="width:145px;">현장 체크 (V)</th>
+              <th style="width:78px;">지시수량</th>
+              <th style="width:102px;">현장 체크 (V)</th>
             </tr>
           </thead>
           <tbody>
@@ -1586,7 +1586,7 @@ export const WorkOrderStatusView: React.FC = () => {
           <meta charset="UTF-8" />
           <title>[GFS 전부서 일괄 작업지시서] (${escapeHtml(safeWorkDate)})</title>
           <style>
-            @page { size: A4 landscape; margin: 7mm 8mm; }
+            @page { size: A4 portrait; margin: 7mm 7mm; }
             * {
               box-sizing: border-box;
               font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
@@ -1594,74 +1594,82 @@ export const WorkOrderStatusView: React.FC = () => {
               print-color-adjust: exact !important;
             }
             body { margin: 0; padding: 10px; color: #000000; background: #ffffff; }
-            .wo-page { page-break-after: always; }
-            .wo-page:last-of-type { page-break-after: auto; }
+            .wo-page { break-after: page; page-break-after: always; }
+            .wo-page:last-of-type { break-after: auto; page-break-after: auto; }
             .no-print-bar {
               display: flex; justify-content: space-between; align-items: center;
               background: #0f172a; color: #ffffff; padding: 10px 16px; border-radius: 8px;
               margin-bottom: 12px; font-size: 13px; font-weight: 700;
             }
             .no-print-btn { padding: 7px 15px; border: none; border-radius: 6px; font-weight: 900; font-size: 13px; cursor: pointer; }
-            .top-header-box { border: 2.5px solid #000000; padding: 10px 14px; margin-bottom: 10px; background: #ffffff; }
+            .top-header-box {
+              border: 2px solid #000000; padding: 8px 11px; margin-bottom: 8px; background: #ffffff;
+              break-inside: avoid; page-break-inside: avoid;
+            }
             .top-header-row1 {
-              display: flex; justify-content: space-between; align-items: center;
-              border-bottom: 2px solid #000000; padding-bottom: 8px; margin-bottom: 8px;
+              display: flex; justify-content: space-between; align-items: center; gap: 8px;
+              border-bottom: 1.5px solid #000000; padding-bottom: 6px; margin-bottom: 6px;
             }
-            .doc-kicker { font-size: 11px; font-weight: 900; color: #334155; letter-spacing: 0.3px; margin-bottom: 2px; }
-            .doc-big-title { font-size: 26px; font-weight: 900; color: #000000; letter-spacing: -0.8px; line-height: 1.15; }
-            .sign-box { border: 2px solid #000000; padding: 8px 14px; font-size: 15px; font-weight: 900; background: #f8fafc; white-space: nowrap; text-align: right; }
-            .top-header-meta-grid { display: grid; grid-template-columns: 1.3fr 1.1fr 1.2fr; gap: 8px; font-size: 14px; font-weight: 900; }
-            .meta-pill { background: #f1f5f9; border: 1.5px solid #334155; padding: 6px 10px; border-radius: 4px; }
-            .meta-pill strong { font-size: 15px; color: #000000; }
-            .work-table { width: 100%; border-collapse: collapse; border: 2.5px solid #000000; margin-bottom: 12px; }
+            .doc-kicker { font-size: 10px; font-weight: 900; color: #334155; letter-spacing: 0.2px; margin-bottom: 2px; }
+            .doc-big-title { font-size: 21px; font-weight: 900; color: #000000; letter-spacing: -0.6px; line-height: 1.15; }
+            .sign-box { border: 1.5px solid #000000; padding: 6px 10px; font-size: 13px; font-weight: 900; background: #f8fafc; white-space: nowrap; text-align: right; }
+            .top-header-meta-grid { display: grid; grid-template-columns: 1.25fr 1fr 1.15fr; gap: 6px; font-size: 12px; font-weight: 900; }
+            .meta-pill { background: #f1f5f9; border: 1px solid #334155; padding: 4px 8px; border-radius: 4px; }
+            .meta-pill strong { font-size: 12.5px; color: #000000; }
+            .work-table { width: 100%; border-collapse: collapse; border: 2px solid #000000; margin-bottom: 10px; table-layout: fixed; }
+            .work-table thead { display: table-header-group; }
             .work-table th {
-              background: #e2e8f0; color: #000000; font-weight: 900; font-size: 14px;
-              text-align: center; padding: 9px 6px; border: 1.5px solid #000000;
+              background: #e2e8f0; color: #000000; font-weight: 900; font-size: 12px;
+              text-align: center; padding: 7px 4px; border: 1.5px solid #000000;
             }
-            .work-table td { border: 1.5px solid #000000; padding: 9px 8px; vertical-align: middle; }
+            .work-table td { border: 1.5px solid #000000; padding: 6px 5px; vertical-align: middle; }
+            .work-table tr { break-inside: avoid; page-break-inside: avoid; }
             .work-table tr.row-alt { background: #f8fafc; }
             .section-banner-row td.section-banner-cell {
-              background: #1d4ed8 !important; color: #ffffff !important; font-size: 15px; font-weight: 900;
-              padding: 9px 12px; letter-spacing: -0.2px; border: 2px solid #000000; text-align: left;
+              background: #1d4ed8 !important; color: #ffffff !important; font-size: 12.5px; font-weight: 900;
+              padding: 6px 10px; letter-spacing: -0.2px; border: 1.5px solid #000000; text-align: left;
             }
             .section-banner-row td.section-banner-cell.section-s1 { background: #6d28d9 !important; }
             .row-break { background: #e2e8f0 !important; font-weight: 900; }
-            .col-break-title { font-size: 15px; font-weight: 900; color: #0f172a; text-align: center; }
+            .col-break-title { font-size: 12.5px; font-weight: 900; color: #0f172a; text-align: center; }
             .col-center { text-align: center; }
             .col-right { text-align: right; }
-            .col-seq { font-family: monospace; font-size: 19px; font-weight: 900; width: 48px; }
-            .col-time { font-family: monospace; font-size: 15px; font-weight: 900; width: 132px; white-space: nowrap; }
+            .col-seq { font-family: monospace; font-size: 14px; font-weight: 900; width: 34px; }
+            .col-time { font-family: monospace; font-size: 12px; font-weight: 900; width: 96px; white-space: nowrap; }
             .rice-box {
-              display: inline-block; font-size: 13px; font-weight: 900; padding: 3px 6px;
-              border-radius: 4px; border: 2px solid #000000; white-space: nowrap;
+              display: inline-block; font-size: 11px; font-weight: 900; padding: 2px 4px;
+              border-radius: 3px; border: 1.5px solid #000000; white-space: nowrap;
             }
             .rice-box-white { background: #ffffff; color: #000000; }
             .rice-box-purple { background: #f3e8ff; color: #3b0764; border-style: double; }
-            .rice-box-red { background: #ffe4e6; color: #881337; border-width: 2.5px; }
+            .rice-box-red { background: #ffe4e6; color: #881337; border-width: 2px; }
             .rice-box-break { background: #cbd5e1; color: #0f172a; }
-            .col-item { text-align: left; }
-            .item-main-name { font-size: 17px; font-weight: 900; color: #000000; line-height: 1.25; word-break: keep-all; }
-            .item-sub-note { font-size: 11.5px; font-weight: 700; color: #334155; margin-top: 2px; }
-            .col-qty { font-family: monospace; font-size: 18px; font-weight: 900; color: #000000; width: 115px; white-space: nowrap; }
-            .col-check-cell { width: 145px; font-size: 14px; font-weight: 900; color: #000000; white-space: nowrap; }
-            .pen-check-box { font-size: 18px; font-weight: 900; vertical-align: middle; }
-            .bottom-summary-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 10px; margin-bottom: 8px; }
-            .summary-box { border: 2.5px solid #000000; padding: 10px 12px; background: #ffffff; }
-            .summary-box-title {
-              font-size: 14px; font-weight: 900; color: #000000;
-              border-bottom: 1.5px solid #000000; padding-bottom: 5px; margin-bottom: 7px;
+            .col-item { text-align: left; word-break: keep-all; overflow-wrap: anywhere; }
+            .item-main-name { font-size: 13.5px; font-weight: 900; color: #000000; line-height: 1.25; word-break: keep-all; }
+            .item-sub-note { font-size: 10px; font-weight: 700; color: #334155; margin-top: 2px; line-height: 1.25; }
+            .col-qty { font-family: monospace; font-size: 13.5px; font-weight: 900; color: #000000; width: 78px; white-space: nowrap; }
+            .col-check-cell { width: 102px; font-size: 11.5px; font-weight: 900; color: #000000; white-space: nowrap; }
+            .pen-check-box { font-size: 14px; font-weight: 900; vertical-align: middle; }
+            .bottom-summary-grid {
+              display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 8px; margin-bottom: 6px;
+              break-inside: avoid; page-break-inside: avoid;
             }
-            .ccp-check-list { margin: 0; padding-left: 0; list-style: none; font-size: 12.5px; font-weight: 800; line-height: 1.65; }
-            .rice-sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13.5px; font-weight: 900; }
-            .rice-sum-item { border: 1.5px solid #334155; padding: 5px 8px; display: flex; justify-content: space-between; background: #f8fafc; }
+            .summary-box { border: 2px solid #000000; padding: 8px 10px; background: #ffffff; break-inside: avoid; page-break-inside: avoid; }
+            .summary-box-title {
+              font-size: 12.5px; font-weight: 900; color: #000000;
+              border-bottom: 1.5px solid #000000; padding-bottom: 4px; margin-bottom: 5px;
+            }
+            .ccp-check-list { margin: 0; padding-left: 0; list-style: none; font-size: 11px; font-weight: 800; line-height: 1.55; }
+            .rice-sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 11.5px; font-weight: 900; }
+            .rice-sum-item { border: 1px solid #334155; padding: 4px 6px; display: flex; justify-content: space-between; background: #f8fafc; }
             .footer-line {
-              display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #334155;
-              border-top: 1px solid #94a3b8; padding-top: 5px;
+              display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; color: #334155;
+              border-top: 1px solid #94a3b8; padding-top: 4px; break-inside: avoid; page-break-inside: avoid;
             }
             @media print {
               .no-print-bar { display: none !important; }
               body { padding: 0; }
-              tr { page-break-inside: avoid; }
+              tr { break-inside: avoid !important; page-break-inside: avoid !important; }
             }
           </style>
         </head>
