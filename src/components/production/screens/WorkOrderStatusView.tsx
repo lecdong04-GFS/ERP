@@ -1187,11 +1187,11 @@ export const WorkOrderStatusView: React.FC = () => {
             }
             <tr>
               <th style="width:34px;">순서</th>
-              <th style="width:96px;">작업시간</th>
-              <th style="width:74px;">밥/공정</th>
+              <th style="width:92px;">작업시간</th>
+              <th style="width:70px;">밥/공정</th>
               <th>지시 제품명 (배합·소요시간)</th>
-              <th style="width:78px;">지시수량</th>
-              <th style="width:102px;">현장 체크 (V)</th>
+              <th style="width:98px;">지시수량</th>
+              <th style="width:94px;">현장 체크 (V)</th>
             </tr>
           </thead>
           <tbody>
@@ -1429,11 +1429,11 @@ export const WorkOrderStatusView: React.FC = () => {
             }
             <tr>
               <th style="width:34px;">순서</th>
-              <th style="width:96px;">작업시간</th>
-              <th style="width:74px;">밥/공정</th>
+              <th style="width:92px;">작업시간</th>
+              <th style="width:70px;">밥/공정</th>
               <th>지시 제품명 (배합·소요시간)</th>
-              <th style="width:78px;">지시수량</th>
-              <th style="width:102px;">현장 체크 (V)</th>
+              <th style="width:98px;">지시수량</th>
+              <th style="width:94px;">현장 체크 (V)</th>
             </tr>
           </thead>
           <tbody>
@@ -1635,7 +1635,7 @@ export const WorkOrderStatusView: React.FC = () => {
             .col-center { text-align: center; }
             .col-right { text-align: right; }
             .col-seq { font-family: monospace; font-size: 14px; font-weight: 900; width: 34px; }
-            .col-time { font-family: monospace; font-size: 12px; font-weight: 900; width: 96px; white-space: nowrap; }
+            .col-time { font-family: monospace; font-size: 12px; font-weight: 900; width: 92px; white-space: nowrap; }
             .rice-box {
               display: inline-block; font-size: 11px; font-weight: 900; padding: 2px 4px;
               border-radius: 3px; border: 1.5px solid #000000; white-space: nowrap;
@@ -1647,8 +1647,8 @@ export const WorkOrderStatusView: React.FC = () => {
             .col-item { text-align: left; word-break: keep-all; overflow-wrap: anywhere; }
             .item-main-name { font-size: 13.5px; font-weight: 900; color: #000000; line-height: 1.25; word-break: keep-all; }
             .item-sub-note { font-size: 10px; font-weight: 700; color: #334155; margin-top: 2px; line-height: 1.25; }
-            .col-qty { font-family: monospace; font-size: 13.5px; font-weight: 900; color: #000000; width: 78px; white-space: nowrap; }
-            .col-check-cell { width: 102px; font-size: 11.5px; font-weight: 900; color: #000000; white-space: nowrap; }
+            .col-qty { font-family: monospace; font-size: 17.5px; font-weight: 900; color: #000000; width: 98px; white-space: nowrap; letter-spacing: -0.3px; }
+            .col-check-cell { width: 94px; font-size: 11px; font-weight: 900; color: #000000; white-space: nowrap; }
             .pen-check-box { font-size: 14px; font-weight: 900; vertical-align: middle; }
             .bottom-summary-grid {
               display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 8px; margin-bottom: 6px;
