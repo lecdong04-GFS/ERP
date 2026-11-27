@@ -189,23 +189,6 @@ export const INITIAL_DAILY_PRODUCTION_REPORT: DailyProductionItem[] = [
     shift2Centers: { '김해': 158, '김해2': 151, '왜관': 364, '경산': 241, '경산2': 307, '진주': 224, '신광주2': 185, '신광주': 148, '익산': 256, '특판': 43 }
   },
   {
-    no: 9,
-    category: '삼각',
-    productName: '(더큰)맥적구이안심',
-    deliveryPrice: 1131,
-    retailPrice: 1900,
-    totalQty: 1230,
-    qtyRatio: 2.1,
-    totalAmount: 1391622,
-    amtRatio: 1.2,
-    shift1Qty: 730,
-    shift1Amount: 825922,
-    shift2Qty: 500,
-    shift2Amount: 565700,
-    shift1Centers: { '김해': 62, '김해2': 76, '왜관': 114, '경산': 98, '경산2': 97, '진주': 76, '신광주2': 57, '신광주': 48, '익산': 93, '신양산': 0, '신양산2': 0, '부산수탁': 9 },
-    shift2Centers: { '김해': 29, '김해2': 35, '왜관': 94, '경산': 68, '경산2': 74, '진주': 60, '신광주2': 37, '신광주': 25, '익산': 70, '특판': 8 }
-  },
-  {
     no: 10,
     category: '삼각',
     productName: '(더큰)고기듬뿍촌식된장',

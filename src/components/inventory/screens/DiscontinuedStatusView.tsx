@@ -435,14 +435,14 @@ export const DiscontinuedStatusView: React.FC = () => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-xs font-black text-rose-900 bg-rose-200 px-2.5 py-1 rounded-md">
-                🚨 11월 단종 예정 3개 품목 집중 관리 중
+                🚨 11월 단종 예정 품목 집중 관리 중
               </span>
               <span className="text-[14px] text-slate-800 font-extrabold">
-                [혜자)돌아온등심돈까스 (11/10)], [추석)맥적구이한상 (11/17)], [더큰)오징어제육깻잎쌈밥 (11/17)]
+                [혜자)돌아온등심돈까스 (11/10)], [더큰)오징어제육깻잎쌈밥 (11/17)]
               </span>
             </div>
             <p className="text-[13.5px] text-slate-700 font-medium mt-1.5 leading-relaxed">
-              위 3개 제품의 <strong>전용 원부자재(아이투알 등심돈까스 용기/뚜껑, 바릴라스파게티면, 돈까스소스H, 맥적구이 양념육 등 11종)</strong>는 단종 시 즉시 폐기 위험이 발생합니다.
+              위 제품의 <strong>전용 원부자재(아이투알 등심돈까스 용기/뚜껑, 바릴라스파게티면, 돈까스소스H 등)</strong>는 단종 시 즉시 폐기 위험이 발생합니다.
               <strong> [자재발주(요일별)]</strong> 화면과 실시간 연계되어 과잉 발주가 자동 차단되며 잔여 재고 소진 우선 모드로 작동합니다. (품목 클릭 시 세부 BOM 자재 분석 조회)
             </p>
           </div>

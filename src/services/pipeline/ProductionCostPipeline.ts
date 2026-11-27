@@ -30,14 +30,6 @@ export const REPR_MAPPINGS: RepresentativeMapping[] = [
     category: '도시락',
   },
   {
-    orderItemCode: '28607290003',
-    reprItemCode: '10520090',
-    reprItemName: '추석)맥적구이한상',
-    spec: '450g',
-    unit: 'ea',
-    category: '도시락',
-  },
-  {
     orderItemCode: '28607290004',
     reprItemCode: '10120016',
     reprItemName: '삼각)전주비빔',
@@ -549,17 +541,6 @@ export const SAMPLE_STORE_ORDERS: OrderIntakeItem[] = [
     orderQty2: 12346,
     totalOrderQty: 27436,
     deliveryPrice: 2127,
-  },
-  {
-    orderId: 'ORD-20261030-009',
-    storeCode: 'VSK03',
-    storeName: 'GS25송도센트럴점',
-    orderItemCode: '28607290003',
-    orderItemName: '추석)맥적구이한상',
-    orderQty1: 32950,
-    orderQty2: 26958,
-    totalOrderQty: 59908,
-    deliveryPrice: 1131,
   },
   {
     orderId: 'ORD-20261030-010',
